@@ -1,0 +1,299 @@
+// Customer accounts: sign up / sign in, save enquiries, "My enquiries" panel.
+import './amplify-config.js';
+import {
+  signUp, confirmSignUp, resendSignUpCode, signIn, signOut, autoSignIn,
+  getCurrentUser, fetchUserAttributes, resetPassword, confirmResetPassword,
+} from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
+import { generateClient } from 'aws-amplify/data';
+import { uploadData } from 'aws-amplify/storage';
+
+const client = generateClient();
+const state = { user: null, email: '' };
+
+export const STATUS = {
+  RECEIVED: 'Received',
+  PRICE_SENT: 'Price sent',
+  PAID: 'Paid',
+  FRAMING: 'Being framed',
+  SHIPPED: 'Shipped',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
+};
+const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift' };
+
+/* ---------- styles ---------- */
+const css = `
+.acct-scrim{position:fixed;inset:0;background:rgba(10,8,20,.55);z-index:40}
+.acct-panel{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);color:var(--fg);z-index:41;display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px);box-shadow:-10px 0 40px rgba(0,0,0,.3)}
+.acct-panel header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.acct-panel h2{font-size:24px;margin:0}
+.acct-body{flex:1;overflow:auto;padding:20px;display:grid;gap:14px;align-content:start}
+.acct-body form{display:grid;gap:12px}
+.acct-body .field{display:grid;gap:6px}
+.acct-body label{font-size:13px;font-weight:600}
+.acct-link{background:none;border:0;padding:0;color:var(--kumkum);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;justify-self:start}
+.acct-err{color:var(--kumkum);font-size:14px;min-height:1em}
+.acct-info{font-size:14px;color:var(--muted)}
+.enq{border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;gap:8px;background:var(--bg)}
+.enq-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.enq-title{font-weight:600}
+.enq-ref{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--gold-soft);color:var(--fg)}
+.pill.done{background:var(--ok);color:#fff}
+.pill.stop{background:var(--kumkum);color:#fff}
+.steps-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.steps-bar i{height:5px;border-radius:3px;background:var(--line)}
+.steps-bar i.on{background:var(--gold)}
+.enq-msg{font-size:14px;background:var(--surface);border-left:3px solid var(--gold);padding:8px 10px}
+.enq-price{font-family:var(--mono);font-size:16px}
+`;
+document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
+
+/* ---------- panel shell ---------- */
+const scrim = document.createElement('div');
+scrim.className = 'acct-scrim'; scrim.hidden = true;
+const panel = document.createElement('aside');
+panel.className = 'acct-panel'; panel.hidden = true; panel.setAttribute('aria-label', 'Your account');
+panel.innerHTML = `<header><h2 id="acctTitle">Sign in</h2><button class="x" id="acctClose" aria-label="Close">×</button></header><div class="acct-body" id="acctBody"></div>`;
+document.body.append(scrim, panel);
+const body = panel.querySelector('#acctBody');
+const title = panel.querySelector('#acctTitle');
+const open = () => { panel.hidden = false; scrim.hidden = false; };
+const close = () => { panel.hidden = true; scrim.hidden = true; };
+panel.querySelector('#acctClose').onclick = close;
+scrim.onclick = close;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const btn = document.getElementById('acctBtn');
+function setButton() { if (btn) btn.textContent = state.user ? 'My enquiries' : 'Sign in'; }
+if (btn) btn.onclick = () => { state.user ? showList() : showSignIn(); open(); };
+
+function form(html, onSubmit) {
+  body.innerHTML = html;
+  const f = body.querySelector('form');
+  const err = body.querySelector('.acct-err');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const b = f.querySelector('button[type=submit]');
+    err.textContent = ''; b.disabled = true;
+    try { await onSubmit(new FormData(f)); }
+    catch (ex) { err.textContent = friendly(ex); }
+    finally { b.disabled = false; }
+  });
+  return f;
+}
+function friendly(ex) {
+  const n = ex?.name || '';
+  if (n === 'UserNotFoundException' || n === 'NotAuthorizedException') return 'Email or password is incorrect.';
+  if (n === 'UsernameExistsException') return 'An account with this email already exists. Sign in instead.';
+  if (n === 'CodeMismatchException') return 'That code is not right. Check the latest email and try again.';
+  if (n === 'ExpiredCodeException') return 'That code has expired. Request a new one.';
+  if (n === 'InvalidPasswordException') return 'Use at least 8 characters with upper and lower case letters, a number and a symbol.';
+  if (n === 'LimitExceededException') return 'Too many attempts. Please wait a few minutes and try again.';
+  return ex?.message || 'Something went wrong. Please try again.';
+}
+
+/* ---------- views ---------- */
+function showSignIn(msg = '') {
+  title.textContent = 'Sign in';
+  const f = form(`
+    <p class="acct-info">Sign in to track your price enquiries, commissions and Little Artists gifts.</p>
+    ${msg ? `<p class="acct-info" style="color:var(--ok)">${esc(msg)}</p>` : ''}
+    <form novalidate>
+      <div class="field"><label for="aiEmail">Email</label><input id="aiEmail" name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="aiPass">Password</label><input id="aiPass" name="password" type="password" autocomplete="current-password" required></div>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Sign in</button>
+    </form>
+    <button class="acct-link" id="toSignUp">New here? Create an account</button>
+    <button class="acct-link" id="toForgot">Forgot password?</button>`,
+  async (fd) => {
+    const email = String(fd.get('email')).trim().toLowerCase();
+    const { nextStep } = await signIn({ username: email, password: String(fd.get('password')) });
+    if (nextStep.signInStep === 'CONFIRM_SIGN_UP') { await resendSignUpCode({ username: email }); showConfirm(email); return; }
+    if (nextStep.signInStep === 'DONE') { await loadUser(); showList(); return; }
+    throw new Error('Additional sign-in step required: ' + nextStep.signInStep);
+  });
+  body.querySelector('#toSignUp').onclick = showSignUp;
+  body.querySelector('#toForgot').onclick = () => showForgot(f.email.value);
+  f.email.focus();
+}
+
+function showSignUp() {
+  title.textContent = 'Create account';
+  const f = form(`
+    <p class="acct-info">We'll email you a 6-digit code to confirm your address.</p>
+    <form novalidate>
+      <div class="field"><label for="auEmail">Email</label><input id="auEmail" name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="auPass">Password</label><input id="auPass" name="password" type="password" autocomplete="new-password" required>
+        <span class="acct-info" style="font-size:12px">At least 8 characters, with upper and lower case letters, a number and a symbol.</span></div>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Create account</button>
+    </form>
+    <button class="acct-link" id="toSignIn">Already have an account? Sign in</button>`,
+  async (fd) => {
+    const email = String(fd.get('email')).trim().toLowerCase();
+    await signUp({ username: email, password: String(fd.get('password')), options: { userAttributes: { email }, autoSignIn: true } });
+    showConfirm(email);
+  });
+  body.querySelector('#toSignIn').onclick = () => showSignIn();
+  f.email.focus();
+}
+
+function showConfirm(email) {
+  title.textContent = 'Check your email';
+  const f = form(`
+    <p class="acct-info">We sent a 6-digit code to <b>${esc(email)}</b>. It can take a minute to arrive; check your spam folder too.</p>
+    <form novalidate>
+      <div class="field"><label for="acCode">Code</label><input id="acCode" name="code" inputmode="numeric" autocomplete="one-time-code" required></div>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Confirm</button>
+    </form>
+    <button class="acct-link" id="resend">Send a new code</button>`,
+  async (fd) => {
+    const { nextStep } = await confirmSignUp({ username: email, confirmationCode: String(fd.get('code')).trim() });
+    if (nextStep.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
+      try { await autoSignIn(); await loadUser(); showList(); return; } catch (e) { /* fall through to manual sign-in */ }
+    }
+    showSignIn('Email confirmed. Please sign in.');
+  });
+  body.querySelector('#resend').onclick = async () => {
+    try { await resendSignUpCode({ username: email }); body.querySelector('.acct-err').textContent = 'A new code is on its way.'; }
+    catch (ex) { body.querySelector('.acct-err').textContent = friendly(ex); }
+  };
+  f.code.focus();
+}
+
+function showForgot(prefill = '') {
+  title.textContent = 'Reset password';
+  const f = form(`
+    <p class="acct-info">Enter your email and we'll send a code to set a new password.</p>
+    <form novalidate>
+      <div class="field"><label for="afEmail">Email</label><input id="afEmail" name="email" type="email" autocomplete="email" value="${esc(prefill)}" required></div>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Send code</button>
+    </form>
+    <button class="acct-link" id="toSignIn">Back to sign in</button>`,
+  async (fd) => {
+    const email = String(fd.get('email')).trim().toLowerCase();
+    await resetPassword({ username: email });
+    showReset(email);
+  });
+  body.querySelector('#toSignIn').onclick = () => showSignIn();
+  f.email.focus();
+}
+
+function showReset(email) {
+  title.textContent = 'Set a new password';
+  const f = form(`
+    <p class="acct-info">Enter the code we emailed to <b>${esc(email)}</b> and choose a new password.</p>
+    <form novalidate>
+      <div class="field"><label for="arCode">Code</label><input id="arCode" name="code" inputmode="numeric" autocomplete="one-time-code" required></div>
+      <div class="field"><label for="arPass">New password</label><input id="arPass" name="password" type="password" autocomplete="new-password" required></div>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Save new password</button>
+    </form>`,
+  async (fd) => {
+    await confirmResetPassword({ username: email, confirmationCode: String(fd.get('code')).trim(), newPassword: String(fd.get('password')) });
+    showSignIn('Password changed. Please sign in.');
+  });
+  f.code.focus();
+}
+
+function card(e) {
+  const st = e.status || 'RECEIVED';
+  const idx = STEPS.indexOf(st);
+  const pillCls = st === 'DELIVERED' ? 'pill done' : st === 'CANCELLED' ? 'pill stop' : 'pill';
+  const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const pay = st === 'PRICE_SENT' && e.paymentLink
+    ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">Pay now</a>` : '';
+  return `<article class="enq">
+    <div class="enq-top"><span class="enq-title">${esc(e.title)}</span><span class="${pillCls}">${esc(STATUS[st] || st)}</span></div>
+    <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')} · ${esc(date)}</div>
+    ${st !== 'CANCELLED' ? `<div class="steps-bar" aria-hidden="true">${STEPS.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    ${e.quotedPrice ? `<div>Price: <span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span></div>` : ''}
+    ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
+    ${pay}
+  </article>`;
+}
+
+async function showList() {
+  title.textContent = 'My enquiries';
+  body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b></p><div id="enqList" class="acct-info">Loading your enquiries…</div>
+    <button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;
+  body.querySelector('#signOut').onclick = async () => { await signOut(); state.user = null; setButton(); showSignIn('You are signed out.'); };
+  body.querySelector('#refresh').onclick = showList;
+  const list = body.querySelector('#enqList');
+  try {
+    const items = [];
+    let nextToken = null;
+    do {
+      const res = await client.models.Enquiry.list({ limit: 100, nextToken });
+      if (res.errors?.length) throw new Error(res.errors[0].message);
+      items.push(...res.data);
+      nextToken = res.nextToken;
+    } while (nextToken);
+    items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    list.className = '';
+    list.style.cssText = 'display:grid;gap:12px';
+    list.innerHTML = items.length ? items.map(card).join('')
+      : `<p class="acct-info">No enquiries yet. Tap "Ask for price" on a painting, request a commission, or send a Little Artists gift, and it will appear here.</p>`;
+  } catch (ex) {
+    list.textContent = 'We could not load your enquiries. ' + friendly(ex);
+  }
+}
+
+/* ---------- session ---------- */
+async function loadUser() {
+  try {
+    state.user = await getCurrentUser();
+    const attrs = await fetchUserAttributes();
+    state.email = attrs.email || state.user.signInDetails?.loginId || '';
+  } catch {
+    state.user = null; state.email = '';
+  }
+  setButton();
+}
+Hub.listen('auth', ({ payload }) => {
+  if (payload.event === 'signedIn') loadUser();
+  if (payload.event === 'signedOut') { state.user = null; setButton(); }
+});
+loadUser();
+
+/* ---------- save an enquiry (called by the site's forms) ---------- */
+const safeName = (n) => String(n || 'file').replace(/[^\w.\-]+/g, '_').slice(-60);
+async function save({ ref, subject, fields, files }) {
+  let fileKey = null;
+  const file = (files || []).map((x) => x[1]).find(Boolean);
+  if (file) {
+    const res = await uploadData({
+      path: ({ identityId }) => `uploads/${identityId}/${ref}-${safeName(file.name)}`,
+      data: file,
+      options: { contentType: file.type || 'application/octet-stream' },
+    }).result;
+    fileKey = res.path;
+  }
+  const kind = subject.startsWith('Price') ? 'PRICE' : subject.startsWith('Commission') ? 'COMMISSION' : 'GIFT';
+  const title = kind === 'PRICE' ? (fields['Artwork'] || 'Price enquiry').split(' (')[0]
+    : kind === 'COMMISSION' ? `Commission: ${fields['Subject'] || ''} (${fields['Style'] || ''})`
+    : `Little Artists gift for ${fields['Gift for'] || ''}`;
+  const { errors } = await client.models.Enquiry.create({
+    ref, kind, title,
+    details: JSON.stringify(fields),
+    customerName: fields['Name'] || fields['Parent'] || '',
+    phone: fields['Mobile'] || '',
+    email: state.email,
+    fileKey,
+  });
+  if (errors?.length) throw new Error(errors[0].message);
+}
+
+window.kalaiAccount = {
+  get user() { return state.user; },
+  save,
+  open: () => { state.user ? showList() : showSignIn(); open(); },
+};
