@@ -622,16 +622,42 @@ async function purchaseSteps(start: Img) {
 
 type ChallanBody = { deliverychallan?: { deliverychallan_id: string; deliverychallan_number: string; status?: string } };
 
+function challanNotes(img: Img) {
+  const q = quoteParts(img);
+  return [
+    `Kalai Art House order ${q.ref}${str(img, 'zohoInvoice') ? ` · invoice ${str(img, 'zohoInvoice')}` : ''}`,
+    `Courier: ${str(img, 'courierName') || '-'} · AWB / tracking: ${str(img, 'trackingNo') || '-'}`,
+    `Deliver to: ${str(img, 'customerName')} · ${str(img, 'phone')}`,
+  ].join('\n');
+}
+
+/** Courier or AWB changed after the challan was made: rewrite its notes in Zoho. */
+async function updateChallanNotes(img: Img) {
+  const challanId = str(img, 'zohoChallanId');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const got = (await zoho(`/deliverychallans/${challanId}`)).body as any;
+  const dc = got.deliverychallan;
+  if (!dc) throw new Error(`Challan ${str(img, 'zohoChallan')} could not be read from Zoho`);
+  const r = await zoho(`/deliverychallans/${challanId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      customer_id: dc.customer_id,
+      reference_number: dc.reference_number,
+      date: dc.date,
+      ...(dc.challan_type ? { challan_type: dc.challan_type } : {}),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      line_items: (dc.line_items ?? []).map((li: any) => ({ line_item_id: li.line_item_id, name: li.name, description: li.description, rate: li.rate, quantity: li.quantity })),
+      notes: challanNotes(img),
+    }),
+  });
+  if (!r.ok) throw new Error(`Challan ${str(img, 'zohoChallan')} courier/AWB not updated: ${r.body.message}`);
+  console.log(`Updated courier/AWB on challan ${str(img, 'zohoChallan')} for ${str(img, 'ref')}`);
+}
+
 async function createChallan(img: Img) {
   const q = quoteParts(img);
   const price = num(img, 'quotedPrice') ?? 0;
-  const courier = str(img, 'courierName');
-  const awb = str(img, 'trackingNo');
-  const notes = [
-    `Kalai Art House order ${q.ref}${str(img, 'zohoInvoice') ? ` · invoice ${str(img, 'zohoInvoice')}` : ''}`,
-    `Courier: ${courier || '-'} · AWB / tracking: ${awb || '-'}`,
-    `Deliver to: ${str(img, 'customerName')} · ${str(img, 'phone')}`,
-  ].join('\n');
+  const notes = challanNotes(img);
   const body: Record<string, unknown> = {
     customer_id: await fixedCustomerId(),
     reference_number: q.ref,
@@ -652,7 +678,7 @@ async function createChallan(img: Img) {
 }
 
 /** Never throws: problems go to deliveryMessage. */
-async function deliverySteps(img: Img) {
+async function deliverySteps(img: Img, old?: Img) {
   const id = str(img, 'id');
   const status = str(img, 'status');
   if (!['SHIPPED', 'DELIVERED'].includes(status) || !str(img, 'zohoInvoiceId')) return;
@@ -661,6 +687,13 @@ async function deliverySteps(img: Img) {
   try {
     let challanId = str(img, 'zohoChallanId');
     let challanNo = str(img, 'zohoChallan');
+    const courierChanged = !!old && (str(old, 'courierName') !== str(img, 'courierName') || str(old, 'trackingNo') !== str(img, 'trackingNo'));
+    if (challanId && courierChanged) {
+      await updateChallanNotes(img);
+      await writeBack(id, {
+        deliveryMessage: `${testing ? 'Test mode: draft ' : ''}delivery challan ${challanNo} · ${status === 'DELIVERED' && str(img, 'deliveryState') === 'DELIVERED' ? 'delivered' : 'shipped'} with ${courierLine} (courier/AWB updated in Zoho)`,
+      });
+    }
     if (!challanId) {
       const dc = await createChallan(img);
       challanId = dc.id;
@@ -1011,7 +1044,7 @@ async function onStreamRecord(rec: StreamRecord) {
   const locked = str(img, 'zohoPaymentId') !== '';
 
   // Shipped / Delivered: delivery challan in Zoho (needs the invoice first).
-  if (['SHIPPED', 'DELIVERED'].includes(status)) await deliverySteps(img);
+  if (['SHIPPED', 'DELIVERED'].includes(status)) await deliverySteps(img, old);
 
   if (locked) {
     await purchaseSteps(img);
@@ -1038,7 +1071,8 @@ async function onStreamRecord(rec: StreamRecord) {
   }
 
   // Test mode order already invoiced as a draft: run the purchase steps (draft PO) on later saves.
-  if (status === 'PAID' && oldStatus === 'PAID' && str(img, 'zohoState') === 'TEST') {
+  // (Paid or any later status: Being framed, Shipped, Delivered.)
+  if (str(img, 'zohoState') === 'TEST' && !BEFORE_PAYMENT.includes(status) && !(status === 'PAID' && oldStatus !== 'PAID')) {
     await purchaseSteps(img);
     return;
   }
