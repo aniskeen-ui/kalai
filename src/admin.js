@@ -531,7 +531,9 @@ async function showDetail(e) {
       Object.assign(e, data || {});
       $('saveMsg').textContent = $('eStatus').value === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries. Use the WhatsApp link to let them know.';
       render();
-      if (toZoho) waitForZoho(e.id, savedAt);
+      // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
+      void toZoho;
+      waitForZoho(e.id, savedAt);
     } catch (ex) {
       $('saveMsg').textContent = '';
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">Could not save: ${esc(ex.message)}</div>`);

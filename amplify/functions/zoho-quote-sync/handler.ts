@@ -687,7 +687,10 @@ async function deliverySteps(img: Img, old?: Img) {
   try {
     let challanId = str(img, 'zohoChallanId');
     let challanNo = str(img, 'zohoChallan');
-    const courierChanged = !!old && (str(old, 'courierName') !== str(img, 'courierName') || str(old, 'trackingNo') !== str(img, 'trackingNo'));
+    // Update the challan whenever its courier/AWB (as last recorded in deliveryMessage) differ from the order.
+    const courierChanged =
+      (!!old && (str(old, 'courierName') !== str(img, 'courierName') || str(old, 'trackingNo') !== str(img, 'trackingNo'))) ||
+      (!!str(img, 'courierName') && !str(img, 'deliveryMessage').includes(courierLine));
     if (challanId && courierChanged) {
       await updateChallanNotes(img);
       await writeBack(id, {
