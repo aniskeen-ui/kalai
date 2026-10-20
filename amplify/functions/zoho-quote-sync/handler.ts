@@ -1,14 +1,26 @@
 import { env } from '$amplify/env/zoho-quote-sync';
 
 type Attr = { S?: string; N?: string; NULL?: boolean };
-type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImage?: Record<string, Attr> } };
+type StreamRecord = {
+  eventID?: string;
+  eventName?: string;
+  dynamodb?: { NewImage?: Record<string, Attr>; OldImage?: Record<string, Attr> };
+};
 type StreamEvent = { Records: StreamRecord[] };
 type ZohoBody = {
   code?: number;
   message?: string;
   contacts?: { contact_id: string; contact_name: string }[];
   contact?: { contact_id: string };
-  estimate?: { estimate_id: string; estimate_number: string };
+  estimate?: {
+    estimate_id: string;
+    estimate_number: string;
+    customer_id?: string;
+    reference_number?: string;
+    notes?: string;
+    line_items?: { line_item_id: string; name?: string; description?: string; rate?: number; quantity?: number }[];
+  };
+  estimates?: { estimate_id: string; estimate_number: string; reference_number?: string }[];
 };
 
 const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift' };
@@ -80,41 +92,103 @@ function parseDetails(raw: string): Record<string, string> {
   }
 }
 
+const num = (img: Record<string, Attr> | undefined, k: string) => {
+  const v = img?.[k]?.N;
+  return v === undefined ? null : Number(v);
+};
+
+/** Build the quote fields (item line + notes) from an enquiry record. */
+function quoteParts(img: Record<string, Attr>) {
+  const ref = str(img, 'ref');
+  const kind = str(img, 'kind');
+  const title = str(img, 'title') || KIND[kind] || 'Website enquiry';
+  const details = parseDetails(str(img, 'details'));
+  const customerLines = [
+    `Website enquiry ${ref} (${KIND[kind] ?? kind})`,
+    `Customer: ${str(img, 'customerName')}`,
+    `Mobile: ${str(img, 'phone')}`,
+    `Email: ${str(img, 'email')}`,
+  ];
+  const detailLines = Object.entries(details)
+    .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total'].includes(k))
+    .map(([k, v]) => `${k}: ${v}`);
+  // Price enquiries start at 0. Commissions use the website estimate, gifts the total shown.
+  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' ? amount(details['Total']) : 0;
+  return {
+    ref,
+    name: title.slice(0, 100),
+    description: detailLines.join('\n').slice(0, 2000),
+    notes: customerLines.join('\n'),
+    startRate,
+  };
+}
+
+async function createQuote(img: Record<string, Attr>, rate?: number) {
+  const q = quoteParts(img);
+  const customerId = await fixedCustomerId();
+  const r = await zoho('/estimates', {
+    method: 'POST',
+    body: JSON.stringify({
+      customer_id: customerId,
+      reference_number: q.ref,
+      line_items: [{ name: q.name, description: q.description, rate: rate ?? q.startRate, quantity: 1 }],
+      notes: q.notes,
+    }),
+  });
+  if (!r.ok) throw new Error(`Zoho quote create failed (${r.status}): ${r.body.message}`);
+  console.log(`Created Zoho quote ${r.body.estimate?.estimate_number} for ${q.ref}`);
+}
+
+/** Find the quote created for this website reference (KA-…). */
+async function findQuoteId(ref: string): Promise<string | null> {
+  const r = await zoho(`/estimates?reference_number=${encodeURIComponent(ref)}`);
+  if (!r.ok) throw new Error(`Zoho quote search failed (${r.status}): ${r.body.message}`);
+  const match = (r.body.estimates ?? []).find((e) => (e.reference_number ?? '').trim() === ref);
+  return match?.estimate_id ?? null;
+}
+
+/** Set the price on the quote's first line; add the studio message to the notes. */
+async function updateQuotePrice(img: Record<string, Attr>, price: number) {
+  const q = quoteParts(img);
+  const id = await findQuoteId(q.ref);
+  if (!id) {
+    // Enquiry from before the sync existed: create its quote now, with the price.
+    await createQuote(img, price);
+    return;
+  }
+  const got = await zoho(`/estimates/${id}`);
+  if (!got.ok || !got.body.estimate) throw new Error(`Zoho quote read failed (${got.status}): ${got.body.message}`);
+  const est = got.body.estimate;
+  const lines = (est.line_items ?? []).map((li, i) =>
+    i === 0
+      ? { line_item_id: li.line_item_id, name: li.name, description: li.description, quantity: li.quantity ?? 1, rate: price }
+      : { line_item_id: li.line_item_id, name: li.name, description: li.description, quantity: li.quantity, rate: li.rate },
+  );
+  if (!lines.length) lines.push({ name: q.name, description: q.description, quantity: 1, rate: price } as never);
+  const msg = str(img, 'adminMessage');
+  const notes = msg ? `${q.notes}\nStudio message: ${msg}` : q.notes;
+  const r = await zoho(`/estimates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ customer_id: est.customer_id, reference_number: q.ref, line_items: lines, notes }),
+  });
+  if (!r.ok) throw new Error(`Zoho quote update failed (${r.status}): ${r.body.message}`);
+  console.log(`Updated Zoho quote ${est.estimate_number} for ${q.ref} to AED ${price}`);
+}
+
 export const handler = async (event: StreamEvent) => {
   const failures: { itemIdentifier: string }[] = [];
   for (const rec of event.Records) {
-    if (rec.eventName !== 'INSERT' || !rec.dynamodb?.NewImage) continue;
-    const img = rec.dynamodb.NewImage;
+    const img = rec.dynamodb?.NewImage;
+    if (!img) continue;
     const ref = str(img, 'ref');
-    const kind = str(img, 'kind');
-    const title = str(img, 'title') || KIND[kind] || 'Website enquiry';
-    const details = parseDetails(str(img, 'details'));
-    // Price enquiries have no price yet (0). Commissions use the website estimate, gifts the total shown.
-    const rate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' ? amount(details['Total']) : 0;
-
-    const customerLines = [
-      `Website enquiry ${ref} (${KIND[kind] ?? kind})`,
-      `Customer: ${str(img, 'customerName')}`,
-      `Mobile: ${str(img, 'phone')}`,
-      `Email: ${str(img, 'email')}`,
-    ];
-    const detailLines = Object.entries(details)
-      .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total'].includes(k))
-      .map(([k, v]) => `${k}: ${v}`);
-
     try {
-      const customerId = await fixedCustomerId();
-      const r = await zoho('/estimates', {
-        method: 'POST',
-        body: JSON.stringify({
-          customer_id: customerId,
-          reference_number: ref,
-          line_items: [{ name: title.slice(0, 100), description: detailLines.join('\n').slice(0, 2000), rate, quantity: 1 }],
-          notes: customerLines.join('\n'),
-        }),
-      });
-      if (!r.ok) throw new Error(`Zoho quote create failed (${r.status}): ${r.body.message}`);
-      console.log(`Created Zoho quote ${r.body.estimate?.estimate_number} for ${ref}`);
+      if (rec.eventName === 'INSERT') {
+        await createQuote(img);
+      } else if (rec.eventName === 'MODIFY') {
+        const before = num(rec.dynamodb?.OldImage, 'quotedPrice');
+        const after = num(img, 'quotedPrice');
+        if (after !== null && after > 0 && after !== before) await updateQuotePrice(img, after);
+      }
     } catch (err) {
       console.error(`Zoho sync failed for ${ref}:`, err);
       if (rec.eventID) failures.push({ itemIdentifier: rec.eventID });
