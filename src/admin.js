@@ -15,7 +15,7 @@ const STATUS = {
 const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists' };
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
-const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho' };
+const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
 const isLocked = (e) => !!e.zohoPaymentId;
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 const STUDIO_WHATSAPP_NAME = 'Kalai Art House';
@@ -202,7 +202,7 @@ function costingSection(e) {
 }
 
 function purchaseSection(e) {
-  if (!hasArtist(e) || !isLocked(e)) return '';
+  if (!hasArtist(e) || !(isLocked(e) || e.zohoState === 'TEST')) return '';
   const st = e.purchaseState || '';
   const color = st === 'ARTIST_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
   return `<fieldset class="cost" id="purchase">
@@ -319,8 +319,8 @@ function showRates() {
 
 function zohoPanel(e) {
   const st = e.zohoState || '';
-  const color = st === 'PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
-  const icon = st === 'PAID' ? '✓' : st === 'ERROR' ? '✗' : '•';
+  const color = st === 'PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
+  const icon = st === 'PAID' ? '✓' : st === 'ERROR' ? '✗' : st === 'TEST' ? '◌' : '•';
   return `<div class="card" style="padding:12px 14px;display:grid;gap:6px;background:var(--sunk)">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <b style="color:${color}">${icon} ${esc(ZOHO_LABEL[st] || 'Zoho Books')}</b>

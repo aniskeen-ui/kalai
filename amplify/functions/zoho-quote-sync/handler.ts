@@ -51,6 +51,8 @@ type ZohoBody = {
 const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift' };
 const INVOICE_PREFIX = 'KAH-INV-';
 const VAT_PARAM = '/kalai/zoho/vat_tax_id';
+// Test mode (default ON until /kalai/zoho/test_mode is set to "off"): drafts only, nothing posted to the accounts.
+const TEST_PARAM = '/kalai/zoho/test_mode';
 // Statuses an enquiry may not go back to once Zoho holds its payment.
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 
@@ -64,6 +66,21 @@ let cachedToken: { value: string; expires: number } | null = null;
 let cachedCustomerId: string | null = null;
 let cachedVendorId: string | null = null;
 let cachedVat: { id: string | null; at: number } | null = null;
+let cachedTest: { on: boolean; at: number } | null = null;
+
+/** True while testing: invoices and POs stay drafts; no payments, bills or vendor payments are posted. */
+async function testMode(): Promise<boolean> {
+  if (cachedTest && Date.now() - cachedTest.at < 60_000) return cachedTest.on;
+  let on = true;
+  try {
+    const r = await ssm.send(new GetParameterCommand({ Name: TEST_PARAM }));
+    on = (r.Parameter?.Value ?? '').trim().toLowerCase() !== 'off';
+  } catch {
+    on = true; // not created yet → test mode
+  }
+  cachedTest = { on, at: Date.now() };
+  return on;
+}
 
 async function accessToken(): Promise<string> {
   if (cachedToken && cachedToken.expires > Date.now() + 60_000) return cachedToken.value;
@@ -376,6 +393,10 @@ async function invoiceAndRecordPayment(img: Img) {
 
   const existing = await findInvoice(q.ref);
   const inv = existing ? { id: existing.invoice_id, number: existing.invoice_number } : await createInvoice(img, price);
+  if (await testMode()) {
+    console.log(`TEST MODE: draft invoice ${inv.number} for ${q.ref}; nothing posted`);
+    return { quote: quote?.number ?? '', invoiceId: inv.id, invoice: inv.number, paymentId: '', total: price, test: true };
+  }
   if (!existing) {
     // A draft invoice can't take a payment: mark it as sent (no email goes to anyone).
     const sent = await zoho(`/invoices/${inv.id}/status/sent`, { method: 'POST' });
@@ -470,8 +491,10 @@ async function createPurchaseOrder(img: Img) {
   });
   if (!r.ok || !r.body.purchaseorder) throw new Error(`Zoho purchase order failed (${r.status}): ${r.body.message}`);
   const po = r.body.purchaseorder;
-  const issued = await zoho(`/purchaseorders/${po.purchaseorder_id}/status/issued`, { method: 'POST' });
-  if (!issued.ok) console.warn(`PO ${po.purchaseorder_number} not marked issued: ${issued.body.message}`);
+  if (!(await testMode())) {
+    const issued = await zoho(`/purchaseorders/${po.purchaseorder_id}/status/issued`, { method: 'POST' });
+    if (!issued.ok) console.warn(`PO ${po.purchaseorder_number} not marked issued: ${issued.body.message}`);
+  }
   console.log(`Created PO ${po.purchaseorder_number} for ${ref} (AED ${artistAed + courier})`);
   return { id: po.purchaseorder_id, number: po.purchaseorder_number, total: artistAed + courier };
 }
@@ -536,7 +559,8 @@ async function payVendor(img: Img) {
 async function purchaseSteps(start: Img) {
   let img: Img = { ...start };
   const id = str(img, 'id');
-  if (!str(img, 'zohoPaymentId') || str(img, 'kind') === 'GIFT') return;
+  const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
+  if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT') return;
   try {
     if (!str(img, 'zohoPOId')) {
       const po = await createPurchaseOrder(img);
@@ -550,9 +574,17 @@ async function purchaseSteps(start: Img) {
         purchaseState: 'PO',
         zohoPO: po.number,
         zohoPOId: po.id,
-        purchaseMessage: `PO ${po.number} to ${VENDOR_NAME} · AED ${po.total.toLocaleString('en-US')}`,
+        purchaseMessage: `${testing ? 'Test mode: draft ' : ''}PO ${po.number} to ${VENDOR_NAME} · AED ${po.total.toLocaleString('en-US')}`,
       });
       img = { ...img, zohoPO: { S: po.number }, zohoPOId: { S: po.id } };
+    }
+    if (testing) {
+      if ((str(img, 'artistInvoiceNo') || str(img, 'artistPaidRef')) && !/not posted/.test(str(img, 'purchaseMessage'))) {
+        await writeBack(id, {
+          purchaseMessage: `Test mode: draft PO ${str(img, 'zohoPO')} to ${VENDOR_NAME}. Bill and payment to Siva are not posted while testing.`,
+        });
+      }
+      return;
     }
     if (str(img, 'artistInvoiceNo') && !str(img, 'zohoBillId')) {
       const bill = await createBillFromPO(img);
@@ -739,6 +771,18 @@ async function checkZoho(id: string) {
   const pays = voided ? [] : await invoicePayments(invoiceId);
   const paid = !voided && (inv?.status === 'paid' || (balance <= 0 && pays.length > 0));
 
+  if (!voided && inv?.status === 'draft') {
+    const set = {
+      zohoState: 'TEST',
+      zohoInvoice: invoiceNumber || inv.invoice_number,
+      zohoInvoiceId: invoiceId,
+      zohoPaymentId: null,
+      zohoMessage: `Draft invoice ${invoiceNumber || inv.invoice_number} (AED ${Number(inv.total ?? 0).toLocaleString('en-US')}): nothing posted`,
+    };
+    await writeBack(id, set);
+    return set;
+  }
+
   if (paid) {
     const set = {
       zohoState: 'PAID',
@@ -804,8 +848,28 @@ async function onStreamRecord(rec: StreamRecord) {
     return;
   }
 
+  // Test mode order already invoiced as a draft: run the purchase steps (draft PO) on later saves.
+  if (status === 'PAID' && oldStatus === 'PAID' && str(img, 'zohoState') === 'TEST') {
+    await purchaseSteps(img);
+    return;
+  }
+
   if (status === 'PAID' && oldStatus !== 'PAID') {
     const r = await invoiceAndRecordPayment(img);
+    if ('test' in r && r.test) {
+      await writeBack(id, {
+        zohoState: 'TEST',
+        zohoQuote: r.quote || null,
+        zohoInvoice: r.invoice,
+        zohoInvoiceId: r.invoiceId,
+        zohoPaymentId: null,
+        zohoMessage: `Test mode: draft invoice ${r.invoice} · AED ${r.total.toLocaleString('en-US')}. Nothing posted (no payment recorded).`,
+      });
+      if (str(img, 'kind') !== 'GIFT') {
+        await purchaseSteps({ ...img, zohoState: { S: 'TEST' }, zohoInvoiceId: { S: r.invoiceId }, zohoInvoice: { S: r.invoice } });
+      }
+      return;
+    }
     await writeBack(id, {
       zohoState: 'PAID',
       zohoQuote: r.quote || null,

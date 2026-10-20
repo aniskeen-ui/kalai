@@ -103,3 +103,13 @@ To switch VAT off again: same command with `--value off`.
 1. Siva creates an account on art.pranixtechno.com (Sign in → Create account) with his email.
 2. AWS console → Cognito → the user pool → Groups → **ARTISTS** → Add user → his email. (If his code email doesn't arrive, confirm him under Users → Actions → Confirm account, as you did for the admin.)
 3. He signs in at **art.pranixtechno.com/artist.html**.
+
+## Test mode (on until you switch it off)
+
+While test mode is on, Zoho gets **drafts only**: the quote stays draft, the invoice is created as a draft (no payment recorded), and Siva's PO stays draft (no bill, no payment to him). The Studio desk shows "Test mode: drafts only" and nothing locks.
+
+Go live (AWS CloudShell); takes effect within a minute:
+
+    aws ssm put-parameter --name /kalai/zoho/test_mode --type String --overwrite --value off
+
+Back to test mode: same command with `--value on`. Delete the test drafts in Zoho before going live.
