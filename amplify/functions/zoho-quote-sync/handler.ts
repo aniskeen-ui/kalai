@@ -447,17 +447,35 @@ async function getCosting(enquiryId: string): Promise<{ img: Img | null; costs: 
   const r = await ddb.send(new GetItemCommand({ TableName: table, Key: { enquiryId: { S: enquiryId } } }));
   const img = (r.Item as Img | undefined) ?? null;
   let costs: Costs = {};
+  const raw = img?.costs as AttributeValue | undefined;
   try {
-    let v: unknown = JSON.parse(str(img ?? undefined, 'costs') || '{}');
+    // AWSJSON may be stored as text (S) or as a DynamoDB map (M).
+    let v: unknown = raw && 'M' in raw && raw.M ? fromAttr(raw) : JSON.parse(str(img ?? undefined, 'costs') || '{}');
     if (typeof v === 'string') v = JSON.parse(v);
     costs = (v ?? {}) as Costs;
   } catch {
     costs = {};
   }
+  // Fall back to the INR price on the record if the cost snapshot has no AED amount yet.
+  if (!(Number(costs.artistAed) > 0)) {
+    const inr = num(img ?? undefined, 'artistPriceInr');
+    if (inr && Number(costs.fx) > 0) costs.artistAed = inr * Number(costs.fx);
+  }
   return { img, costs };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Plain value from a DynamoDB attribute (S, N, BOOL, NULL, M, L). */
+function fromAttr(a: AttributeValue): unknown {
+  if ('S' in a && a.S !== undefined) return a.S;
+  if ('N' in a && a.N !== undefined) return Number(a.N);
+  if ('BOOL' in a && a.BOOL !== undefined) return a.BOOL;
+  if ('NULL' in a && a.NULL) return null;
+  if ('M' in a && a.M) return Object.fromEntries(Object.entries(a.M).map(([k, v]) => [k, fromAttr(v)]));
+  if ('L' in a && a.L) return a.L.map(fromAttr);
+  return undefined;
+}
 
 /** Lines owed to Siva for this order, from the saved costing: his price + the India courier he paid. */
 async function artistLines(img: Img) {
@@ -483,7 +501,11 @@ async function artistLines(img: Img) {
 /** Customer paid: Siva's order is recorded on the enquiry (no Zoho document; this plan has no purchase orders). */
 async function recordArtistOrder(img: Img) {
   const { lines, total } = await artistLines(img);
-  if (!lines.length) return null; // no artist price yet
+  if (!lines.length) {
+    const { img: cimg, costs } = await getCosting(str(img, 'id'));
+    console.log(`No artist price for ${str(img, 'ref')}: costing ${cimg ? 'found' : 'missing'}, costs type ${cimg?.costs ? Object.keys(cimg.costs)[0] : 'none'}, keys ${Object.keys(costs).join(',')}`);
+    return null; // no artist price yet
+  }
   return { id: 'ORDER', number: `Order ${str(img, 'ref')}`, total };
 }
 
@@ -572,7 +594,7 @@ async function purchaseSteps(start: Img) {
     if (!str(img, 'zohoPOId')) {
       const po = await recordArtistOrder(img);
       if (!po) {
-        if (str(img, 'purchaseState') !== 'NEEDS_PRICE') {
+        if (str(img, 'purchaseState') !== 'NEEDS_PRICE' || /PO for Siva/.test(str(img, 'purchaseMessage'))) {
           await writeBack(id, { purchaseState: 'NEEDS_PRICE', purchaseMessage: "No artist price in the costing yet, so Siva's order isn't recorded. Add it and save." });
         }
         return;
