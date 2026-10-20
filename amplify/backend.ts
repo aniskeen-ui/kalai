@@ -38,20 +38,32 @@ const mapping = new EventSourceMapping(Stack.of(enquiryTable), 'ZohoQuoteSyncEnq
 });
 mapping.node.addDependency(streamPolicy);
 
-// Let the sync write Zoho's result back onto the enquiry, and read the VAT switch (/kalai/zoho/vat_tax_id).
-backend.zohoQuoteSync.addEnvironment('ENQUIRY_TABLE', enquiryTable.tableName);
-enquiryTable.grantReadWriteData(backend.zohoQuoteSync.resources.lambda);
+// Let the sync read/write the Enquiry and Costing tables. Referenced by NAME (Model-<apiId>-NONE), not by
+// table object: the Enquiry table already points at this function (stream), so a direct reference back
+// would make a circular dependency between the nested stacks.
+const fnStack = Stack.of(backend.zohoQuoteSync.resources.lambda);
+const apiId = backend.data.resources.graphqlApi.apiId;
+const tableName = (model: string) => `${model}-${apiId}-NONE`;
+const tableArn = (model: string) => `arn:aws:dynamodb:${fnStack.region}:${fnStack.account}:table/${tableName(model)}`;
+backend.zohoQuoteSync.addEnvironment('ENQUIRY_TABLE', tableName('Enquiry'));
+backend.zohoQuoteSync.addEnvironment('COSTING_TABLE', tableName('Costing'));
+backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Scan', 'dynamodb:Query', 'dynamodb:BatchGetItem'],
+    resources: [tableArn('Enquiry'), tableArn('Costing')],
+  }),
+);
 
-// Costing (Siva's price, cost build-up) for the PO, and commission photos for the Artist desk.
-const costingTable = backend.data.resources.tables['Costing'];
-backend.zohoQuoteSync.addEnvironment('COSTING_TABLE', costingTable.tableName);
-costingTable.grantReadWriteData(backend.zohoQuoteSync.resources.lambda);
+// Commission photos for the Artist desk (signed links). The bucket is in the storage stack, which doesn't depend on data.
 backend.zohoQuoteSync.addEnvironment('UPLOADS_BUCKET', backend.storage.resources.bucket.bucketName);
 backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'uploads/*');
+
+// VAT switch (/kalai/zoho/vat_tax_id).
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['ssm:GetParameter'],
-    resources: [`arn:aws:ssm:${Stack.of(enquiryTable).region}:${Stack.of(enquiryTable).account}:parameter/kalai/zoho/*`],
+    resources: [`arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/zoho/*`],
   }),
 );
