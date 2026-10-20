@@ -17,6 +17,8 @@ const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists' 
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
 const isLocked = (e) => !!e.zohoPaymentId;
+// The price is fixed once Zoho has an invoice for the order (a draft one too, in test mode).
+const priceLocked = (e) => isLocked(e) || !!e.zohoInvoiceId;
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 const STUDIO_WHATSAPP_NAME = 'Kalai Art House';
 
@@ -349,6 +351,7 @@ function zohoPanel(e) {
       <button type="button" class="btn" id="checkZoho" style="padding:6px 12px;font-size:13px">Check Zoho</button>
     </div>
     <div style="font-size:14px;overflow-wrap:anywhere">${esc(e.zohoMessage || 'No reply from Zoho yet. Press Check Zoho to look it up.')}</div>
+    ${!isLocked(e) && e.zohoInvoiceId ? `<div class="muted" style="font-size:12px">🔒 Price locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho. To change the price, delete the draft invoice in Zoho, then press <b>Check Zoho</b>.</div>` : ''}
     ${isLocked(e) ? `<div class="muted" style="font-size:12px">🔒 Locked: the payment is in Zoho, so the price can't change and the status can't go back to Received, Price sent or Cancelled. If the payment failed, void invoice ${esc(e.zohoInvoice || '')} or delete its payment in Zoho, then press <b>Check Zoho</b> to unlock.</div>` : ''}
     ${docsList(e)}
     <div class="ok" id="zohoMsg" role="status"></div>
@@ -398,7 +401,7 @@ async function showDetail(e) {
         <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === s ? 'selected' : ''} ${locked && BEFORE_PAYMENT.includes(k) && k !== s ? 'disabled' : ''}>${v}${locked && BEFORE_PAYMENT.includes(k) && k !== s ? ' (locked)' : ''}</option>`).join('')}</select></div>
-        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${locked ? 'readonly title="Locked: payment recorded in Zoho"' : ''}></div>
+        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}></div>
       </div>
       ${costingSection(e)}
       <div class="two">
@@ -489,7 +492,7 @@ async function showDetail(e) {
         status: $('eStatus').value,
         paymentMethod: $('ePayMethod').value || null,
         paymentRef: $('ePayRef').value.trim() || null,
-        ...(locked ? {} : { quotedPrice: priceVal === '' ? null : Number(priceVal) }),
+        ...(priceLocked(e) ? {} : { quotedPrice: priceVal === '' ? null : Number(priceVal) }),
         paymentLink: $('eLink').value.trim() || null,
         adminMessage: $('eMsg').value.trim() || null,
       });

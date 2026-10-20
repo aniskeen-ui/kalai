@@ -940,6 +940,16 @@ async function onStreamRecord(rec: StreamRecord) {
     return;
   }
 
+  // An invoice exists (draft in test mode): the price can't change any more; put it back.
+  if (str(img, 'zohoInvoiceId') && price !== oldPrice && oldPrice !== null) {
+    await writeBack(id, {
+      quotedPrice: oldPrice,
+      zohoMessage: `Price kept at AED ${oldPrice.toLocaleString('en-US')}: invoice ${str(img, 'zohoInvoice')} exists in Zoho. Delete or void it in Zoho first, then press Check Zoho.`,
+    });
+    console.log(`Kept ${str(img, 'ref')} price at ${oldPrice} (invoice exists)`);
+    return;
+  }
+
   // Test mode order already invoiced as a draft: run the purchase steps (draft PO) on later saves.
   if (status === 'PAID' && oldStatus === 'PAID' && str(img, 'zohoState') === 'TEST') {
     await purchaseSteps(img);
