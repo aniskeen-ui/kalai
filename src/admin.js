@@ -113,12 +113,13 @@ async function showDetail(e) {
     <h2 style="font-size:22px;margin-top:4px">${esc(e.title)}</h2></div>
     <dl class="kv">
       <dt>Customer</dt><dd>${esc(e.customerName)}</dd>
-      <dt>Mobile</dt><dd>${esc(e.phone)}</dd>
       <dt>Email</dt><dd>${esc(e.email)}</dd>
       ${Object.entries(det).filter(([k, v]) => v !== '' && v != null && !['Reference', 'Name', 'Mobile', 'Parent'].includes(k)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
     </dl>
     <div class="links" id="fileLinks">${e.fileKey ? '<span class="muted">Loading upload…</span>' : '<span class="muted">No upload attached.</span>'}</div>
     <form id="editForm" novalidate style="display:grid;gap:12px">
+      <div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
+        <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === s ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
         <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}"></div>
@@ -131,7 +132,7 @@ async function showDetail(e) {
     <div class="links" id="waLinks"></div>`;
 
   const waLink = () => {
-    const digits = waDigits(e.phone);
+    const digits = waDigits($('ePhone').value);
     if (!digits) { $('waLinks').innerHTML = '<span class="muted">No mobile number to message.</span>'; return; }
     const price = $('ePrice').value, link = $('eLink').value.trim(), msg = $('eMsg').value.trim();
     const text = [`Hello ${e.customerName || ''}, this is ${STUDIO_WHATSAPP_NAME} about your enquiry ${e.ref} (${e.title}).`,
@@ -140,7 +141,7 @@ async function showDetail(e) {
     $('waLinks').innerHTML = `<a href="https://wa.me/${digits}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Send update on WhatsApp</a>`;
   };
   waLink();
-  ['ePrice', 'eLink', 'eMsg'].forEach((id) => $(id).addEventListener('input', waLink));
+  ['ePhone', 'ePrice', 'eLink', 'eMsg'].forEach((id) => $(id).addEventListener('input', waLink));
 
   if (e.fileKey) {
     try {
@@ -158,6 +159,7 @@ async function showDetail(e) {
     try {
       const { data, errors } = await client.models.Enquiry.update({
         id: e.id,
+        phone: $('ePhone').value.trim() || null,
         status: $('eStatus').value,
         quotedPrice: priceVal === '' ? null : Number(priceVal),
         paymentLink: $('eLink').value.trim() || null,
