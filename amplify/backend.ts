@@ -37,3 +37,21 @@ const mapping = new EventSourceMapping(Stack.of(enquiryTable), 'ZohoQuoteSyncEnq
   reportBatchItemFailures: true,
 });
 mapping.node.addDependency(streamPolicy);
+
+// Let the sync write Zoho's result back onto the enquiry, and read the VAT switch (/kalai/zoho/vat_tax_id).
+backend.zohoQuoteSync.addEnvironment('ENQUIRY_TABLE', enquiryTable.tableName);
+enquiryTable.grantReadWriteData(backend.zohoQuoteSync.resources.lambda);
+
+// Costing (Siva's price, cost build-up) for the PO, and commission photos for the Artist desk.
+const costingTable = backend.data.resources.tables['Costing'];
+backend.zohoQuoteSync.addEnvironment('COSTING_TABLE', costingTable.tableName);
+costingTable.grantReadWriteData(backend.zohoQuoteSync.resources.lambda);
+backend.zohoQuoteSync.addEnvironment('UPLOADS_BUCKET', backend.storage.resources.bucket.bucketName);
+backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'uploads/*');
+backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: ['ssm:GetParameter'],
+    resources: [`arn:aws:ssm:${Stack.of(enquiryTable).region}:${Stack.of(enquiryTable).account}:parameter/kalai/zoho/*`],
+  }),
+);

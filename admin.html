@@ -62,6 +62,23 @@ td.mono{font-family:var(--mono);font-size:13px}
 @media (max-width:480px){.two{grid-template-columns:1fr}}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 [hidden]{display:none!important}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:13px}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--gold);color:var(--fg);margin-left:4px}
+fieldset.cost{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px 12px;display:grid;gap:10px;margin:0;min-width:0}
+fieldset.cost legend{font-size:13px;font-weight:700;padding:0 6px}
+fieldset.cost summary{font-size:13px;cursor:pointer;color:var(--muted)}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+table.costs{font-size:13px;width:100%}
+table.costs td,table.costs th{padding:5px 8px;white-space:normal}
+table.costs input{padding:6px 8px}
+table.costs td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.suggest{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:var(--gold-soft);border-radius:var(--r);padding:8px 10px;font-size:14px}
+.marginline{font-size:13px}
+.marginline.low{color:var(--kumkum)}
+.warnline{font-size:12px;border-left:3px solid var(--gold);padding-left:8px}
+@media (max-width:480px){.three{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -92,6 +109,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <select id="fKind" aria-label="Filter by type">
         <option value="">All types</option><option value="PRICE">Price enquiries</option><option value="COMMISSION">Commissions</option><option value="GIFT">Little Artists</option>
       </select>
+      <button class="btn ghost" id="ratesBtn" type="button">Rates</button>
       <button class="btn" id="reload" type="button">Refresh</button>
     </div>
     <div class="counts" id="counts"></div>
