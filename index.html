@@ -198,6 +198,40 @@ footer p{margin:2px 0}
 .kid figcaption{font-size:13px;color:var(--muted)}
 .kid figcaption b{color:var(--fg);font-weight:600}
 .illus-note{font-size:12px;color:var(--muted);margin:0 0 30px}
+
+/* artwork page (Saatchi-style) */
+.chips-row{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 22px}
+.chip-f{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.chip-f[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.count-note{font-size:13px;color:var(--muted);margin:0 0 14px}
+.modal .box.wide{position:relative;max-width:1040px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+.xtop{position:sticky;top:0;justify-self:end;grid-column:1/-1;z-index:3;margin:8px 8px -46px 0;width:38px;height:38px;border-radius:50%!important;background:var(--surface)!important;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.viewer{display:grid;gap:10px;align-content:start;background:var(--sunk);padding:22px}
+.viewer .stage{display:grid;place-items:center;min-height:320px}
+.viewer .stage>img{max-width:100%;max-height:62vh;width:auto;height:auto;box-shadow:0 10px 26px rgba(0,0,0,.3)}
+.vtabs{display:flex;gap:6px}
+.vtabs button{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.vtabs button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.room{position:relative;width:100%;aspect-ratio:4/3;max-width:100%;background:linear-gradient(#e9e4da,#ddd6c8 78%,#b89f80 78%,#a88d6c);border-radius:4px;overflow:hidden}
+.room .hang{position:absolute;left:50%;transform:translateX(-50%);background:#3b2a1d;padding:1.1%;box-shadow:0 8px 18px rgba(0,0,0,.35)}
+.room .hang .mount{background:#fbf8f1;display:grid;place-items:center}
+.room .hang img{display:block;width:100%;height:auto}
+.room svg{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);width:66.7%;height:auto}
+.room-cap{font-size:12px;color:var(--muted);margin:0}
+.byline{font-size:14px;color:var(--muted);margin:-4px 0 0}
+.badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
+.badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+.badge b{display:block;font-size:13px}
+.badge i{font-style:normal;color:var(--gold);font-size:15px;line-height:1}
+.acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn.ghost-dark{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.modal .info details{background:none;border:0;border-top:1px solid var(--line);border-radius:0;padding:10px 0 0}
+.info summary{cursor:pointer;font-weight:600;font-size:14px}
+.info details p{font-size:14px;color:var(--muted);margin:8px 0 0}
+.similar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.similar button{border:0;background:var(--sunk);padding:8px;border-radius:4px;cursor:pointer;display:grid;gap:6px;text-align:left;color:var(--fg);font:inherit;font-size:12px}
+.similar img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+@media (max-width:860px){.modal .box.wide{grid-template-columns:1fr}.badges{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 </style>
@@ -236,6 +270,8 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
       <button data-f="water" aria-pressed="false">Watercolour</button>
     </div>
   </div>
+  <div class="chips-row" id="subjChips" role="group" aria-label="Filter by subject"></div>
+  <p class="count-note" id="countNote"></p>
   <div class="grid" id="grid"></div>
 </div></section>
 
@@ -441,21 +477,33 @@ document.getElementById("heroA").src=PRODUCTS[1].img;document.getElementById("he
 
 /* grid */
 let filter="all";
+const SUBJECTS={land:"Landscapes & water",village:"Village life",nature:"Trees & nature",arch:"Buildings & places",people:"Portraits"};
+const SUBJ_OF={P2:"land",P6:"land",P0:"land",S10:"land",P7:"village",P9:"village",P11:"village",P10:"nature",P27:"nature",S16:"nature",S17:"nature",S8:"arch",S12:"arch",S0:"arch",S1:"people",S3:"people"};
+PRODUCTS.forEach(p=>{p.subject=SUBJ_OF[p.id]||"land";const m=String(p.size).match(/(\d+)\s*×\s*(\d+)/);p.wcm=m?+m[1]:30;p.hcm=m?+m[2]:40;});
+let subj="all";
+function drawChips(){
+  const c=document.getElementById("subjChips");
+  c.innerHTML=[["all","All subjects"],...Object.entries(SUBJECTS)].map(([k,v])=>`<button class="chip-f" data-subj="${k}" aria-pressed="${k===subj}">${v}</button>`).join("");
+  c.querySelectorAll("[data-subj]").forEach(b=>b.onclick=()=>{subj=b.dataset.subj;drawChips();drawGrid()});
+}
 function drawGrid(){
   const g=document.getElementById("grid");g.innerHTML="";
-  PRODUCTS.filter(p=>filter==="all"||p.kind===filter).forEach(p=>{
+  const list=PRODUCTS.filter(p=>(filter==="all"||p.kind===filter)&&(subj==="all"||p.subject===subj));
+  document.getElementById("countNote").textContent=list.length+(list.length===1?" artwork":" artworks");
+  list.forEach(p=>{
     const card=document.createElement("article");card.className="card";
     const fb=document.createElement("button");fb.className="frame";fb.setAttribute("aria-label","View "+p.name);
     fb.appendChild(mk(p));fb.onclick=()=>openModal(p);
     card.appendChild(fb);
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
-      <h3>${p.name}</h3><div class="meta">${p.size} · <span class="tag">${p.ship}</span></div>
-      <div class="row">${p.price?`<span class="note">Price on request</span><button class="add" data-ask="${p.id}">Ask for price</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
+      <h3>${p.name}</h3><div class="meta">Siva Raja · ${p.size}</div><div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
+      <div class="row">${p.price?`<span class="note">Price on request</span><button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
+  if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
 }
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawGrid()});
-document.addEventListener("click",e=>{const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
+document.addEventListener("click",e=>{const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
 
 /* cart */
 let cart=[];try{cart=JSON.parse(localStorage.getItem("kalai-cart")||"[]")}catch(e){cart=[]}
@@ -496,39 +544,84 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAll()});
 
 /* modal */
 
-function openAsk(p){
-  const box=document.getElementById("modalBox");box.innerHTML="";
+function openAsk(p,offer){
+  const box=document.getElementById("modalBox");box.className="box";box.innerHTML="";
   const art=document.createElement("div");art.className="art";art.appendChild(mk(p));box.appendChild(art);
   box.insertAdjacentHTML("beforeend",`<div class="info"><button class="x" id="mClose" aria-label="Close">×</button>
-   <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">Price enquiry</div>
+   <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${offer?"Make an offer":"Price enquiry"}</div>
    <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${p.medium} · ${p.size}</p>
    <form id="askForm" novalidate style="display:grid;gap:12px">
      <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
+     ${offer?`<div class="field"><label for="aOffer">Your offer (AED)</label><input id="aOffer" inputmode="numeric" placeholder="e.g. 350"></div>`:""}
      <div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>
      <div class="field"><label for="aMsg">Anything else? (optional)</label><textarea id="aMsg" placeholder="Is it available? Can it be delivered before the 28th?"></textarea></div>
-     <button class="btn primary" type="submit">Ask for price</button>
+     <button class="btn primary" type="submit">${offer?"Send my offer":"Ask for price"}</button>
      <div class="ok-msg" id="askOk" hidden></div>
    </form></div>`);
   modal.hidden=false;scrim.hidden=false;document.getElementById("mClose").onclick=closeAll;
   document.getElementById("askForm").onsubmit=e=>{e.preventDefault();const ok=document.getElementById("askOk");ok.hidden=false;
     const n=document.getElementById("aName").value.trim(),ph=document.getElementById("aPhone").value.trim();
-    if(!n||!ph){ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can send the price.";return}
-    const url=sendEnquiry("Price enquiry: "+p.name,{"Artwork":p.name+" ("+p.medium+", "+p.size+")","Name":n,"Mobile":ph,"Framing":document.getElementById("aFrame").value,"Message":document.getElementById("aMsg").value.trim()});
-    ok.style.color="var(--fg)";ok.textContent=`Thank you, ${n}. We'll send the price and delivery date for "${p.name}" on WhatsApp within one working day. If WhatsApp didn't open, tap here: `;url.then(u=>ok.appendChild(waLink(u)))};
+    const off=offer?document.getElementById("aOffer").value.replace(/[^\d.]/g,""):"";
+    if(!n||!ph){ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can reply.";return}
+    if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
+    const fields={"Artwork":p.name+" ("+p.medium+", "+p.size+")","Name":n,"Mobile":ph};
+    if(offer)fields["Offer"]="AED "+off;
+    fields["Framing"]=document.getElementById("aFrame").value;fields["Message"]=document.getElementById("aMsg").value.trim();
+    const url=sendEnquiry((offer?"Price enquiry (offer): ":"Price enquiry: ")+p.name,fields);
+    ok.style.color="var(--fg)";ok.textContent=offer
+      ?`Thank you, ${n}. We'll check your offer of AED ${off} for "${p.name}" with the artist and reply on WhatsApp within one working day. If WhatsApp didn't open, tap here: `
+      :`Thank you, ${n}. We'll send the price and delivery date for "${p.name}" on WhatsApp within one working day. If WhatsApp didn't open, tap here: `;
+    url.then(u=>ok.appendChild(waLink(u)))};
   document.getElementById("aName").focus();
 }
+function roomView(p){
+  // Wall shown is 300 cm wide; sofa is 200 cm. Frame + mount adds about 8 cm each side.
+  const W=300,fw=p.wcm+16,fh=p.hcm+16,leftPct=fw/W*100;
+  const sofaTopPct=100-6-(85/ (W*0.75))*100; // sofa ~85 cm tall in a 225 cm-high view
+  const bottomGapPct=(25/(W*0.75))*100;       // hang 25 cm above the sofa
+  const heightPct=fh/(W*0.75)*100;
+  const top=Math.max(4,sofaTopPct-bottomGapPct-heightPct);
+  const mountPad=(8/fw*100).toFixed(2);
+  return `<div class="room" role="img" aria-label="${p.name} shown to scale on a wall above a two-metre sofa">
+    <div class="hang" style="width:${leftPct}%;top:${top}%"><div class="mount" style="padding:${mountPad}%"><img src="${p.img}" alt=""></div></div>
+    <svg viewBox="0 0 200 85" aria-hidden="true"><rect x="0" y="22" width="200" height="45" rx="10" fill="#6d7f86"/><rect x="12" y="6" width="176" height="34" rx="12" fill="#7f9198"/><rect x="0" y="30" width="22" height="40" rx="8" fill="#5e6f75"/><rect x="178" y="30" width="22" height="40" rx="8" fill="#5e6f75"/><rect x="14" y="67" width="6" height="18" fill="#3b2a1d"/><rect x="180" y="67" width="6" height="18" fill="#3b2a1d"/></svg>
+  </div>`;
+}
 function openModal(p){
-  const box=document.getElementById("modalBox");box.innerHTML="";
-  const art=document.createElement("div");art.className="art";art.appendChild(mk(p));box.appendChild(art);
-  box.insertAdjacentHTML("beforeend",`<div class="info"><button class="x" id="mClose" aria-label="Close">×</button>
-   <div class="kind" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
-   <h2 style="font-size:30px">${p.name}</h2><p class="note" style="font-size:15px;margin:0">${p.desc}</p>
-   <dl class="spec"><dt>Size</dt><dd>${p.size}</dd><dt>Medium</dt><dd>${p.medium}</dd>
-   <dt>Dispatch</dt><dd>${p.ship}</dd><dt>Includes</dt><dd>Signed original, duties paid</dd></dl>
-   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px">${p.price?`<span class="note">Price on request</span><button class="btn primary" data-ask="${p.id}">Ask for price</button>`:`<span class="note">Portrait sample</span><button class="btn primary" data-jump="commission">Commission a portrait</button>`}</div>
-   <p class="note" style="margin:0">Original by Siva Raja. Ask for the price and we reply on WhatsApp within one working day.</p></div>`);
-  modal.hidden=false;scrim.hidden=false;document.getElementById("mClose").onclick=closeAll;document.getElementById("mClose").focus();
+  const box=document.getElementById("modalBox");box.className="box wide";box.innerHTML="";
+  const sim=PRODUCTS.filter(x=>x.id!==p.id&&x.price&&(x.subject===p.subject||x.kind===p.kind)).sort((a,b)=>(b.subject===p.subject)-(a.subject===p.subject)).slice(0,3);
+  box.insertAdjacentHTML("beforeend",`<button class="x xtop" id="mClose" aria-label="Close">×</button><div class="viewer">
+      <div class="vtabs" role="group" aria-label="Choose view"><button type="button" data-v="art" aria-pressed="true">Artwork</button><button type="button" data-v="room" aria-pressed="false">On a wall</button></div>
+      <div class="stage" id="vStage"></div>
+      <p class="room-cap" id="vCap">Photo of the original by the artist.</p>
+    </div>
+    <div class="info">
+     <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · One of a kind</div>
+     <h2 style="font-size:30px">${p.name}</h2>
+     <p class="byline">by Siva Raja · Tamil Nadu, India</p>
+     <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
+     <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size} (artwork)</dd>
+       <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
+       <dt>Dispatch</dt><dd>${p.ship}</dd></dl>
+     <div class="badges">
+       <div class="badge"><i>✦</i><div><b>Original &amp; signed</b>Hand-made by the artist, not a print</div></div>
+       <div class="badge"><i>✓</i><div><b>Certificate of authenticity</b>Signed certificate with every original</div></div>
+       <div class="badge"><i>⛟</i><div><b>Delivered across the UAE</b>Duties paid, insured courier</div></div>
+       <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
+     </div>
+     <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">Ask for price</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}</div>
+     <p class="note" style="margin:0">We reply on WhatsApp within one working day with the price, framing options and delivery date.</p>
+     <details><summary>About the artist</summary><p>Siva Raja is a painter, sketch artist and story illustrator from Tamil Nadu. His watercolours and pen drawings record village life, old streets, rivers and trees in South India. Every work here is drawn or painted by hand and signed.</p></details>
+     <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
+     ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
+    </div>`);
+  const stage=box.querySelector("#vStage"),cap=box.querySelector("#vCap");
+  const show=v=>{box.querySelectorAll(".vtabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
+    if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent="Photo of the original by the artist.";}
+    else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, with a frame and mount (about ${p.wcm+16} × ${p.hcm+16} cm framed).`;}};
+  box.querySelectorAll(".vtabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));show("art");
+  modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mClose").focus();
 }
 
 /* commission estimate */
@@ -622,7 +715,7 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   const g=document.getElementById("kidGrid");
   g.innerHTML=KIDS.map(k=>`<figure class="kid">${kid(k)}<figcaption><b>${k.n}, ${k.a}</b> · ${k.c}</figcaption></figure>`).join("");
 })();
-drawGrid();updateCount();
+drawChips();drawGrid();updateCount();
 </script>
 <script type="module" src="/src/account.js"></script>
 </body>
