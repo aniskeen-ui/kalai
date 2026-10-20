@@ -61,6 +61,9 @@ const schema = a.schema({
       indiaCourierOverride: a.float(),
       localCourierOverride: a.float(),
       costs: a.json(),
+      // Every Zoho document for the order (quote, invoices, payments, PO, bills), refreshed by Check Zoho.
+      zohoDocs: a.json(),
+      docsAt: a.string(),
     })
     .identifier(['enquiryId'])
     .authorization((allow) => [allow.group('ADMINS')]),

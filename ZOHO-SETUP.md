@@ -85,14 +85,20 @@ Prices are VAT-inclusive. VAT stays off until you do this:
 
 To switch VAT off again: same command with `--value off`.
 
-## Purchase side: Siva Raja (PO → bill → payment)
+## Purchase side: Siva Raja (order → bill → payment made)
+
+This Zoho plan has no purchase orders, so Siva's order is kept on the Studio desk and Zoho gets the bill and the payment.
 
 - **Siva prices the work** on the Artist desk (`/artist.html`): his price in INR, ready-by date and a note. He never sees customer names, numbers or your selling price.
-- **You set the price** on the Studio desk: the Costing box converts his INR price with the master rates (Rates button) and suggests a selling price with your margin. Overrides are there for premium frames, oversized works and deliveries abroad.
-- **When the order is Paid**, after the customer invoice and payment, Zoho also gets a **purchase order to the vendor "Siva Raja"** for his price in AED, plus a separate line for the India courier he paid (reimbursement). Marked Issued. Siva then sees "Ordered · PO-…" and his price is fixed.
-- **His invoice arrives**: type his invoice number in "Siva's invoice no." and save. The PO becomes a **bill** in Zoho.
-- **You pay him**: type your bank transfer reference in "Paid to Siva" and save. A **vendor payment** is recorded against the bill. Siva sees "Paid to you".
-- Little Artists gifts have no artist purchase.
+- **You set the price** on the Studio desk: the Costing box converts his INR price with the master rates (Rates button) and suggests a selling price with your margin.
+- **When the order is Paid**, Siva's order is recorded on the enquiry (his price is then fixed; he sees "Ordered").
+- **His invoice arrives**: type his invoice number in "Siva's invoice no." and save. Zoho gets a **bill** from vendor "Siva Raja" for his price (AED) plus a line for the India courier he paid.
+- **You pay him**: type your bank transfer reference in "Paid to Siva" and save. Zoho records a **payment made** against the bill.
+- If Zoho asks for an expense account on the bill: Accountant → Chart of Accounts → open the account (e.g. Cost of Goods Sold) → copy the number at the end of the address, then in CloudShell:
+
+      aws ssm put-parameter --name /kalai/zoho/artist_account_id --type String --overwrite --value ACCOUNT_ID
+
+- **Check Zoho** on any enquiry lists every Zoho document for that order (quote, invoices, payments received, bills, payments made) with links.
 
 ### Zoho permissions needed (one new refresh token)
 

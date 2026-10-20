@@ -15,9 +15,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
  *    "Check Zoho" is pressed in the Studio desk (the checkZoho mutation, also handled here).
  *  - VAT: off until the SSM parameter /kalai/zoho/vat_tax_id holds the Zoho 5% tax ID.
  *    Prices are VAT-inclusive.
- *  - Purchase side (artist Siva Raja): once paid, a purchase order for his price (+ India courier
- *    reimbursement) from the Costing record; Siva's invoice number → bill from the PO;
- *    payment reference → vendor payment against the bill.
+ *  - Purchase side (artist Siva Raja; this Zoho plan has no purchase orders): once paid, Siva's order is
+ *    recorded on the enquiry (price fixed); his invoice number → bill for his price + India courier
+ *    from the Costing record; payment reference → payment made against the bill.
  *  - Artist desk API (artistList / artistQuote / artistPhoto): Siva sees and prices works without
  *    customer details or selling prices.
  */
@@ -459,53 +459,62 @@ async function getCosting(enquiryId: string): Promise<{ img: Img | null; costs: 
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Purchase order to Siva for his price (+ India courier he paid). Needs the costing saved in the Studio desk. */
-async function createPurchaseOrder(img: Img) {
+/** Lines owed to Siva for this order, from the saved costing: his price + the India courier he paid. */
+async function artistLines(img: Img) {
   const ref = str(img, 'ref');
   const { img: cimg, costs } = await getCosting(str(img, 'id'));
   const artistAed = round2(Number(costs.artistAed ?? 0));
-  if (!(artistAed > 0)) return null; // no artist price yet
   const courier = round2(Number(costs.indiaCourier ?? 0));
   const inr = Number(costs.artistInr ?? num(cimg ?? undefined, 'artistPriceInr') ?? 0);
-  const readyBy = str(cimg ?? undefined, 'artistReadyBy');
   const q = quoteParts(img);
-  const lines: LineItem[] = [
-    {
+  const lines: LineItem[] = [];
+  if (artistAed > 0) {
+    lines.push({
       name: q.name,
       description: `Artwork for ${ref}${inr ? ` · artist price INR ${inr.toLocaleString('en-IN')} @ ${costs.fx ?? ''} AED/INR` : ''}`,
       rate: artistAed,
       quantity: 1,
-    },
-  ];
-  if (courier > 0) lines.push({ name: 'Courier India → UAE (reimbursement)', description: `Shipping for ${ref}`, rate: courier, quantity: 1 });
-  const r = await zoho('/purchaseorders', {
-    method: 'POST',
-    body: JSON.stringify({
-      vendor_id: await vendorId(),
-      reference_number: ref,
-      date: dubaiToday(),
-      ...(/^\d{4}-\d{2}-\d{2}$/.test(readyBy) ? { delivery_date: readyBy } : {}),
-      line_items: lines,
-      notes: `Kalai Art House order ${ref}. Please quote this PO number on your invoice.`,
-    }),
-  });
-  if (!r.ok || !r.body.purchaseorder) throw new Error(`Zoho purchase order failed (${r.status}): ${r.body.message}`);
-  const po = r.body.purchaseorder;
-  if (!(await testMode())) {
-    const issued = await zoho(`/purchaseorders/${po.purchaseorder_id}/status/issued`, { method: 'POST' });
-    if (!issued.ok) console.warn(`PO ${po.purchaseorder_number} not marked issued: ${issued.body.message}`);
+    });
   }
-  console.log(`Created PO ${po.purchaseorder_number} for ${ref} (AED ${artistAed + courier})`);
-  return { id: po.purchaseorder_id, number: po.purchaseorder_number, total: artistAed + courier };
+  if (artistAed > 0 && courier > 0) lines.push({ name: 'Courier India → UAE (reimbursement)', description: `Shipping for ${ref}`, rate: courier, quantity: 1 });
+  return { lines, total: round2(artistAed + (artistAed > 0 ? courier : 0)) };
 }
 
-/** Siva's invoice arrived: bill from the PO, with his invoice number. */
-async function createBillFromPO(img: Img) {
+/** Customer paid: Siva's order is recorded on the enquiry (no Zoho document; this plan has no purchase orders). */
+async function recordArtistOrder(img: Img) {
+  const { lines, total } = await artistLines(img);
+  if (!lines.length) return null; // no artist price yet
+  return { id: 'ORDER', number: `Order ${str(img, 'ref')}`, total };
+}
+
+/** Expense account for Siva's bills: SSM /kalai/zoho/artist_account_id if set, else "Cost of Goods Sold" if readable. */
+let cachedAccount: string | null | undefined;
+async function artistAccountId(): Promise<string | null> {
+  if (cachedAccount !== undefined) return cachedAccount;
+  let id: string | null = null;
+  try {
+    const r = await ssm.send(new GetParameterCommand({ Name: '/kalai/zoho/artist_account_id' }));
+    id = (r.Parameter?.Value ?? '').trim() || null;
+  } catch {
+    id = null;
+  }
+  if (!id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = (await zoho('/chartofaccounts?filter_by=AccountType.CostOfGoodsSold')).body as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const acc = (r.chartofaccounts ?? []).find((a: any) => /cost of goods sold/i.test(a.account_name)) ?? (r.chartofaccounts ?? [])[0];
+    id = acc?.account_id ?? null;
+  }
+  cachedAccount = id;
+  return id;
+}
+
+/** Siva's invoice arrived: a bill with his invoice number, from the costing. */
+async function createArtistBill(img: Img) {
   const ref = str(img, 'ref');
-  const poId = str(img, 'zohoPOId');
-  const got = await zoho(`/purchaseorders/${poId}`);
-  if (!got.ok || !got.body.purchaseorder) throw new Error(`Zoho PO read failed (${got.status}): ${got.body.message}`);
-  const po = got.body.purchaseorder;
+  const { lines } = await artistLines(img);
+  if (!lines.length) throw new Error('No artist price in the costing, so no bill was created');
+  const account = await artistAccountId();
   const r = await zoho('/bills', {
     method: 'POST',
     body: JSON.stringify({
@@ -513,19 +522,17 @@ async function createBillFromPO(img: Img) {
       bill_number: str(img, 'artistInvoiceNo'),
       reference_number: ref,
       date: dubaiToday(),
-      purchaseorder_ids: [poId],
-      line_items: (po.line_items ?? []).map((li) => ({
-        purchaseorder_item_id: li.line_item_id,
-        name: li.name,
-        description: li.description,
-        rate: li.rate,
-        quantity: li.quantity ?? 1,
-        ...(li.account_id ? { account_id: li.account_id } : {}),
-      })),
+      line_items: lines.map((l) => ({ ...l, ...(account ? { account_id: account } : {}) })),
+      notes: `Kalai Art House order ${ref}.`,
     }),
   });
-  if (!r.ok || !r.body.bill) throw new Error(`Zoho bill failed (${r.status}): ${r.body.message}`);
-  console.log(`Created bill ${r.body.bill.bill_number} from ${po.purchaseorder_number} for ${ref}`);
+  if (!r.ok || !r.body.bill) {
+    const hint = /account/i.test(r.body.message ?? '')
+      ? ' Set the expense account: copy its ID from Zoho (Accountant → Chart of Accounts → the account, number at the end of the address) and save it as SSM parameter /kalai/zoho/artist_account_id.'
+      : '';
+    throw new Error(`Zoho bill failed (${r.status}): ${r.body.message}.${hint}`);
+  }
+  console.log(`Created bill ${r.body.bill.bill_number} for ${ref}`);
   return { id: r.body.bill.bill_id, number: r.body.bill.bill_number, total: Number(r.body.bill.total ?? 0) };
 }
 
@@ -563,36 +570,36 @@ async function purchaseSteps(start: Img) {
   if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT') return;
   try {
     if (!str(img, 'zohoPOId')) {
-      const po = await createPurchaseOrder(img);
+      const po = await recordArtistOrder(img);
       if (!po) {
         if (str(img, 'purchaseState') !== 'NEEDS_PRICE') {
-          await writeBack(id, { purchaseState: 'NEEDS_PRICE', purchaseMessage: "No artist price in the costing yet, so no PO for Siva. Add it and save." });
+          await writeBack(id, { purchaseState: 'NEEDS_PRICE', purchaseMessage: "No artist price in the costing yet, so Siva's order isn't recorded. Add it and save." });
         }
         return;
       }
       await writeBack(id, {
-        purchaseState: 'PO',
+        purchaseState: 'ORDERED',
         zohoPO: po.number,
         zohoPOId: po.id,
-        purchaseMessage: `${testing ? 'Test mode: draft ' : ''}PO ${po.number} to ${VENDOR_NAME} · AED ${po.total.toLocaleString('en-US')}`,
+        purchaseMessage: `${po.number}: ${VENDOR_NAME} · AED ${po.total.toLocaleString('en-US')} owed when his invoice arrives (price fixed)`,
       });
       img = { ...img, zohoPO: { S: po.number }, zohoPOId: { S: po.id } };
     }
     if (testing) {
       if ((str(img, 'artistInvoiceNo') || str(img, 'artistPaidRef')) && !/not posted/.test(str(img, 'purchaseMessage'))) {
         await writeBack(id, {
-          purchaseMessage: `Test mode: draft PO ${str(img, 'zohoPO')} to ${VENDOR_NAME}. Bill and payment to Siva are not posted while testing.`,
+          purchaseMessage: `Test mode: ${str(img, 'zohoPO')} recorded. Bill and payment to Siva are not posted while testing.`,
         });
       }
       return;
     }
     if (str(img, 'artistInvoiceNo') && !str(img, 'zohoBillId')) {
-      const bill = await createBillFromPO(img);
+      const bill = await createArtistBill(img);
       await writeBack(id, {
         purchaseState: 'BILLED',
         zohoBill: bill.number,
         zohoBillId: bill.id,
-        purchaseMessage: `Bill ${bill.number} from ${str(img, 'zohoPO')} · AED ${bill.total.toLocaleString('en-US')} to pay`,
+        purchaseMessage: `Bill ${bill.number} from ${VENDOR_NAME} · AED ${bill.total.toLocaleString('en-US')} to pay`,
       });
       img = { ...img, zohoBill: { S: bill.number }, zohoBillId: { S: bill.id } };
     }
@@ -642,7 +649,7 @@ async function costingFor(ids: string[]) {
 function artistStage(e: Img, c: Img | undefined) {
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
-  if (str(e, 'zohoPOId')) return { stage: 'ORDERED', label: `Ordered · ${str(e, 'zohoPO')}` };
+  if (str(e, 'zohoPOId')) return { stage: 'ORDERED', label: 'Ordered · price fixed · send your invoice' };
   const status = str(e, 'status') || 'RECEIVED';
   if (status === 'CANCELLED') return { stage: 'CLOSED', label: 'Not going ahead' };
   if (num(c, 'artistPriceInr')) return { stage: 'PRICED', label: status === 'PAID' ? 'Customer paid · order coming' : 'Price given · waiting for customer' };
@@ -686,7 +693,7 @@ async function artistQuote(args: ApiEvent['arguments']) {
   const got = await ddb.send(new GetItemCommand({ TableName: enquiryTable, Key: { id: { S: id } } }));
   const e = got.Item as Img | undefined;
   if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Enquiry not found');
-  if (str(e, 'zohoPOId')) throw new Error(`Already ordered (${str(e, 'zohoPO')}): the price can no longer change. Contact Kalai Art House.`);
+  if (str(e, 'zohoPOId')) throw new Error('Already ordered: the price can no longer change. Contact Kalai Art House.');
   const price = Number(args.priceInr);
   if (!(price > 0) || price > 10_000_000) throw new Error('Enter your price in INR (a number above 0).');
   const readyBy = String(args.readyBy ?? '').slice(0, 10);
@@ -729,7 +736,92 @@ async function artistPhoto(id: string) {
 
 // ---------- "Check Zoho" from the Studio desk ----------
 
+// ---------- all Zoho documents for one order (shown on the Studio desk) ----------
+
+const BOOKS_APP = `https://books.zoho.com/app/${env.ZOHO_ORG_ID}#`;
+type Doc = { group: 'SALES' | 'PURCHASE'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function zget(path: string): Promise<any> {
+  const r = await zoho(path);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return r.ok ? (r.body as any) : {};
+}
+
+async function collectDocs(ref: string): Promise<Doc[]> {
+  const q = encodeURIComponent(ref);
+  const [est, inv, bill] = await Promise.all([
+    zget(`/estimates?reference_number=${q}`),
+    zget(`/invoices?reference_number=${q}&filter_by=Status.All`),
+    zget(`/bills?reference_number=${q}`),
+  ]);
+  const same = (x: { reference_number?: string }) => (x.reference_number ?? '').trim() === ref;
+  const docs: Doc[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const e of (est.estimates ?? []).filter(same) as any[]) {
+    docs.push({ group: 'SALES', type: 'Quote', id: e.estimate_id, number: e.estimate_number, status: e.status, date: e.date, total: e.total, url: `${BOOKS_APP}/quotes/${e.estimate_id}` });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const i of (inv.invoices ?? []).filter(same) as any[]) {
+    docs.push({ group: 'SALES', type: 'Invoice', id: i.invoice_id, number: i.invoice_number, status: i.status, date: i.date, total: i.total, balance: i.balance, url: `${BOOKS_APP}/invoices/${i.invoice_id}` });
+    if (['draft', 'void'].includes(i.status)) continue;
+    const pays = await zget(`/invoices/${i.invoice_id}/payments`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const p of (pays.payments ?? []) as any[]) {
+      docs.push({ group: 'SALES', type: 'Payment received', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsreceived/${p.payment_id}` });
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const b of (bill.bills ?? []).filter(same) as any[]) {
+    docs.push({ group: 'PURCHASE', type: 'Bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}` });
+    if (['draft', 'void'].includes(b.status)) continue;
+    const pays = await zget(`/bills/${b.bill_id}/payments`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const p of (pays.payments ?? []) as any[]) {
+      docs.push({ group: 'PURCHASE', type: 'Payment made', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsmade/${p.payment_id}` });
+    }
+  }
+  return docs;
+}
+
+/** Keep the document list on the admin-only Costing record (customers never see it). */
+async function saveDocs(enquiryId: string, docs: Doc[]) {
+  const table = process.env.COSTING_TABLE;
+  if (!table) return;
+  const now = new Date().toISOString();
+  await ddb.send(
+    new UpdateItemCommand({
+      TableName: table,
+      Key: { enquiryId: { S: enquiryId } },
+      UpdateExpression: 'SET zohoDocs = :d, docsAt = :n, updatedAt = :n, createdAt = if_not_exists(createdAt, :n), #tn = if_not_exists(#tn, :t)',
+      ExpressionAttributeNames: { '#tn': '__typename' },
+      ExpressionAttributeValues: { ':d': { S: JSON.stringify({ checkedAt: now, docs }) }, ':n': { S: now }, ':t': { S: 'Costing' } },
+    }),
+  );
+}
+
 async function checkZoho(id: string) {
+  const result = await reconcileZoho(id);
+  const table = process.env.ENQUIRY_TABLE;
+  const got = table ? await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } })) : null;
+  const img = got?.Item as Img | undefined;
+  if (!img) return result;
+  try {
+    const docs = await collectDocs(str(img, 'ref'));
+    await saveDocs(id, docs);
+    // Backfill the purchase links if the documents exist in Zoho but the enquiry doesn't know them yet.
+    const bill = docs.find((d) => d.type === 'Bill' && d.status !== 'void');
+    const fill: Record<string, string | null> = {};
+    if (bill && !str(img, 'zohoBillId')) Object.assign(fill, { zohoBill: bill.number, zohoBillId: bill.id });
+    if (Object.keys(fill).length) await writeBack(id, fill);
+    return { ...result, documents: docs.length };
+  } catch (err) {
+    console.warn(`Could not list Zoho documents for ${str(img, 'ref')}:`, err);
+    return result;
+  }
+}
+
+async function reconcileZoho(id: string) {
   const table = process.env.ENQUIRY_TABLE;
   if (!table) throw new Error('ENQUIRY_TABLE is not configured');
   const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));

@@ -88,7 +88,7 @@ function card(x) {
       <div class="field"><label for="r-${esc(x.id)}">Ready to ship by</label><input id="r-${esc(x.id)}" type="date" value="${esc(x.artistReadyBy)}" ${dis}></div>
       <div class="field"><label for="n-${esc(x.id)}">Note (optional)</label><input id="n-${esc(x.id)}" value="${esc(x.artistNote)}" placeholder="e.g. needs 5 days" ${dis}></div>
       <div class="field wide"><button class="btn" type="submit" ${dis}>${x.artistPriceInr ? 'Update price' : 'Send price'}</button></div>
-      <div class="wide ok" id="m-${esc(x.id)}" role="status">${x.locked ? 'Price fixed by the purchase order.' : ''}</div>
+      <div class="wide ok" id="m-${esc(x.id)}" role="status">${x.locked ? 'Price fixed: order placed.' : ''}</div>
     </form>
   </article>`;
 }

@@ -182,7 +182,7 @@ function costingSection(e) {
     ? `From Siva ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
     : 'Siva hasn\'t priced this yet (Artist desk). You can also type his price here.';
   return `<fieldset class="cost" id="costing">
-    <legend>Costing ${lockedPO ? `<span class="muted">· locked by ${esc(e.zohoPO)}</span>` : ''}</legend>
+    <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
     ${rates.saved ? '' : '<div class="muted warnline">Rates are placeholders. Set the real ones under <b>Rates</b>.</div>'}
     <div class="three">
       <div class="field"><label for="cInr">Artist price (INR)</label><input id="cInr" type="number" min="0" step="1" value="${c.artistPriceInr ?? ''}" ${dis}></div>
@@ -207,12 +207,12 @@ function purchaseSection(e) {
   const color = st === 'ARTIST_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
   return `<fieldset class="cost" id="purchase">
     <legend>Siva Raja (purchase)</legend>
-    <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || 'The PO is created once the order is paid and the costing has Siva\'s price.')}</div>
+    <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || 'Siva\'s order is recorded once the customer has paid and the costing has his price.')}</div>
     <div class="two">
       <div class="field"><label for="pInv">Siva's invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From his invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
       <div class="field"><label for="pPaid">Paid to Siva: bank ref</label><input id="pPaid" value="${esc(e.artistPaidRef)}" placeholder="Transfer reference" ${!e.zohoPOId || e.zohoVendorPaymentId ? 'disabled' : ''}></div>
     </div>
-    <div class="muted" style="font-size:12px">Save with his invoice number to turn the PO into a bill in Zoho; save with your bank reference to record the payment to him.</div>
+    <div class="muted" style="font-size:12px">Save with his invoice number to create the bill in Zoho; save with your bank reference to record the payment made to him.</div>
   </fieldset>`;
 }
 
@@ -317,6 +317,27 @@ function showRates() {
   });
 }
 
+const DOC_STATUS_OK = ['paid', 'accepted', 'closed', 'billed', 'issued', 'invoiced', 'sent', 'open', 'creditcard', 'banktransfer', 'cash', 'recorded'];
+function docsList(e) {
+  const raw = costings.get(e.id)?.zohoDocs;
+  let d = null;
+  try { d = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; if (typeof d === 'string') d = JSON.parse(d); } catch { d = null; }
+  if (!d) return '<div class="muted" style="font-size:12px">Press Check Zoho to list every Zoho document for this order.</div>';
+  if (!d.docs?.length) return `<div class="muted" style="font-size:12px">No Zoho documents with reference ${esc(e.ref)} (checked ${esc(when(d.checkedAt))}).</div>`;
+  const pretty = (st) => String(st || '').replace(/creditcard/, 'card').replace(/banktransfer/, 'bank transfer').replace(/_/g, ' ');
+  const rows = (group, title) => {
+    const list = d.docs.filter((x) => x.group === group);
+    if (!list.length) return '';
+    return `<tr class="grp"><th colspan="4">${title}</th></tr>` + list.map((x) => `<tr>
+      <td>${esc(x.type)}</td>
+      <td><a href="${esc(x.url)}" target="_blank" rel="noopener" class="mono">${esc(x.number || 'open')}</a></td>
+      <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
+      <td class="num mono">${x.total != null ? aed(x.total, 2) : ''}${x.balance ? `<br><span class="muted">due ${aed(x.balance, 2)}</span>` : ''}</td></tr>`).join('');
+  };
+  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('PURCHASE', 'Purchase (Siva)')}</tbody></table>
+    <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
+}
+
 function zohoPanel(e) {
   const st = e.zohoState || '';
   const color = st === 'PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
@@ -329,6 +350,7 @@ function zohoPanel(e) {
     </div>
     <div style="font-size:14px;overflow-wrap:anywhere">${esc(e.zohoMessage || 'No reply from Zoho yet. Press Check Zoho to look it up.')}</div>
     ${isLocked(e) ? `<div class="muted" style="font-size:12px">🔒 Locked: the payment is in Zoho, so the price can't change and the status can't go back to Received, Price sent or Cancelled. If the payment failed, void invoice ${esc(e.zohoInvoice || '')} or delete its payment in Zoho, then press <b>Check Zoho</b> to unlock.</div>` : ''}
+    ${docsList(e)}
     <div class="ok" id="zohoMsg" role="status"></div>
   </div>`;
 }
@@ -336,6 +358,10 @@ function zohoPanel(e) {
 async function refreshOne(id) {
   const { data } = await client.models.Enquiry.get({ id });
   if (!data) return null;
+  try {
+    const c = await client.models.Costing.get({ enquiryId: id });
+    if (c.data) costings.set(id, c.data);
+  } catch { /* costing optional */ }
   const i = all.findIndex((x) => x.id === id);
   if (i >= 0) all[i] = data; else all.push(data);
   render();
@@ -381,7 +407,7 @@ async function showDetail(e) {
         </select></div>
         <div class="field"><label for="ePayRef">Payment reference</label><input id="ePayRef" placeholder="Ziina / bank transaction ID" value="${esc(e.paymentRef)}"></div>
       </div>
-      <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? ', then raises the purchase order to Siva' : ''}.</div>
+      <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? ', then records Siva’s order' : ''}.</div>
       ${purchaseSection(e)}
       <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="https://… from Telr, Tap or Stripe" value="${esc(e.paymentLink)}"></div>
       <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
