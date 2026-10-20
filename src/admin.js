@@ -218,6 +218,23 @@ function purchaseSection(e) {
   </fieldset>`;
 }
 
+const COURIERS = ['Aramex', 'DHL', 'Emirates Post', 'Quiqup', 'SMSA', 'Own delivery'];
+const SHIP_STATUSES = ['SHIPPED', 'DELIVERED'];
+function shippingSection(e) {
+  const st = e.deliveryState || '';
+  const color = st === 'DELIVERED' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'DRAFT' ? 'var(--gold)' : 'var(--muted)';
+  return `<fieldset class="cost" id="shipBox" ${SHIP_STATUSES.includes(e.status) ? '' : 'hidden'}>
+    <legend>Delivery</legend>
+    ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.deliveryMessage)}</div>` : ''}
+    <div class="two">
+      <div class="field"><label for="eCourier">Courier</label><input id="eCourier" list="courierList" value="${esc(e.courierName)}" placeholder="Aramex, DHL…">
+        <datalist id="courierList">${COURIERS.map((c) => `<option value="${c}">`).join('')}</datalist></div>
+      <div class="field"><label for="eAwb">AWB / tracking no.</label><input id="eAwb" value="${esc(e.trackingNo)}" placeholder="e.g. 4489 2201 7731"></div>
+    </div>
+    <div class="muted" style="font-size:12px">Saving as <b>Shipped</b> creates the delivery challan in Zoho; <b>Delivered</b> marks it delivered. The customer sees the courier and tracking number under My enquiries.</div>
+  </fieldset>`;
+}
+
 function readCosting() {
   return {
     artistPriceInr: n($('cInr')?.value),
@@ -319,7 +336,7 @@ function showRates() {
   });
 }
 
-const DOC_STATUS_OK = ['paid', 'accepted', 'closed', 'billed', 'issued', 'invoiced', 'sent', 'open', 'creditcard', 'banktransfer', 'cash', 'recorded'];
+const DOC_STATUS_OK = ['delivered', 'paid', 'accepted', 'closed', 'billed', 'issued', 'invoiced', 'sent', 'open', 'creditcard', 'banktransfer', 'cash', 'recorded'];
 function docsList(e) {
   const raw = costings.get(e.id)?.zohoDocs;
   let d = null;
@@ -336,7 +353,7 @@ function docsList(e) {
       <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
       <td class="num mono">${x.total != null ? aed(x.total, 2) : ''}${x.balance ? `<br><span class="muted">due ${aed(x.balance, 2)}</span>` : ''}</td></tr>`).join('');
   };
-  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('PURCHASE', 'Purchase (Siva)')}</tbody></table>
+  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', 'Purchase (Siva)')}</tbody></table>
     <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
 }
 
@@ -403,6 +420,7 @@ async function showDetail(e) {
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === s ? 'selected' : ''} ${locked && BEFORE_PAYMENT.includes(k) && k !== s ? 'disabled' : ''}>${v}${locked && BEFORE_PAYMENT.includes(k) && k !== s ? ' (locked)' : ''}</option>`).join('')}</select></div>
         <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}></div>
       </div>
+      ${shippingSection(e)}
       ${costingSection(e)}
       <div class="two">
         <div class="field"><label for="ePayMethod">Paid by</label><select id="ePayMethod">
@@ -425,11 +443,14 @@ async function showDetail(e) {
     const price = $('ePrice').value, link = $('eLink').value.trim(), msg = $('eMsg').value.trim();
     const text = [`Hello ${e.customerName || ''}, this is ${STUDIO_WHATSAPP_NAME} about your enquiry ${e.ref} (${e.title}).`,
       price ? `Price: AED ${price}` : '', msg, link ? `Pay securely here: ${link}` : '',
+      SHIP_STATUSES.includes($('eStatus').value) && $('eCourier').value.trim()
+        ? `${$('eStatus').value === 'DELIVERED' ? 'Delivered' : 'Shipped'} with ${$('eCourier').value.trim()}${$('eAwb').value.trim() ? `, tracking no. ${$('eAwb').value.trim()}` : ''}` : '',
       'You can also track it under My enquiries on art.pranixtechno.com'].filter(Boolean).join('\n');
     $('waLinks').innerHTML = `<a href="https://wa.me/${digits}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Send update on WhatsApp</a>`;
   };
   waLink();
-  ['ePhone', 'ePrice', 'eLink', 'eMsg'].forEach((id) => $(id).addEventListener('input', waLink));
+  ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
+  $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); });
   if ($('costOut')) {
     renderCost();
     ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice'].forEach((id) => { $(id).addEventListener('input', renderCost); $(id).addEventListener('change', renderCost); });
@@ -471,6 +492,13 @@ async function showDetail(e) {
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose how it was paid (Ziina, bank transfer…) before marking it Paid.</div>');
       b.disabled = false; return;
     }
+    if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {
+      const courier = $('eCourier').value.trim(), awb = $('eAwb').value.trim();
+      const why = !e.zohoInvoiceId ? 'Mark it Paid first, so Zoho has the invoice before it ships.'
+        : !courier ? 'Add the courier before marking it shipped.'
+        : !awb && !/own/i.test(courier) ? 'Add the AWB / tracking number before marking it shipped.' : '';
+      if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }
+    }
     if (locked && BEFORE_PAYMENT.includes($('eStatus').value) && $('eStatus').value !== s) {
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Locked: reverse the payment in Zoho first, then press Check Zoho.</div>');
       b.disabled = false; return;
@@ -480,12 +508,15 @@ async function showDetail(e) {
     const paidRef = $('pPaid') && !$('pPaid').disabled ? $('pPaid').value.trim() : null;
     const costingChanged = $('costing') && !e.zohoPOId;
     const toZoho = (!locked && (($('eStatus').value === 'PAID' && s !== 'PAID') || (priceVal !== '' && Number(priceVal) !== Number(e.quotedPrice ?? NaN))))
+      || (SHIP_STATUSES.includes($('eStatus').value) && $('eStatus').value !== s && !!e.zohoInvoiceId)
       || (locked && hasArtist(e) && (!e.zohoPOId || (invNo && invNo !== (e.artistInvoiceNo || '')) || (paidRef && paidRef !== (e.artistPaidRef || ''))));
     try {
       if (costingChanged) await saveCosting(e);
       const { data, errors } = await client.models.Enquiry.update({
         ...(costingChanged ? { costingAt: savedAt } : {}),
         ...(invNo != null ? { artistInvoiceNo: invNo || null } : {}),
+        courierName: $('eCourier').value.trim() || null,
+        trackingNo: $('eAwb').value.trim() || null,
         ...(paidRef != null ? { artistPaidRef: paidRef || null } : {}),
         id: e.id,
         phone: $('ePhone').value.trim() || null,

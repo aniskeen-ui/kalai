@@ -618,6 +618,82 @@ async function purchaseSteps(start: Img) {
   }
 }
 
+// ---------- delivery challan: Shipped → challan, Delivered → marked delivered ----------
+
+type ChallanBody = { deliverychallan?: { deliverychallan_id: string; deliverychallan_number: string; status?: string } };
+
+async function createChallan(img: Img) {
+  const q = quoteParts(img);
+  const price = num(img, 'quotedPrice') ?? 0;
+  const courier = str(img, 'courierName');
+  const awb = str(img, 'trackingNo');
+  const notes = [
+    `Kalai Art House order ${q.ref}${str(img, 'zohoInvoice') ? ` · invoice ${str(img, 'zohoInvoice')}` : ''}`,
+    `Courier: ${courier || '-'} · AWB / tracking: ${awb || '-'}`,
+    `Deliver to: ${str(img, 'customerName')} · ${str(img, 'phone')}`,
+  ].join('\n');
+  const body: Record<string, unknown> = {
+    customer_id: await fixedCustomerId(),
+    reference_number: q.ref,
+    date: dubaiToday(),
+    challan_type: 'others',
+    line_items: [{ name: q.name, description: q.description, rate: price, quantity: 1 }],
+    notes,
+  };
+  let r = await zoho('/deliverychallans', { method: 'POST', body: JSON.stringify(body) });
+  if (!r.ok && /challan_type/i.test(r.body.message ?? '')) {
+    delete body.challan_type; // not used in every edition
+    r = await zoho('/deliverychallans', { method: 'POST', body: JSON.stringify(body) });
+  }
+  const dc = (r.body as ChallanBody).deliverychallan;
+  if (!r.ok || !dc) throw new Error(`Zoho delivery challan failed (${r.status}): ${r.body.message}`);
+  console.log(`Created delivery challan ${dc.deliverychallan_number} for ${q.ref}`);
+  return { id: dc.deliverychallan_id, number: dc.deliverychallan_number };
+}
+
+/** Never throws: problems go to deliveryMessage. */
+async function deliverySteps(img: Img) {
+  const id = str(img, 'id');
+  const status = str(img, 'status');
+  if (!['SHIPPED', 'DELIVERED'].includes(status) || !str(img, 'zohoInvoiceId')) return;
+  const testing = await testMode();
+  const courierLine = `${str(img, 'courierName') || 'courier'}${str(img, 'trackingNo') ? ` · AWB ${str(img, 'trackingNo')}` : ''}`;
+  try {
+    let challanId = str(img, 'zohoChallanId');
+    let challanNo = str(img, 'zohoChallan');
+    if (!challanId) {
+      const dc = await createChallan(img);
+      challanId = dc.id;
+      challanNo = dc.number;
+      if (!testing) {
+        const open = await zoho(`/deliverychallans/${dc.id}/status/open`, { method: 'POST' });
+        if (!open.ok) console.warn(`Challan ${dc.number} not marked open: ${open.body.message}`);
+      }
+      await writeBack(id, {
+        zohoChallan: challanNo,
+        zohoChallanId: challanId,
+        deliveryState: testing ? 'DRAFT' : 'OPEN',
+        deliveryMessage: `${testing ? 'Test mode: draft ' : ''}delivery challan ${challanNo} · shipped with ${courierLine}`,
+      });
+    }
+    if (status === 'DELIVERED' && str(img, 'deliveryState') !== 'DELIVERED') {
+      if (testing) {
+        if (/not marked delivered/.test(str(img, 'deliveryMessage'))) return;
+        await writeBack(id, { deliveryState: 'DRAFT', deliveryMessage: `Test mode: draft delivery challan ${challanNo} (not marked delivered while testing) · ${courierLine}` });
+        return;
+      }
+      const d = await zoho(`/deliverychallans/${challanId}/status/delivered`, { method: 'POST' });
+      if (!d.ok) throw new Error(`Challan ${challanNo} not marked delivered: ${d.body.message}`);
+      await writeBack(id, { deliveryState: 'DELIVERED', deliveryMessage: `Delivery challan ${challanNo} delivered · ${courierLine}` });
+      console.log(`Challan ${challanNo} for ${str(img, 'ref')} marked delivered`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Delivery step failed for ${str(img, 'ref')}:`, err);
+    await writeBack(id, { deliveryState: 'ERROR', deliveryMessage: msg.slice(0, 500) });
+  }
+}
+
 // ---------- Artist desk (Siva): no customer details, no selling price ----------
 
 const PRIVATE_KEY = /name|mobile|phone|whats|email|address|parent|contact|reference|deliver|to$|gift for/i;
@@ -739,7 +815,7 @@ async function artistPhoto(id: string) {
 // ---------- all Zoho documents for one order (shown on the Studio desk) ----------
 
 const BOOKS_APP = `https://books.zoho.com/app/${env.ZOHO_ORG_ID}#`;
-type Doc = { group: 'SALES' | 'PURCHASE'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string };
+type Doc = { group: 'SALES' | 'PURCHASE' | 'DELIVERY'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function zget(path: string): Promise<any> {
@@ -750,10 +826,11 @@ async function zget(path: string): Promise<any> {
 
 async function collectDocs(ref: string): Promise<Doc[]> {
   const q = encodeURIComponent(ref);
-  const [est, inv, bill] = await Promise.all([
+  const [est, inv, bill, dcs] = await Promise.all([
     zget(`/estimates?reference_number=${q}`),
     zget(`/invoices?reference_number=${q}&filter_by=Status.All`),
     zget(`/bills?reference_number=${q}`),
+    zget(`/deliverychallans?reference_number=${q}`),
   ]);
   const same = (x: { reference_number?: string }) => (x.reference_number ?? '').trim() === ref;
   const docs: Doc[] = [];
@@ -780,6 +857,10 @@ async function collectDocs(ref: string): Promise<Doc[]> {
     for (const p of (pays.payments ?? []) as any[]) {
       docs.push({ group: 'PURCHASE', type: 'Payment made', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsmade/${p.payment_id}` });
     }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const c of (dcs.deliverychallans ?? []).filter(same) as any[]) {
+    docs.push({ group: 'DELIVERY', type: 'Delivery challan', id: c.deliverychallan_id, number: c.deliverychallan_number, status: c.status, date: c.date, total: c.total, url: `${BOOKS_APP}/deliverychallans/${c.deliverychallan_id}` });
   }
   return docs;
 }
@@ -813,6 +894,9 @@ async function checkZoho(id: string) {
     const bill = docs.find((d) => d.type === 'Bill' && d.status !== 'void');
     const fill: Record<string, string | null> = {};
     if (bill && !str(img, 'zohoBillId')) Object.assign(fill, { zohoBill: bill.number, zohoBillId: bill.id });
+    const dc = docs.find((d) => d.type === 'Delivery challan');
+    if (dc && !str(img, 'zohoChallanId')) Object.assign(fill, { zohoChallan: dc.number, zohoChallanId: dc.id });
+    if (dc && str(img, 'zohoChallanId') === dc.id && dc.status === 'delivered' && str(img, 'deliveryState') !== 'DELIVERED') fill.deliveryState = 'DELIVERED';
     if (Object.keys(fill).length) await writeBack(id, fill);
     return { ...result, documents: docs.length };
   } catch (err) {
@@ -925,6 +1009,9 @@ async function onStreamRecord(rec: StreamRecord) {
   const price = num(img, 'quotedPrice');
   const oldPrice = old ? num(old, 'quotedPrice') : price;
   const locked = str(img, 'zohoPaymentId') !== '';
+
+  // Shipped / Delivered: delivery challan in Zoho (needs the invoice first).
+  if (['SHIPPED', 'DELIVERED'].includes(status)) await deliverySteps(img);
 
   if (locked) {
     await purchaseSteps(img);

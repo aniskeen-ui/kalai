@@ -100,9 +100,16 @@ This Zoho plan has no purchase orders, so Siva's order is kept on the Studio des
 
 - **Check Zoho** on any enquiry lists every Zoho document for that order (quote, invoices, payments received, bills, payments made) with links.
 
-### Zoho permissions needed (one new refresh token)
+### Zoho permissions needed (refresh token)
 
-    ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ,ZohoBooks.estimates.UPDATE,ZohoBooks.invoices.CREATE,ZohoBooks.invoices.READ,ZohoBooks.invoices.UPDATE,ZohoBooks.customerpayments.CREATE,ZohoBooks.contacts.READ,ZohoBooks.contacts.CREATE,ZohoBooks.purchaseorders.CREATE,ZohoBooks.purchaseorders.READ,ZohoBooks.purchaseorders.UPDATE,ZohoBooks.bills.CREATE,ZohoBooks.bills.READ,ZohoBooks.vendorpayments.CREATE
+    ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ,ZohoBooks.estimates.UPDATE,ZohoBooks.invoices.CREATE,ZohoBooks.invoices.READ,ZohoBooks.invoices.UPDATE,ZohoBooks.customerpayments.CREATE,ZohoBooks.contacts.READ,ZohoBooks.contacts.CREATE,ZohoBooks.bills.CREATE,ZohoBooks.bills.READ,ZohoBooks.vendorpayments.CREATE,ZohoBooks.deliverychallans.CREATE,ZohoBooks.deliverychallans.READ,ZohoBooks.deliverychallans.UPDATE,ZohoBooks.accountants.READ
+
+## Delivery (Shipped → delivery challan → Delivered)
+
+- Setting **Shipped** needs the courier and the AWB / tracking number (and the invoice must exist, so mark it Paid first). Zoho gets a **delivery challan** with the KA reference, the artwork, the courier and the AWB (draft in test mode, open when live).
+- Setting **Delivered** marks the same challan **delivered** in Zoho (skipped in test mode).
+- The customer sees "Shipped with Aramex · tracking no. …" under My enquiries; the WhatsApp update includes it too.
+- Check Zoho lists the challan under "Delivery".
 
 ### Giving Siva access
 

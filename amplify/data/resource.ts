@@ -42,6 +42,13 @@ const schema = a.schema({
       zohoBill: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoBillId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoVendorPaymentId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Delivery: courier + tracking (shown to the customer) and the Zoho delivery challan.
+      courierName: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      trackingNo: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoChallan: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoChallanId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryState: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryMessage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
