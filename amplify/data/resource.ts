@@ -3,7 +3,7 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 /**
  * One Enquiry per "Ask for price", commission request or Little Artists gift.
  * Customers can create and read their own enquiries.
- * Price, payment link, status and the studio message can only be set by ADMINS.
+ * Price, payment link, status, payment details and the studio message can only be set by ADMINS.
  */
 const schema = a.schema({
   Enquiry: a
@@ -20,6 +20,8 @@ const schema = a.schema({
       quotedPrice: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       paymentLink: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       adminMessage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      paymentMethod: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      paymentRef: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
