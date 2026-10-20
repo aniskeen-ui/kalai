@@ -312,7 +312,6 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     </div>
     <div class="field"><label for="cPhoto">Reference photo</label><input id="cPhoto" type="file" accept="image/*"></div>
     <div class="field"><label for="cNotes">Notes for the artist</label><textarea id="cNotes" placeholder="Our golden retriever Bruno, sitting on the balcony at sunset"></textarea></div>
-    <div class="estimate"><span class="note">Estimated price, duties and delivery included</span><span class="mono" id="est">AED 0</span></div>
     <button class="btn primary" type="submit">Request a quote</button>
     <div class="ok-msg" id="commOk" hidden></div>
   </form>
@@ -624,18 +623,14 @@ function openModal(p){
   modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mClose").focus();
 }
 
-/* commission estimate */
-const BASE={water:{s:350,m:520,l:850},pencil:{s:220,m:340,l:560}},SUBJ={pet:1,home:1.15,family:1.3,place:1.1},FRAME={none:0,wood:120,black:140};
+/* commission request (price on request: no estimate shown) */
 const val=n=>document.querySelector(`input[name="${n}"]:checked`).value;
-function est(){const s=val("style"),sz=document.getElementById("cSize").value,f=document.getElementById("cFrame").value;
-  let p=Math.round(BASE[s][sz]*SUBJ[val("subj")]/10)*10+FRAME[f];document.getElementById("est").textContent=fmt(p);return p}
-document.getElementById("commForm").addEventListener("change",est);est();
 document.getElementById("commForm").onsubmit=e=>{e.preventDefault();const ok=document.getElementById("commOk");
   const n=document.getElementById("cName").value.trim(),ph=document.getElementById("cPhone").value.trim();
   if(!n||!ph){ok.hidden=false;ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can send the quote.";return}
   const photo=document.getElementById("cPhoto").files[0];
-  const url=sendEnquiry("Commission request",{"Name":n,"Mobile":ph,"Style":val("style")==="water"?"Watercolour":"Pencil sketch","Subject":document.querySelector('input[name="subj"]:checked').nextElementSibling.textContent,"Size":document.getElementById("cSize").selectedOptions[0].text,"Frame":document.getElementById("cFrame").selectedOptions[0].text,"Estimate":fmt(est()),"Notes":document.getElementById("cNotes").value.trim()},[["Reference photo",photo]]);
-  ok.hidden=false;ok.style.color="var(--fg)";ok.textContent=`Thank you, ${n}. Your estimate is ${fmt(est())}. ${CONFIG.formspree?"We've received your photo.":"Please send your reference photo in the WhatsApp chat that just opened."} We'll confirm the price within one working day. If WhatsApp didn't open, tap here: `;url.then(u=>ok.appendChild(waLink(u)))};
+  const url=sendEnquiry("Commission request",{"Name":n,"Mobile":ph,"Style":val("style")==="water"?"Watercolour":"Pencil sketch","Subject":document.querySelector('input[name="subj"]:checked').nextElementSibling.textContent,"Size":document.getElementById("cSize").selectedOptions[0].text,"Frame":document.getElementById("cFrame").selectedOptions[0].text,"Notes":document.getElementById("cNotes").value.trim()},[["Reference photo",photo]]);
+  ok.hidden=false;ok.style.color="var(--fg)";ok.textContent=`Thank you, ${n}. ${CONFIG.formspree?"We've received your photo.":"Please send your reference photo in the WhatsApp chat that just opened."} We'll confirm the price within one working day. If WhatsApp didn't open, tap here: `;url.then(u=>ok.appendChild(waLink(u)))};
 
 /* toast */
 let tt;function toast(m){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2200)}
