@@ -124,6 +124,13 @@ async function showDetail(e) {
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === s ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
         <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}"></div>
       </div>
+      <div class="two">
+        <div class="field"><label for="ePayMethod">Paid by</label><select id="ePayMethod">
+          ${[['', '–'], ['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${k === (e.paymentMethod || '') ? 'selected' : ''}>${v}</option>`).join('')}
+        </select></div>
+        <div class="field"><label for="ePayRef">Payment reference</label><input id="ePayRef" placeholder="Ziina / bank transaction ID" value="${esc(e.paymentRef)}"></div>
+      </div>
+      <div class="muted" style="font-size:12px">When you save with status <b>Paid</b>, Zoho Books creates the invoice and records the payment automatically.</div>
       <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="https://… from Telr, Tap or Stripe" value="${esc(e.paymentLink)}"></div>
       <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
       <div class="ok" id="saveMsg" role="status"></div>
@@ -155,19 +162,31 @@ async function showDetail(e) {
   $('editForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const b = ev.target.querySelector('button'); b.disabled = true; $('saveMsg').textContent = '';
+    $('detail').querySelectorAll('.err').forEach((x) => x.remove());
     const priceVal = $('ePrice').value.trim();
+    if ($('eStatus').value === 'PAID' && (!priceVal || Number(priceVal) <= 0)) {
+      $('saveMsg').textContent = '';
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Set the price before marking it Paid, so the Zoho invoice has the right amount.</div>');
+      b.disabled = false; return;
+    }
+    if ($('eStatus').value === 'PAID' && !$('ePayMethod').value) {
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose how it was paid (Ziina, bank transfer…) before marking it Paid.</div>');
+      b.disabled = false; return;
+    }
     try {
       const { data, errors } = await client.models.Enquiry.update({
         id: e.id,
         phone: $('ePhone').value.trim() || null,
         status: $('eStatus').value,
+        paymentMethod: $('ePayMethod').value || null,
+        paymentRef: $('ePayRef').value.trim() || null,
         quotedPrice: priceVal === '' ? null : Number(priceVal),
         paymentLink: $('eLink').value.trim() || null,
         adminMessage: $('eMsg').value.trim() || null,
       });
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(e, data || {});
-      $('saveMsg').textContent = 'Saved. The customer sees this under My enquiries. Use the WhatsApp link to let them know.';
+      $('saveMsg').textContent = $('eStatus').value === 'PAID' ? 'Saved as Paid. Zoho Books will create the invoice and record the payment within a minute.' : 'Saved. The customer sees this under My enquiries. Use the WhatsApp link to let them know.';
       render();
     } catch (ex) {
       $('saveMsg').textContent = '';
