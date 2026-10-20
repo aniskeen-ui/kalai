@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Kalai Studio Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: operations desk — enquiry queue on the left, the selected enquiry's editor on the right */
+:root{
+  --bg:#f7f6f3; --surface:#ffffff; --sunk:#eeece6; --fg:#1d1b2b; --muted:#5f5b6e; --line:#dedbd2;
+  --ink:#232046; --gold:#b0832b; --gold-soft:#f3e7cc; --kumkum:#a3242f; --ok:#2f7d4f; --on-ink:#f6f1e4;
+  --display:"Marcellus",Georgia,serif; --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; --r:6px;
+}
+@media (prefers-color-scheme:dark){:root{--bg:#13121c;--surface:#1c1a28;--sunk:#232133;--fg:#efedf5;--muted:#a6a2b8;--line:#33304a;--ink:#0d0c16;--gold:#d9ad55;--gold-soft:#3a3020;--kumkum:#e0646e;--ok:#6cc08f;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--body)}
+header.top{background:var(--ink);color:var(--on-ink)}
+header.top .in{display:flex;align-items:center;gap:16px;padding:14px max(16px,env(safe-area-inset-left,0px))}
+header.top b{font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.06em;margin-right:auto}
+header.top button{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 14px;font:inherit;font-size:14px;cursor:pointer}
+main{padding:20px max(16px,env(safe-area-inset-left,0px)) 40px}
+h1,h2{font-family:var(--display);font-weight:400;margin:0}
+.btn{border:0;border-radius:var(--r);padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--ink);color:var(--on-ink)}
+@media (prefers-color-scheme:dark){.btn{background:var(--gold);color:#1d1b2b}}
+.btn:disabled{opacity:.6;cursor:wait}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:9px 11px;width:100%}
+label{font-size:13px;font-weight:600}
+.field{display:grid;gap:5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.login{max-width:380px;margin:40px auto;display:grid;gap:14px}
+.err{color:var(--kumkum);font-size:14px;min-height:1em}
+.muted{color:var(--muted);font-size:14px}
+.desk{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.bar select{width:auto}
+.counts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.count{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px}
+.count b{font-family:var(--mono)}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+tbody tr{cursor:pointer}
+tbody tr:hover,tbody tr.sel{background:var(--gold-soft)}
+td.mono{font-family:var(--mono);font-size:13px}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--sunk)}
+.pill.RECEIVED{background:var(--kumkum);color:#fff}
+.pill.DELIVERED{background:var(--ok);color:#fff}
+.pill.PRICE_SENT,.pill.PAID{background:var(--gold-soft)}
+.detail{display:grid;gap:14px;position:sticky;top:12px}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:14px;margin:0}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.links{display:flex;flex-wrap:wrap;gap:14px;font-size:14px}
+.links a{color:var(--kumkum)}
+.ok{color:var(--ok);font-size:14px;min-height:1em}
+@media (max-width:900px){.desk{grid-template-columns:1fr}.detail{position:static}}
+@media (max-width:480px){.two{grid-template-columns:1fr}}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:13px}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--gold);color:var(--fg);margin-left:4px}
+fieldset.cost{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px 12px;display:grid;gap:10px;margin:0;min-width:0}
+fieldset.cost legend{font-size:13px;font-weight:700;padding:0 6px}
+fieldset.cost summary{font-size:13px;cursor:pointer;color:var(--muted)}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+table.costs{font-size:13px;width:100%}
+table.costs td,table.costs th{padding:5px 8px;white-space:normal}
+table.costs input{padding:6px 8px}
+table.costs td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.suggest{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:var(--gold-soft);border-radius:var(--r);padding:8px 10px;font-size:14px}
+.marginline{font-size:13px}
+.marginline.low{color:var(--kumkum)}
+.warnline{font-size:12px;border-left:3px solid var(--gold);padding-left:8px}
+@media (max-width:480px){.three{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>KALAI · Studio desk</b><span id="who" class="muted" style="color:#cfc9e2"></span><button id="signOutBtn" hidden>Sign out</button></div></header>
+<main>
+  <section id="loginView" class="card login" hidden>
+    <h1 style="font-size:26px">Studio sign in</h1>
+    <p class="muted">For Kalai Art House staff. Your account must be in the ADMINS group.</p>
+    <form id="loginForm" novalidate style="display:grid;gap:12px">
+      <div class="field"><label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="lPass">Password</label><input id="lPass" type="password" autocomplete="current-password" required></div>
+      <div class="err" id="loginErr" role="alert"></div>
+      <button class="btn" type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <section id="denyView" class="card login" hidden>
+    <h1 style="font-size:24px">No studio access</h1>
+    <p class="muted">You're signed in, but this account isn't in the ADMINS group. Add it in Amazon Cognito (see SETUP.md), then sign out and back in.</p>
+  </section>
+
+  <section id="deskView" hidden>
+    <div class="bar">
+      <h1 style="font-size:28px;margin-right:auto">Enquiries</h1>
+      <select id="fStatus" aria-label="Filter by status">
+        <option value="">All statuses</option>
+      </select>
+      <select id="fKind" aria-label="Filter by type">
+        <option value="">All types</option><option value="PRICE">Price enquiries</option><option value="COMMISSION">Commissions</option><option value="GIFT">Little Artists</option>
+      </select>
+      <button class="btn ghost" id="ratesBtn" type="button">Rates</button>
+      <button class="btn" id="reload" type="button">Refresh</button>
+    </div>
+    <div class="counts" id="counts"></div>
+    <div class="desk">
+      <div class="tablewrap"><table>
+        <thead><tr><th>Date</th><th>Ref</th><th>Type</th><th>Enquiry</th><th>Customer</th><th>Status</th><th>Price</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+      </table></div>
+      <aside class="card detail" id="detail"><p class="muted">Select an enquiry to see the details, set a price and update its status.</p></aside>
+    </div>
+  </section>
+</main>
+<script type="module" src="/src/admin.js"></script>
+</body>
+</html>
