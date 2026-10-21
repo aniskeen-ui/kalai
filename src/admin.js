@@ -101,6 +101,16 @@ async function loadReviews() {
 $('fStatus').insertAdjacentHTML('beforeend', '<option value="__REQ">Customer requests (cancel / damage)</option>');
 Object.entries(STATUS).forEach(([k, v]) => $('fStatus').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`));
 
+// Signed out in the background (session expired, or the sign-in setup changed after a deploy): back to the sign-in screen.
+function sessionGone(ex) {
+  const m = String(ex?.message || ex || '');
+  if (!/No current user|not authenticated|Unauthorized|NotAuthorizedException|token.*(expired|invalid)|UserUnAuthenticated/i.test(m)) return false;
+  show('loginView');
+  $('loginErr').textContent = 'Your session has ended. Please sign in again; nothing you saved is lost.';
+  $('lEmail').focus();
+  return true;
+}
+
 function show(view) {
   ['loginView', 'denyView', 'deskView'].forEach((v) => { $(v).hidden = v !== view; });
   $('signOutBtn').hidden = view === 'loginView';
@@ -361,6 +371,7 @@ async function load() {
     if (!$('feedbackPane').hidden) renderFeedback();
     if (selectedId) { const e = all.find((x) => x.id === selectedId); if (e) showDetail(e); }
   } catch (ex) {
+    if (sessionGone(ex)) return;
     $('rows').innerHTML = `<tr><td colspan="7" class="err">Could not load enquiries: ${esc(ex.message)}</td></tr>`;
   }
 }
@@ -862,7 +873,12 @@ async function waitForZoho(id, since) {
     await new Promise((r) => setTimeout(r, 4000));
     if (selectedId !== id) return;
     const { data } = await client.models.Enquiry.get({ id });
-    if (data && data.zohoAt && data.zohoAt > since) { await refreshOne(id); return; }
+    if (data && data.zohoAt && data.zohoAt > since) {
+      // Zoho answered (invoice, challan, credit note, bill…): refresh the document list too, so it is never out of date.
+      try { await client.mutations.checkZoho({ id }); } catch { /* the list can still be refreshed with Check Zoho */ }
+      await refreshOne(id);
+      return;
+    }
   }
 }
 
@@ -999,6 +1015,7 @@ async function showDetail(e) {
       await refreshOne(e.id);
     } catch (ex) {
       $('zohoMsg').textContent = '';
+      if (sessionGone(ex)) return;
       $('zohoMsg').insertAdjacentHTML('afterend', `<div class="err">Could not check Zoho: ${esc(ex.message)}</div>`);
       b.disabled = false;
     }
@@ -1112,6 +1129,7 @@ async function showDetail(e) {
       waitForZoho(e.id, savedAt);
     } catch (ex) {
       $('saveMsg').textContent = '';
+      if (sessionGone(ex)) return;
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">Could not save: ${esc(ex.message)}</div>`);
     } finally { b.disabled = false; }
   });
