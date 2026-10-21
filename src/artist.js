@@ -85,7 +85,8 @@ function card(x) {
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
     ${reworkBlock(x)}
     ${progressBlock(x)}
-    <form class="aform" data-id="${esc(x.id)}" novalidate>
+    ${x.locked ? `<div class="pricefix">Your price: <b>INR ${Number(x.artistPriceInr || 0).toLocaleString('en-IN')}</b>${x.artistReadyBy ? ` · ready by ${esc(x.artistReadyBy)}` : ''}${x.artistNote ? ` · “${esc(x.artistNote)}”` : ''} <span class="muted">· fixed: order placed${x.priceBy && x.priceBy !== 'Siva' ? ' (entered for you by Kalai Art House)' : ''}</span></div>` : ''}
+    <form class="aform" data-id="${esc(x.id)}" novalidate ${x.locked ? 'hidden' : ''}>
       <div class="field"><label for="p-${esc(x.id)}">Your price (INR)</label><input id="p-${esc(x.id)}" type="number" min="1" step="1" inputmode="numeric" value="${x.artistPriceInr ?? ''}" ${dis} required></div>
       <div class="field"><label for="r-${esc(x.id)}">Ready to ship by</label><input id="r-${esc(x.id)}" type="date" value="${esc(x.artistReadyBy)}" ${dis}></div>
       <div class="field"><label for="n-${esc(x.id)}">Note (optional)</label><input id="n-${esc(x.id)}" value="${esc(x.artistNote)}" placeholder="e.g. needs 5 days" ${dis}></div>

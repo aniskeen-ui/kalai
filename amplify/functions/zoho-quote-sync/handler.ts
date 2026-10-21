@@ -379,7 +379,11 @@ async function keepAsDraft(path: string, status?: string): Promise<'draft' | 'vo
   const d = await zoho(`${path}/status/draft`, { method: 'POST' });
   if (d.ok) return 'draft';
   const v = await zoho(`${path}/status/void`, { method: 'POST' });
-  if (v.ok) return 'void';
+  if (v.ok) {
+    // Zoho lets a voided credit note (and sometimes a bill) be turned into a draft: try, so it reads as a draft.
+    const d2 = await zoho(`${path}/status/draft`, { method: 'POST' });
+    return d2.ok ? 'draft' : 'void';
+  }
   throw new Error(`Test mode: ${path.split('/')[1]} was created in Zoho but could not be set to draft or void (${v.body.message ?? d.body.message}). Void or delete it in Zoho by hand. If the message is about permission, add the UPDATE scope for it to the Zoho token.`);
 }
 
