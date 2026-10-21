@@ -388,7 +388,8 @@ function costingSection(e) {
   const dis = lockedPO ? 'disabled' : '';
   const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${c.sizeTier === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
   const fromSiva = c.artistAt
-    ? `${c.artistBy && c.artistBy !== 'Siva' ? 'Entered on Siva’s behalf (Artist desk)' : 'From Siva'} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
+    ? `${c.artistBy && c.artistBy !== 'Siva' ? `Entered by you on Siva’s behalf${/Order Management/.test(c.artistBy) ? '' : ' (Artist desk)'}` : 'From Siva'} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
+    : c.artistPriceInr != null ? 'Entered by you on Siva’s behalf.'
     : 'Siva hasn\'t priced this yet (Artist desk). You can also type his price here.';
   return `<fieldset class="cost" id="costing">
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
@@ -536,8 +537,13 @@ async function saveCosting(e) {
     customs: r.customs != null ? Math.round(r.customs * 100) / 100 : null, total: r.total ?? null, suggested: r.suggested ?? null,
     price: r.price ?? null, margin: r.margin != null ? Math.round(r.margin * 100) / 100 : null, savedAt: new Date().toISOString(),
   };
-  const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
   const existing = costings.get(e.id);
+  const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
+  // Artist price typed (or changed) here by the studio: record who entered it and when.
+  if (inp.artistPriceInr != null && Number(inp.artistPriceInr) !== Number(existing?.artistPriceInr ?? NaN)) {
+    rec.artistAt = new Date().toISOString();
+    rec.artistBy = 'Kalai Art House (Order Management)';
+  }
   const res = existing ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec);
   if (res.errors?.length) throw new Error(res.errors[0].message);
   costings.set(e.id, res.data || { ...existing, ...rec });
