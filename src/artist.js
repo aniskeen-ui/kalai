@@ -24,6 +24,7 @@ async function start() {
   const session = await fetchAuthSession();
   const groups = session.tokens?.accessToken?.payload?.['cognito:groups'] || [];
   if (!groups.includes('ARTISTS') && !groups.includes('ADMINS')) { show('denyView'); return; }
+  isAdmin = groups.includes('ADMINS');
   show('deskView');
   await load();
 }
@@ -96,6 +97,7 @@ function card(x) {
   </article>`;
 }
 
+let isAdmin = false; // Kalai Art House signed in on Siva's page: may correct a courier / AWB after it was sent.
 const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
 function progressBlock(x) {
   if (!x.ordered) return '';
@@ -107,7 +109,9 @@ function progressBlock(x) {
   const next = !p ? `<button type="button" class="btn" data-step="STARTED">I've started this work</button>`
     : p === 'STARTED' ? `<button type="button" class="btn" data-step="FINISHED">It's finished</button>`
     : '';
-  const ship = p === 'FINISHED' || p === 'SHIPPED' ? `<div class="aform">
+  const lockedShip = p === 'SHIPPED' && !x.editShip;
+  const ship = lockedShip ? (isAdmin ? `<div><button type="button" class="linkbtn" data-fixship="${esc(x.id)}">Correct courier / AWB (Kalai Art House only)</button></div>` : '')
+    : p === 'FINISHED' || p === 'SHIPPED' ? `<div class="aform">
       <div class="field"><label for="sc-${esc(x.id)}">Courier to the frame shop</label><select id="sc-${esc(x.id)}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${x.artistCourier === c || (c === 'Other' && x.artistCourier && !COURIERS.includes(x.artistCourier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>
         <input id="sco-${esc(x.id)}" placeholder="Courier name" value="${x.artistCourier && !COURIERS.includes(x.artistCourier) ? esc(x.artistCourier) : ''}" ${x.artistCourier && !COURIERS.includes(x.artistCourier) ? '' : 'hidden'} style="margin-top:6px"></div>
       <div class="field"><label for="sa-${esc(x.id)}">AWB / tracking no.</label><input id="sa-${esc(x.id)}" value="${esc(x.artistAwb)}"></div>
@@ -124,6 +128,8 @@ function progressBlock(x) {
 function wireProgress(x) {
   const box = document.getElementById('pg-' + x.id);
   if (!box) return;
+  const fix = box.querySelector('[data-fixship]');
+  if (fix) fix.onclick = () => { x.editShip = true; render(); };
   const sel = document.getElementById('sc-' + x.id);
   if (sel) sel.onchange = () => { document.getElementById('sco-' + x.id).hidden = sel.value !== 'Other'; };
   box.querySelectorAll('[data-step]').forEach((b) => {
@@ -143,6 +149,7 @@ function wireProgress(x) {
         if (errors?.length) throw new Error(errors[0].message);
         const r = parse(data) || {};
         Object.assign(x, { progress: r.artistStage || step, startedAt: r.artistStartedAt || x.startedAt, finishedAt: r.artistFinishedAt || x.finishedAt, progressBy: r.artistBy || x.progressBy, shippedAt: r.artistShippedAt || x.shippedAt, artistCourier: r.artistCourier || x.artistCourier, artistAwb: r.artistAwb || x.artistAwb });
+        x.editShip = false;
         x.label = x.progress === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : x.progress === 'FINISHED' ? 'Finished · send it to the frame shop' : 'In progress';
         render();
         const m2 = document.getElementById('pm-' + x.id);
@@ -172,7 +179,7 @@ function reworkBlock(x) {
     : `<div class="muted" style="font-size:13px">Damaged piece received ${esc(day(r.receivedAt))} (${esc(r.toSivaCourier)} · AWB ${esc(r.toSivaAwb)})</div>`;
   const next = ready || waiting ? '' : !r.stage ? `<button type="button" class="btn" data-rw="STARTED">I've started the rework</button>`
     : r.stage === 'STARTED' ? `<button type="button" class="btn" data-rw="FINISHED">Rework finished</button>` : '';
-  const ship = !ready && (r.stage === 'FINISHED' || r.stage === 'SENT') ? `<div class="aform">
+  const ship = !ready && (r.stage === 'FINISHED' || (r.stage === 'SENT' && x.editRwShip)) ? `<div class="aform">
       <div class="field"><label for="rc-${id}">Courier to the frame shop</label><select id="rc-${id}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${r.courier === c || (c === 'Other' && r.courier && !COURIERS.includes(r.courier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>
         <input id="rco-${id}" placeholder="Courier name" value="${r.courier && !COURIERS.includes(r.courier) ? esc(r.courier) : ''}" ${r.courier && !COURIERS.includes(r.courier) ? '' : 'hidden'} style="margin-top:6px"></div>
       <div class="field"><label for="ra-${id}">AWB / tracking no.</label><input id="ra-${id}" value="${esc(r.awb)}"></div>
@@ -189,6 +196,7 @@ function reworkBlock(x) {
     ${inbound}
     <ol>${repair ? step('Received', r.receivedAt) : ''}${step('Rework started', r.startedAt)}${step('Rework finished', r.finishedAt)}${step('Sent to frame shop', r.sentAt)}${step('Checked and ready (Kalai Art House)', r.readyAt)}${r.awb ? ` <li class="muted" style="list-style:none">${esc(r.courier)} · AWB ${esc(r.awb)}</li>` : ''}</ol>
     ${next}${ship}
+    ${!ready && r.stage === 'SENT' && !x.editRwShip && isAdmin ? `<div><button type="button" class="linkbtn" data-fixrwship="${id}">Correct courier / AWB (Kalai Art House only)</button></div>` : ''}
     ${r.priceInr > 0 ? `<div class="muted" style="font-size:13px">${r.paid ? `Rework paid to you · ref ${esc(r.paidRef)}` : r.billed ? `Your rework invoice ${esc(r.invoiceNo)} received · payment pending` : 'Send your rework invoice to Kalai Art House when it is done.'}</div>` : ''}
     <div class="ok" id="rwm-${id}" role="status"></div>
   </div>`;
@@ -196,6 +204,8 @@ function reworkBlock(x) {
 function wireRework(x) {
   const box = document.getElementById('rw-' + x.id);
   if (!box) return;
+  const fix = box.querySelector('[data-fixrwship]');
+  if (fix) fix.onclick = () => { x.editRwShip = true; render(); };
   const sel = document.getElementById('rc-' + x.id);
   if (sel) sel.onchange = () => { document.getElementById('rco-' + x.id).hidden = sel.value !== 'Other'; };
   box.querySelectorAll('[data-rw]').forEach((b) => {
@@ -222,6 +232,7 @@ function wireRework(x) {
         if (step === 'PRICE') Object.assign(x.rework, { priceInr: r.reworkPriceInr, priceBy: '' });
         else if (step === 'RECEIVED') { Object.assign(x.rework, { receivedAt: r.sivaReceivedAt }); x.label = 'Rework needed (damaged in transit) · give your rework price'; }
         else Object.assign(x.rework, { stage: r.reworkStage, startedAt: r.reworkStartedAt || x.rework.startedAt, finishedAt: r.reworkFinishedAt || x.rework.finishedAt, sentAt: r.reworkSentAt || x.rework.sentAt, courier: r.reworkCourier || x.rework.courier, awb: r.reworkAwb || x.rework.awb });
+        x.editRwShip = false;
         x.label = x.rework.stage === 'SENT' ? 'Rework sent to frame shop · send your rework invoice' : x.rework.stage === 'FINISHED' ? 'Rework finished · send it to the frame shop' : x.rework.stage === 'STARTED' ? 'Rework in progress' : x.label;
         render();
         const m2 = document.getElementById('rwm-' + x.id);

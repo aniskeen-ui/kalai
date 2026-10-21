@@ -1,5 +1,5 @@
 import { env } from '$amplify/env/zoho-quote-sync';
-import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, PutItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -29,7 +29,7 @@ type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImag
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
   identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
+  arguments: { ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -1156,6 +1156,8 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const courier = String(args.courier ?? '').trim().slice(0, 60);
   const awb = String(args.awb ?? '').trim().slice(0, 60);
   if (step === 'SHIPPED' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
+  // Once sent, the courier and AWB are fixed for Siva; only Kalai Art House can correct them.
+  if (step === 'SHIPPED' && str(e, 'artistStage') === 'SHIPPED' && by === 'Siva') throw new Error('Already sent: the courier and AWB can only be corrected by Kalai Art House.');
   const now = new Date().toISOString();
   const set: Record<string, string> = { artistStage: PROGRESS[Math.max(target, current)], artistBy: by, updatedAt: now };
   // Earlier steps are filled in too if skipped (e.g. "Finished" without "Started").
@@ -1546,6 +1548,7 @@ async function artistRework(args: ApiEvent['arguments'], by = 'Siva') {
   const courier = String(args.courier ?? '').trim().slice(0, 60);
   const awb = String(args.awb ?? '').trim().slice(0, 60);
   if (step === 'SENT' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
+  if (step === 'SENT' && str(e, 'reworkStage') === 'SENT' && by === 'Siva') throw new Error('Already sent: the courier and AWB can only be corrected by Kalai Art House.');
   const set: Record<string, string> = { reworkStage: REWORK_STEPS[Math.max(target, current)], reworkBy: by, updatedAt: now };
   if (!str(e, 'reworkStartedAt')) set.reworkStartedAt = now;
   if (target >= 1 && !str(e, 'reworkFinishedAt')) set.reworkFinishedAt = now;
@@ -1632,6 +1635,33 @@ function reworkForArtist(e: Img, c: Img | undefined) {
     toSivaCourier: str(e, 'toSivaCourier'), toSivaAwb: str(e, 'toSivaAwb'), toSivaSentAt: str(e, 'toSivaSentAt'), receivedAt: str(e, 'sivaReceivedAt'),
     invoiceNo: str(e, 'reworkInvoiceNo'), billed: !!str(e, 'zohoReworkBillId'), paid: !!str(e, 'zohoReworkPaymentId'), paidRef: str(e, 'reworkPaidRef'),
   };
+}
+
+// ---------- Guest price enquiry (visitor not signed in) ----------
+/** Saves a catalogue price enquiry from a visitor without an account. The usual stream then creates the quote and emails. */
+async function guestEnquiry(a: ApiEvent['arguments']) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const clip = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
+  const ref = clip(a.ref, 30);
+  const name = clip(a.customerName, 80);
+  const phone = clip(a.phone, 30);
+  const email = clip(a.email, 120).toLowerCase();
+  if (!/^KA-\d{6}-[A-Z0-9]{3,6}$/.test(ref)) throw new Error('Invalid reference');
+  if (!name || phone.replace(/\D/g, '').length < 7) throw new Error('Please add your name and mobile number.');
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Please check your email address.');
+  let details = clip(a.details, 4000);
+  try { JSON.parse(details || '{}'); } catch { details = '{}'; }
+  const now = new Date().toISOString();
+  const item: Record<string, AttributeValue> = {
+    id: { S: crypto.randomUUID() }, __typename: { S: 'Enquiry' }, createdAt: { S: now }, updatedAt: { S: now },
+    ref: { S: ref }, kind: { S: 'PRICE' }, title: { S: clip(a.title, 160) || 'Price enquiry' }, details: { S: details || '{}' },
+    customerName: { S: name }, phone: { S: phone }, status: { S: 'RECEIVED' },
+  };
+  if (email) item.email = { S: email };
+  await ddb.send(new PutItemCommand({ TableName: table, Item: item, ConditionExpression: 'attribute_not_exists(id)' }));
+  console.log(`Guest enquiry ${ref} saved`);
+  return { ok: true, ref };
 }
 
 // ---------- Customer requests (My enquiries & orders): cancel, or report damage on delivery ----------
@@ -1888,6 +1918,7 @@ export const handler = async (event: StreamEvent | ApiEvent) => {
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    if (field === 'guestEnquiry') return JSON.stringify(await guestEnquiry(event.arguments));
     if (field === 'artistRework') return JSON.stringify(await artistRework(event.arguments, actor(event)));
     if (field === 'customerRequest') return JSON.stringify(await customerRequest(event));
     if (field === 'artistList') return JSON.stringify(await artistList());

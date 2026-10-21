@@ -500,7 +500,9 @@ async function sendEnquiry(subject, fields, files){
     try{await acct.save({ref,subject,fields,files});toast("Saved to My enquiries & orders as "+ref);}
     catch(e){console.error(e);toast("Sent on WhatsApp. We couldn't save it to your account this time.");}
   }else{
-    setTimeout(()=>toast("Sign in next time to track your enquiries here"),2600);
+    let saved=false;
+    try{saved=acct&&acct.saveGuest?await acct.saveGuest({ref,subject,fields}):false;}catch(e){console.error(e);}
+    setTimeout(()=>toast(saved?"Enquiry "+ref+" received. Sign in next time to track it here":"Sign in next time to track your enquiries here"),2600);
   }
   if(CONFIG.formspree){
     try{const fd=new FormData();fd.append("_subject",subject+" "+ref);Object.entries(fields).forEach(([k,v])=>fd.append(k,v));
@@ -543,11 +545,18 @@ function drawGrid(){
     card.appendChild(fb);
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
       <h3>${p.name}</h3><div class="meta">Siva Raja · ${p.size}</div><div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
-      <div class="row">${p.price?`<span class="note">Price on request</span><button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
+      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`<span class="note">Price on request</span><button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
 }
+/* Catalogue from Order Management (replaces the built-in list once it has published works). */
+window.kalaiShowCatalogue=function(list){
+  if(!list||!list.length)return;
+  PRODUCTS.splice(0,PRODUCTS.length,...list);
+  PRODUCTS.forEach(p=>{const m=String(p.size||"").match(/(\d+)\s*[×x]\s*(\d+)/);p.wcm=m?+m[1]:30;p.hcm=m?+m[2]:40;if(!SUBJECTS[p.subject])p.subject="land";});
+  drawChips();drawGrid();
+};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawGrid()});
 document.addEventListener("click",e=>{const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
 

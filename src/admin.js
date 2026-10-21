@@ -3,6 +3,7 @@ import './amplify-config.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
+import { showCatalogue } from './catalogue.js';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -130,6 +131,7 @@ async function start() {
   show('deskView');
   if (location.hash === '#reports') showPane('reports', 'tabReports');
   if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
+  if (location.hash === '#catalogue') showPane('catalogue', 'tabCatalogue');
   await loadRates();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
@@ -155,16 +157,19 @@ $('ratesBtn').onclick = () => { showPane('orders', 'ratesBtn'); selectedId = nul
 $('tabOrders').onclick = () => showPane('orders', 'tabOrders');
 $('tabReports').onclick = () => showPane('reports', 'tabReports');
 $('tabFeedback').onclick = () => showPane('feedback', 'tabFeedback');
+$('tabCatalogue').onclick = () => showPane('catalogue', 'tabCatalogue');
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {
   $('ordersPane').hidden = pane !== 'orders';
   $('reportsPane').hidden = pane !== 'reports';
   $('feedbackPane').hidden = pane !== 'feedback';
-  ['tabOrders', 'tabReports', 'tabFeedback', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', pane === 'reports' || pane === 'feedback' ? '#' + pane : location.pathname); } catch { /* ignore */ }
+  $('cataloguePane').hidden = pane !== 'catalogue';
+  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
+  if (pane === 'catalogue') showCatalogue();
 }
 
 // ---------- Feedback: customer reviews, publish to the website ----------
@@ -391,7 +396,7 @@ function render() {
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
       <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}</td>
-      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !['CANCELLED', 'DELIVERED'].includes(s) ? ' <span class="chip" title="Siva hasn\'t priced this yet">Artist price needed</span>' : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
+      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !['CANCELLED', 'DELIVERED'].includes(s) ? ' <span class="chip" title="Siva hasn\'t priced this yet">Artist price needed</span>' : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? 'AED ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">Nothing matches this filter.</td></tr>';
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {

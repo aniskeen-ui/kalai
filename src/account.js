@@ -7,7 +7,7 @@ import {
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
-import { uploadData } from 'aws-amplify/storage';
+import { uploadData, getUrl } from 'aws-amplify/storage';
 
 const client = generateClient();
 const state = { user: null, email: '' };
@@ -563,6 +563,33 @@ async function save({ ref, subject, fields, files }) {
   if (errors?.length) throw new Error(errors[0].message);
 }
 
+/* ---------- website collection from the Catalogue (public, read-only) ---------- */
+async function showCatalogue() {
+  if (typeof window.kalaiShowCatalogue !== 'function') return;
+  try {
+    const all = [];
+    let nextToken = null;
+    do {
+      const r = await client.models.Product.list({ authMode: 'apiKey', limit: 500, nextToken });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      all.push(...r.data);
+      nextToken = r.nextToken;
+    } while (nextToken);
+    const nowIso = new Date().toISOString();
+    const live = all
+      .filter((p) => ['PUBLISHED', 'SOLD'].includes(p.status) && (!p.publishAt || p.publishAt <= nowIso) && p.imageKey)
+      .sort((a, b) => (a.status === 'SOLD') - (b.status === 'SOLD') || String(b.publishAt).localeCompare(String(a.publishAt)) || (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    if (!live.length) return;
+    const list = await Promise.all(live.map(async (p) => {
+      let img = '';
+      try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.title, size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
+    }));
+    window.kalaiShowCatalogue(list.filter((x) => x.img));
+  } catch (ex) { console.warn('Catalogue not loaded; showing the built-in collection.', ex); }
+}
+showCatalogue();
+
 /* ---------- published reviews on the website (public, read-only) ---------- */
 async function showPublicReviews() {
   const sec = document.getElementById('reviews');
@@ -583,7 +610,19 @@ async function showPublicReviews() {
 }
 showPublicReviews();
 
+/* Visitor not signed in: a catalogue price enquiry is still saved for the studio (public key; no tracking for the visitor). */
+async function saveGuest({ ref, subject, fields }) {
+  if (!subject.startsWith('Price')) return false;
+  const { errors } = await client.mutations.guestEnquiry({
+    ref, title: (fields['Artwork'] || 'Price enquiry').split(' (')[0], details: JSON.stringify(fields),
+    customerName: fields['Name'] || '', phone: fields['Mobile'] || '', email: fields['Email'] || null,
+  }, { authMode: 'apiKey' });
+  if (errors?.length) throw new Error(errors[0].message);
+  return true;
+}
+
 window.kalaiAccount = {
+  saveGuest,
   get user() { return state.user; },
   save,
   open: () => { state.user ? showList() : showSignIn(); open(); },

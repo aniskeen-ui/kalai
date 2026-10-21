@@ -169,6 +169,26 @@ const schema = a.schema({
     .identifier(['enquiryId'])
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
+  // Product catalogue (website collection). Edited on the Catalogue tab; the website shows works whose status is
+  // PUBLISHED or SOLD and whose publishAt has arrived (so a batch can be scheduled N per day).
+  Product: a
+    .model({
+      title: a.string().required(),
+      kind: a.string(), // water | sketch
+      subject: a.string(), // land | village | nature | arch | people
+      medium: a.string(),
+      size: a.string(),
+      framing: a.string(),
+      description: a.string(),
+      priceAed: a.float(),
+      status: a.string(), // DRAFT | PUBLISHED | SOLD | HIDDEN
+      publishAt: a.string(),
+      imageKey: a.string(),
+      sortOrder: a.integer(),
+      source: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
   // Master rates (framing and India courier per size tier, local courier, customs, fee, margin, VAT, FX).
   Rates: a
     .model({
@@ -207,6 +227,14 @@ const schema = a.schema({
     .arguments({ id: a.id().required() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Visitor NOT signed in: price enquiry saved for the studio (no account, so the visitor can't track it).
+  guestEnquiry: a
+    .mutation()
+    .arguments({ ref: a.string().required(), title: a.string().required(), details: a.string(), customerName: a.string().required(), phone: a.string().required(), email: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Customer, from My enquiries: cancel an order or report damage on delivery. Checked against the policy in the function.

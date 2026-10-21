@@ -8,6 +8,12 @@ import { defineStorage } from '@aws-amplify/backend';
 export const storage = defineStorage({
   name: 'kalaiUploads',
   access: (allow) => ({
+    // Catalogue photos: anyone may view (the website), only the studio uploads.
+    'catalogue/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read']),
+      allow.groups(['ADMINS']).to(['read', 'write', 'delete']),
+    ],
     'uploads/{entity_id}/*': [
       allow.entity('identity').to(['read', 'write', 'delete']),
       // ADMINS read everything; write too, because a signed-in admin uses the group's role (not the customer's)

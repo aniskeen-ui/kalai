@@ -1,0 +1,248 @@
+// Catalogue tab (Order Management): the website's collection.
+// Bulk import photos → drafts; edit inline (auto-saves); select many → publish now, schedule N per day, sold, hide, delete.
+import { generateClient } from 'aws-amplify/data';
+import { uploadData, getUrl, remove } from 'aws-amplify/storage';
+
+const client = generateClient();
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const KINDS = { water: 'Watercolour', sketch: 'Pencil sketch' };
+const SUBJECTS = { land: 'Landscapes & water', village: 'Village life', nature: 'Trees & nature', arch: 'Buildings & places', people: 'Portraits' };
+const MEDIUM = { water: 'Watercolour on paper', sketch: 'Graphite on paper' };
+
+let items = [];
+const selected = new Set();
+const thumbs = new Map(); // imageKey → url
+let loaded = false;
+
+const now = () => new Date().toISOString();
+/** What the website shows for a work right now. */
+function state(p) {
+  const s = p.status || 'DRAFT';
+  if (s === 'PUBLISHED' && p.publishAt && p.publishAt > now()) return 'SCHEDULED';
+  return s;
+}
+const STATE_LABEL = { DRAFT: 'Draft', SCHEDULED: 'Scheduled', PUBLISHED: 'On the website', SOLD: 'Sold', HIDDEN: 'Hidden' };
+const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
+
+export async function showCatalogue() {
+  if (!loaded) { wireToolbar(); loaded = true; }
+  await load();
+}
+
+async function load() {
+  $('cgList').innerHTML = '<p class="muted">Loading the catalogue…</p>';
+  try {
+    const all = [];
+    let nextToken = null;
+    do {
+      const r = await client.models.Product.list({ limit: 500, nextToken });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      all.push(...r.data);
+      nextToken = r.nextToken;
+    } while (nextToken);
+    items = all.sort((a, b) => String(b.publishAt || b.createdAt).localeCompare(String(a.publishAt || a.createdAt)));
+    draw();
+  } catch (ex) {
+    $('cgList').innerHTML = `<p class="err">Could not load the catalogue: ${esc(ex.message)}</p>`;
+  }
+}
+
+function filtered() {
+  const f = $('cgFilter').value, q = $('cgSearch').value.trim().toLowerCase();
+  return items.filter((p) => (!f || state(p) === f) && (!q || `${p.title} ${p.size} ${p.description}`.toLowerCase().includes(q)));
+}
+
+function draw() {
+  const counts = {};
+  items.forEach((p) => { const s = state(p); counts[s] = (counts[s] || 0) + 1; });
+  $('cgCounts').innerHTML = [`<span class="count">All <b>${items.length}</b></span>`, ...Object.entries(STATE_LABEL).filter(([k]) => counts[k]).map(([k, v]) => `<span class="count">${v} <b>${counts[k]}</b></span>`)].join('');
+  const queue = items.filter((p) => state(p) === 'SCHEDULED').sort((a, b) => a.publishAt.localeCompare(b.publishAt));
+  $('cgQueue').innerHTML = queue.length ? `Publishing queue: next <b>${esc(queue[0].title)}</b> on ${esc(day(queue[0].publishAt))}; last on ${esc(day(queue.at(-1).publishAt))} (${queue.length} works).` : '';
+  const list = filtered();
+  [...selected].forEach((id) => { if (!items.find((p) => p.id === id)) selected.delete(id); });
+  $('cgAll').checked = list.length > 0 && list.every((p) => selected.has(p.id));
+  $('cgList').innerHTML = list.length ? list.map(row).join('') : `<p class="muted">${items.length ? 'Nothing matches this filter.' : 'No works yet. Use “Import photos” (select many at once), or “Import the current website works”.'}</p>`;
+  wireRows(list);
+  drawBulk();
+  list.forEach(async (p) => {
+    if (!p.imageKey) return;
+    let u = thumbs.get(p.imageKey);
+    if (!u) { try { u = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); thumbs.set(p.imageKey, u); } catch { return; } }
+    const im = document.querySelector(`.cg-row[data-id="${CSS.escape(p.id)}"] img`);
+    if (im) im.src = u;
+  });
+}
+
+function row(p) {
+  const s = state(p);
+  const opt = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${l}</option>`).join('');
+  return `<article class="cg-row ${selected.has(p.id) ? 'sel' : ''}" data-id="${esc(p.id)}">
+    <label class="cg-pick"><input type="checkbox" ${selected.has(p.id) ? 'checked' : ''} aria-label="Select ${esc(p.title)}"></label>
+    <div class="cg-img"><img alt=""></div>
+    <div class="cg-fields">
+      <div class="cg-top"><input data-f="title" value="${esc(p.title)}" aria-label="Title" class="cg-title">
+        <span class="cg-badge ${s}">${STATE_LABEL[s]}${s === 'SCHEDULED' || (s === 'PUBLISHED' && p.publishAt) ? ` · ${esc(day(p.publishAt))}` : ''}</span></div>
+      <div class="cg-grid">
+        <select data-f="kind" aria-label="Type">${opt(KINDS, p.kind || 'water')}</select>
+        <select data-f="subject" aria-label="Subject">${opt(SUBJECTS, p.subject || 'land')}</select>
+        <input data-f="size" value="${esc(p.size)}" placeholder="Size, e.g. 38 × 28 cm" aria-label="Size">
+        <input data-f="medium" value="${esc(p.medium)}" placeholder="Medium" aria-label="Medium">
+        <input data-f="priceAed" type="number" min="0" step="1" value="${p.priceAed ?? ''}" placeholder="Your price AED (internal)" aria-label="Price AED">
+      </div>
+      <textarea data-f="description" rows="1" placeholder="Short description shown on the website" aria-label="Description">${esc(p.description)}</textarea>
+      <span class="cg-saved muted" aria-live="polite"></span>
+    </div>
+  </article>`;
+}
+
+function wireRows(list) {
+  document.querySelectorAll('.cg-row').forEach((el) => {
+    const p = list.find((x) => x.id === el.dataset.id);
+    el.querySelector('.cg-pick input').onchange = (e) => { e.target.checked ? selected.add(p.id) : selected.delete(p.id); el.classList.toggle('sel', e.target.checked); $('cgAll').checked = list.every((x) => selected.has(x.id)); drawBulk(); };
+    el.querySelectorAll('[data-f]').forEach((inp) => {
+      inp.onchange = async () => {
+        const f = inp.dataset.f;
+        let v = inp.value.trim();
+        if (f === 'title' && !v) { inp.value = p.title; return; }
+        if (f === 'priceAed') v = v === '' ? null : Number(v);
+        const patch = { id: p.id, [f]: v };
+        if (f === 'kind' && (!p.medium || Object.values(MEDIUM).includes(p.medium))) patch.medium = MEDIUM[v];
+        const msg = el.querySelector('.cg-saved'); msg.textContent = 'Saving…';
+        const r = await client.models.Product.update(patch);
+        if (r.errors?.length) { msg.textContent = 'Not saved: ' + r.errors[0].message; return; }
+        Object.assign(p, r.data || patch);
+        if (patch.medium) el.querySelector('[data-f="medium"]').value = patch.medium;
+        msg.textContent = 'Saved';
+        setTimeout(() => { msg.textContent = ''; }, 1500);
+      };
+    });
+  });
+}
+
+function drawBulk() {
+  const n = selected.size;
+  $('cgBulk').hidden = n === 0;
+  $('cgSelCount').textContent = `${n} selected`;
+}
+
+async function bulk(label, fn) {
+  const ids = [...selected];
+  if (!ids.length) return;
+  $('cgBulkMsg').textContent = `${label}…`;
+  let ok = 0, fail = 0;
+  for (const [i, id] of ids.entries()) {
+    const p = items.find((x) => x.id === id);
+    try { await fn(p, i); ok++; } catch (e) { console.error(e); fail++; }
+    $('cgBulkMsg').textContent = `${label}… ${i + 1}/${ids.length}`;
+  }
+  $('cgBulkMsg').textContent = `${label}: ${ok} done${fail ? `, ${fail} failed` : ''}.`;
+  selected.clear();
+  await load();
+}
+const upd = async (p, patch) => { const r = await client.models.Product.update({ id: p.id, ...patch }); if (r.errors?.length) throw new Error(r.errors[0].message); };
+
+/** Dubai date at 09:00 local (05:00 UTC), n days after start. */
+function slot(startDate, n) {
+  const d = new Date(`${startDate}T05:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString();
+}
+
+function wireToolbar() {
+  const tomorrow = new Date(Date.now() + 86400000 + 4 * 3600000).toISOString().slice(0, 10);
+  $('cgStart').value = tomorrow;
+  $('cgFilter').onchange = draw;
+  $('cgSearch').oninput = draw;
+  $('cgReload').onclick = load;
+  $('cgAll').onchange = (e) => { filtered().forEach((p) => (e.target.checked ? selected.add(p.id) : selected.delete(p.id))); draw(); };
+  $('cgPublish').onclick = () => bulk('Publishing now', (p) => upd(p, { status: 'PUBLISHED', publishAt: now() }));
+  $('cgSchedule').onclick = () => {
+    const per = Math.max(1, Number($('cgPerDay').value) || 1), start = $('cgStart').value;
+    if (!start) { $('cgBulkMsg').textContent = 'Choose the start date.'; return; }
+    // Keep the order shown on screen.
+    const order = filtered().map((p) => p.id).filter((id) => selected.has(id));
+    selected.clear(); order.forEach((id) => selected.add(id));
+    bulk(`Scheduling ${per} per day from ${start}`, (p, i) => upd(p, { status: 'PUBLISHED', publishAt: slot(start, Math.floor(i / per)) }));
+  };
+  $('cgSold').onclick = () => bulk('Marking sold', (p) => upd(p, { status: 'SOLD' }));
+  $('cgDraft').onclick = () => bulk('Taking off the website', (p) => upd(p, { status: 'DRAFT' }));
+  $('cgHide').onclick = () => bulk('Hiding', (p) => upd(p, { status: 'HIDDEN' }));
+  $('cgDelete').onclick = () => {
+    if (!confirm(`Delete ${selected.size} work(s) and their photos? This can't be undone.`)) return;
+    bulk('Deleting', async (p) => {
+      const r = await client.models.Product.delete({ id: p.id });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      if (p.imageKey) { try { await remove({ path: p.imageKey }); } catch { /* photo already gone */ } }
+    });
+  };
+  $('cgFiles').onchange = (e) => importPhotos([...e.target.files]).finally(() => { e.target.value = ''; });
+  $('cgSite').onclick = importSite;
+}
+
+/** Shrink to max 1600 px JPEG so the website stays fast. */
+async function shrink(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((res) => c.toBlob((b) => res(b || file), 'image/jpeg', 0.85));
+  } catch { return file; }
+}
+const titleFrom = (name) => name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled';
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+
+async function importPhotos(files) {
+  const imgs = files.filter((f) => /^image\//.test(f.type));
+  if (!imgs.length) return;
+  let ok = 0;
+  for (const [i, f] of imgs.entries()) {
+    $('cgBulkMsg').textContent = `Importing ${i + 1}/${imgs.length}: ${f.name}`;
+    try {
+      const blob = await shrink(f);
+      const key = `catalogue/${uid()}.jpg`;
+      await uploadData({ path: key, data: blob, options: { contentType: 'image/jpeg' } }).result;
+      const kind = /sketch|pencil/i.test(f.name) ? 'sketch' : 'water';
+      const r = await client.models.Product.create({ title: titleFrom(f.name), kind, subject: 'land', medium: MEDIUM[kind], status: 'DRAFT', imageKey: key, source: `upload:${f.name}` });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      ok++;
+    } catch (e) { console.error(e); }
+  }
+  $('cgBulkMsg').textContent = `Imported ${ok} of ${imgs.length} photos as drafts. Add titles and sizes, then publish or schedule them.`;
+  $('cgFilter').value = 'DRAFT';
+  await load();
+}
+
+/** One-off: copy the works built into the current website into the catalogue (published), with their photos. */
+async function importSite() {
+  $('cgBulkMsg').textContent = 'Reading the current website…';
+  try {
+    const html = await (await fetch('/', { cache: 'no-store' })).text();
+    const m = html.match(/const PRODUCTS=(\[[\s\S]*?\]);\s*\n/);
+    if (!m) throw new Error('the website list was not found');
+    const site = JSON.parse(m[1]);
+    const sm = html.match(/const SUBJ_OF=(\{[^}]*\})/);
+    // eslint-disable-next-line no-new-func
+    const subjOf = sm ? Function(`return ${sm[1]}`)() : {};
+    const have = new Set(items.map((p) => p.source));
+    let ok = 0, skip = 0;
+    for (const [i, w] of site.entries()) {
+      if (have.has(`site:${w.id}`)) { skip++; continue; }
+      $('cgBulkMsg').textContent = `Copying ${i + 1}/${site.length}: ${w.name}`;
+      const blob = await (await fetch(w.img)).blob();
+      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const key = `catalogue/site-${w.id}.${ext}`;
+      await uploadData({ path: key, data: blob, options: { contentType: blob.type || 'image/jpeg' } }).result;
+      const r = await client.models.Product.create({ title: w.name, kind: w.kind === 'sketch' ? 'sketch' : 'water', subject: subjOf[w.id] || 'land', medium: w.medium, size: w.size, description: w.desc, priceAed: w.price || null, status: 'PUBLISHED', publishAt: now(), sortOrder: i, imageKey: key, source: `site:${w.id}` });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      ok++;
+    }
+    $('cgBulkMsg').textContent = `Copied ${ok} works from the website${skip ? ` (${skip} already in the catalogue)` : ''}. The website now shows the catalogue.`;
+    await load();
+  } catch (ex) {
+    $('cgBulkMsg').textContent = `Could not copy the website works: ${ex.message}`;
+  }
+}
