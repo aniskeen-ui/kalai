@@ -67,3 +67,13 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
     resources: [`arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/zoho/*`],
   }),
 );
+
+// Login emails (sign-up codes, password resets): send through the verified DOMAIN identity in SES.
+// Amplify's `senders.email` points Cognito at the single address noreply@…, which SES lists as "pending"
+// (no mailbox to confirm it); Cognito refuses a pending identity. The domain identity is fully verified.
+const authStack = Stack.of(backend.auth.resources.userPool);
+backend.auth.resources.cfnResources.cfnUserPool.addPropertyOverride(
+  'EmailConfiguration.SourceArn',
+  `arn:aws:ses:${authStack.region}:${authStack.account}:identity/pranixtechno.com`,
+);
+
