@@ -145,3 +145,26 @@ On a paid order, the Studio desk box "Cancellation, damage or refund" offers fou
 In test mode nothing is posted (the box says so). A cancelled order that was never paid: just set status Cancelled (the quote is marked declined).
 If Zoho asks which account a refund is paid from: copy the account ID (Banking → the account → number at the end of the address) and run
 `aws ssm put-parameter --name /kalai/zoho/refund_account_id --type String --overwrite --value ACCOUNT_ID`.
+
+## Order emails (Amazon SES)
+
+The function emails customers from **Kalai Art House <noreply@pranixtechno.com>** (replies go to kalaiarthouse@pranixtechno.com):
+enquiry received · price sent (with Pay button) · payment received · artist started · being framed · shipped (courier + tracking) ·
+delivered (rate + 48-hour damage note) · cancelled · replacement · refund done · request received / declined · new message from you.
+The studio (kalaiarthouse@pranixtechno.com) gets: new enquiry, cancellation request, damage report, customer cancelled before paying.
+
+- Switch off all emails: `aws ssm put-parameter --name /kalai/email/enabled --type String --overwrite --value off` (on again: `--value on`).
+- An email failure never stops the Zoho steps; it is only logged.
+
+## Customer cancellations and damage reports (My enquiries)
+
+| Order status | Customer can | Result |
+|---|---|---|
+| Received / Price sent | Cancel | Cancelled at once, quote declined, nothing to refund |
+| Paid / Being framed, work not started | Request cancellation | Full refund due; Siva's order on hold |
+| Paid / Being framed, Siva started (Little Artists: Being framed) | Request cancellation | 50% refund due; Siva's order on hold |
+| Shipped | — | Can't cancel |
+| Delivered, within 48 hours | Report damage with photos: refund or replacement | Full refund due, or replacement |
+
+Requests appear on the Order Management desk (red "Customer requests" count and filter). The refund box is filled in for you:
+pay the refund, type its reference, tick and save (credit note + refund in Zoho as before). Or "Decline the request" with a reply, which is emailed.

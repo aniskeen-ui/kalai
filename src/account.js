@@ -60,6 +60,15 @@ const css = `
 .rate .tick{display:flex;gap:8px;align-items:flex-start;font-size:13px;font-weight:400}
 .rate .tick input{width:auto;margin-top:3px}
 .rated{font-size:14px}.rated span{color:var(--gold);letter-spacing:2px}
+.req-open{background:none;border:0;padding:0;font:inherit;font-size:13px;color:var(--muted);text-decoration:underline;cursor:pointer;justify-self:start}
+.req{display:grid;gap:10px;border:1px solid var(--line);border-radius:var(--r);padding:12px;background:var(--surface)}
+.req .terms-box{font-size:14px;border-left:3px solid var(--kumkum);padding:6px 10px;background:var(--bg)}
+.req .opts{display:grid;gap:6px}
+.req .opts label,.req .tick{display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:14px}
+.req input[type=radio],.req input[type=checkbox]{width:auto;margin-top:3px}
+.req .row{display:flex;gap:8px;flex-wrap:wrap}
+.req .row .btn{flex:1}
+.enq-msg.warn{border-left-color:var(--kumkum)}
 `;
 document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
 
@@ -265,6 +274,112 @@ function wireRate(root, items) {
   });
 }
 
+/* ---------- cancel / report damage (policy mirrored from the server, which has the final say) ---------- */
+const aedTxt = (n) => 'AED ' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const DAMAGE_HOURS = 48;
+function cancelTerms(e) {
+  const st = e.status || 'RECEIVED';
+  const price = Number(e.quotedPrice || 0);
+  if (['RECEIVED', 'PRICE_SENT'].includes(st)) return { type: 'FREE', due: 0, text: "Nothing has been paid, so there's nothing to refund. Your enquiry is cancelled straight away." };
+  if (['PAID', 'FRAMING'].includes(st)) {
+    const started = e.kind === 'GIFT' ? st === 'FRAMING' : !!e.artistStartedAt || st === 'FRAMING';
+    return started
+      ? { type: 'HALF', due: Math.round(price * 50) / 100, text: e.kind === 'GIFT' ? `Framing has started, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>.` : `The artist started your work${e.artistStartedAt ? ` on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>. The rest covers the artist's time.` }
+      : { type: 'FULL', due: price, text: `The work hasn't started yet, so you get a <b>full refund of ${aedTxt(price)}</b>.` };
+  }
+  return null;
+}
+function damageOpen(e) {
+  if (e.status !== 'DELIVERED') return false;
+  const at = Date.parse(e.deliveredAt || e.updatedAt);
+  return !Number.isFinite(at) || Date.now() - at <= DAMAGE_HOURS * 3600_000;
+}
+function requestBlock(e) {
+  const when = e.cancelRequestedAt ? new Date(e.cancelRequestedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+  if (e.cancelState === 'REQUESTED') {
+    return `<div class="enq-msg warn">${e.cancelRequest === 'CANCEL' ? `Cancellation requested on ${esc(when)}. Refund due: <b>${aedTxt(e.cancelRefundDue)}</b>, sent within 7 working days. We'll email you when it's done.`
+      : e.cancelRequest === 'DAMAGED_REPLACE' ? `Damage reported on ${esc(when)}. You asked for a replacement or repair; we'll confirm within 2 working days.`
+      : `Damage reported on ${esc(when)}. Refund due: <b>${aedTxt(e.cancelRefundDue)}</b> once we've checked the photos. We'll email you.`}</div>`;
+  }
+  if (e.cancelState === 'DECLINED') return `<div class="enq-msg warn">About your request: ${esc(e.cancelReply || 'we could not accept it under our terms. Please reply to our email to talk it through.')}</div>`;
+  if (['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(e.status)) return '';
+  const t = cancelTerms(e);
+  if (t) return `<button type="button" class="req-open" data-req="CANCEL" data-id="${esc(e.id)}">${t.type === 'FREE' ? 'Cancel this enquiry' : 'Cancel this order'}</button>`;
+  if (e.status === 'SHIPPED') return `<p class="acct-info" style="margin:0;font-size:13px">It's on its way, so it can't be cancelled now. If it arrives damaged, you can report it here within 48 hours.</p>`;
+  if (damageOpen(e)) return `<button type="button" class="req-open" data-req="DAMAGE" data-id="${esc(e.id)}">Arrived damaged? Report it (within 48 hours)</button>`;
+  return '';
+}
+function requestForm(e, which) {
+  if (which === 'CANCEL') {
+    const t = cancelTerms(e);
+    return `<form class="req" novalidate>
+      <b>${t.type === 'FREE' ? 'Cancel this enquiry' : 'Cancel this order'}</b>
+      <div class="terms-box">${t.text}${t.type !== 'FREE' ? ' Refunds go back the way you paid, usually within 7 working days.' : ''}</div>
+      <div class="field"><label>Reason (optional)</label><input name="reason" maxlength="300" placeholder="e.g. change of plans"></div>
+      ${t.type !== 'FREE' ? `<label class="tick"><input type="checkbox" name="agree"> I have read the <a href="#terms" style="color:var(--kumkum)">cancellation terms</a> and accept the refund shown.</label>` : ''}
+      <div class="acct-err" role="alert"></div>
+      <div class="row"><button class="btn primary" type="submit">${t.type === 'FREE' ? 'Cancel enquiry' : 'Request cancellation'}</button><button class="btn" type="button" data-close>Keep it</button></div>
+    </form>`;
+  }
+  return `<form class="req" novalidate>
+    <b>Report damage</b>
+    <div class="terms-box">We're sorry. Every parcel is insured: send us photos and choose what you'd like. Please keep the packaging until it's resolved.</div>
+    <div class="opts" role="radiogroup">
+      <label><input type="radio" name="action" value="DAMAGED_REPLACE" checked> A replacement or repair, at no cost</label>
+      <label><input type="radio" name="action" value="DAMAGED_REFUND"> A full refund of ${aedTxt(e.quotedPrice)}</label>
+    </div>
+    <div class="field"><label>What is damaged?</label><input name="reason" maxlength="500" placeholder="e.g. glass cracked in the corner"></div>
+    <div class="field"><label>Photos (up to 3)</label><input name="photos" type="file" accept="image/*" multiple></div>
+    <label class="tick"><input type="checkbox" name="agree"> I have read the <a href="#terms" style="color:var(--kumkum)">damage terms</a>.</label>
+    <div class="acct-err" role="alert"></div>
+    <div class="row"><button class="btn primary" type="submit">Send report</button><button class="btn" type="button" data-close>Close</button></div>
+  </form>`;
+}
+function wireRequests(root, items) {
+  root.querySelectorAll('[data-req]').forEach((b) => {
+    b.onclick = () => {
+      const e = items.find((x) => x.id === b.dataset.id);
+      const which = b.dataset.req;
+      b.hidden = true;
+      b.insertAdjacentHTML('afterend', requestForm(e, which));
+      const f = b.nextElementSibling;
+      f.querySelector('[data-close]').onclick = () => { f.remove(); b.hidden = false; };
+      f.querySelectorAll('a[href="#terms"]').forEach((a) => { a.onclick = () => close(); });
+      f.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const err = f.querySelector('.acct-err');
+        const btn = f.querySelector('button[type=submit]');
+        const action = which === 'CANCEL' ? 'CANCEL' : f.querySelector('input[name=action]:checked').value;
+        const reason = String(f.reason.value || '').trim();
+        const files = which === 'DAMAGE' ? [...(f.photos.files || [])].slice(0, 3) : [];
+        if (which === 'DAMAGE' && reason.length < 5) { err.textContent = 'Describe the damage in a few words.'; return; }
+        if (which === 'DAMAGE' && !files.length) { err.textContent = 'Add at least one photo of the damage.'; return; }
+        if (f.agree && !f.agree.checked) { err.textContent = 'Please tick the box to accept the terms.'; return; }
+        btn.disabled = true; err.textContent = files.length ? 'Uploading photos…' : '';
+        try {
+          const keys = [];
+          for (const [i, file] of files.entries()) {
+            const res = await uploadData({
+              path: ({ identityId }) => `uploads/${identityId}/${e.ref}-damage-${i + 1}-${safeName(file.name)}`,
+              data: file, options: { contentType: file.type || 'image/jpeg' },
+            }).result;
+            keys.push(res.path);
+          }
+          err.textContent = '';
+          const { data, errors } = await client.mutations.customerRequest({ id: e.id, action, reason: reason || null, photos: keys.join('\n') || null });
+          if (errors?.length) throw new Error(errors[0].message);
+          const r = typeof data === 'string' ? JSON.parse(data) : data;
+          Object.assign(e, { cancelRequest: action, cancelState: r.state, cancelRequestedAt: r.at, cancelRefundDue: r.due, status: r.status || e.status });
+          showList();
+        } catch (ex) {
+          err.textContent = ex.message || 'Could not send your request.';
+          btn.disabled = false;
+        }
+      };
+    };
+  });
+}
+
 function card(e) {
   const st = e.status || 'RECEIVED';
   const idx = STEPS.indexOf(st);
@@ -283,6 +398,7 @@ function card(e) {
     ${st === 'REPLACEMENT' ? `<div class="enq-msg">We're sorry it arrived damaged. Your replacement is being prepared, and we'll send the new tracking number when it ships.</div>` : ''}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${pay}
+    ${requestBlock(e)}
     ${rateBlock(e)}
   </article>`;
 }
@@ -316,6 +432,7 @@ async function showList() {
     list.innerHTML = items.length ? items.map(card).join('')
       : `<p class="acct-info">No enquiries yet. Tap "Ask for price" on a painting, request a commission, or send a Little Artists gift, and it will appear here.</p>`;
     wireRate(list, items);
+    wireRequests(list, items);
   } catch (ex) {
     list.textContent = 'We could not load your enquiries. ' + friendly(ex);
   }
@@ -336,7 +453,10 @@ Hub.listen('auth', ({ payload }) => {
   if (payload.event === 'signedIn') loadUser();
   if (payload.event === 'signedOut') { state.user = null; setButton(); }
 });
-loadUser();
+loadUser().then(() => {
+  // Links in our emails: art.pranixtechno.com/#my-enquiries opens the panel (sign-in first if needed).
+  if (location.hash === "#my-enquiries") { state.user ? showList() : showSignIn(); open(); }
+});
 
 /* ---------- save an enquiry (called by the site's forms) ---------- */
 const safeName = (n) => String(n || 'file').replace(/[^\w.\-]+/g, '_').slice(-60);

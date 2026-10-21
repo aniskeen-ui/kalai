@@ -68,6 +68,15 @@ const schema = a.schema({
       artistCourier: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistAwb: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Customer's own cancellation request / damage report (made under My enquiries, through customerRequest).
+      cancelRequest: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      cancelReason: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      cancelPhotos: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      cancelRequestedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      cancelRefundDue: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      cancelState: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      cancelReply: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveredAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
@@ -156,6 +165,14 @@ const schema = a.schema({
     .arguments({ id: a.id().required() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Customer, from My enquiries: cancel an order or report damage on delivery. Checked against the policy in the function.
+  customerRequest: a
+    .mutation()
+    .arguments({ id: a.id().required(), action: a.string().required(), reason: a.string(), photos: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Studio desk "Check Zoho": re-reads the invoice in Zoho; unlocks the enquiry if it was voided or its payment removed.

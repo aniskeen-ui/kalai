@@ -3,6 +3,7 @@ import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGe
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 /**
  * Kalai Art House ↔ Zoho Books.
@@ -27,8 +28,8 @@ type Img = Record<string, Attr>;
 type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImage?: Img; OldImage?: Img } };
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
-  identity?: { username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { id?: string; priceInr?: number; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null };
+  identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
+  arguments: { id?: string; priceInr?: number; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -943,6 +944,9 @@ function artistStage(e: Img, c: Img | undefined) {
   if (str(e, 'purchaseState') === 'CANCELLED') return { stage: 'CLOSED', label: 'Order cancelled by the customer' };
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
+  if (str(e, 'zohoPOId') && str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL') {
+    return { stage: 'ORDERED', label: 'On hold · the customer asked to cancel · please wait' };
+  }
   if (str(e, 'zohoPOId')) {
     const p = str(e, 'artistStage');
     const label = p === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : p === 'FINISHED' ? 'Finished · send it to the frame shop' : p === 'STARTED' ? 'In progress' : 'Ordered · price fixed · tap Started when you begin';
@@ -985,6 +989,7 @@ async function artistList() {
         artistCourier: str(e, 'artistCourier'),
         artistAwb: str(e, 'artistAwb'),
         progressBy: str(e, 'artistBy'),
+        onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
         priceBy: str(c, 'artistBy'),
         ...artistStage(e, c),
       };
@@ -1050,6 +1055,7 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const e = got.Item as Img | undefined;
   if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Order not found');
   if (str(e, 'purchaseState') === 'CANCELLED') throw new Error('This order was cancelled by the customer.');
+  if (str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL') throw new Error('On hold: the customer asked to cancel. Please wait for Kalai Art House before continuing.');
   if (!str(e, 'zohoPOId')) throw new Error('Not ordered yet: wait until the customer has paid and the order is placed.');
   const current = PROGRESS.indexOf(str(e, 'artistStage'));
   const target = PROGRESS.indexOf(step);
@@ -1297,6 +1303,8 @@ async function onStreamRecord(rec: StreamRecord) {
   // Cancelled before payment: decline the quote.
   if (status === 'CANCELLED' && oldStatus !== 'CANCELLED' && !str(img, 'zohoInvoiceId')) await declineQuote(img);
 
+  // Delivered: remember when (the customer has 48 hours to report damage).
+  if (status === 'DELIVERED' && oldStatus !== 'DELIVERED') await writeBack(id, { deliveredAt: new Date().toISOString() });
   // Shipped / Delivered: delivery challan in Zoho (needs the invoice first).
   if (['SHIPPED', 'DELIVERED'].includes(status)) await deliverySteps(img, old);
 
@@ -1365,10 +1373,249 @@ async function onStreamRecord(rec: StreamRecord) {
   }
 }
 
+// ---------- Customer requests (My enquiries): cancel, or report damage on delivery ----------
+// Policy (Terms clause 9): before payment → cancelled at once, nothing to pay. After payment and before
+// the work starts → full refund; once the artist (or, for Little Artists, the framer) has started → 50%.
+// Shipped → can't be cancelled. Delivered → damage reported with photos within 48 hours: refund or replacement.
+const DAMAGE_WINDOW_MS = 48 * 3600_000;
+type Terms = { allowed: boolean; type: 'FREE' | 'FULL' | 'HALF' | 'DAMAGE' | 'NONE'; pct: number; due: number; note: string };
+
+function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
+  const status = str(e, 'status') || 'RECEIVED';
+  const price = num(e, 'quotedPrice') ?? 0;
+  const t = (type: Terms['type'], pct: number, note: string, allowed = true): Terms => ({ allowed, type, pct, due: Math.round(price * pct * 100) / 100, note });
+  if (str(e, 'cancelState') === 'REQUESTED') return t('NONE', 0, 'A request is already open for this order. We will reply by email.', false);
+  if (action === 'CANCEL') {
+    if (['RECEIVED', 'PRICE_SENT'].includes(status)) return t('FREE', 0, 'Nothing has been paid, so the enquiry is simply cancelled.');
+    if (['PAID', 'FRAMING'].includes(status)) {
+      const started = str(e, 'kind') === 'GIFT' ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
+      return started
+        ? t('HALF', 0.5, str(e, 'kind') === 'GIFT' ? 'Framing has started, so 50% is refunded.' : 'The artist has started your work, so 50% is refunded to cover the artist\'s time.')
+        : t('FULL', 1, 'The work has not started yet, so the full amount is refunded.');
+    }
+    if (status === 'SHIPPED') return t('NONE', 0, 'It has already shipped, so it can no longer be cancelled. If it arrives damaged, report it here within 48 hours of delivery.', false);
+    return t('NONE', 0, 'This order can no longer be cancelled.', false);
+  }
+  if (action === 'DAMAGED_REFUND' || action === 'DAMAGED_REPLACE') {
+    if (status !== 'DELIVERED') return t('NONE', 0, 'Damage can be reported once the order is delivered.', false);
+    const at = Date.parse(str(e, 'deliveredAt') || str(e, 'updatedAt'));
+    if (Number.isFinite(at) && now - at > DAMAGE_WINDOW_MS) return t('NONE', 0, 'Damage must be reported within 48 hours of delivery. Please contact us.', false);
+    return action === 'DAMAGED_REFUND' ? t('DAMAGE', 1, 'Damaged in transit: full refund once we have checked the photos.') : t('DAMAGE', 0, 'Damaged in transit: we replace or repair it at no cost.');
+  }
+  return t('NONE', 0, 'Unknown request.', false);
+}
+
+function ownsEnquiry(e: Img, ev: ApiEvent) {
+  const owner = str(e, 'owner');
+  const sub = ev.identity?.sub ?? String(ev.identity?.claims?.sub ?? '');
+  const user = ev.identity?.username ?? '';
+  if (!owner) return false;
+  return [sub, user].filter(Boolean).some((x) => owner === x || owner.startsWith(`${x}::`) || owner.endsWith(`::${x}`));
+}
+
+async function customerRequest(ev: ApiEvent) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const a = ev.arguments;
+  const id = a.id ?? '';
+  const action = String(a.action ?? '').toUpperCase();
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+  const e = got.Item as Img | undefined;
+  if (!e || !ownsEnquiry(e, ev)) throw new Error('Order not found');
+  const terms = cancelTerms(e, action);
+  if (!terms.allowed) throw new Error(terms.note);
+  const reason = String(a.reason ?? '').trim().slice(0, 1000);
+  const photos = String(a.photos ?? '').split('\n').map((x) => x.trim()).filter((x) => x.startsWith('uploads/')).slice(0, 3);
+  if (terms.type === 'DAMAGE' && !photos.length) throw new Error('Add at least one photo of the damage.');
+  if (terms.type === 'DAMAGE' && reason.length < 5) throw new Error('Describe the damage in a few words.');
+  const now = new Date().toISOString();
+  const set: Record<string, AttributeValue> = {
+    cancelRequest: { S: action },
+    cancelRequestedAt: { S: now },
+    cancelState: { S: terms.type === 'FREE' ? 'DONE' : 'REQUESTED' },
+    updatedAt: { S: now },
+  };
+  if (reason) set.cancelReason = { S: reason };
+  if (photos.length) set.cancelPhotos = { S: photos.join('\n') };
+  if (terms.type !== 'FREE') set.cancelRefundDue = { N: String(terms.due) };
+  if (terms.type === 'FREE') set.status = { S: 'CANCELLED' }; // the stream then declines the Zoho quote
+  const names: Record<string, string> = {};
+  const values: Record<string, AttributeValue> = {};
+  const parts = Object.entries(set).map(([k, v], i) => { names[`#c${i}`] = k; values[`:c${i}`] = v; return `#c${i} = :c${i}`; });
+  await ddb.send(new UpdateItemCommand({
+    TableName: table, Key: { id: { S: id } },
+    UpdateExpression: `SET ${parts.join(', ')} REMOVE cancelReply`,
+    ExpressionAttributeNames: names, ExpressionAttributeValues: values,
+    ConditionExpression: 'attribute_exists(id)',
+  }));
+  console.log(`Customer request ${action} (${terms.type}) for ${str(e, 'ref')}`);
+  return { ok: true, type: terms.type, due: terms.due, note: terms.note, state: terms.type === 'FREE' ? 'DONE' : 'REQUESTED', status: terms.type === 'FREE' ? 'CANCELLED' : str(e, 'status'), at: now };
+}
+
+// ---------- Emails (Amazon SES) to the customer and the studio ----------
+const SITE = 'https://art.pranixtechno.com';
+const STUDIO_EMAIL = 'kalaiarthouse@pranixtechno.com';
+const FROM = 'Kalai Art House <noreply@pranixtechno.com>';
+const EMAIL_PARAM = '/kalai/email/enabled';
+const sesClient = new SESv2Client({});
+let cachedEmailOn: { on: boolean; at: number } | null = null;
+async function emailsOn() {
+  if (cachedEmailOn && Date.now() - cachedEmailOn.at < 60_000) return cachedEmailOn.on;
+  let on = true;
+  try {
+    const r = await ssm.send(new GetParameterCommand({ Name: EMAIL_PARAM }));
+    on = (r.Parameter?.Value ?? '').trim().toLowerCase() !== 'off';
+  } catch { on = true; }
+  cachedEmailOn = { on, at: Date.now() };
+  return on;
+}
+const h = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const aed = (n: number | null) => (n == null ? '' : `AED ${n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`);
+type Mail = { to: string; subject: string; lines: string[]; button?: { label: string; url: string }; footer?: string };
+
+function renderMail(m: Mail) {
+  const para = (l: string) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#232046">${l}</p>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#f7f3ea;padding:24px 12px;font-family:Arial,Helvetica,sans-serif">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+  <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border-radius:8px;border:1px solid #e6dcc6" cellspacing="0" cellpadding="0">
+  <tr><td style="background:#232046;color:#f6f1e4;padding:18px 24px;font-family:Georgia,serif;font-size:20px;letter-spacing:2px;border-radius:8px 8px 0 0">KALAI <span style="color:#d9ad55">ART HOUSE</span></td></tr>
+  <tr><td style="padding:24px">${m.lines.map(para).join('')}
+  ${m.button ? `<p style="margin:20px 0"><a href="${h(m.button.url)}" style="background:#a3242f;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:bold;display:inline-block">${h(m.button.label)}</a></p>` : ''}
+  <p style="margin:18px 0 0;font-size:13px;color:#6b6780">${m.footer ?? `Questions? Just reply to this email or message us on WhatsApp.<br>Kalai Art House · Pranix Technologies FZCO · Dubai · <a href="${SITE}/#terms" style="color:#6b6780">Terms</a>`}</p>
+  </td></tr></table></td></tr></table></body></html>`;
+  const text = [...m.lines.map((l) => l.replace(/<br\s*\/?>/g, '\n').replace(/<[^>]+>/g, '')), m.button ? `${m.button.label}: ${m.button.url}` : '', '', 'Kalai Art House · art.pranixtechno.com'].join('\n\n');
+  return { html, text };
+}
+
+async function sendMail(m: Mail) {
+  if (!m.to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.to)) return;
+  const { html, text } = renderMail(m);
+  await sesClient.send(new SendEmailCommand({
+    FromEmailAddress: FROM,
+    Destination: { ToAddresses: [m.to] },
+    ReplyToAddresses: [STUDIO_EMAIL],
+    Content: { Simple: { Subject: { Data: m.subject, Charset: 'UTF-8' }, Body: { Html: { Data: html, Charset: 'UTF-8' }, Text: { Data: text, Charset: 'UTF-8' } } } },
+  }));
+  console.log(`Email sent: "${m.subject}"`);
+}
+
+const MY = { label: 'Open My enquiries', url: `${SITE}/#my-enquiries` };
+const DESK = (id: string) => ({ label: 'Open in Order Management', url: `${SITE}/admin.html#order=${id}` });
+
+/** Which emails a change to an enquiry should send (customer + studio). Pure: easy to test. */
+function mailsFor(rec: StreamRecord): Mail[] {
+  const img = rec.dynamodb?.NewImage;
+  const old = rec.dynamodb?.OldImage;
+  if (!img) return [];
+  const to = str(img, 'email');
+  const name = (str(img, 'customerName') || 'there').split(/\s+/)[0];
+  const ref = str(img, 'ref');
+  const title = str(img, 'title');
+  const kind = str(img, 'kind');
+  const id = str(img, 'id');
+  const price = num(img, 'quotedPrice');
+  const msg = str(img, 'adminMessage');
+  const msgLine = msg ? `<b>Message from us:</b> ${h(msg)}` : '';
+  const hi = `Hello ${h(name)},`;
+  const out: Mail[] = [];
+  const cust = (subject: string, lines: string[], button = MY) => out.push({ to, subject, lines: [hi, ...lines.filter(Boolean)], button });
+  const studio = (subject: string, lines: string[]) => out.push({ to: STUDIO_EMAIL, subject, lines: lines.filter(Boolean), button: DESK(id), footer: 'Studio notification from art.pranixtechno.com' });
+
+  if (rec.eventName === 'INSERT') {
+    cust(`We've received your enquiry ${ref}`, [
+      kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
+        : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
+        : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
+      `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries on our website.`]);
+    studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`]);
+    return out;
+  }
+  if (rec.eventName !== 'MODIFY' || !old) return out;
+  const own = str(img, 'zohoAt') !== str(old, 'zohoAt');
+
+  // Results our function wrote (refund recorded).
+  const rs = str(img, 'refundState'), ors = str(old, 'refundState');
+  if (rs !== ors && ['DONE', 'TEST'].includes(rs) && str(img, 'refundAction') !== 'DAMAGED_REPLACE') {
+    const amt = num(img, 'refundAmount');
+    cust(`Refund of ${aed(amt)} for ${ref}`, [`We've refunded <b>${aed(amt)}</b> for <b>${h(title)}</b>${str(img, 'refundRef') ? ` (reference ${h(str(img, 'refundRef'))})` : ''}.`,
+      'Depending on your bank it usually shows in your account within 7 working days.', 'We are sorry this one did not work out, and we hope to paint for you again.']);
+  }
+  if (own) return out;
+
+  const st = str(img, 'status') || 'RECEIVED';
+  const ost = str(old, 'status') || 'RECEIVED';
+  const statusChanged = st !== ost;
+  if (statusChanged) {
+    if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
+      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>, including framing, delivery in the UAE and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
+      msgLine, str(img, 'paymentLink') ? 'You can pay securely with the button below. The price is held for 7 days.' : 'The price is held for 7 days. Reply to this email or message us on WhatsApp to go ahead.',
+      `By paying you agree to our <a href="${SITE}/#terms">terms</a>, including the cancellation policy.`],
+      str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
+    if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
+      str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
+      kind === 'GIFT' ? "We'll email you when it is framed and on its way." : "We'll email you when the artist starts, when it is being framed and when it ships.",
+      'Changed your mind? You can request a cancellation under My enquiries: before the work starts you get a full refund.']);
+    if (st === 'FRAMING') cust(`Being framed: ${title}`, [`Good news: <b>${h(title)}</b> is now at our framing studio in Dubai.`, msgLine, "We'll email you the courier and tracking number when it ships."]);
+    if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries within 48 hours.']);
+    if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
+      'If anything arrived damaged, report it with photos under My enquiries within 48 hours and choose a replacement or a refund.',
+      'We would be grateful for your feedback: you can rate your order under My enquiries.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
+    if (st === 'REPLACEMENT') cust(`Your replacement is being prepared (${ref})`, [`We're sorry <b>${h(title)}</b> arrived damaged. Your replacement is being prepared at no cost, and we'll email you the tracking number when it ships.`, msgLine]);
+    if (st === 'CANCELLED') {
+      const self = str(img, 'cancelRequest') === 'CANCEL';
+      cust(`Cancelled: ${ref}`, [self ? `As you asked, your enquiry for <b>${h(title)}</b> is cancelled. Nothing was paid, so there is nothing more to do.` : `Your enquiry for <b>${h(title)}</b> is now closed.`, msgLine, 'You are welcome back any time.']);
+      if (self) studio(`Customer cancelled ${ref} (not paid)`, [`${h(str(img, 'customerName'))} cancelled <b>${h(title)}</b> before paying.`, str(img, 'cancelReason') ? `Reason: ${h(str(img, 'cancelReason'))}` : '', 'The Zoho quote is marked declined automatically.']);
+    }
+  }
+
+  // Siva started: the cancellation terms change, so tell the customer.
+  if (str(img, 'artistStage') === 'STARTED' && str(old, 'artistStage') !== 'STARTED' && ['PAID', 'FRAMING'].includes(st)) {
+    cust(`The artist has started ${title}`, [`Siva Raja has started work on <b>${h(title)}</b>. We'll let you know when it is finished and being framed.`]);
+  }
+
+  // A customer request (cancel / damage) or the studio's answer to it.
+  const cs = str(img, 'cancelState'), ocs = str(old, 'cancelState');
+  if (cs !== ocs && cs === 'REQUESTED') {
+    const req = str(img, 'cancelRequest');
+    const due = num(img, 'cancelRefundDue');
+    const damage = req.startsWith('DAMAGED');
+    cust(damage ? `We've received your damage report (${ref})` : `We've received your cancellation request (${ref})`, [
+      damage ? `Thank you for the photos. We're sorry <b>${h(title)}</b> arrived damaged.` : `We've received your request to cancel <b>${h(title)}</b>.`,
+      req === 'DAMAGED_REPLACE' ? 'You asked for a replacement or repair at no cost. We will confirm the plan within 2 working days.'
+        : `Under our terms the refund is <b>${aed(due)}</b>. We will send it within 7 working days and email you when it is done.`]);
+    studio(`${damage ? 'Damage reported' : 'Cancellation request'}: ${ref}`, [
+      `${h(str(img, 'customerName'))} · ${h(to)} · ${h(str(img, 'phone'))}`, `<b>${h(title)}</b> · status ${h(st)}`,
+      `Request: <b>${h(req === 'CANCEL' ? 'Cancel' : req === 'DAMAGED_REFUND' ? 'Damaged: refund' : 'Damaged: replacement')}</b>${req !== 'DAMAGED_REPLACE' ? ` · refund due under the policy: <b>${aed(due)}</b>` : ''}`,
+      str(img, 'cancelReason') ? `Reason: ${h(str(img, 'cancelReason'))}` : '', damage ? 'Photos are attached to the order.' : '',
+      req === 'CANCEL' && str(img, 'zohoPOId') ? "Siva's order is on hold until you decide." : '',
+      'Pay the refund, then confirm it in the order (the box is filled in for you).']);
+  }
+  if (cs !== ocs && cs === 'DECLINED') {
+    cust(`About your request for ${ref}`, [`We've looked at your request for <b>${h(title)}</b>.`, str(img, 'cancelReply') ? h(str(img, 'cancelReply')) : 'We are unable to accept it under our terms. Please reply to this email if you would like to talk it through.']);
+  }
+
+  // A new message on the order without a status change.
+  if (!statusChanged && msg && msg !== str(old, 'adminMessage')) cust(`A message about your order ${ref}`, [`About <b>${h(title)}</b>:`, h(msg)]);
+  return out;
+}
+
+async function notify(rec: StreamRecord) {
+  try {
+    const mails = mailsFor(rec);
+    if (!mails.length || !(await emailsOn())) return;
+    for (const m of mails) {
+      try { await sendMail(m); } catch (err) { console.warn(`Email "${m.subject}" not sent:`, err); }
+    }
+  } catch (err) {
+    console.warn('Email step failed:', err);
+  }
+}
+
 export const handler = async (event: StreamEvent | ApiEvent) => {
   if ('arguments' in event) {
     const a = event.arguments ?? {};
-    const field = event.info?.fieldName ?? event.fieldName ?? (a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    const field = event.info?.fieldName ?? event.fieldName ?? (a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    if (field === 'customerRequest') return JSON.stringify(await customerRequest(event));
     if (field === 'artistList') return JSON.stringify(await artistList());
     if (field === 'artistQuote') return JSON.stringify(await artistQuote(event.arguments, actor(event)));
     if (field === 'artistPhoto') return JSON.stringify(await artistPhoto(event.arguments.id ?? ''));
@@ -1381,6 +1628,7 @@ export const handler = async (event: StreamEvent | ApiEvent) => {
     const img = rec.dynamodb?.NewImage;
     try {
       await onStreamRecord(rec);
+      await notify(rec);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`Zoho sync failed for ${str(img, 'ref')}:`, err);

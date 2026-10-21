@@ -64,7 +64,20 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['ssm:GetParameter'],
-    resources: [`arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/zoho/*`],
+    resources: [
+      `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/zoho/*`,
+      `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/email/*`,
+    ],
+  }),
+);
+
+// Order emails to customers and the studio (Amazon SES, verified domain pranixtechno.com).
+// Switch off with the SSM parameter /kalai/email/enabled = off.
+backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+    resources: [`arn:aws:ses:${fnStack.region}:${fnStack.account}:identity/*`],
   }),
 );
 

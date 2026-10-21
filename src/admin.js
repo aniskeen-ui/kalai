@@ -94,6 +94,7 @@ async function loadReviews() {
   } while (nextToken);
 }
 
+$('fStatus').insertAdjacentHTML('beforeend', '<option value="__REQ">Customer requests (cancel / damage)</option>');
 Object.entries(STATUS).forEach(([k, v]) => $('fStatus').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`));
 
 function show(view) {
@@ -117,6 +118,10 @@ async function start() {
   if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
   await loadRates();
   await load();
+  // Links in studio emails: admin.html#order=<id> opens that order.
+  const m = location.hash.match(/^#order=(.+)$/);
+  const hit = m && all.find((x) => x.id === decodeURIComponent(m[1]));
+  if (hit) { selectedId = hit.id; render(); showDetail(hit); }
 }
 
 $('loginForm').addEventListener('submit', async (e) => {
@@ -357,14 +362,16 @@ function render() {
   all.forEach((e) => { const s = e.status || 'RECEIVED'; counts[s] = (counts[s] || 0) + 1; });
   $('counts').innerHTML = Object.keys(STATUS).filter((k) => counts[k])
     .map((k) => `<span class="count">${STATUS[k]} <b>${counts[k]}</b></span>`).join('') || '<span class="muted">No enquiries yet.</span>';
-  const list = all.filter((e) => (!fs || (e.status || 'RECEIVED') === fs) && (!fk || e.kind === fk));
+  const reqs = all.filter(isReq).length;
+  if (reqs) $('counts').insertAdjacentHTML('afterbegin', `<span class="count req">Customer requests <b>${reqs}</b></span>`);
+  const list = all.filter((e) => (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk));
   $('rows').innerHTML = list.length ? list.map((e) => {
     const s = e.status || 'RECEIVED';
     const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
       <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}</td>
-      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !['CANCELLED', 'DELIVERED'].includes(s) ? ' <span class="chip" title="Siva hasn\'t priced this yet">Artist price needed</span>' : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
+      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !['CANCELLED', 'DELIVERED'].includes(s) ? ' <span class="chip" title="Siva hasn\'t priced this yet">Artist price needed</span>' : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? 'AED ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">Nothing matches this filter.</td></tr>';
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -465,28 +472,55 @@ const AFTER = {
   DAMAGED_REPLACE: { label: 'Damaged in transit, customer wants a replacement / repair', pct: 0, status: 'REPLACEMENT' },
 };
 const AFTER_DONE = ['DONE', 'TEST', 'REPLACEMENT'];
+// The customer's own request (My enquiries) → the matching box option, pre-filled.
+const isReq = (e) => e.cancelState === 'REQUESTED';
+function reqAction(e) {
+  if (!isReq(e)) return '';
+  if (e.cancelRequest === 'CANCEL') return Number(e.cancelRefundDue) < Number(e.quotedPrice || 0) ? 'CANCEL_HALF' : 'CANCEL_FULL';
+  return e.cancelRequest || '';
+}
+const REQ_LABEL = { CANCEL: 'Cancel the order', DAMAGED_REFUND: 'Arrived damaged: full refund', DAMAGED_REPLACE: 'Arrived damaged: replacement / repair' };
+function requestBanner(e) {
+  if (!isReq(e) && e.cancelState !== 'DECLINED') return '';
+  if (e.cancelState === 'DECLINED') return `<div class="muted" style="font-size:13px"><b>Customer request declined:</b> ${esc(REQ_LABEL[e.cancelRequest] || '')}${e.cancelReply ? ` · “${esc(e.cancelReply)}”` : ''}</div>`;
+  return `<div class="reqbox">
+    <div><b>Customer request · ${esc(when(e.cancelRequestedAt))}</b></div>
+    <div>${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest)}${e.cancelRequest !== 'DAMAGED_REPLACE' ? ` · refund under the policy: <b>AED ${Number(e.cancelRefundDue || 0).toLocaleString('en-US')}</b>` : ''}</div>
+    ${e.cancelReason ? `<div>Reason: “${esc(e.cancelReason)}”</div>` : ''}
+    ${e.cancelPhotos ? `<div class="links" id="reqPhotos"><span class="muted">Loading photos…</span></div>` : ''}
+    <div class="muted" style="font-size:12px">${e.cancelRequest === 'CANCEL' && e.zohoPOId ? "Siva's order is on hold. " : ''}To accept: ${e.cancelRequest === 'DAMAGED_REPLACE' ? 'tick the box below and save.' : 'pay the refund (Ziina / bank), enter its reference below, tick the box and save.'} The customer is emailed automatically.</div>
+    <details><summary>Decline the request instead</summary>
+      <div class="field" style="margin-top:8px"><label for="rqReply">Reply to the customer (emailed)</label><textarea id="rqReply" rows="2" placeholder="e.g. As agreed on the phone, you are keeping the painting."></textarea></div>
+      <button class="btn ghost" type="button" id="rqDecline">Decline and email the customer</button> <span class="ok" id="rqMsg" role="status"></span>
+    </details>
+  </div>`;
+}
+
 function afterSection(e) {
   if (!e.zohoInvoiceId && !e.refundAction) return '';
   const done = AFTER_DONE.includes(e.refundState);
+  const pre = !e.refundAction ? reqAction(e) : '';
+  const act = e.refundAction || pre;
   const st = e.refundState || '';
   const color = st === 'DONE' || st === 'REPLACEMENT' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
   const dis = done ? 'disabled' : '';
   return `<fieldset class="cost" id="afterBox">
     <legend>Cancellation, damage or refund</legend>
+    ${requestBanner(e)}
     ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.refundMessage)}</div>` : ''}
     ${!done && e.zohoPOId ? `<div style="font-size:13px"><b>Siva:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
     <div class="field"><label for="aAction">What happened?</label><select id="aAction" ${dis}>
       <option value="">Nothing: order is fine</option>
-      ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${e.refundAction === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+      ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${act === k ? 'selected' : ''}>${v.label}</option>`).join('')}
     </select></div>
     <div class="err" id="aWarn" hidden></div>
-    <div id="aMoney" class="two" ${e.refundAction && e.refundAction !== 'DAMAGED_REPLACE' ? '' : 'hidden'}>
-      <div class="field"><label for="aAmount">Refund amount (AED)</label><input id="aAmount" type="number" min="0" step="0.01" value="${e.refundAmount ?? ''}" ${dis}></div>
+    <div id="aMoney" class="two" ${act && act !== 'DAMAGED_REPLACE' ? '' : 'hidden'}>
+      <div class="field"><label for="aAmount">Refund amount (AED)</label><input id="aAmount" type="number" min="0" step="0.01" value="${e.refundAmount ?? (pre ? e.cancelRefundDue ?? '' : '')}" ${dis}></div>
       <div class="field"><label for="aMethod">Refund via</label><select id="aMethod" ${dis}>${[['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${(e.refundMethod || e.paymentMethod || 'ZIINA') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="field"><label for="aRef">Refund reference</label><input id="aRef" value="${esc(e.refundRef)}" placeholder="Ziina / bank transaction ID" ${dis}></div>
     </div>
-    <div class="field" id="aNoteBox" ${e.refundAction ? '' : 'hidden'}><label for="aNote">Note (reason, customer's photos received…)</label><input id="aNote" value="${esc(e.refundNote)}" ${dis}></div>
-    ${done ? '' : `<label id="aConfirmBox" style="display:${e.refundAction ? 'flex' : 'none'};gap:8px;align-items:flex-start;font-weight:400;font-size:13px"><input type="checkbox" id="aConfirm" style="width:auto;margin-top:3px"> <span id="aConfirmText">I confirm. Saving sets the status and records this in Zoho (credit note + refund, or the challan as returned). It can't be undone from here.</span></label>`}
+    <div class="field" id="aNoteBox" ${act ? '' : 'hidden'}><label for="aNote">Note (reason, customer's photos received…)</label><input id="aNote" value="${esc(e.refundNote || (pre ? `Customer request: ${e.cancelReason || REQ_LABEL[e.cancelRequest] || ''}` : ''))}" ${dis}></div>
+    ${done ? '' : `<label id="aConfirmBox" style="display:${act ? 'flex' : 'none'};gap:8px;align-items:flex-start;font-weight:400;font-size:13px"><input type="checkbox" id="aConfirm" style="width:auto;margin-top:3px"> <span id="aConfirmText">I confirm. Saving sets the status and records this in Zoho (credit note + refund, or the challan as returned). It can't be undone from here.</span></label>`}
     <div class="muted" style="font-size:12px">Policy: no change-of-mind returns. Cancelled before Siva starts → full refund; after he starts → 50%. Damaged in transit (photos within 48 hours) → customer chooses refund or replacement.</div>
   </fieldset>`;
 }
@@ -751,6 +785,23 @@ async function showDetail(e) {
     }
   }
 
+  if ($('reqPhotos')) {
+    const keys = String(e.cancelPhotos || '').split('\n').filter(Boolean);
+    Promise.all(keys.map((k) => getUrl({ path: k, options: { expiresIn: 900 } }).then((r) => r.url.toString()).catch(() => null)))
+      .then((urls) => { $('reqPhotos').innerHTML = urls.map((u, i) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener">Damage photo ${i + 1}</a>` : `<span class="err">Photo ${i + 1} unavailable</span>`)).join('') + '<span class="muted">Links work for 15 minutes.</span>'; });
+  }
+  if ($('rqDecline')) {
+    $('rqDecline').onclick = async (ev) => {
+      const b = ev.currentTarget; b.disabled = true; $('rqMsg').textContent = 'Saving…';
+      try {
+        const { data, errors } = await client.models.Enquiry.update({ id: e.id, cancelState: 'DECLINED', cancelReply: $('rqReply').value.trim() || null });
+        if (errors?.length) throw new Error(errors[0].message);
+        Object.assign(e, data || { cancelState: 'DECLINED' });
+        render(); showDetail(e);
+      } catch (ex) { $('rqMsg').textContent = ex.message || 'Could not save.'; b.disabled = false; }
+    };
+  }
+
   $('checkZoho').onclick = async (ev) => {
     const b = ev.currentTarget; b.disabled = true; $('zohoMsg').textContent = 'Checking Zoho…';
     try {
@@ -819,6 +870,7 @@ async function showDetail(e) {
           refundRef: $('aRef').value.trim() || null,
           refundNote: $('aNote').value.trim() || null,
           refundState: null,
+          ...(isReq(e) ? { cancelState: 'DONE' } : {}),
         } : {}),
         courierName: $('eCourier').value.trim() || null,
         trackingNo: $('eAwb').value.trim() || null,
@@ -834,7 +886,7 @@ async function showDetail(e) {
       });
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(e, data || {});
-      $('saveMsg').textContent = $('eStatus').value === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries. Use the WhatsApp link to let them know.';
+      $('saveMsg').textContent = $('eStatus').value === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries and is emailed when the status or message changes.';
       render();
       // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
       void toZoho;

@@ -97,6 +97,7 @@ function card(x) {
 const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
 function progressBlock(x) {
   if (!x.ordered) return '';
+  if (x.onHold) return `<div class="progress"><div class="err" style="font-size:14px">On hold: the customer has asked to cancel. Please don't continue with this work until Kalai Art House confirms.</div></div>`;
   const p = x.progress || '';
   const step = (key, label, at) => `<li class="${at ? 'done' : ''}"><span>${at ? '✓' : '○'}</span> ${label}${at ? ` <span class="muted">${esc(day(at))}</span>` : ''}</li>`;
   const next = !p ? `<button type="button" class="btn" data-step="STARTED">I've started this work</button>`
