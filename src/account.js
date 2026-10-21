@@ -19,7 +19,7 @@ export const STATUS = {
   FRAMING: 'Being framed',
   SHIPPED: 'Shipped',
   DELIVERED: 'Delivered',
-  REPLACEMENT: 'Replacement on its way',
+  REPLACEMENT: 'Replacement in progress',
   REFUNDED: 'Refunded',
   CANCELLED: 'Cancelled',
 };
@@ -70,6 +70,13 @@ const css = `
 .req .row{display:flex;gap:8px;flex-wrap:wrap}
 .req .row .btn{flex:1}
 .enq-msg.warn{border-left-color:var(--kumkum)}
+.rtrack{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:5px;font-size:14px}
+.rtrack li{color:var(--muted)}
+.rtrack li.done,.rtrack li.now{color:var(--fg)}
+.rtrack li span{display:inline-block;width:1.2em}
+.rtrack li.done span{color:var(--ok);font-weight:700}
+.rtrack li.now span{color:var(--gold)}
+.rtrack small{color:var(--muted);font-size:12px}
 .acct-sm{display:none}
 @media (max-width:640px){.acct-lg{display:none}.acct-sm{display:inline}}
 .acct-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
@@ -391,6 +398,30 @@ function wireRequests(root, items) {
   });
 }
 
+/* ---------- replacement tracker (damaged in transit → replacement) ---------- */
+const shortDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
+function replacementTracker(e) {
+  const st = e.status || '';
+  if (!(st === 'REPLACEMENT' || (e.refundAction === 'DAMAGED_REPLACE' && ['SHIPPED', 'DELIVERED'].includes(st)))) return '';
+  const steps = [];
+  const add = (done, label, extra = '', at = '') => steps.push({ done, label, extra, at });
+  add(true, 'Damage reported', '', e.cancelRequestedAt);
+  if (e.returnMode === 'PICKUP') {
+    add(!!e.returnAwb, 'Return pickup booked', e.returnAwb ? `${e.returnCourier} · AWB ${e.returnAwb}${e.returnPickupDate ? ` · ${shortDay(e.returnPickupDate)}` : ''}` : 'we will email you the courier and date');
+    add(!!e.returnPickedAt, 'Collected from you', '', e.returnPickedAt);
+  }
+  if (e.returnMode && e.returnMode !== 'NONE') add(!!e.returnReceivedAt, 'Received at our framing studio', '', e.returnReceivedAt);
+  const working = !!(e.reworkStartedAt || e.reworkStage || e.toSivaSentAt);
+  const ready = e.reworkStage === 'READY';
+  add(working || ready, e.reworkType === 'SIVA_REPAINT' ? 'The artist is painting your replacement' : e.reworkType?.startsWith('SIVA') ? 'The artist is repairing it' : 'Being repaired and re-framed');
+  add(ready, 'Checked and ready to ship', '', e.reworkReadyAt);
+  add(['SHIPPED', 'DELIVERED'].includes(st), 'On its way to you', ['SHIPPED', 'DELIVERED'].includes(st) && e.trackingNo ? `${e.courierName} · tracking no. ${e.trackingNo}` : '');
+  add(st === 'DELIVERED', 'Delivered', '', st === 'DELIVERED' ? e.deliveredAt : '');
+  const current = steps.findIndex((x) => !x.done);
+  return `<div class="enq-msg"><b>Replacement</b>${st === 'REPLACEMENT' ? " · we're sorry it arrived damaged" : ''}
+    <ol class="rtrack">${steps.map((x, i) => `<li class="${x.done ? 'done' : i === current ? 'now' : ''}"><span>${x.done ? '✓' : i === current ? '●' : '○'}</span> ${esc(x.label)}${x.extra ? ` <small>${esc(x.extra)}</small>` : ''}${x.at ? ` <small>· ${esc(shortDay(x.at))}</small>` : ''}</li>`).join('')}</ol></div>`;
+}
+
 function card(e) {
   const st = e.status || 'RECEIVED';
   const idx = STEPS.indexOf(st);
@@ -406,9 +437,7 @@ function card(e) {
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
     ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
     ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
-    ${st === 'REPLACEMENT' ? `<div class="enq-msg">We're sorry it arrived damaged. Your replacement is being prepared, and we'll send the new tracking number when it ships.</div>` : ''}
-    ${st === 'REPLACEMENT' && e.returnMode === 'PICKUP' && e.returnAwb && !e.returnPickedAt ? `<div class="enq-msg">Return pickup booked${e.returnPickupDate ? ` for <b>${esc(new Date(e.returnPickupDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))}</b>` : ''}: <b>${esc(e.returnCourier)}</b> · AWB <b>${esc(e.returnAwb)}</b>. Please keep it packed and ready.</div>` : ''}
-    ${st === 'REPLACEMENT' && e.returnReceivedAt ? `<div class="enq-msg">We received the damaged piece on ${esc(new Date(e.returnReceivedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}.</div>` : ''}
+    ${replacementTracker(e)}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${pay}
     ${requestBlock(e)}

@@ -1080,6 +1080,8 @@ async function showDetail(e) {
       render();
       // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
       void toZoho;
+      // Rework / return steps don't go through Zoho: redraw now so the ticks and the timeline show what was saved.
+      if (rw) { const msg = $('saveMsg').textContent; await showDetail(e); if ($('saveMsg')) $('saveMsg').textContent = msg; }
       waitForZoho(e.id, savedAt);
     } catch (ex) {
       $('saveMsg').textContent = '';
