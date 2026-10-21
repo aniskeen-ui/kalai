@@ -49,6 +49,17 @@ const schema = a.schema({
       zohoChallanId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       deliveryState: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       deliveryMessage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // After-sales: cancellation / damage → credit note + refund, or a replacement.
+      refundAction: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      refundAmount: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      refundMethod: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      refundRef: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      refundNote: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      refundState: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      refundMessage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoCreditNote: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoCreditNoteId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoRefundId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),

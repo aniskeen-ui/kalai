@@ -7,6 +7,12 @@
 <title>Kalai Art House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script>
+/* Theme: remembers 🌙 / ☀️ choice per browser; otherwise follows the device setting. */
+(function(){var t=null;try{t=localStorage.getItem('kalaiTheme')}catch(e){}if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);
+window.kalaiToggleTheme=function(){var r=document.documentElement,cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'),next=cur==='dark'?'light':'dark';r.setAttribute('data-theme',next);try{localStorage.setItem('kalaiTheme',next)}catch(e){}document.querySelectorAll('.theme-btn').forEach(function(b){b.textContent=next==='dark'?'☀️':'🌙';b.setAttribute('aria-label',next==='dark'?'Switch to light mode':'Switch to dark mode')})};
+document.addEventListener('DOMContentLoaded',function(){var r=document.documentElement,cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.querySelectorAll('.theme-btn').forEach(function(b){b.textContent=cur==='dark'?'☀️':'🌙';b.setAttribute('aria-label',cur==='dark'?'Switch to light mode':'Switch to dark mode');b.onclick=window.kalaiToggleTheme})});})();
+</script>
 <style>
 /* Layout: gallery-wall storefront — framed works on an ink-and-gold ground, cart as a side drawer, commission studio below the collection */
 :root{
@@ -39,6 +45,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* header */
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--ink);color:var(--on-ink)}
 header.top .wrap{display:flex;align-items:center;gap:20px;padding-block:14px}
+header.top .cart-btn{white-space:nowrap}
+.theme-btn{background:transparent;border:1px solid #6d6596;border-radius:999px;color:var(--on-ink);font-size:16px;line-height:1;padding:6px 10px;cursor:pointer}
 .brand{display:flex;align-items:baseline;gap:10px;margin-right:auto;min-width:0}
 .brand b{font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.06em}
 .brand span{font-size:12px;color:#c9c3dd;letter-spacing:.08em;text-transform:uppercase}
@@ -242,7 +250,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
   <nav class="links"><a href="#collection">Collection</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
-  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
+  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
 <section class="hero" style="padding-block:0"><div class="wrap">
@@ -398,7 +406,8 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <details open><summary>Will I pay customs at the door?</summary><p>No. Every price includes UAE customs duty and VAT, and we ship duties paid, so the courier hands it over with nothing to collect.</p></details>
     <details><summary>How long does delivery take?</summary><p>Ready-to-ship works arrive in 5–8 days anywhere in the UAE. Commissions take 1–2 weeks for pencil sketches and 2–3 weeks for watercolours, plus delivery.</p></details>
     <details><summary>What materials do you use?</summary><p>Watercolours are painted on 300 gsm cotton paper with artist-grade paints. Pencil sketches use graphite on heavy acid-free drawing paper, sealed with fixative so they don't smudge.</p></details>
-    <details><summary>What if it arrives damaged?</summary><p>Every parcel is insured. Send us photos within 48 hours of delivery and we replace or refund it. Because each work is one of a kind, we can't accept change-of-mind returns.</p></details>
+    <details><summary>What if it arrives damaged?</summary><p>Every parcel is insured. Send us photos on WhatsApp within 48 hours of delivery and you choose: a replacement or repair, or a full refund. Because each work is one of a kind, we can't accept change-of-mind returns.</p></details>
+    <details><summary>Can I cancel my order?</summary><p>Yes. Before you pay, just tell us; there's nothing to pay. After payment, if the artist hasn't started your work, you get a full refund. Once the artist has started (including the pencil sketch for commissions), we refund 50% to cover the artist's time.</p></details>
     <details><summary>What does Little Artists cost?</summary><p>For children aged 3 to 10, framing is free and you pay only delivery: AED 25 within Dubai, Sharjah and Ajman, AED 35 to the other emirates. One free framing per child each month. For ages 11 to 17, framing costs AED 79 plus delivery. Premium frames, A3 size, extra copies and gift wrap are optional extras at any age.</p></details>
     <details><summary>Do you deliver outside the UAE?</summary><p>We currently deliver to all seven emirates. GCC delivery is planned.</p></details>
     <details><summary>Can I visit to see paintings?</summary><p>We are an online gallery and paintings ship directly from our artists' studios. For larger commissions we can arrange a video call with the artist.</p></details>
@@ -409,18 +418,41 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
   <div class="sec-head"><div><h2>Delivery, returns and privacy</h2></div></div>
   <div style="display:grid;gap:16px;color:var(--muted)">
     <div><b style="color:var(--fg)">Who you are buying from.</b> Kalai Art House is operated by Pranix Technologies FZCO, Dubai Silicon Oasis, Dubai, UAE (trade licence 92974). Prices are in UAE dirhams.</div>
-    <div><b style="color:var(--fg)">Payment.</b> After we confirm your order on WhatsApp we send a secure card payment link. We never ask for card details by message or email.</div>
+    <div><b style="color:var(--fg)">Payment.</b> After we confirm your order on WhatsApp we send a secure card payment link. Full payment is taken upfront, for catalogue works and commissions alike. We never ask for card details by message or email.</div>
     <div><b style="color:var(--fg)">Delivery.</b> We deliver to all seven emirates by insured courier. Customs duty and VAT on imported artworks are included in the price you are quoted.</div>
-    <div><b style="color:var(--fg)">Returns and damage.</b> Each artwork and commission is one of a kind, so we can't accept change-of-mind returns. If an item arrives damaged, send photos within 48 hours of delivery and we will replace it or refund you in full. Commissions can be cancelled for a full refund until you approve the sketch.</div>
+    <div><b style="color:var(--fg)">Returns.</b> Each artwork, commission and Little Artists gift is one of a kind, so we can't accept change-of-mind returns.</div>
+    <div><b style="color:var(--fg)">Damaged in transit.</b> Every parcel is insured. If an item arrives damaged, send us photos on WhatsApp within 48 hours of delivery and choose either a replacement or repair, or a full refund. Please keep the packaging until we've sorted it out.</div>
+    <div><b style="color:var(--fg)">Cancellations.</b> Before payment you can cancel at any time at no cost. After payment: if the artist hasn't started your work, we refund you in full; once the artist has started (including the pencil sketch for a commission), we refund 50% and the rest covers the artist's time. Refunds go back the way you paid, usually within 7 working days.</div>
     <div><b style="color:var(--fg)">Children's drawings.</b> Little Artists orders are placed by a parent or guardian. We use the drawing, the child's first name and age only to make and deliver the gift. We never publish them. Uploaded drawings and photos are stored privately and deleted automatically 60 days after upload.</div>
     <div><b style="color:var(--fg)">Your account and information.</b> If you create an account, we store your email address and the enquiries you send so you can track them. We use your name, phone number and address only to handle your order and delivery, and share them only with our framing and courier partners for that purpose. Your data is stored on Amazon Web Services. Email kalaiarthouse@pranixtechno.com to close your account or delete your data.</div>
+  </div>
+</div></section>
+
+<section id="terms"><div class="wrap" style="max-width:820px">
+  <div class="sec-head"><div><h2>Terms &amp; conditions</h2></div></div>
+  <div class="terms" style="display:grid;gap:14px;color:var(--muted)">
+    <p class="note" style="margin:0">Last updated 21 October 2026. By placing an order or enquiry on art.pranixtechno.com you agree to these terms.</p>
+    <div><b style="color:var(--fg)">1. Who we are.</b> Kalai Art House is an online art gallery operated by Pranix Technologies FZCO, Dubai Silicon Oasis, Dubai, UAE (trade licence 92974). Contact: kalaiarthouse@pranixtechno.com · +971 55 299 6626 (WhatsApp).</div>
+    <div><b style="color:var(--fg)">2. Enquiries, quotes and orders.</b> Most works are priced on request. An enquiry is not an order. We send you a quote by WhatsApp or email; your order is confirmed when you accept the quote and your payment is received. We may decline an order, for example if a work has already been sold, and will refund any payment in full.</div>
+    <div><b style="color:var(--fg)">3. Prices.</b> Prices are in UAE dirhams and include delivery within the UAE, import customs duty and any VAT that applies, unless the quote says otherwise. A quote is valid for 7 days.</div>
+    <div><b style="color:var(--fg)">4. Payment.</b> Full payment is required upfront, for catalogue works and commissions alike. We take payment by secure payment link from a licensed payment provider, by bank transfer or by other methods we agree with you. We never ask for or store your card details.</div>
+    <div><b style="color:var(--fg)">5. The artworks.</b> Every work is an original, made by hand, so small variations from the photos on screen (colour, texture, framing) are normal and are not a defect. Sizes are approximate.</div>
+    <div><b style="color:var(--fg)">6. Commissions.</b> We share a pencil sketch for your approval before painting. You may ask for reasonable changes at the sketch stage; the finished work is the artist's interpretation of your brief. Timelines are estimates. You confirm you have the right to share any photo you send us, and that it can be used to make your commission.</div>
+    <div><b style="color:var(--fg)">7. Little Artists.</b> Orders are placed by a parent or guardian, who confirms they may share the child's drawing, first name and age with us. We use them only to make and deliver the gift and never publish them. Free framing for ages 3 to 10 is limited to one framing per child each month.</div>
+    <div><b style="color:var(--fg)">8. Delivery.</b> We deliver to all seven emirates by courier. Please give a complete address and a reachable mobile number; if a delivery fails because of incorrect details or no one is available, redelivery may be charged. Responsibility for the artwork passes to you on delivery.</div>
+    <div><b style="color:var(--fg)">9. Cancellations, returns and damage.</b> These are covered by our <a href="#policies" style="color:var(--kumkum)">cancellation, returns and damage policy</a>: no change-of-mind returns; cancellations before payment are free; after payment, a full refund if the artist has not started and 50% once work has started; damaged items reported with photos within 48 hours are replaced, repaired or refunded in full, as you choose.</div>
+    <div><b style="color:var(--fg)">10. Copyright.</b> You own the physical artwork you buy. The artist keeps the copyright, so the work may not be reproduced, printed or used commercially without written permission. We may show photos of commissioned works in our gallery only with your permission.</div>
+    <div><b style="color:var(--fg)">11. Your account.</b> Keep your sign-in details private and your information accurate. We may close accounts used for misuse. How we handle your information is described in our <a href="#policies" style="color:var(--kumkum)">privacy section</a>.</div>
+    <div><b style="color:var(--fg)">12. Liability.</b> We are responsible for delivering the artwork as described. Our total liability for an order is limited to the amount you paid for it, except where the law does not allow this limit.</div>
+    <div><b style="color:var(--fg)">13. Law.</b> These terms are governed by the laws of the United Arab Emirates as applied in the Emirate of Dubai, and the courts of Dubai have jurisdiction.</div>
+    <div><b style="color:var(--fg)">14. Changes.</b> We may update these terms; the version on this page at the time of your order applies to that order.</div>
   </div>
 </div></section>
 
 <footer><div class="wrap">
   <div><b>Kalai Art House</b><p>An online gallery of Pranix Technologies FZCO.</p><p>Dubai Silicon Oasis, Dubai, UAE</p><p>Trade licence 92974 (DIEZA)</p></div>
   <div><b>Contact</b><p class="mono">+971 55 299 6626</p><p>kalaiarthouse@pranixtechno.com</p></div>
-  <div><b>Policies</b><p><a href="#policies" style="color:inherit">Delivery, returns and privacy</a></p><p>Payments by secure card link</p></div>
+  <div><b>Policies</b><p><a href="#policies" style="color:inherit">Delivery, returns and privacy</a></p><p><a href="#terms" style="color:inherit">Terms &amp; conditions</a></p><p>Payments by secure card link</p></div>
 </div></footer>
 
 <div class="scrim" id="scrim" hidden></div>

@@ -102,7 +102,7 @@ This Zoho plan has no purchase orders, so Siva's order is kept on the Studio des
 
 ### Zoho permissions needed (refresh token)
 
-    ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ,ZohoBooks.estimates.UPDATE,ZohoBooks.invoices.CREATE,ZohoBooks.invoices.READ,ZohoBooks.invoices.UPDATE,ZohoBooks.customerpayments.CREATE,ZohoBooks.contacts.READ,ZohoBooks.contacts.CREATE,ZohoBooks.bills.CREATE,ZohoBooks.bills.READ,ZohoBooks.vendorpayments.CREATE,ZohoBooks.deliverychallans.CREATE,ZohoBooks.deliverychallans.READ,ZohoBooks.deliverychallans.UPDATE,ZohoBooks.accountants.READ
+    ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ,ZohoBooks.estimates.UPDATE,ZohoBooks.invoices.CREATE,ZohoBooks.invoices.READ,ZohoBooks.invoices.UPDATE,ZohoBooks.customerpayments.CREATE,ZohoBooks.contacts.READ,ZohoBooks.contacts.CREATE,ZohoBooks.bills.CREATE,ZohoBooks.bills.READ,ZohoBooks.vendorpayments.CREATE,ZohoBooks.deliverychallans.CREATE,ZohoBooks.deliverychallans.READ,ZohoBooks.deliverychallans.UPDATE,ZohoBooks.accountants.READ,ZohoBooks.creditnotes.CREATE,ZohoBooks.creditnotes.READ,ZohoBooks.creditnotes.UPDATE
 
 ## Delivery (Shipped → delivery challan → Delivered)
 
@@ -126,3 +126,22 @@ Go live (AWS CloudShell); takes effect within a minute:
     aws ssm put-parameter --name /kalai/zoho/test_mode --type String --overwrite --value off
 
 Back to test mode: same command with `--value on`. Delete the test drafts in Zoho before going live.
+
+## Cancellations, damage and refunds
+
+Policy (also on the website): no change-of-mind returns; full payment upfront; cancel before payment = free;
+cancel after payment but before Siva starts = full refund; after he starts = 50% refund;
+damaged in transit (photos within 48 hours) = customer chooses replacement/repair or full refund.
+
+On a paid order, the Studio desk box "Cancellation, damage or refund" offers four actions. Tick the confirmation and save:
+
+| Action | Website status | Zoho | Siva |
+|---|---|---|---|
+| Cancelled, Siva not started | Refunded | credit note + refund (full) | order cancelled (if no bill yet) |
+| Cancelled, Siva started | Refunded | credit note + refund (50%, editable) | order stays: pay him as agreed |
+| Damaged, refund | Refunded | challan marked returned + credit note + refund (full) | order stays |
+| Damaged, replacement | Replacement | challan marked returned; set Shipped again for a new challan | agree a repaint if needed |
+
+In test mode nothing is posted (the box says so). A cancelled order that was never paid: just set status Cancelled (the quote is marked declined).
+If Zoho asks which account a refund is paid from: copy the account ID (Banking → the account → number at the end of the address) and run
+`aws ssm put-parameter --name /kalai/zoho/refund_account_id --type String --overwrite --value ACCOUNT_ID`.

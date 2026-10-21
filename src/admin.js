@@ -10,7 +10,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 const STATUS = {
   RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed',
-  SHIPPED: 'Shipped', DELIVERED: 'Delivered', CANCELLED: 'Cancelled',
+  SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
 const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists' };
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
@@ -241,6 +241,38 @@ function shippingSection(e) {
   </fieldset>`;
 }
 
+// ---------- after-sales: cancellations, damage, replacement ----------
+const AFTER = {
+  CANCEL_FULL: { label: 'Customer cancelled, Siva not started: full refund', pct: 1, status: 'REFUNDED' },
+  CANCEL_HALF: { label: 'Customer cancelled, Siva already started: 50% refund', pct: 0.5, status: 'REFUNDED' },
+  DAMAGED_REFUND: { label: 'Damaged in transit, customer wants a refund: full refund', pct: 1, status: 'REFUNDED' },
+  DAMAGED_REPLACE: { label: 'Damaged in transit, customer wants a replacement / repair', pct: 0, status: 'REPLACEMENT' },
+};
+const AFTER_DONE = ['DONE', 'TEST', 'REPLACEMENT'];
+function afterSection(e) {
+  if (!e.zohoInvoiceId && !e.refundAction) return '';
+  const done = AFTER_DONE.includes(e.refundState);
+  const st = e.refundState || '';
+  const color = st === 'DONE' || st === 'REPLACEMENT' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
+  const dis = done ? 'disabled' : '';
+  return `<fieldset class="cost" id="afterBox">
+    <legend>Cancellation, damage or refund</legend>
+    ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.refundMessage)}</div>` : ''}
+    <div class="field"><label for="aAction">What happened?</label><select id="aAction" ${dis}>
+      <option value="">Nothing: order is fine</option>
+      ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${e.refundAction === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+    </select></div>
+    <div id="aMoney" class="two" ${e.refundAction && e.refundAction !== 'DAMAGED_REPLACE' ? '' : 'hidden'}>
+      <div class="field"><label for="aAmount">Refund amount (AED)</label><input id="aAmount" type="number" min="0" step="0.01" value="${e.refundAmount ?? ''}" ${dis}></div>
+      <div class="field"><label for="aMethod">Refund via</label><select id="aMethod" ${dis}>${[['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${(e.refundMethod || e.paymentMethod || 'ZIINA') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label for="aRef">Refund reference</label><input id="aRef" value="${esc(e.refundRef)}" placeholder="Ziina / bank transaction ID" ${dis}></div>
+    </div>
+    <div class="field" id="aNoteBox" ${e.refundAction ? '' : 'hidden'}><label for="aNote">Note (reason, customer's photos received…)</label><input id="aNote" value="${esc(e.refundNote)}" ${dis}></div>
+    ${done ? '' : `<label id="aConfirmBox" style="display:${e.refundAction ? 'flex' : 'none'};gap:8px;align-items:flex-start;font-weight:400;font-size:13px"><input type="checkbox" id="aConfirm" style="width:auto;margin-top:3px"> <span id="aConfirmText">I confirm. Saving sets the status and records this in Zoho (credit note + refund, or the challan as returned). It can't be undone from here.</span></label>`}
+    <div class="muted" style="font-size:12px">Policy: no change-of-mind returns. Cancelled before Siva starts → full refund; after he starts → 50%. Damaged in transit (photos within 48 hours) → customer chooses refund or replacement.</div>
+  </fieldset>`;
+}
+
 function readCosting() {
   return {
     artistPriceInr: n($('cInr')?.value),
@@ -436,6 +468,7 @@ async function showDetail(e) {
       </div>
       <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? ', then records Siva’s order' : ''}.</div>
       ${purchaseSection(e)}
+      ${afterSection(e)}
       <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="https://… from Telr, Tap or Stripe" value="${esc(e.paymentLink)}"></div>
       <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
       <div class="ok" id="saveMsg" role="status"></div>
@@ -466,6 +499,15 @@ async function showDetail(e) {
     if (other) $('eCourier').focus();
     waLink();
   });
+  if ($('aAction')) {
+    $('aAction').addEventListener('change', () => {
+      const a = AFTER[$('aAction').value];
+      $('aMoney').hidden = !a || a.pct === 0;
+      $('aNoteBox').hidden = !a;
+      if ($('aConfirmBox')) $('aConfirmBox').style.display = a ? 'flex' : 'none';
+      if (a && a.pct > 0 && !e.refundState) $('aAmount').value = Math.round(Number(e.quotedPrice || 0) * a.pct * 100) / 100;
+    });
+  }
   if ($('costOut')) {
     renderCost();
     ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice'].forEach((id) => { $(id).addEventListener('input', renderCost); $(id).addEventListener('change', renderCost); });
@@ -507,6 +549,17 @@ async function showDetail(e) {
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose how it was paid (Ziina, bank transfer…) before marking it Paid.</div>');
       b.disabled = false; return;
     }
+    const newAction = $('aAction') && !$('aAction').disabled ? $('aAction').value : '';
+    if (newAction) {
+      const a = AFTER[newAction];
+      const why = !$('aConfirm')?.checked ? 'Tick the confirmation box to record this cancellation / refund.'
+        : a.pct > 0 && !(Number($('aAmount').value) > 0) ? 'Enter the refund amount.' : '';
+      if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }
+      $('eStatus').value = a.status;
+    } else if ($('eStatus').value === 'CANCELLED' && s !== 'CANCELLED' && e.zohoInvoiceId) {
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">This order is already invoiced. Use "Cancellation, damage or refund" below to cancel it with the right refund.</div>');
+      b.disabled = false; return;
+    }
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {
       const courier = $('eCourier').value.trim(), awb = $('eAwb').value.trim();
       const why = !e.zohoInvoiceId ? 'Mark it Paid first, so Zoho has the invoice before it ships.'
@@ -530,6 +583,14 @@ async function showDetail(e) {
       const { data, errors } = await client.models.Enquiry.update({
         ...(costingChanged ? { costingAt: savedAt } : {}),
         ...(invNo != null ? { artistInvoiceNo: invNo || null } : {}),
+        ...(newAction ? {
+          refundAction: newAction,
+          refundAmount: AFTER[newAction].pct > 0 ? Number($('aAmount').value) : null,
+          refundMethod: AFTER[newAction].pct > 0 ? $('aMethod').value : null,
+          refundRef: $('aRef').value.trim() || null,
+          refundNote: $('aNote').value.trim() || null,
+          refundState: null,
+        } : {}),
         courierName: $('eCourier').value.trim() || null,
         trackingNo: $('eAwb').value.trim() || null,
         ...(paidRef != null ? { artistPaidRef: paidRef || null } : {}),

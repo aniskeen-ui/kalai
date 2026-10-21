@@ -219,10 +219,15 @@ function quoteParts(img: Img) {
 
 // ---------- write Zoho's result back onto the enquiry ----------
 
+// Every write-back gets a strictly increasing zohoAt, so our own writes are always recognised as ours.
+let lastWriteTs = 0;
+
 async function writeBack(id: string, set: Record<string, string | number | null>) {
   const table = process.env.ENQUIRY_TABLE;
   if (!table || !id) return;
-  const fields = { ...set, zohoAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  lastWriteTs = Math.max(Date.now(), lastWriteTs + 1);
+  const at = new Date(lastWriteTs).toISOString();
+  const fields = { ...set, zohoAt: at, updatedAt: at };
   const sets: string[] = [];
   const removes: string[] = [];
   const names: Record<string, string> = {};
@@ -589,7 +594,7 @@ async function purchaseSteps(start: Img) {
   let img: Img = { ...start };
   const id = str(img, 'id');
   const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
-  if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT') return;
+  if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT' || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction').startsWith('CANCEL')) return;
   try {
     if (!str(img, 'zohoPOId')) {
       const po = await recordArtistOrder(img);
@@ -752,6 +757,159 @@ async function deliverySteps(img: Img, old?: Img) {
   }
 }
 
+// ---------- after-sales: cancellations, damage, replacement ----------
+// Policy: no change-of-mind returns; cancel before Siva starts = full refund; after he starts = 50% refund;
+// damaged in transit = customer chooses full refund or replacement/repair.
+
+const AFTER_LABEL: Record<string, string> = {
+  CANCEL_FULL: 'Cancelled before work started: full refund',
+  CANCEL_HALF: 'Cancelled after work started: 50% refund',
+  DAMAGED_REFUND: 'Damaged in transit: full refund',
+  DAMAGED_REPLACE: 'Damaged in transit: replacement / repair',
+};
+const AFTER_DONE = ['DONE', 'TEST', 'REPLACEMENT'];
+
+async function optionalParam(name: string): Promise<string | null> {
+  try {
+    const r = await ssm.send(new GetParameterCommand({ Name: name }));
+    return (r.Parameter?.Value ?? '').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Credit note for the refunded amount, linked to the invoice, then the refund to the customer. */
+async function creditNoteAndRefund(img: Img, amount: number) {
+  const q = quoteParts(img);
+  const action = str(img, 'refundAction');
+  // A retry after a failed refund: reuse the credit note already created, don't make a second one.
+  const existingId = str(img, 'zohoCreditNoteId');
+  if (existingId) return refundCreditNote(img, amount, { creditnote_id: existingId, creditnote_number: str(img, 'zohoCreditNote') });
+  const vat = await vatFields();
+  const body: Record<string, unknown> = {
+    customer_id: await fixedCustomerId(),
+    reference_number: q.ref,
+    date: dubaiToday(),
+    invoice_id: str(img, 'zohoInvoiceId'),
+    ...vat.header,
+    line_items: [{ name: `Refund: ${q.name}`, description: AFTER_LABEL[action] ?? action, rate: amount, quantity: 1, ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
+    notes: [`${AFTER_LABEL[action] ?? action} · order ${q.ref} · invoice ${str(img, 'zohoInvoice')}`, str(img, 'refundNote')].filter(Boolean).join('\n'),
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let r = await zoho('/creditnotes', { method: 'POST', body: JSON.stringify(body) }) as any;
+  if (!r.ok && /invoice_id/i.test(r.body.message ?? '')) {
+    delete body.invoice_id;
+    r = await zoho('/creditnotes', { method: 'POST', body: JSON.stringify(body) });
+  }
+  const cn = r.body.creditnote;
+  if (!r.ok || !cn) throw new Error(`Zoho credit note failed (${r.status}): ${r.body.message}`);
+  console.log(`Created credit note ${cn.creditnote_number} for ${q.ref} (AED ${amount})`);
+  return refundCreditNote(img, amount, cn);
+}
+
+async function refundCreditNote(img: Img, amount: number, cn: { creditnote_id: string; creditnote_number: string }) {
+  const q = quoteParts(img);
+
+  const method = str(img, 'refundMethod') || str(img, 'paymentMethod') || 'OTHER';
+  const fromAccount = await optionalParam('/kalai/zoho/refund_account_id');
+  const ref = str(img, 'refundRef');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rf = await zoho(`/creditnotes/${cn.creditnote_id}/refunds`, {
+    method: 'POST',
+    body: JSON.stringify({
+      date: dubaiToday(),
+      refund_mode: PAY_MODE[method] ?? 'others',
+      amount,
+      reference_number: ref || q.ref,
+      description: `Refund for ${q.ref}${ref ? ` (ref ${ref})` : ''}`,
+      ...(fromAccount ? { from_account_id: fromAccount } : {}),
+    }),
+  }) as any;
+  if (!rf.ok) {
+    const hint = /account/i.test(rf.body.message ?? '')
+      ? ' Set the account refunds are paid from: copy its ID from Zoho (Banking → the account, number at the end of the address) and save it as SSM parameter /kalai/zoho/refund_account_id.'
+      : '';
+    return { creditNote: cn.creditnote_number as string, creditNoteId: cn.creditnote_id as string, refundId: '', refundError: `${rf.body.message}.${hint}` };
+  }
+  const refundId = rf.body.creditnote_refund?.creditnote_refund_id ?? rf.body.refund?.refund_id ?? 'refunded';
+  console.log(`Recorded refund AED ${amount} on ${cn.creditnote_number} for ${q.ref}`);
+  return { creditNote: cn.creditnote_number as string, creditNoteId: cn.creditnote_id as string, refundId: String(refundId), refundError: '' };
+}
+
+/** Never throws: problems go to refundMessage. Runs once per action (re-runs after an error on the next save). */
+async function afterSales(img: Img) {
+  const id = str(img, 'id');
+  const action = str(img, 'refundAction');
+  if (!action || AFTER_DONE.includes(str(img, 'refundState'))) return;
+  const testing = await testMode();
+  const amount = round2(Number(num(img, 'refundAmount') ?? 0));
+  const label = AFTER_LABEL[action] ?? action;
+  try {
+    // Damaged: the delivery challan goes back as "returned" (live), and the order can ship again.
+    if (action.startsWith('DAMAGED') && str(img, 'zohoChallanId') && !testing) {
+      const ret = await zoho(`/deliverychallans/${str(img, 'zohoChallanId')}/status/returned`, { method: 'POST' });
+      if (!ret.ok) console.warn(`Challan ${str(img, 'zohoChallan')} not marked returned: ${ret.body.message}`);
+    }
+    if (action === 'DAMAGED_REPLACE') {
+      await writeBack(id, {
+        refundState: 'REPLACEMENT',
+        refundMessage: `${label}. ${testing ? 'Test mode: challan not marked returned. ' : str(img, 'zohoChallan') ? `Challan ${str(img, 'zohoChallan')} marked returned. ` : ''}Set Shipped again with the new courier and AWB to create a new delivery challan.`,
+        zohoChallan: null,
+        zohoChallanId: null,
+        deliveryState: null,
+        deliveryMessage: str(img, 'zohoChallan') ? `Previous challan ${str(img, 'zohoChallan')} returned (damaged). Waiting for the replacement to ship.` : null,
+        courierName: null,
+        trackingNo: null,
+      });
+      return;
+    }
+
+    // Siva: a cancellation before he started cancels his order (if no bill yet).
+    const sivaCancelled = action === 'CANCEL_FULL' && str(img, 'kind') !== 'GIFT' && !str(img, 'zohoBillId');
+    const sivaNote =
+      action === 'CANCEL_FULL'
+        ? sivaCancelled ? " Siva's order cancelled (nothing owed)." : " Siva's bill already exists: agree with him what is owed."
+        : str(img, 'kind') === 'GIFT' ? '' : ' Siva had started / finished: pay him as agreed.';
+
+    if (!(amount > 0)) throw new Error('Enter the refund amount.');
+    if (testing) {
+      await writeBack(id, {
+        refundState: 'TEST',
+        refundMessage: `Test mode: ${label}. Credit note and refund of AED ${amount.toLocaleString('en-US')} not posted.${sivaNote}`,
+        ...(sivaCancelled ? { purchaseState: 'CANCELLED', purchaseMessage: 'Order cancelled: customer cancelled before work started.' } : {}),
+      });
+      return;
+    }
+    if (!str(img, 'zohoInvoiceId')) throw new Error('No invoice in Zoho for this order, so nothing to refund. Use status Cancelled instead.');
+    const r = await creditNoteAndRefund(img, amount);
+    await writeBack(id, {
+      refundState: r.refundError ? 'ERROR' : 'DONE',
+      zohoCreditNote: r.creditNote,
+      zohoCreditNoteId: r.creditNoteId,
+      zohoRefundId: r.refundId || null,
+      refundMessage: r.refundError
+        ? `Credit note ${r.creditNote} created, but the refund could not be recorded: ${r.refundError}`
+        : `${label}. Credit note ${r.creditNote} · refund AED ${amount.toLocaleString('en-US')} recorded.${sivaNote}`,
+      ...(sivaCancelled ? { purchaseState: 'CANCELLED', purchaseMessage: 'Order cancelled: customer cancelled before work started.' } : {}),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`After-sales step failed for ${str(img, 'ref')}:`, err);
+    await writeBack(id, { refundState: 'ERROR', refundMessage: msg.slice(0, 500) });
+  }
+}
+
+/** Cancelled before payment: decline the quote (live only). */
+async function declineQuote(img: Img) {
+  if (await testMode()) return;
+  const quote = await findQuote(str(img, 'ref'));
+  if (!quote || ['declined', 'invoiced'].includes(quote.status)) return;
+  if (quote.status === 'draft') await zoho(`/estimates/${quote.id}/status/sent`, { method: 'POST' });
+  const d = await zoho(`/estimates/${quote.id}/status/declined`, { method: 'POST' });
+  if (!d.ok) console.warn(`Quote ${quote.number} not marked declined: ${d.body.message}`);
+  else await writeBack(str(img, 'id'), { zohoMessage: `Quote ${quote.number} marked declined (order cancelled)` });
+}
+
 // ---------- Artist desk (Siva): no customer details, no selling price ----------
 
 const PRIVATE_KEY = /name|mobile|phone|whats|email|address|parent|contact|reference|deliver|to$|gift for/i;
@@ -781,6 +939,7 @@ async function costingFor(ids: string[]) {
 }
 
 function artistStage(e: Img, c: Img | undefined) {
+  if (str(e, 'purchaseState') === 'CANCELLED') return { stage: 'CLOSED', label: 'Order cancelled by the customer' };
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
   if (str(e, 'zohoPOId')) return { stage: 'ORDERED', label: 'Ordered · price fixed · send your invoice' };
@@ -884,11 +1043,12 @@ async function zget(path: string): Promise<any> {
 
 async function collectDocs(ref: string): Promise<Doc[]> {
   const q = encodeURIComponent(ref);
-  const [est, inv, bill, dcs] = await Promise.all([
+  const [est, inv, bill, dcs, cns] = await Promise.all([
     zget(`/estimates?reference_number=${q}`),
     zget(`/invoices?reference_number=${q}&filter_by=Status.All`),
     zget(`/bills?reference_number=${q}`),
     zget(`/deliverychallans?reference_number=${q}`),
+    zget(`/creditnotes?reference_number=${q}`),
   ]);
   const same = (x: { reference_number?: string }) => (x.reference_number ?? '').trim() === ref;
   const docs: Doc[] = [];
@@ -915,6 +1075,10 @@ async function collectDocs(ref: string): Promise<Doc[]> {
     for (const p of (pays.payments ?? []) as any[]) {
       docs.push({ group: 'PURCHASE', type: 'Payment made', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsmade/${p.payment_id}` });
     }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const c of (cns.creditnotes ?? []).filter(same) as any[]) {
+    docs.push({ group: 'SALES', type: 'Credit note', id: c.creditnote_id, number: c.creditnote_number, status: c.status, date: c.date, total: c.total, balance: c.balance, url: `${BOOKS_APP}/creditnotes/${c.creditnote_id}` });
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (dcs.deliverychallans ?? []).filter(same) as any[]) {
@@ -1067,6 +1231,11 @@ async function onStreamRecord(rec: StreamRecord) {
   const price = num(img, 'quotedPrice');
   const oldPrice = old ? num(old, 'quotedPrice') : price;
   const locked = str(img, 'zohoPaymentId') !== '';
+
+  // After-sales action chosen on the Studio desk (refund / replacement).
+  if (str(img, 'refundAction')) await afterSales(img);
+  // Cancelled before payment: decline the quote.
+  if (status === 'CANCELLED' && oldStatus !== 'CANCELLED' && !str(img, 'zohoInvoiceId')) await declineQuote(img);
 
   // Shipped / Delivered: delivery challan in Zoho (needs the invoice first).
   if (['SHIPPED', 'DELIVERED'].includes(status)) await deliverySteps(img, old);
