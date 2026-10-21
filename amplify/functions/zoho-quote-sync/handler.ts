@@ -29,7 +29,7 @@ type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImag
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
   identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { id?: string; priceInr?: number; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
+  arguments: { id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -944,6 +944,13 @@ function artistStage(e: Img, c: Img | undefined) {
   if (str(e, 'purchaseState') === 'CANCELLED') return { stage: 'CLOSED', label: 'Order cancelled by the customer' };
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
+  const rw = str(e, 'reworkType').startsWith('SIVA') ? str(e, 'reworkStage') : null;
+  if (rw !== null && rw !== 'READY' && str(e, 'reworkType') === 'SIVA_REPAIR' && !str(e, 'sivaReceivedAt')) {
+    return { stage: 'ORDERED', label: str(e, 'toSivaSentAt') ? 'Damaged piece on its way to you · tap Received when it arrives' : 'Repair needed · the damaged piece will be sent to you' };
+  }
+  if (rw !== null && rw !== 'READY') {
+    return { stage: 'ORDERED', label: rw === 'SENT' ? 'Rework sent to frame shop · send your rework invoice' : rw === 'FINISHED' ? 'Rework finished · send it to the frame shop' : rw === 'STARTED' ? 'Rework in progress' : 'Rework needed (damaged in transit) · give your rework price' };
+  }
   if (str(e, 'zohoPOId') && str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL') {
     return { stage: 'ORDERED', label: 'On hold · the customer asked to cancel · please wait' };
   }
@@ -990,6 +997,7 @@ async function artistList() {
         artistAwb: str(e, 'artistAwb'),
         progressBy: str(e, 'artistBy'),
         onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
+        rework: reworkForArtist(e, c),
         priceBy: str(c, 'artistBy'),
         ...artistStage(e, c),
       };
@@ -1300,6 +1308,8 @@ async function onStreamRecord(rec: StreamRecord) {
 
   // After-sales action chosen on the Studio desk (refund / replacement).
   if (str(img, 'refundAction')) await afterSales(img);
+  // Siva's rework for a replacement: his bill and payment.
+  await reworkPurchase(img);
   // Cancelled before payment: decline the quote.
   if (status === 'CANCELLED' && oldStatus !== 'CANCELLED' && !str(img, 'zohoInvoiceId')) await declineQuote(img);
 
@@ -1373,6 +1383,149 @@ async function onStreamRecord(rec: StreamRecord) {
   }
 }
 
+// ---------- Rework for a replacement (damaged in transit) ----------
+// The studio picks the fix on the order: REFRAME (frame shop: new glass / frame), SIVA_REPAIR or SIVA_REPAINT.
+// Siva sees a Rework card on his page: his rework price (INR, 0 if free) and Started → Finished → Sent to frame shop.
+// The studio confirms READY after checking it at the frame shop; only then can the order ship again.
+// His rework invoice no. → a second Zoho bill (rework price + India courier); bank ref → payment made.
+const REWORK_STEPS = ['STARTED', 'FINISHED', 'SENT'];
+type Rework = { framing?: number; indiaCourier?: number; localCourier?: number; other?: number; insurer?: string; claimRef?: string; claimed?: number; received?: number; receivedRef?: string };
+
+async function getRework(enquiryId: string): Promise<{ priceInr: number | null; fx: number; rework: Rework }> {
+  const { img, costs } = await getCosting(enquiryId);
+  const raw = img?.rework as AttributeValue | undefined;
+  let rework: Rework = {};
+  try {
+    let v: unknown = raw && 'M' in raw && raw.M ? fromAttr(raw) : JSON.parse(str(img ?? undefined, 'rework') || '{}');
+    if (typeof v === 'string') v = JSON.parse(v);
+    rework = (v ?? {}) as Rework;
+  } catch { rework = {}; }
+  return { priceInr: num(img ?? undefined, 'reworkPriceInr'), fx: Number(costs.fx) > 0 ? Number(costs.fx) : 0.042, rework };
+}
+
+async function artistRework(args: ApiEvent['arguments'], by = 'Siva') {
+  const table = process.env.ENQUIRY_TABLE;
+  const costingTable = process.env.COSTING_TABLE;
+  if (!table || !costingTable) throw new Error('Not configured');
+  const id = args.id ?? '';
+  const step = String(args.step ?? '').toUpperCase();
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+  const e = got.Item as Img | undefined;
+  if (!e || !str(e, 'reworkType').startsWith('SIVA')) throw new Error('No rework requested for this work.');
+  if (str(e, 'reworkStage') === 'READY') throw new Error('The rework is already checked and ready.');
+  const now = new Date().toISOString();
+  if (step === 'PRICE') {
+    if (str(e, 'zohoReworkBillId')) throw new Error('Your rework invoice is already recorded: the price can no longer change.');
+    const price = Number(args.priceInr);
+    if (!(price >= 0) || price > 10_000_000) throw new Error('Enter your rework price in INR (0 if there is no charge).');
+    await ddb.send(new UpdateItemCommand({
+      TableName: costingTable, Key: { enquiryId: { S: id } },
+      UpdateExpression: 'SET reworkPriceInr = :p, reworkPriceAt = :a, reworkPriceBy = :b, updatedAt = :a, createdAt = if_not_exists(createdAt, :a), #tn = if_not_exists(#tn, :t)',
+      ExpressionAttributeNames: { '#tn': '__typename' },
+      ExpressionAttributeValues: { ':p': { N: String(price) }, ':a': { S: now }, ':b': { S: by }, ':t': { S: 'Costing' } },
+    }));
+    console.log(`Rework price INR ${price} for ${str(e, 'ref')} by ${by}`);
+    return { ok: true, reworkPriceInr: price, reworkPriceAt: now };
+  }
+  if (step === 'RECEIVED') {
+    // Siva confirms the damaged piece reached him (repair only).
+    if (!str(e, 'toSivaSentAt')) throw new Error('Nothing has been sent to you yet for this rework.');
+    if (str(e, 'sivaReceivedAt')) return { ok: true, sivaReceivedAt: str(e, 'sivaReceivedAt') };
+    await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: 'SET sivaReceivedAt = :a, reworkBy = :b, updatedAt = :a', ExpressionAttributeValues: { ':a': { S: now }, ':b': { S: by } } }));
+    console.log(`Siva received the damaged piece for ${str(e, 'ref')} (${by})`);
+    return { ok: true, sivaReceivedAt: now };
+  }
+  if (!REWORK_STEPS.includes(step)) throw new Error('Unknown step');
+  if (str(e, 'reworkType') === 'SIVA_REPAIR' && !str(e, 'sivaReceivedAt')) throw new Error('Tap "I\'ve received it" first: the damaged piece has to reach you before the repair starts.');
+  const current = REWORK_STEPS.indexOf(str(e, 'reworkStage'));
+  const target = REWORK_STEPS.indexOf(step);
+  if (target < current) throw new Error(`Already marked ${str(e, 'reworkStage').toLowerCase()}.`);
+  const courier = String(args.courier ?? '').trim().slice(0, 60);
+  const awb = String(args.awb ?? '').trim().slice(0, 60);
+  if (step === 'SENT' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
+  const set: Record<string, string> = { reworkStage: REWORK_STEPS[Math.max(target, current)], reworkBy: by, updatedAt: now };
+  if (!str(e, 'reworkStartedAt')) set.reworkStartedAt = now;
+  if (target >= 1 && !str(e, 'reworkFinishedAt')) set.reworkFinishedAt = now;
+  if (target >= 2) { if (!str(e, 'reworkSentAt')) set.reworkSentAt = now; set.reworkCourier = courier; set.reworkAwb = awb; }
+  if (args.note) set.reworkNote = String(args.note).slice(0, 500);
+  const names: Record<string, string> = {};
+  const values: Record<string, AttributeValue> = {};
+  const parts = Object.entries(set).map(([k, v], i) => { names[`#r${i}`] = k; values[`:r${i}`] = { S: v }; return `#r${i} = :r${i}`; });
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+  console.log(`Rework ${set.reworkStage} for ${str(e, 'ref')} by ${by}`);
+  return { ok: true, ref: str(e, 'ref'), ...set };
+}
+
+/** Siva's rework: bill on his rework invoice number, then the payment made. Never throws (message on the order). */
+async function reworkPurchase(img: Img) {
+  const id = str(img, 'id');
+  const ref = str(img, 'ref');
+  if (!str(img, 'reworkType').startsWith('SIVA')) return;
+  const needBill = !!str(img, 'reworkInvoiceNo') && !str(img, 'zohoReworkBillId');
+  const needPay = !!str(img, 'zohoReworkBillId') && !!str(img, 'reworkPaidRef') && !str(img, 'zohoReworkPaymentId');
+  if (!needBill && !needPay) return;
+  try {
+    const { priceInr, fx, rework } = await getRework(id);
+    const aedPrice = round2((priceInr ?? 0) * fx);
+    const courier = round2(Number(rework.indiaCourier ?? 0));
+    if (needBill) {
+      if (aedPrice + courier <= 0) { await writeBack(id, { reworkMessage: 'No rework price from Siva (or it is 0), so there is no bill to create.' }); return; }
+      if (await testMode()) {
+        if (/Test mode/.test(str(img, 'reworkMessage'))) return;
+        await writeBack(id, { reworkMessage: `Test mode: rework bill ${str(img, 'reworkInvoiceNo')} for AED ${(aedPrice + courier).toLocaleString('en-US')} not created.` });
+        return;
+      }
+      const account = await artistAccountId();
+      const lines: LineItem[] = [];
+      if (aedPrice > 0) lines.push({ name: `Rework: ${str(img, 'reworkType') === 'SIVA_REPAINT' ? 'repaint' : 'repair'} (${str(img, 'title')})`, description: `Replacement for ${ref} · INR ${(priceInr ?? 0).toLocaleString('en-IN')} @ ${fx} AED/INR`, rate: aedPrice, quantity: 1 });
+      if (courier > 0) lines.push({ name: 'Courier India → UAE (rework, reimbursement)', description: `Shipping for ${ref} rework`, rate: courier, quantity: 1 });
+      const r = await zoho('/bills', {
+        method: 'POST',
+        body: JSON.stringify({
+          vendor_id: await vendorId(), bill_number: str(img, 'reworkInvoiceNo'), reference_number: `${ref}-RW`, date: dubaiToday(),
+          line_items: lines.map((l) => ({ ...l, ...(account ? { account_id: account } : {}) })), notes: `Rework for Kalai Art House order ${ref} (damaged in transit).`,
+        }),
+      });
+      if (!r.ok || !r.body.bill) throw new Error(`Zoho rework bill failed (${r.status}): ${r.body.message}`);
+      await writeBack(id, { zohoReworkBill: r.body.bill.bill_number, zohoReworkBillId: r.body.bill.bill_id, reworkMessage: `Rework bill ${r.body.bill.bill_number} · AED ${(aedPrice + courier).toLocaleString('en-US')} owed to Siva` });
+      return;
+    }
+    if (needPay) {
+      const billId = str(img, 'zohoReworkBillId');
+      const got = await zoho(`/bills/${billId}`);
+      if (!got.ok || !got.body.bill) throw new Error(`Zoho bill read failed (${got.status}): ${got.body.message}`);
+      const balance = Number(got.body.bill.balance ?? 0);
+      let payId = 'paid';
+      if (balance > 0 && got.body.bill.status !== 'paid') {
+        const p = await zoho('/vendorpayments', {
+          method: 'POST',
+          body: JSON.stringify({ vendor_id: await vendorId(), payment_mode: 'banktransfer', amount: balance, date: dubaiToday(), reference_number: str(img, 'reworkPaidRef'), description: `Rework payment to ${VENDOR_NAME} for ${ref}`, bills: [{ bill_id: billId, amount_applied: balance }] }),
+        });
+        if (!p.ok || !p.body.vendorpayment) throw new Error(`Zoho vendor payment failed (${p.status}): ${p.body.message}`);
+        payId = p.body.vendorpayment.payment_id;
+      }
+      await writeBack(id, { zohoReworkPaymentId: payId, reworkMessage: `Rework bill ${str(img, 'zohoReworkBill')} paid · ref ${str(img, 'reworkPaidRef')}` });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Rework purchase step failed for ${ref}:`, err);
+    await writeBack(id, { reworkMessage: `Error: ${msg}`.slice(0, 500) });
+  }
+}
+
+function reworkForArtist(e: Img, c: Img | undefined) {
+  const type = str(e, 'reworkType');
+  if (!type.startsWith('SIVA')) return null;
+  return {
+    type, stage: str(e, 'reworkStage'), note: str(e, 'reworkNote'),
+    startedAt: str(e, 'reworkStartedAt'), finishedAt: str(e, 'reworkFinishedAt'), sentAt: str(e, 'reworkSentAt'), readyAt: str(e, 'reworkReadyAt'),
+    courier: str(e, 'reworkCourier'), awb: str(e, 'reworkAwb'), by: str(e, 'reworkBy'),
+    priceInr: num(c, 'reworkPriceInr'), priceBy: str(c, 'reworkPriceBy'),
+    toSivaCourier: str(e, 'toSivaCourier'), toSivaAwb: str(e, 'toSivaAwb'), toSivaSentAt: str(e, 'toSivaSentAt'), receivedAt: str(e, 'sivaReceivedAt'),
+    invoiceNo: str(e, 'reworkInvoiceNo'), billed: !!str(e, 'zohoReworkBillId'), paid: !!str(e, 'zohoReworkPaymentId'), paidRef: str(e, 'reworkPaidRef'),
+  };
+}
+
 // ---------- Customer requests (My enquiries & orders): cancel, or report damage on delivery ----------
 // Policy (Terms clause 9): before payment → cancelled at once, nothing to pay. After payment and before
 // the work starts → full refund; once the artist (or, for Little Artists, the framer) has started → 50%.
@@ -1421,7 +1574,13 @@ async function customerRequest(ev: ApiEvent) {
   const action = String(a.action ?? '').toUpperCase();
   const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
   const e = got.Item as Img | undefined;
-  if (!e || !ownsEnquiry(e, ev)) throw new Error('Order not found');
+  // The customer who placed it, or the studio acting for them (an admin signed in on the website sees every order).
+  const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+  if (!e) throw new Error('Order not found');
+  if (!ownsEnquiry(e, ev) && !groups.includes('ADMINS')) {
+    console.warn(`customerRequest refused for ${str(e, 'ref')}: owner ${str(e, 'owner')} vs caller ${ev.identity?.sub ?? ev.identity?.username ?? '?'}`);
+    throw new Error('Order not found');
+  }
   const terms = cancelTerms(e, action);
   if (!terms.allowed) throw new Error(terms.note);
   const reason = String(a.reason ?? '').trim().slice(0, 1000);
@@ -1594,6 +1753,17 @@ function mailsFor(rec: StreamRecord): Mail[] {
     cust(`About your request for ${ref}`, [`We've looked at your request for <b>${h(title)}</b>.`, str(img, 'cancelReply') ? h(str(img, 'cancelReply')) : 'We are unable to accept it under our terms. Please reply to this email if you would like to talk it through.']);
   }
 
+  // Return pickup for a replacement.
+  if (str(img, 'returnAwb') && str(img, 'returnAwb') !== str(old, 'returnAwb') && str(img, 'returnMode') === 'PICKUP') {
+    const d = str(img, 'returnPickupDate');
+    cust(`Pickup booked for ${title} (${ref})`, [`We've booked a courier to collect the damaged <b>${h(title)}</b>${d ? ` on <b>${h(new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` : ''}.`,
+      `Courier: <b>${h(str(img, 'returnCourier'))}</b> · return AWB <b>${h(str(img, 'returnAwb'))}</b>. The driver brings the label; please pack it in the original packaging if you still have it.`,
+      "We'll email you when it reaches our framing studio."]);
+  }
+  if (str(img, 'returnReceivedAt') && !str(old, 'returnReceivedAt') && str(img, 'returnMode') !== 'NONE') {
+    cust(`We've received ${title}`, [`The damaged <b>${h(title)}</b> has reached our framing studio in Dubai. Your replacement is now being made, and we'll email you the tracking number when it ships.`]);
+  }
+
   // A new message on the order without a status change.
   if (!statusChanged && msg && msg !== str(old, 'adminMessage')) cust(`A message about your order ${ref}`, [`About <b>${h(title)}</b>:`, h(msg)]);
   return out;
@@ -1615,6 +1785,7 @@ export const handler = async (event: StreamEvent | ApiEvent) => {
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    if (field === 'artistRework') return JSON.stringify(await artistRework(event.arguments, actor(event)));
     if (field === 'customerRequest') return JSON.stringify(await customerRequest(event));
     if (field === 'artistList') return JSON.stringify(await artistList());
     if (field === 'artistQuote') return JSON.stringify(await artistQuote(event.arguments, actor(event)));

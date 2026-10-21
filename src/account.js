@@ -3,7 +3,7 @@
 import './amplify-config.js';
 import {
   signUp, confirmSignUp, resendSignUpCode, signIn, signOut, autoSignIn,
-  getCurrentUser, fetchUserAttributes, resetPassword, confirmResetPassword,
+  getCurrentUser, fetchUserAttributes, fetchAuthSession, resetPassword, confirmResetPassword,
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
@@ -407,6 +407,8 @@ function card(e) {
     ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
     ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
     ${st === 'REPLACEMENT' ? `<div class="enq-msg">We're sorry it arrived damaged. Your replacement is being prepared, and we'll send the new tracking number when it ships.</div>` : ''}
+    ${st === 'REPLACEMENT' && e.returnMode === 'PICKUP' && e.returnAwb && !e.returnPickedAt ? `<div class="enq-msg">Return pickup booked${e.returnPickupDate ? ` for <b>${esc(new Date(e.returnPickupDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))}</b>` : ''}: <b>${esc(e.returnCourier)}</b> · AWB <b>${esc(e.returnAwb)}</b>. Please keep it packed and ready.</div>` : ''}
+    ${st === 'REPLACEMENT' && e.returnReceivedAt ? `<div class="enq-msg">We received the damaged piece on ${esc(new Date(e.returnReceivedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}.</div>` : ''}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${pay}
     ${requestBlock(e)}
@@ -429,7 +431,10 @@ async function showList() {
     try { state.email = (await fetchUserAttributes()).email || ''; } catch { /* keep going */ }
     if (!state.email) state.email = state.user?.signInDetails?.loginId || '';
   }
+  let admin = false;
+  try { admin = ((await fetchAuthSession()).tokens?.accessToken?.payload?.['cognito:groups'] || []).includes('ADMINS'); } catch { /* not admin */ }
   body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b></p>
+    ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
     <nav class="acct-tabs" role="tablist" id="acctTabs"></nav>
     <div id="enqList" class="acct-info">Loading…</div>
     <button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;

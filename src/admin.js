@@ -30,7 +30,7 @@ const DEFAULT_RATES = {
     M: { label: 'A3 / 38×28 cm', framing: 140, courier: 65 },
     L: { label: '50×70 cm', framing: 220, courier: 110 },
   },
-  local: 30, customs: 0.05, fee: 0.03, margin: 0.25, vat: 0, fx: 0.042, round9: true, saved: false,
+  local: 30, customs: 0.05, fee: 0.03, ins: 0.01, reserve: 0.02, margin: 0.25, vat: 0, fx: 0.042, round9: true, saved: false,
 };
 let rates = structuredClone(DEFAULT_RATES);
 const costings = new Map(); // enquiryId → Costing record
@@ -51,14 +51,18 @@ function calc(c, price) {
   }
   const customs = (artistAed + indiaCourier) * rates.customs;
   const total = artistAed + framing + indiaCourier + customs + localCourier;
-  const raw = (total * (1 + rates.margin)) / (1 / (1 + vat) - rates.fee);
+  // Ziina fee, courier insurance and the breakage reserve are all a % of what the customer pays.
+  const pctOfPrice = rates.fee + (rates.ins || 0) + (rates.reserve || 0);
+  const raw = (total * (1 + rates.margin)) / (1 / (1 + vat) - pctOfPrice);
   const suggested = rates.round9 ? Math.ceil((raw + 1) / 10) * 10 - 1 : Math.round(raw);
   const out = { artistAed, framing, indiaCourier, localCourier, customs, total, suggested, vatRate: vat, ready: true };
   if (price > 0) {
     out.price = price;
     out.vatAmt = price - price / (1 + vat);
     out.feeAmt = price * rates.fee;
-    out.margin = price - out.vatAmt - out.feeAmt - total;
+    out.insAmt = price * (rates.ins || 0);
+    out.resAmt = price * (rates.reserve || 0);
+    out.margin = price - out.vatAmt - out.feeAmt - out.insAmt - out.resAmt - total;
     out.marginPct = out.margin / (price - out.vatAmt);
   }
   return out;
@@ -268,9 +272,13 @@ function reportLine(e) {
     if (e.purchaseState === 'CANCELLED') { k.artist = 0; k.india = 0; k.customs = 0; }
     if (String(e.refundAction || '').startsWith('CANCEL')) { k.framing = 0; k.local = 0; }
   }
-  const total = k ? k.artist + k.framing + k.india + k.customs + k.local : null;
-  const margin = k ? net - fee - total : null;
-  return { e, price, refund, net: r2(net), fee: r2(fee), k, total: total == null ? null : r2(total), margin: margin == null ? null : r2(margin), pct: margin == null || !net ? null : margin / net, note };
+  const rc = reworkCost(e);
+  if (k) k.rework = rc.net;
+  const ins = price * (rates.ins || 0);
+  const fees = fee + ins;
+  const total = k ? k.artist + k.framing + k.india + k.customs + k.local + k.rework : null;
+  const margin = k ? net - fees - total : null;
+  return { e, price, refund, net: r2(net), fee: r2(fees), reserve: r2(price * (rates.reserve || 0)), rc, k, total: total == null ? null : r2(total), margin: margin == null ? null : r2(margin), pct: margin == null || !net ? null : margin / net, note };
 }
 
 function reportLines() {
@@ -297,6 +305,7 @@ function renderReport() {
     tile('Total cost', money(T.cost)),
     tile('Margin', money(T.margin), T.margin < 0 ? 'neg' : ''),
     tile('Margin %', pct == null ? '–' : (pct * 100).toFixed(1) + '%', pct != null && pct < 0.1 ? 'neg' : ''),
+    (() => { const loss = sum((l) => l.rc.cost), rec = sum((l) => l.rc.received), res = sum((l) => l.reserve); return loss || rec ? tile('Damage: cost / insurance / reserve', `${money(loss)} / ${money(rec)} / ${money(res)}`, loss - rec > res ? 'neg' : '') : ''; })(),
     (() => { const rv = lines.map((l) => reviews.get(l.e.id)).filter(Boolean); const a = avgRating(rv); return tile('Customer rating', a == null ? '–' : `${a.toFixed(1)} ★ (${rv.length})`, a != null && a < 4 ? 'neg' : ''); })(),
   ].join('') + (lines.length - costed.length ? `<div class="tile"><div class="k">Without costing</div><div class="v neg">${lines.length - costed.length}</div></div>` : '');
   const td = (v, cls = '') => `<td class="num ${cls}">${money(v)}</td>`;
@@ -305,11 +314,11 @@ function renderReport() {
     return `<tr data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(d)}</td><td class="mono">${esc(l.e.ref)}</td>
       <td style="white-space:normal;min-width:160px">${esc(l.e.title)}${l.note ? `<br><span class="flag">${esc(l.note)}</span>` : ''}</td><td>${esc(l.e.customerName)}</td>
       <td><span class="pill ${esc(l.e.status)}">${esc(STATUS[l.e.status] || l.e.status)}</span></td>
-      ${td(l.price)}${td(l.refund || null)}${td(l.net)}${td(l.k?.artist)}${td(l.k?.framing)}${td(l.k?.india)}${td(l.k?.customs)}${td(l.k?.local)}${td(l.fee)}${td(l.total)}
+      ${td(l.price)}${td(l.refund || null)}${td(l.net)}${td(l.k?.artist)}${td(l.k?.framing)}${td(l.k?.india)}${td(l.k?.customs)}${td(l.k?.local)}${td(l.k?.rework || null, l.k?.rework > 0 ? 'neg' : '')}${td(l.fee)}${td(l.total)}
       ${td(l.margin, l.margin != null && l.margin < 0 ? 'neg' : '')}<td class="num ${l.pct != null && l.pct < 0.1 ? 'neg' : ''}">${l.pct == null ? '–' : (l.pct * 100).toFixed(1) + '%'}</td></tr>`;
-  }).join('') : '<tr><td colspan="17" class="muted">No paid orders in this period.</td></tr>';
+  }).join('') : '<tr><td colspan="18" class="muted">No paid orders in this period.</td></tr>';
   const k = (f) => costed.reduce((a, l) => a + (f(l.k) || 0), 0);
-  $('rFoot').innerHTML = lines.length ? `<tr><td colspan="5">Total (${lines.length} orders)</td>${td(T.sales)}${td(T.refund || null)}${td(T.net)}${td(k((x) => x.artist))}${td(k((x) => x.framing))}${td(k((x) => x.india))}${td(k((x) => x.customs))}${td(k((x) => x.local))}${td(T.fee)}${td(T.cost)}${td(T.margin, T.margin < 0 ? 'neg' : '')}<td class="num">${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}</td></tr>` : '';
+  $('rFoot').innerHTML = lines.length ? `<tr><td colspan="5">Total (${lines.length} orders)</td>${td(T.sales)}${td(T.refund || null)}${td(T.net)}${td(k((x) => x.artist))}${td(k((x) => x.framing))}${td(k((x) => x.india))}${td(k((x) => x.customs))}${td(k((x) => x.local))}${td(k((x) => x.rework) || null)}${td(T.fee)}${td(T.cost)}${td(T.margin, T.margin < 0 ? 'neg' : '')}<td class="num">${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}</td></tr>` : '';
   $('rRows').querySelectorAll('tr[data-id]').forEach((tr) => {
     const open = () => { const e = all.find((x) => x.id === tr.dataset.id); if (!e) return; showPane('orders', 'tabOrders'); selectedId = e.id; render(); showDetail(e); };
     tr.onclick = open;
@@ -319,10 +328,10 @@ function renderReport() {
 
 ['rFrom', 'rTo', 'rKind'].forEach((id) => $(id).addEventListener('change', renderReport));
 $('rCsv').onclick = () => {
-  const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Payment fee', 'Total cost', 'Margin', 'Margin %', 'Note'];
+  const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Total cost', 'Margin', 'Margin %', 'Note'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = reportLines().map((l) => [String(l.e.createdAt || '').slice(0, 10), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
-    l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '',
+    l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '', l.k ? r2(l.k.rework) : '',
     l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%', l.note]);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
@@ -496,6 +505,154 @@ function requestBanner(e) {
   </div>`;
 }
 
+// ---------- Replacement rework: frame shop or Siva, costs and the courier insurance claim ----------
+const REWORK_TYPE = { REFRAME: 'New glass / re-frame at the frame shop', SIVA_REPAIR: 'Repair by Siva', SIVA_REPAINT: 'Repaint by Siva (new painting)' };
+function parseRework(c) {
+  let v = c?.rework;
+  try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
+  return v && typeof v === 'object' ? v : {};
+}
+/** Extra cost of a replacement (AED) and what the insurer paid back. */
+function reworkCost(e) {
+  const c = costings.get(e.id);
+  const r = parseRework(c);
+  const fx = Number(parseCosts(c)?.fx) || rates.fx;
+  const siva = e.reworkType?.startsWith('SIVA') && c?.reworkPriceInr ? Number(c.reworkPriceInr) * fx : 0;
+  const cost = siva + Number(r.framing || 0) + Number(r.indiaCourier || 0) + Number(r.localCourier || 0) + Number(r.other || 0);
+  const received = Number(r.received || 0);
+  return { siva, cost, received, net: cost - received, any: cost > 0 || received > 0 };
+}
+// Return transport legs, as one timeline: customer → frame shop → (Siva → frame shop) → checked → customer.
+const RETURN_MODE = { PICKUP: 'Courier pickup from the customer', DROP: 'Customer drops it at the frame shop', NONE: 'No return (customer keeps / disposes of it)' };
+function reworkTimeline(e) {
+  const rows = [];
+  const add = (done, label, at, extra = '') => rows.push(`<li class="${done ? 'done' : ''}"><span>${done ? '✓' : '○'}</span> ${label}${extra ? ` <span class="muted">${esc(extra)}</span>` : ''}${at ? ` <span class="muted">· ${esc(day(at))}</span>` : ''}</li>`);
+  const siva = (e.reworkType || '').startsWith('SIVA');
+  if (e.returnMode === 'PICKUP') {
+    add(!!e.returnAwb, 'Return pickup booked', e.returnPickupDate, e.returnAwb ? `${e.returnCourier} · AWB ${e.returnAwb}` : '');
+    add(!!e.returnPickedAt, 'Picked up from the customer', e.returnPickedAt);
+  }
+  if (e.returnMode !== 'NONE') add(!!e.returnReceivedAt, 'Received at the frame shop', e.returnReceivedAt);
+  if (e.reworkType === 'SIVA_REPAIR') {
+    add(!!e.toSivaSentAt, 'Sent to Siva (India)', e.toSivaSentAt, e.toSivaAwb ? `${e.toSivaCourier} · AWB ${e.toSivaAwb}` : '');
+    add(!!e.sivaReceivedAt, 'Siva received it', e.sivaReceivedAt);
+  }
+  if (siva) {
+    add(!!e.reworkStartedAt, 'Siva: rework started', e.reworkStartedAt);
+    add(!!e.reworkFinishedAt, 'Siva: finished', e.reworkFinishedAt);
+    add(!!e.reworkSentAt, 'Siva: sent to the frame shop', e.reworkSentAt, e.reworkAwb ? `${e.reworkCourier} · AWB ${e.reworkAwb}` : '');
+    add(!!e.reworkBackAt, 'Back at the frame shop', e.reworkBackAt);
+  }
+  add(e.reworkStage === 'READY', 'Checked and ready', e.reworkReadyAt);
+  add(SHIP_STATUSES.includes(e.status), 'Shipped to the customer', '', SHIP_STATUSES.includes(e.status) && e.trackingNo ? `${e.courierName} · AWB ${e.trackingNo}` : '');
+  add(e.status === 'DELIVERED', 'Delivered', e.deliveredAt);
+  return `<ol class="timeline">${rows.join('')}</ol>`;
+}
+function transportSection(e) {
+  const mode = e.returnMode || '';
+  const sel = (id, v, list) => `<select id="${id}"><option value="">Choose…</option>${list.map((c) => `<option ${c === v ? 'selected' : ''}>${esc(c)}</option>`).join('')}${v && !list.includes(v) ? `<option selected>${esc(v)}</option>` : ''}</select>`;
+  const tick = (id, label, at) => `<label class="tickline"><input type="checkbox" id="${id}" ${at ? 'checked disabled' : ''}> ${label}${at ? ` <span class="muted">${esc(when(at))}</span>` : ''}</label>`;
+  return `<div class="muted" style="font-size:12px;font-weight:600;margin-top:4px">Return and transport</div>
+    <div class="field"><label for="rtMode">Damaged piece</label><select id="rtMode"><option value="">Choose…</option>${Object.entries(RETURN_MODE).map(([k, v]) => `<option value="${k}" ${mode === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+    <div id="rtPickup" class="three" ${mode === 'PICKUP' ? '' : 'hidden'}>
+      <div class="field"><label for="rtCourier">Return courier</label>${sel('rtCourier', e.returnCourier, COURIERS.filter((c) => c !== 'Own delivery'))}</div>
+      <div class="field"><label for="rtAwb">Return AWB</label><input id="rtAwb" value="${esc(e.returnAwb)}" placeholder="From the courier's return booking"></div>
+      <div class="field"><label for="rtDate">Pickup date</label><input id="rtDate" type="date" value="${esc(e.returnPickupDate)}"></div>
+    </div>
+    <div class="muted" style="font-size:12px" id="rtHint" ${mode === 'PICKUP' ? '' : 'hidden'}>Book a return (reverse) pickup with the courier, to the frame shop's address. Saving the AWB emails the customer the courier, AWB and date.</div>
+    <div id="rtTicks" ${mode && mode !== 'NONE' ? '' : 'hidden'}>
+      ${mode === 'PICKUP' || !mode ? tick('rtPicked', 'Picked up from the customer', e.returnPickedAt) : ''}
+      ${tick('rtRecv', 'Received at the frame shop (the customer is emailed)', e.returnReceivedAt)}
+    </div>
+    ${e.reworkType === 'SIVA_REPAIR' ? `<div class="three">
+      <div class="field"><label for="tsCourier">To Siva: courier</label>${sel('tsCourier', e.toSivaCourier, ['DHL', 'Aramex', 'FedEx', 'SMSA', 'Emirates Post'])}</div>
+      <div class="field"><label for="tsAwb">To Siva: AWB</label><input id="tsAwb" value="${esc(e.toSivaAwb)}" ${e.toSivaSentAt ? 'disabled' : ''}></div>
+      <div class="field" style="align-self:end">${tick('tsSent', 'Sent to Siva (he sees the AWB)', e.toSivaSentAt)}</div>
+    </div>
+    <div class="muted" style="font-size:12px">${e.sivaReceivedAt ? `Siva received it ${esc(when(e.sivaReceivedAt))}.` : 'Siva taps “I\'ve received it” on his page; he can only start the repair after that.'} Sending art to India and back needs export / re-import papers (repair and return); keep the courier's paperwork.</div>` : ''}
+    ${(e.reworkType || '').startsWith('SIVA') ? tick('rwBack', 'Siva\'s piece is back at the frame shop', e.reworkBackAt) : ''}`;
+}
+
+function reworkSection(e) {
+  if (e.status !== 'REPLACEMENT' && !e.reworkType) return '';
+  const c = costings.get(e.id) || {};
+  const r = parseRework(c);
+  const siva = (e.reworkType || '').startsWith('SIVA');
+  const ready = e.reworkStage === 'READY';
+  const rc = reworkCost(e);
+  const sivaSteps = siva ? [e.reworkStartedAt && `Started ${day(e.reworkStartedAt)}`, e.reworkFinishedAt && `Finished ${day(e.reworkFinishedAt)}`, e.reworkSentAt && `Sent to frame shop ${day(e.reworkSentAt)}${e.reworkAwb ? ` (${e.reworkCourier} · AWB ${e.reworkAwb})` : ''}`].filter(Boolean).join(' · ') : '';
+  const num = (id, label, v, dis = false) => `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="number" min="0" step="0.01" value="${v ?? ''}" ${dis ? 'disabled' : ''}></div>`;
+  return `<fieldset class="cost" id="reworkBox">
+    <legend>Replacement: rework ${ready ? '<span class="muted">· ready to ship</span>' : ''}</legend>
+    <div class="two">
+      <div class="field"><label for="rwType">Fix</label><select id="rwType" ${e.reworkStage ? 'disabled' : ''}><option value="">Choose…</option>${Object.entries(REWORK_TYPE).map(([k, v]) => `<option value="${k}" ${e.reworkType === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label for="rwNote">Instructions (Siva sees them)</label><input id="rwNote" value="${esc(e.reworkNote)}" placeholder="e.g. glass cracked, painting fine"></div>
+    </div>
+    ${siva ? `<div style="font-size:13px"><b>Siva:</b> ${c.reworkPriceInr != null ? `rework price INR ${Number(c.reworkPriceInr).toLocaleString('en-IN')}${c.reworkPriceBy && c.reworkPriceBy !== 'Siva' ? ' (entered by you)' : ''}` : 'no rework price yet'}${sivaSteps ? ` · ${esc(sivaSteps)}` : e.reworkType ? ' · not started (he sees it on his page; you can tick it there for him)' : ''}</div>` : ''}
+    ${e.reworkMessage ? `<div style="font-size:13px;color:${/^Error/.test(e.reworkMessage) ? 'var(--kumkum)' : 'var(--muted)'}">${esc(e.reworkMessage)}</div>` : ''}
+    ${reworkTimeline(e)}
+    ${transportSection(e)}
+    <div class="muted" style="font-size:12px;font-weight:600;margin-top:4px">Extra costs of this replacement (AED, the customer pays nothing)</div>
+    <div class="three">
+      ${num('rwFr', 'Frame shop (glass / frame)', r.framing)}
+      ${num('rwLc', 'Couriers (pickup, re-delivery)', r.localCourier)}
+      ${siva ? num('rwIc', 'India courier (Siva)', r.indiaCourier) : ''}
+      ${num('rwOt', 'Other', r.other)}
+      ${siva ? `<div class="field"><label for="rwInr">Siva's rework price (INR)</label><input id="rwInr" type="number" min="0" step="1" value="${c.reworkPriceInr ?? ''}" ${e.zohoReworkBillId ? 'disabled' : ''}></div>` : ''}
+    </div>
+    ${siva ? `<div class="two">
+      <div class="field"><label for="rwInv">Siva's rework invoice no.</label><input id="rwInv" value="${esc(e.reworkInvoiceNo)}" placeholder="Creates a second bill in Zoho" ${e.zohoReworkBillId ? 'disabled' : ''}></div>
+      <div class="field"><label for="rwPaid">Paid to Siva (rework): bank ref</label><input id="rwPaid" value="${esc(e.reworkPaidRef)}" ${!e.zohoReworkBillId || e.zohoReworkPaymentId ? 'disabled' : ''}></div>
+    </div>` : ''}
+    <details ${r.claimRef || r.received ? 'open' : ''}><summary>Courier insurance claim</summary>
+      <div class="three" style="margin-top:8px">
+        <div class="field"><label for="rwIns">Courier / insurer</label><input id="rwIns" value="${esc(r.insurer)}" placeholder="Courier that delivered it damaged"></div>
+        <div class="field"><label for="rwClaim">Claim reference</label><input id="rwClaim" value="${esc(r.claimRef)}"></div>
+        ${num('rwClaimed', 'Amount claimed', r.claimed)}
+        ${num('rwRecv', 'Amount received', r.received)}
+        <div class="field"><label for="rwRecvRef">Received: reference</label><input id="rwRecvRef" value="${esc(r.receivedRef)}"></div>
+      </div>
+      <div class="muted" style="font-size:12px">Claim with the courier within its time limit (e.g. Aramex: 60 days from pickup), with the AWB, the customer's photos and the declared value.</div>
+    </details>
+    <div class="marginline ${rc.net > 0 ? 'low' : ''}" id="rwSum">Extra cost ${aed(rc.cost, 2)}${rc.received ? ` − insurance ${aed(rc.received, 2)}` : ''} = <b>${aed(rc.net, 2)}</b> taken from this order's margin.</div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:13px"><input type="checkbox" id="rwReady" style="width:auto;margin-top:3px" ${ready ? 'checked disabled' : ''}> <span>${ready ? `Checked and ready ${esc(when(e.reworkReadyAt))}` : 'I have checked the reworked piece (at the frame shop or by photo): it is ready to ship. Shipping is allowed only after this.'}</span></label>
+  </fieldset>`;
+}
+function readRework(e) {
+  if (!$('reworkBox')) return null;
+  const c = costings.get(e.id) || {};
+  const old = parseRework(c);
+  const rework = { ...old, framing: n($('rwFr').value), localCourier: n($('rwLc').value), indiaCourier: $('rwIc') ? n($('rwIc').value) : old.indiaCourier ?? null, other: n($('rwOt').value),
+    insurer: $('rwIns').value.trim() || null, claimRef: $('rwClaim').value.trim() || null, claimed: n($('rwClaimed').value), received: n($('rwRecv').value), receivedRef: $('rwRecvRef').value.trim() || null };
+  const inr = $('rwInr') && !$('rwInr').disabled ? n($('rwInr').value) : undefined;
+  const now = new Date().toISOString();
+  const ticked = (id) => $(id) && $(id).checked && !$(id).disabled;
+  const mode = $('rtMode').value || null;
+  const enq = {
+    returnMode: mode,
+    ...(mode === 'PICKUP' ? { returnCourier: $('rtCourier').value || null, returnAwb: $('rtAwb').value.trim() || null, returnPickupDate: $('rtDate').value || null } : {}),
+    ...(ticked('rtPicked') ? { returnPickedAt: now } : {}),
+    ...(ticked('rtRecv') ? { returnReceivedAt: now, ...(mode === 'PICKUP' && !e.returnPickedAt && !ticked('rtPicked') ? { returnPickedAt: now } : {}) } : {}),
+    ...($('tsCourier') ? { toSivaCourier: $('tsCourier').value || null } : {}),
+    ...($('tsAwb') && !$('tsAwb').disabled ? { toSivaAwb: $('tsAwb').value.trim() || null } : {}),
+    ...(ticked('tsSent') ? { toSivaSentAt: now } : {}),
+    ...(ticked('rwBack') ? { reworkBackAt: now } : {}),
+    reworkType: $('rwType').disabled ? e.reworkType : $('rwType').value || null,
+    reworkNote: $('rwNote').value.trim() || null,
+    ...($('rwReady').checked && !$('rwReady').disabled ? { reworkStage: 'READY', reworkReadyAt: new Date().toISOString() } : {}),
+    ...($('rwInv') && !$('rwInv').disabled ? { reworkInvoiceNo: $('rwInv').value.trim() || null } : {}),
+    ...($('rwPaid') && !$('rwPaid').disabled ? { reworkPaidRef: $('rwPaid').value.trim() || null } : {}),
+  };
+  return { rework, inr, enq, changedInr: inr !== undefined && inr !== (c.reworkPriceInr ?? null) };
+}
+async function saveRework(e, rw) {
+  const c = costings.get(e.id);
+  const rec = { enquiryId: e.id, rework: JSON.stringify(rw.rework), ...(rw.changedInr ? { reworkPriceInr: rw.inr, reworkPriceAt: new Date().toISOString(), reworkPriceBy: 'Kalai Art House (Order Management)' } : {}) };
+  const res = c ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec);
+  if (res.errors?.length) throw new Error(res.errors[0].message);
+  costings.set(e.id, res.data || { ...c, ...rec });
+}
+
 function afterSection(e) {
   if (!e.zohoInvoiceId && !e.refundAction) return '';
   const done = AFTER_DONE.includes(e.refundState);
@@ -550,11 +707,11 @@ function renderCost() {
     ${r.ready ? `<tr class="tot"><td>Total cost</td><td class="mono num">${aed(r.total)}</td><td></td></tr>` : ''}
   </tbody></table>`;
   if (r.ready) {
-    html += `<div class="suggest"><span>Suggested price <b class="mono">${aed(r.suggested)}</b> <span class="muted">(${(rates.margin * 100).toFixed(0)}% margin${r.vatRate ? ', VAT incl.' : ''}${rates.fee ? ', after Ziina fee' : ''})</span></span>
+    html += `<div class="suggest"><span>Suggested price <b class="mono">${aed(r.suggested)}</b> <span class="muted">(${(rates.margin * 100).toFixed(0)}% margin${r.vatRate ? ', VAT incl.' : ''}${rates.fee ? ', after Ziina fee' : ''}${rates.ins ? ', insurance' : ''}${rates.reserve ? ', breakage reserve' : ''})</span></span>
       ${$('ePrice').readOnly ? '' : '<button type="button" class="btn small" id="useSug">Use this price</button>'}</div>`;
     if (r.price) {
       const low = r.marginPct < 0.1;
-      html += `<div class="marginline ${low ? 'low' : ''}">At ${aed(r.price)}: ${r.vatRate ? `VAT ${aed(r.vatAmt, 2)} · ` : ''}Ziina fee ${aed(r.feeAmt, 2)} · <b>margin ${aed(r.margin)} (${(r.marginPct * 100).toFixed(1)}%)</b>${low ? ' · below 10%' : ''}</div>`;
+      html += `<div class="marginline ${low ? 'low' : ''}">At ${aed(r.price)}: ${r.vatRate ? `VAT ${aed(r.vatAmt, 2)} · ` : ''}Ziina fee ${aed(r.feeAmt, 2)}${r.insAmt ? ` · insurance ${aed(r.insAmt, 2)}` : ''}${r.resAmt ? ` · breakage reserve ${aed(r.resAmt, 2)}` : ''} · <b>margin ${aed(r.margin)} (${(r.marginPct * 100).toFixed(1)}%)</b>${low ? ' · below 10%' : ''}</div>`;
     }
   }
   $('costOut').innerHTML = html;
@@ -601,6 +758,8 @@ function showRates() {
         <div class="field"><label for="rFx">Exchange rate (AED per INR)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
+        ${pct('rIns', 'Courier insurance (%)', rates.ins || 0, 'declared-value cover bought with each shipment, % of price')}
+        ${pct('rRes', 'Breakage reserve (%)', rates.reserve || 0, 'set aside per order for damage the insurer won\'t pay')}
         ${pct('rMar', 'Pranix margin (%)', rates.margin, 'markup on total cost')}
         ${pct('rVat', 'VAT (%)', rates.vat, '0 until registered, then 5')}
       </div>
@@ -615,7 +774,7 @@ function showRates() {
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
     const data = { tiers, local: n($('rLocal').value) ?? 0, fx: n($('rFx').value) ?? 0,
-      customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, margin: (n($('rMar').value) ?? 0) / 100,
+      customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margin: (n($('rMar').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, round9: $('rRound').checked, updatedAt: new Date().toISOString() };
     try {
       const rec = { key: 'default', data: JSON.stringify(data) };
@@ -726,6 +885,7 @@ async function showDetail(e) {
       </div>
       <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? ', then records Siva’s order' : ''}.</div>
       ${purchaseSection(e)}
+      ${reworkSection(e)}
       ${afterSection(e)}
       <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="https://… from Telr, Tap or Stripe" value="${esc(e.paymentLink)}"></div>
       <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
@@ -790,6 +950,13 @@ async function showDetail(e) {
     Promise.all(keys.map((k) => getUrl({ path: k, options: { expiresIn: 900 } }).then((r) => r.url.toString()).catch(() => null)))
       .then((urls) => { $('reqPhotos').innerHTML = urls.map((u, i) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener">Damage photo ${i + 1}</a>` : `<span class="err">Photo ${i + 1} unavailable</span>`)).join('') + '<span class="muted">Links work for 15 minutes.</span>'; });
   }
+  if ($('rtMode')) {
+    $('rtMode').addEventListener('change', () => {
+      const m = $('rtMode').value;
+      $('rtPickup').hidden = m !== 'PICKUP'; $('rtHint').hidden = m !== 'PICKUP'; $('rtTicks').hidden = !m || m === 'NONE';
+      if ($('rtPicked')) $('rtPicked').closest('label').hidden = m !== 'PICKUP';
+    });
+  }
   if ($('rqDecline')) {
     $('rqDecline').onclick = async (ev) => {
       const b = ev.currentTarget; b.disabled = true; $('rqMsg').textContent = 'Saving…';
@@ -840,6 +1007,26 @@ async function showDetail(e) {
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">This order is already invoiced. Use "Cancellation, damage or refund" below to cancel it with the right refund.</div>');
       b.disabled = false; return;
     }
+    if (s === 'REPLACEMENT' && SHIP_STATUSES.includes($('eStatus').value) && e.reworkStage !== 'READY' && !$('rwReady')?.checked) {
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">The replacement isn\'t confirmed ready: tick “I have checked the reworked piece” in the Replacement box first.</div>');
+      b.disabled = false; return;
+    }
+    if ($('reworkBox')) {
+      const v = (id) => $(id)?.value?.trim();
+      const isOn = (id) => !!$(id)?.checked;
+      const t = $('rwType').value || e.reworkType || '';
+      const why = $('rtMode').value === 'PICKUP' && isOn('rtPicked') && !v('rtAwb') ? 'Enter the return AWB before marking it picked up.'
+        : isOn('tsSent') && (!v('tsCourier') || !v('tsAwb')) ? 'Enter the courier and AWB for the parcel to Siva.'
+        : isOn('tsSent') && !isOn('rtRecv') && $('rtMode').value !== 'NONE' ? 'Tick “Received at the frame shop” before sending it to Siva.'
+        : isOn('rwReady') && !$('rwReady').disabled && ['PICKUP', 'DROP'].includes($('rtMode').value) && !isOn('rtRecv') ? 'The damaged piece hasn\'t been received at the frame shop yet.'
+        : isOn('rwReady') && !$('rwReady').disabled && t.startsWith('SIVA') && !isOn('rwBack') ? 'Siva\'s piece isn\'t back at the frame shop yet: tick that first.'
+        : isOn('rwBack') && !$('rwBack').disabled && e.reworkStage !== 'SENT' ? 'Siva hasn\'t marked the rework as sent to the frame shop yet.' : '';
+      if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }
+    }
+    if ($('rwType') && !$('rwType').disabled && !$('rwType').value && s === 'REPLACEMENT' && $('rwReady')?.checked) {
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose the fix (frame shop or Siva) in the Replacement box.</div>');
+      b.disabled = false; return;
+    }
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {
       const courier = $('eCourier').value.trim(), awb = $('eAwb').value.trim();
       const why = !e.zohoInvoiceId ? 'Mark it Paid first, so Zoho has the invoice before it ships.'
@@ -858,8 +1045,10 @@ async function showDetail(e) {
     const toZoho = (!locked && (($('eStatus').value === 'PAID' && s !== 'PAID') || (priceVal !== '' && Number(priceVal) !== Number(e.quotedPrice ?? NaN))))
       || (SHIP_STATUSES.includes($('eStatus').value) && $('eStatus').value !== s && !!e.zohoInvoiceId)
       || (locked && hasArtist(e) && (!e.zohoPOId || (invNo && invNo !== (e.artistInvoiceNo || '')) || (paidRef && paidRef !== (e.artistPaidRef || ''))));
+    const rw = readRework(e);
     try {
       if (costingChanged) await saveCosting(e);
+      if (rw) await saveRework(e, rw);
       const { data, errors } = await client.models.Enquiry.update({
         ...(costingChanged ? { costingAt: savedAt } : {}),
         ...(invNo != null ? { artistInvoiceNo: invNo || null } : {}),
@@ -875,6 +1064,7 @@ async function showDetail(e) {
         courierName: $('eCourier').value.trim() || null,
         trackingNo: $('eAwb').value.trim() || null,
         ...(paidRef != null ? { artistPaidRef: paidRef || null } : {}),
+        ...(rw ? rw.enq : {}),
         id: e.id,
         phone: $('ePhone').value.trim() || null,
         status: $('eStatus').value,

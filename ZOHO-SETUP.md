@@ -168,3 +168,24 @@ The studio (kalaiarthouse@pranixtechno.com) gets: new enquiry, cancellation requ
 
 Requests appear on the Order Management desk (red "Customer requests" count and filter). The refund box is filled in for you:
 pay the refund, type its reference, tick and save (credit note + refund in Zoho as before). Or "Decline the request" with a reply, which is emailed.
+
+## Replacements: rework, extra costs and insurance
+
+After "Damaged in transit: replacement" the order shows a **Replacement: rework** box:
+1. Choose the fix: *New glass / re-frame at the frame shop*, *Repair by Siva* or *Repaint by Siva*, with instructions.
+2. Siva (Siva types only) sees a red **Rework** card on his page: rework price in INR (0 if free), Started → Finished → Sent to frame shop (courier + AWB). You can tick them for him.
+3. Enter the extra costs (frame shop, couriers, India courier, other). They come off this order's margin in Reports (column *Rework*).
+4. Siva's rework invoice no. → second Zoho bill (reference `KA-…-RW`: rework price + India courier); bank ref → payment made. Test mode: not created.
+5. Courier insurance claim: insurer, claim ref, claimed, received. What is received is taken off the rework cost.
+6. Tick **I have checked the reworked piece** (at the frame shop or by photo). Only then can the order be set to Shipped again, which creates the new delivery challan and emails the customer the tracking number.
+
+Rates now include **Courier insurance %** (declared-value cover bought with each shipment) and **Breakage reserve %** (kept per order for damage the insurer won't pay). Both are built into the suggested price. Reports shows *Damage: cost / insurance / reserve* so you can see whether the reserve covers the losses.
+
+### Return transport (in the same box)
+
+Timeline: return pickup booked → picked up → received at the frame shop → (repair by Siva: sent to Siva → Siva received → rework → sent back → back at the frame shop) → checked and ready → shipped → delivered.
+- **Damaged piece**: courier pickup / customer drops it / no return (glass only, or a repaint).
+- **Courier pickup**: book a return (reverse) pickup with the courier to the frame shop's address, then enter the courier, return AWB and pickup date. Saving emails the customer.
+- Tick **Picked up** and **Received at the frame shop** (the customer is emailed).
+- **Repair by Siva**: enter the courier and AWB to India and tick **Sent to Siva**. Siva sees it, taps **I've received it**, and only then can start. He sends it back with his courier and AWB; you tick **Back at the frame shop**.
+- **Checked and ready** is only possible after those steps; only then can the order ship again.

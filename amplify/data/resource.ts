@@ -77,6 +77,35 @@ const schema = a.schema({
       cancelState: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       cancelReply: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       deliveredAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Rework for a replacement (damaged in transit): frame shop or Siva, confirmed ready by the studio before it ships again.
+      reworkType: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkStage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkStartedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkFinishedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkSentAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkReadyAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkCourier: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkAwb: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkNote: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkInvoiceNo: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkPaidRef: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoReworkBill: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoReworkBillId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      zohoReworkPaymentId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkMessage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Return transport for a replacement: customer → frame shop (UAE), frame shop → Siva (India) for a repair, and back.
+      returnMode: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      returnCourier: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      returnAwb: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      returnPickupDate: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      returnPickedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      returnReceivedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      toSivaCourier: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      toSivaAwb: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      toSivaSentAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      sivaReceivedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      reworkBackAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
@@ -91,6 +120,11 @@ const schema = a.schema({
       artistNote: a.string(),
       artistAt: a.string(),
       artistBy: a.string(),
+      // Replacement / rework: Siva's rework price (INR) and the studio's extra costs + courier insurance claim (AED).
+      reworkPriceInr: a.float(),
+      reworkPriceAt: a.string(),
+      reworkPriceBy: a.string(),
+      rework: a.json(),
       sizeTier: a.string(),
       delivery: a.string(),
       framingOverride: a.float(),
@@ -157,6 +191,12 @@ const schema = a.schema({
   artistProgress: a
     .mutation()
     .arguments({ id: a.id().required(), step: a.string().required(), courier: a.string(), awb: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+  artistRework: a
+    .mutation()
+    .arguments({ id: a.id().required(), step: a.string().required(), priceInr: a.float(), courier: a.string(), awb: a.string(), note: a.string() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),

@@ -62,7 +62,7 @@ async function load() {
 }
 
 function render() {
-  const needed = items.filter((x) => x.stage === 'NEEDED');
+  const needed = items.filter((x) => x.stage === 'NEEDED' || reworkPriceNeeded(x));
   $('cNeeded').textContent = needed.length ? `(${needed.length})` : '';
   const list = filter === 'NEEDED' ? needed
     : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage))
@@ -83,6 +83,7 @@ function card(x) {
     <h2>${esc(x.title)}</h2>
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
+    ${reworkBlock(x)}
     ${progressBlock(x)}
     <form class="aform" data-id="${esc(x.id)}" novalidate>
       <div class="field"><label for="p-${esc(x.id)}">Your price (INR)</label><input id="p-${esc(x.id)}" type="number" min="1" step="1" inputmode="numeric" value="${x.artistPriceInr ?? ''}" ${dis} required></div>
@@ -97,6 +98,8 @@ function card(x) {
 const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
 function progressBlock(x) {
   if (!x.ordered) return '';
+  // During a rework the original steps are done: the Rework card above has the buttons.
+  if (x.rework) return '';
   if (x.onHold) return `<div class="progress"><div class="err" style="font-size:14px">On hold: the customer has asked to cancel. Please don't continue with this work until Kalai Art House confirms.</div></div>`;
   const p = x.progress || '';
   const step = (key, label, at) => `<li class="${at ? 'done' : ''}"><span>${at ? '✓' : '○'}</span> ${label}${at ? ` <span class="muted">${esc(day(at))}</span>` : ''}</li>`;
@@ -152,8 +155,88 @@ function wireProgress(x) {
   });
 }
 
+// ---------- Rework (the work arrived damaged and needs repair or a repaint) ----------
+const reworkPriceNeeded = (x) => !!x.rework && x.rework.priceInr == null && x.rework.stage !== 'READY';
+function reworkBlock(x) {
+  const r = x.rework;
+  if (!r) return '';
+  const id = esc(x.id);
+  const kind = r.type === 'SIVA_REPAINT' ? 'a new painting (repaint)' : 'a repair';
+  const step = (label, at) => `<li class="${at ? 'done' : ''}"><span>${at ? '✓' : '○'}</span> ${label}${at ? ` <span class="muted">${esc(day(at))}</span>` : ''}</li>`;
+  const ready = r.stage === 'READY';
+  const repair = r.type === 'SIVA_REPAIR';
+  const waiting = repair && !r.receivedAt;
+  const inbound = !repair ? '' : !r.toSivaSentAt ? '<div class="muted" style="font-size:14px">The damaged piece will be sent to you from Dubai. The courier and AWB will appear here.</div>'
+    : !r.receivedAt ? `<div style="font-size:14px"><b>On its way to you:</b> ${esc(r.toSivaCourier)} · AWB ${esc(r.toSivaAwb)} · sent ${esc(day(r.toSivaSentAt))}</div><div><button type="button" class="btn" data-rw="RECEIVED">I've received it</button></div>`
+    : `<div class="muted" style="font-size:13px">Damaged piece received ${esc(day(r.receivedAt))} (${esc(r.toSivaCourier)} · AWB ${esc(r.toSivaAwb)})</div>`;
+  const next = ready || waiting ? '' : !r.stage ? `<button type="button" class="btn" data-rw="STARTED">I've started the rework</button>`
+    : r.stage === 'STARTED' ? `<button type="button" class="btn" data-rw="FINISHED">Rework finished</button>` : '';
+  const ship = !ready && (r.stage === 'FINISHED' || r.stage === 'SENT') ? `<div class="aform">
+      <div class="field"><label for="rc-${id}">Courier to the frame shop</label><select id="rc-${id}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${r.courier === c || (c === 'Other' && r.courier && !COURIERS.includes(r.courier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>
+        <input id="rco-${id}" placeholder="Courier name" value="${r.courier && !COURIERS.includes(r.courier) ? esc(r.courier) : ''}" ${r.courier && !COURIERS.includes(r.courier) ? '' : 'hidden'} style="margin-top:6px"></div>
+      <div class="field"><label for="ra-${id}">AWB / tracking no.</label><input id="ra-${id}" value="${esc(r.awb)}"></div>
+      <div class="field"><button type="button" class="btn" data-rw="SENT">${r.stage === 'SENT' ? 'Update shipping' : 'Sent to frame shop'}</button></div>
+    </div>` : '';
+  const priceLocked = r.billed || ready && r.priceInr != null;
+  return `<div class="progress rework" id="rw-${id}">
+    <div><b>Rework needed:</b> the work arrived damaged at the customer. Kalai Art House asks you for ${kind}.${r.note ? ` <span class="muted">“${esc(r.note)}”</span>` : ''}</div>
+    <div class="aform">
+      <div class="field"><label for="rp-${id}">Your rework price (INR, 0 if no charge)</label><input id="rp-${id}" type="number" min="0" step="1" inputmode="numeric" value="${r.priceInr ?? ''}" ${priceLocked ? 'disabled' : ''}></div>
+      <div class="field"><button type="button" class="btn" data-rw="PRICE" ${priceLocked ? 'disabled' : ''}>${r.priceInr != null ? 'Update rework price' : 'Send rework price'}</button></div>
+    </div>
+    ${r.priceBy && r.priceBy !== 'Siva' && r.priceInr != null ? '<div class="muted" style="font-size:12px">Rework price entered for you by Kalai Art House.</div>' : ''}
+    ${inbound}
+    <ol>${repair ? step('Received', r.receivedAt) : ''}${step('Rework started', r.startedAt)}${step('Rework finished', r.finishedAt)}${step('Sent to frame shop', r.sentAt)}${step('Checked and ready (Kalai Art House)', r.readyAt)}${r.awb ? ` <li class="muted" style="list-style:none">${esc(r.courier)} · AWB ${esc(r.awb)}</li>` : ''}</ol>
+    ${next}${ship}
+    ${r.priceInr > 0 ? `<div class="muted" style="font-size:13px">${r.paid ? `Rework paid to you · ref ${esc(r.paidRef)}` : r.billed ? `Your rework invoice ${esc(r.invoiceNo)} received · payment pending` : 'Send your rework invoice to Kalai Art House when it is done.'}</div>` : ''}
+    <div class="ok" id="rwm-${id}" role="status"></div>
+  </div>`;
+}
+function wireRework(x) {
+  const box = document.getElementById('rw-' + x.id);
+  if (!box) return;
+  const sel = document.getElementById('rc-' + x.id);
+  if (sel) sel.onchange = () => { document.getElementById('rco-' + x.id).hidden = sel.value !== 'Other'; };
+  box.querySelectorAll('[data-rw]').forEach((b) => {
+    b.onclick = async () => {
+      const msg = document.getElementById('rwm-' + x.id);
+      box.querySelectorAll('.err').forEach((e) => e.remove());
+      const step = b.dataset.rw;
+      const args = { id: x.id, step };
+      if (step === 'PRICE') {
+        const v = document.getElementById('rp-' + x.id).value;
+        if (v === '' || !(Number(v) >= 0)) { msg.insertAdjacentHTML('afterend', '<div class="err">Enter your rework price in INR (0 if there is no charge).</div>'); return; }
+        args.priceInr = Number(v);
+      }
+      if (step === 'SENT') {
+        args.courier = sel.value === 'Other' ? document.getElementById('rco-' + x.id).value.trim() : sel.value;
+        args.awb = document.getElementById('ra-' + x.id).value.trim();
+        if (!args.courier || !args.awb) { msg.insertAdjacentHTML('afterend', '<div class="err">Choose the courier and enter the AWB / tracking number.</div>'); return; }
+      }
+      b.disabled = true; msg.textContent = 'Saving…';
+      try {
+        const { data, errors } = await client.mutations.artistRework(args);
+        if (errors?.length) throw new Error(errors[0].message);
+        const r = parse(data) || {};
+        if (step === 'PRICE') Object.assign(x.rework, { priceInr: r.reworkPriceInr, priceBy: '' });
+        else if (step === 'RECEIVED') { Object.assign(x.rework, { receivedAt: r.sivaReceivedAt }); x.label = 'Rework needed (damaged in transit) · give your rework price'; }
+        else Object.assign(x.rework, { stage: r.reworkStage, startedAt: r.reworkStartedAt || x.rework.startedAt, finishedAt: r.reworkFinishedAt || x.rework.finishedAt, sentAt: r.reworkSentAt || x.rework.sentAt, courier: r.reworkCourier || x.rework.courier, awb: r.reworkAwb || x.rework.awb });
+        x.label = x.rework.stage === 'SENT' ? 'Rework sent to frame shop · send your rework invoice' : x.rework.stage === 'FINISHED' ? 'Rework finished · send it to the frame shop' : x.rework.stage === 'STARTED' ? 'Rework in progress' : x.label;
+        render();
+        const m2 = document.getElementById('rwm-' + x.id);
+        if (m2) m2.textContent = 'Saved. Kalai Art House can see it now.';
+      } catch (ex) {
+        msg.textContent = '';
+        msg.insertAdjacentHTML('afterend', `<div class="err">Could not save: ${esc(ex.message)}</div>`);
+        b.disabled = false;
+      }
+    };
+  });
+}
+
 function wire(x) {
   wireProgress(x);
+  wireRework(x);
   const form = document.querySelector(`form[data-id="${CSS.escape(x.id)}"]`);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -171,7 +254,7 @@ function wire(x) {
       b.textContent = 'Update price';
       const pill = document.querySelector(`#c-${CSS.escape(x.id)} .stage`);
       if (pill) { pill.className = `stage ${x.stage}`; pill.textContent = x.label; }
-      $('cNeeded').textContent = items.filter((i) => i.stage === 'NEEDED').length ? `(${items.filter((i) => i.stage === 'NEEDED').length})` : '';
+      { const k = items.filter((i) => i.stage === 'NEEDED' || reworkPriceNeeded(i)).length; $('cNeeded').textContent = k ? `(${k})` : ''; }
     } catch (ex) {
       msg.textContent = '';
       msg.insertAdjacentHTML('afterend', `<div class="wide err">Could not send: ${esc(ex.message)}</div>`);

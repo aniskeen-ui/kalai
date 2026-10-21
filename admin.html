@@ -94,6 +94,11 @@ table.report tbody tr{cursor:pointer}
 .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
 .btn.small{padding:6px 12px;font-size:13px}
 .chip.req,.count.req{border-color:var(--kumkum);color:var(--kumkum);font-weight:700}
+.timeline{list-style:none;margin:0;padding:8px 10px;display:grid;gap:4px;font-size:13px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
+.timeline li span:first-child{display:inline-block;width:1.1em;color:var(--muted)}
+.timeline li.done span:first-child{color:var(--ok);font-weight:700}
+.tickline{display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:13px;margin:4px 0}
+.tickline input{width:auto;margin-top:3px}
 .reqbox{display:grid;gap:6px;border:1px solid var(--kumkum);border-radius:var(--r);padding:10px 12px;font-size:14px;background:var(--bg)}
 .reqbox details summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--gold);color:var(--fg);margin-left:4px}
@@ -176,9 +181,9 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
         <button class="btn ghost" id="rCsv" type="button">Download CSV</button>
       </div>
       <div class="tiles" id="rTiles"></div>
-      <p class="muted" style="font-size:13px;margin:0 0 10px">Paid orders only (Paid, Being framed, Shipped, Delivered, Replacement, Refunded), by order date. Costs are the estimates saved in each order's Costing box; refunds and cancelled Siva orders are taken into account. Sales are shown with VAT; margin is on net sales (excluding VAT and the payment fee).</p>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Paid orders only (Paid, Being framed, Shipped, Delivered, Replacement, Refunded), by order date. Costs are the estimates saved in each order's Costing box, plus the actual extra cost of any replacement (less insurance received); refunds and cancelled Siva orders are taken into account. Sales are shown with VAT; margin is on net sales (excluding VAT and the payment fee).</p>
       <div class="tablewrap"><table class="report">
-        <thead><tr><th>Date</th><th>Ref</th><th>Order</th><th>Customer</th><th>Status</th><th class="num">Sales</th><th class="num">Refund</th><th class="num">Net sales</th><th class="num">Artist</th><th class="num">Framing</th><th class="num">India courier</th><th class="num">Customs</th><th class="num">Local courier</th><th class="num">Pay. fee</th><th class="num">Total cost</th><th class="num">Margin</th><th class="num">Margin %</th></tr></thead>
+        <thead><tr><th>Date</th><th>Ref</th><th>Order</th><th>Customer</th><th>Status</th><th class="num">Sales</th><th class="num">Refund</th><th class="num">Net sales</th><th class="num">Artist</th><th class="num">Framing</th><th class="num">India courier</th><th class="num">Customs</th><th class="num">Local courier</th><th class="num">Rework</th><th class="num">Fees &amp; ins.</th><th class="num">Total cost</th><th class="num">Margin</th><th class="num">Margin %</th></tr></thead>
         <tbody id="rRows"></tbody>
         <tfoot id="rFoot"></tfoot>
       </table></div>
