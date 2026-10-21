@@ -102,7 +102,7 @@ This Zoho plan has no purchase orders, so Siva's order is kept on the Studio des
 
 ### Zoho permissions needed (refresh token)
 
-    ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ,ZohoBooks.estimates.UPDATE,ZohoBooks.invoices.CREATE,ZohoBooks.invoices.READ,ZohoBooks.invoices.UPDATE,ZohoBooks.customerpayments.CREATE,ZohoBooks.contacts.READ,ZohoBooks.contacts.CREATE,ZohoBooks.bills.CREATE,ZohoBooks.bills.READ,ZohoBooks.vendorpayments.CREATE,ZohoBooks.deliverychallans.CREATE,ZohoBooks.deliverychallans.READ,ZohoBooks.deliverychallans.UPDATE,ZohoBooks.accountants.READ,ZohoBooks.creditnotes.CREATE,ZohoBooks.creditnotes.READ,ZohoBooks.creditnotes.UPDATE
+    ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ,ZohoBooks.estimates.UPDATE,ZohoBooks.invoices.CREATE,ZohoBooks.invoices.READ,ZohoBooks.invoices.UPDATE,ZohoBooks.customerpayments.CREATE,ZohoBooks.contacts.READ,ZohoBooks.contacts.CREATE,ZohoBooks.bills.CREATE,ZohoBooks.bills.READ,ZohoBooks.bills.UPDATE,ZohoBooks.vendorpayments.CREATE,ZohoBooks.deliverychallans.CREATE,ZohoBooks.deliverychallans.READ,ZohoBooks.deliverychallans.UPDATE,ZohoBooks.accountants.READ,ZohoBooks.creditnotes.CREATE,ZohoBooks.creditnotes.READ,ZohoBooks.creditnotes.UPDATE
 
 ## Delivery (Shipped → delivery challan → Delivered)
 
@@ -190,3 +190,16 @@ Timeline: return pickup booked → picked up → received at the frame shop → 
 - Tick **Picked up** and **Received at the frame shop** (the customer is emailed).
 - **Repair by Siva**: enter the courier and AWB to India and tick **Sent to Siva**. Siva sees it, taps **I've received it**, and only then can start. He sends it back with his courier and AWB; you tick **Back at the frame shop**.
 - **Checked and ready** is only possible after those steps; only then can the order ship again.
+
+## Test mode documents and number series
+
+In test mode these are created in Zoho as **drafts** (nothing reaches the accounts):
+quote · invoice (KAH-INV-…) · delivery challan · **credit note (KAH-CN-…)** · **Siva's bill and rework bill** (on his invoice number).
+Refunds and payments (customer payment, payment to Siva, refund) are never recorded in test mode.
+If Zoho won't keep a bill as a draft, it is **voided** instead (no effect on the accounts; delete it before going live).
+Bills and credit notes need the scopes `ZohoBooks.bills.UPDATE` and `ZohoBooks.creditnotes.UPDATE` (included in the list above).
+
+Going live, so the live numbers start clean:
+- **KAH-INV-** and **KAH-CN-**: worked out from what exists in Zoho. Delete all test invoices / credit notes and the next ones are KAH-INV-0001 and KAH-CN-0001 automatically.
+- **Quotes (QT-) and delivery challans (DC-)**: Zoho's own series. Zoho does not go back after deletes: delete the drafts, then set the next number back to 1 in Zoho (Settings → Customisation → Transaction Number Series, or the gear on the quote / challan number field).
+- **Bills**: carry Siva's own invoice number, so there is no series; just delete the test bills (Zoho warns on a repeated bill number for the same vendor).

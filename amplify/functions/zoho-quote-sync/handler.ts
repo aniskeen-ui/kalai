@@ -52,6 +52,9 @@ type ZohoBody = {
 
 const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift' };
 const INVOICE_PREFIX = 'KAH-INV-';
+// Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
+// so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
+const CREDIT_PREFIX = 'KAH-CN-';
 const VAT_PARAM = '/kalai/zoho/vat_tax_id';
 // Test mode (default ON until /kalai/zoho/test_mode is set to "off"): drafts only, nothing posted to the accounts.
 const TEST_PARAM = '/kalai/zoho/test_mode';
@@ -352,6 +355,34 @@ async function nextInvoiceNumber(): Promise<number> {
   return max + 1;
 }
 
+/** Next number in a Kalai series (KAH-CN-…) from the documents that exist in Zoho, in any status. */
+async function nextSeriesNumber(prefix: string, listPath: string, listKey: string, numberKey: string): Promise<number> {
+  const r = await zoho(`${listPath}?per_page=200&filter_by=Status.All&search_text=${encodeURIComponent(prefix)}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (r.ok ? ((r.body as any)[listKey] ?? []) : []) as Record<string, string>[];
+  let max = 0;
+  for (const d of rows) {
+    const num = String(d[numberKey] ?? '');
+    if (!num.startsWith(prefix)) continue;
+    const n = Number(num.slice(prefix.length));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
+/**
+ * Test mode: keep a just-created document out of the accounts. Draft if Zoho allows it, otherwise void
+ * (a void document has no effect and can be deleted). Returns the state it was left in.
+ */
+async function keepAsDraft(path: string, status?: string): Promise<'draft' | 'void'> {
+  if (status === 'draft') return 'draft';
+  const d = await zoho(`${path}/status/draft`, { method: 'POST' });
+  if (d.ok) return 'draft';
+  const v = await zoho(`${path}/status/void`, { method: 'POST' });
+  if (v.ok) return 'void';
+  throw new Error(`Test mode: ${path.split('/')[1]} was created in Zoho but could not be set to draft or void (${v.body.message ?? d.body.message}). Void or delete it in Zoho by hand. If the message is about permission, add the UPDATE scope for it to the Zoho token.`);
+}
+
 async function createInvoice(img: Img, price: number) {
   const q = quoteParts(img);
   const customerId = await fixedCustomerId();
@@ -562,7 +593,7 @@ async function createArtistBill(img: Img) {
     throw new Error(`Zoho bill failed (${r.status}): ${r.body.message}.${hint}`);
   }
   console.log(`Created bill ${r.body.bill.bill_number} for ${ref}`);
-  return { id: r.body.bill.bill_id, number: r.body.bill.bill_number, total: Number(r.body.bill.total ?? 0) };
+  return { id: r.body.bill.bill_id, number: r.body.bill.bill_number, total: Number(r.body.bill.total ?? 0), status: r.body.bill.status };
 }
 
 /** Siva paid: vendor payment against the bill. */
@@ -615,10 +646,18 @@ async function purchaseSteps(start: Img) {
       img = { ...img, zohoPO: { S: po.number }, zohoPOId: { S: po.id } };
     }
     if (testing) {
-      if ((str(img, 'artistInvoiceNo') || str(img, 'artistPaidRef')) && !/not posted/.test(str(img, 'purchaseMessage'))) {
+      // Test mode: Siva's bill as a draft (on his invoice number); the payment to him is never recorded.
+      if (str(img, 'artistInvoiceNo') && !str(img, 'zohoBillId')) {
+        const bill = await createArtistBill(img);
+        const state = await keepAsDraft(`/bills/${bill.id}`, bill.status);
         await writeBack(id, {
-          purchaseMessage: `Test mode: ${str(img, 'zohoPO')} recorded. Bill and payment to Siva are not posted while testing.`,
+          purchaseState: 'BILLED', zohoBill: bill.number, zohoBillId: bill.id,
+          purchaseMessage: `Test mode: ${state === 'draft' ? 'draft' : 'void (test)'} bill ${bill.number} from ${VENDOR_NAME} · AED ${bill.total.toLocaleString('en-US')}. Payment to Siva is not recorded while testing.`,
         });
+        return;
+      }
+      if (str(img, 'artistPaidRef') && str(img, 'zohoBillId') && !/payment not recorded/i.test(str(img, 'purchaseMessage'))) {
+        await writeBack(id, { purchaseMessage: `Test mode: test bill ${str(img, 'zohoBill')} · payment not recorded while testing (ref ${str(img, 'artistPaidRef')}).` });
       }
       return;
     }
@@ -797,16 +836,42 @@ async function creditNoteAndRefund(img: Img, amount: number) {
     line_items: [{ name: `Refund: ${q.name}`, description: AFTER_LABEL[action] ?? action, rate: amount, quantity: 1, ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
     notes: [`${AFTER_LABEL[action] ?? action} · order ${q.ref} · invoice ${str(img, 'zohoInvoice')}`, str(img, 'refundNote')].filter(Boolean).join('\n'),
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let r = await zoho('/creditnotes', { method: 'POST', body: JSON.stringify(body) }) as any;
-  if (!r.ok && /invoice_id/i.test(r.body.message ?? '')) {
-    delete body.invoice_id;
-    r = await zoho('/creditnotes', { method: 'POST', body: JSON.stringify(body) });
-  }
-  const cn = r.body.creditnote;
-  if (!r.ok || !cn) throw new Error(`Zoho credit note failed (${r.status}): ${r.body.message}`);
+  const cn = await postCreditNote(body);
   console.log(`Created credit note ${cn.creditnote_number} for ${q.ref} (AED ${amount})`);
   return refundCreditNote(img, amount, cn);
+}
+
+/** Credit note in Kalai's own series (KAH-CN-0001…). Retries the next number if one is taken. */
+async function postCreditNote(body: Record<string, unknown>) {
+  let n = await nextSeriesNumber(CREDIT_PREFIX, '/creditnotes', 'creditnotes', 'creditnote_number');
+  for (let attempt = 0; attempt < 4; attempt++, n++) {
+    const b = { ...body, creditnote_number: `${CREDIT_PREFIX}${String(n).padStart(4, '0')}` };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let r = await zoho('/creditnotes?ignore_auto_number_generation=true', { method: 'POST', body: JSON.stringify(b) }) as any;
+    // Not allowed against this invoice (e.g. a draft invoice in test mode): create it without the link.
+    if (!r.ok && /invoice/i.test(r.body.message ?? '') && (b as Record<string, unknown>).invoice_id) {
+      delete (b as Record<string, unknown>).invoice_id;
+      r = await zoho('/creditnotes?ignore_auto_number_generation=true', { method: 'POST', body: JSON.stringify(b) });
+    }
+    if (r.ok && r.body.creditnote) return r.body.creditnote as { creditnote_id: string; creditnote_number: string; status?: string };
+    if (!/already|exist|duplicate/i.test(r.body.message ?? '')) throw new Error(`Zoho credit note failed (${r.status}): ${r.body.message}`);
+  }
+  throw new Error('Zoho credit note failed: could not find a free KAH-CN number');
+}
+
+/** Test mode: the credit note only, kept as a draft (no refund, nothing posted). */
+async function draftCreditNote(img: Img, amount: number) {
+  const q = quoteParts(img);
+  const action = str(img, 'refundAction');
+  if (str(img, 'zohoCreditNoteId')) return { number: str(img, 'zohoCreditNote'), id: str(img, 'zohoCreditNoteId'), state: 'draft' as const };
+  const vat = await vatFields();
+  const cn = await postCreditNote({
+    customer_id: await fixedCustomerId(), reference_number: q.ref, date: dubaiToday(), invoice_id: str(img, 'zohoInvoiceId'), ...vat.header,
+    line_items: [{ name: `Refund: ${q.name}`, description: AFTER_LABEL[action] ?? action, rate: amount, quantity: 1, ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
+    notes: [`TEST · ${AFTER_LABEL[action] ?? action} · order ${q.ref}`, str(img, 'refundNote')].filter(Boolean).join('\n'),
+  });
+  const state = await keepAsDraft(`/creditnotes/${cn.creditnote_id}`, cn.status);
+  return { number: cn.creditnote_number, id: cn.creditnote_id, state };
 }
 
 async function refundCreditNote(img: Img, amount: number, cn: { creditnote_id: string; creditnote_number: string }) {
@@ -876,9 +941,19 @@ async function afterSales(img: Img) {
 
     if (!(amount > 0)) throw new Error('Enter the refund amount.');
     if (testing) {
+      let cnText = 'Credit note not created';
+      let cnSet: Record<string, string> = {};
+      try {
+        const d = await draftCreditNote(img, amount);
+        cnText = `${d.state === 'draft' ? 'Draft' : 'Void (test)'} credit note ${d.number}`;
+        cnSet = { zohoCreditNote: d.number, zohoCreditNoteId: d.id };
+      } catch (e) {
+        cnText = `Credit note not created (${e instanceof Error ? e.message : String(e)})`.slice(0, 300);
+      }
       await writeBack(id, {
         refundState: 'TEST',
-        refundMessage: `Test mode: ${label}. Credit note and refund of AED ${amount.toLocaleString('en-US')} not posted.${sivaNote}`,
+        ...cnSet,
+        refundMessage: `Test mode: ${label}. ${cnText} · AED ${amount.toLocaleString('en-US')}; refund not recorded.${sivaNote}`,
         ...(sivaCancelled ? { purchaseState: 'CANCELLED', purchaseMessage: 'Order cancelled: customer cancelled before work started.' } : {}),
       });
       return;
@@ -1489,11 +1564,7 @@ async function reworkPurchase(img: Img) {
     const courier = round2(Number(rework.indiaCourier ?? 0));
     if (needBill) {
       if (aedPrice + courier <= 0) { await writeBack(id, { reworkMessage: 'No rework price from Siva (or it is 0), so there is no bill to create.' }); return; }
-      if (await testMode()) {
-        if (/Test mode/.test(str(img, 'reworkMessage'))) return;
-        await writeBack(id, { reworkMessage: `Test mode: rework bill ${str(img, 'reworkInvoiceNo')} for AED ${(aedPrice + courier).toLocaleString('en-US')} not created.` });
-        return;
-      }
+      const testing = await testMode();
       const account = await artistAccountId();
       const lines: LineItem[] = [];
       if (aedPrice > 0) lines.push({ name: `Rework: ${str(img, 'reworkType') === 'SIVA_REPAINT' ? 'repaint' : 'repair'} (${str(img, 'title')})`, description: `Replacement for ${ref} · INR ${(priceInr ?? 0).toLocaleString('en-IN')} @ ${fx} AED/INR`, rate: aedPrice, quantity: 1 });
@@ -1506,10 +1577,19 @@ async function reworkPurchase(img: Img) {
         }),
       });
       if (!r.ok || !r.body.bill) throw new Error(`Zoho rework bill failed (${r.status}): ${r.body.message}`);
+      if (testing) {
+        const state = await keepAsDraft(`/bills/${r.body.bill.bill_id}`, r.body.bill.status);
+        await writeBack(id, { zohoReworkBill: r.body.bill.bill_number, zohoReworkBillId: r.body.bill.bill_id, reworkMessage: `Test mode: ${state === 'draft' ? 'draft' : 'void (test)'} rework bill ${r.body.bill.bill_number} · AED ${(aedPrice + courier).toLocaleString('en-US')}. Payment not recorded while testing.` });
+        return;
+      }
       await writeBack(id, { zohoReworkBill: r.body.bill.bill_number, zohoReworkBillId: r.body.bill.bill_id, reworkMessage: `Rework bill ${r.body.bill.bill_number} · AED ${(aedPrice + courier).toLocaleString('en-US')} owed to Siva` });
       return;
     }
     if (needPay) {
+      if (await testMode()) {
+        if (!/payment not recorded/i.test(str(img, 'reworkMessage'))) await writeBack(id, { reworkMessage: `Test mode: rework bill ${str(img, 'zohoReworkBill')} · payment not recorded while testing (ref ${str(img, 'reworkPaidRef')}).` });
+        return;
+      }
       const billId = str(img, 'zohoReworkBillId');
       const got = await zoho(`/bills/${billId}`);
       if (!got.ok || !got.body.bill) throw new Error(`Zoho bill read failed (${got.status}): ${got.body.message}`);
