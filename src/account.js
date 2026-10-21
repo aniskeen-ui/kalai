@@ -51,6 +51,15 @@ const css = `
 .steps-bar i.on{background:var(--gold)}
 .enq-msg{font-size:14px;background:var(--surface);border-left:3px solid var(--gold);padding:8px 10px}
 .enq-price{font-family:var(--mono);font-size:16px}
+.rate{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:10px}
+.rate b{font-size:14px}
+.stars{display:flex;gap:2px}
+.stars button{background:none;border:0;padding:2px 3px;font-size:30px;line-height:1;color:var(--line);cursor:pointer}
+.stars button.on{color:var(--gold)}
+.rate textarea{min-height:70px}
+.rate .tick{display:flex;gap:8px;align-items:flex-start;font-size:13px;font-weight:400}
+.rate .tick input{width:auto;margin-top:3px}
+.rated{font-size:14px}.rated span{color:var(--gold);letter-spacing:2px}
 `;
 document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
 
@@ -206,6 +215,56 @@ function showReset(email) {
   f.code.focus();
 }
 
+const myReviews = new Map();
+const starText = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+function rateBlock(e) {
+  if (e.status !== 'DELIVERED') return '';
+  const r = myReviews.get(e.id);
+  if (r) return `<div class="rated">You rated this <span aria-label="${r.rating} out of 5">${starText(r.rating)}</span>. Thank you for your feedback.${r.published ? ' It is now on our website.' : ''}</div>`;
+  return `<form class="rate" data-id="${esc(e.id)}" novalidate>
+    <b>How did we do? Rate your ${e.kind === 'GIFT' ? 'framed gift' : 'artwork'}</b>
+    <div class="stars" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="false" aria-label="${n} star${n > 1 ? 's' : ''}" data-n="${n}">★</button>`).join('')}</div>
+    <textarea name="comment" maxlength="600" placeholder="Tell us about the painting, the packing and delivery (optional)"></textarea>
+    <label class="tick"><input type="checkbox" name="consent"> You may show my first name and this review on the Kalai Art House website.</label>
+    <div class="acct-err" role="alert"></div>
+    <button class="btn primary" type="submit">Send feedback</button>
+  </form>`;
+}
+function wireRate(root, items) {
+  root.querySelectorAll('form.rate').forEach((f) => {
+    const e = items.find((x) => x.id === f.dataset.id);
+    let rating = 0;
+    const btns = [...f.querySelectorAll('.stars button')];
+    const paint = (n) => btns.forEach((b) => { const on = Number(b.dataset.n) <= n; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(Number(b.dataset.n) === n)); });
+    btns.forEach((b) => {
+      b.onclick = () => { rating = Number(b.dataset.n); paint(rating); };
+      b.onmouseenter = () => paint(Number(b.dataset.n));
+      b.onmouseleave = () => paint(rating);
+    });
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const err = f.querySelector('.acct-err');
+      if (!rating) { err.textContent = 'Tap the stars to choose a rating.'; return; }
+      const btn = f.querySelector('button[type=submit]'); btn.disabled = true; err.textContent = '';
+      try {
+        const firstName = String(e.customerName || '').trim().split(/\s+/)[0] || '';
+        const { data, errors } = await client.models.Review.create({
+          enquiryId: e.id, ref: e.ref, firstName, rating,
+          // Only a general label goes with the review (no child's name or commission details).
+          title: e.kind === 'GIFT' ? 'Little Artists framed gift' : e.kind === 'COMMISSION' ? 'Commissioned painting' : e.title,
+          comment: String(f.comment.value || '').trim().slice(0, 600), consent: f.consent.checked,
+        });
+        if (errors?.length) throw new Error(errors[0].message);
+        myReviews.set(e.id, data || { enquiryId: e.id, rating });
+        f.outerHTML = rateBlock(e);
+      } catch (ex) {
+        err.textContent = /conditional|exists/i.test(ex.message || '') ? 'You have already rated this order. Tap Refresh.' : 'Could not send your feedback. ' + friendly(ex);
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
 function card(e) {
   const st = e.status || 'RECEIVED';
   const idx = STEPS.indexOf(st);
@@ -219,10 +278,12 @@ function card(e) {
     ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true">${STEPS.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     ${e.quotedPrice ? `<div>Price: <span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span></div>` : ''}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
+    ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
     ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
     ${st === 'REPLACEMENT' ? `<div class="enq-msg">We're sorry it arrived damaged. Your replacement is being prepared, and we'll send the new tracking number when it ships.</div>` : ''}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${pay}
+    ${rateBlock(e)}
   </article>`;
 }
 
@@ -243,10 +304,18 @@ async function showList() {
       nextToken = res.nextToken;
     } while (nextToken);
     items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    myReviews.clear();
+    if (items.some((x) => x.status === 'DELIVERED')) {
+      try {
+        const rv = await client.models.Review.list({ limit: 200 });
+        (rv.data || []).forEach((r) => myReviews.set(r.enquiryId, r));
+      } catch { /* reviews are optional */ }
+    }
     list.className = '';
     list.style.cssText = 'display:grid;gap:12px';
     list.innerHTML = items.length ? items.map(card).join('')
       : `<p class="acct-info">No enquiries yet. Tap "Ask for price" on a painting, request a commission, or send a Little Artists gift, and it will appear here.</p>`;
+    wireRate(list, items);
   } catch (ex) {
     list.textContent = 'We could not load your enquiries. ' + friendly(ex);
   }
@@ -296,6 +365,26 @@ async function save({ ref, subject, fields, files }) {
   });
   if (errors?.length) throw new Error(errors[0].message);
 }
+
+/* ---------- published reviews on the website (public, read-only) ---------- */
+async function showPublicReviews() {
+  const sec = document.getElementById('reviews');
+  if (!sec) return;
+  try {
+    const res = await client.models.PublicReview.list({ authMode: 'apiKey', limit: 100 });
+    const list = (res.data || []).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    if (!list.length) return;
+    const avg = list.reduce((a, r) => a + r.rating, 0) / list.length;
+    document.getElementById('revAvg').textContent = `${avg.toFixed(1)} out of 5 from ${list.length} review${list.length > 1 ? 's' : ''} by customers who bought from us.`;
+    document.getElementById('revGrid').innerHTML = list.slice(0, 12).map((r) => `<figure class="rev">
+      <div class="st" aria-label="${r.rating} out of 5">${starText(r.rating)}</div>
+      ${r.comment ? `<blockquote>“${esc(r.comment)}”</blockquote>` : ''}
+      <figcaption>${esc(r.firstName || 'A customer')}${r.title ? ` · ${esc(r.title)}` : ''}${r.date ? ` · ${esc(new Date(r.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }))}` : ''}</figcaption>
+    </figure>`).join('');
+    sec.hidden = false;
+  } catch { /* no reviews section if it can't load */ }
+}
+showPublicReviews();
 
 window.kalaiAccount = {
   get user() { return state.user; },

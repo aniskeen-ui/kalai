@@ -27,7 +27,8 @@ type Img = Record<string, Attr>;
 type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImage?: Img; OldImage?: Img } };
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
-  arguments: { id?: string; priceInr?: number; readyBy?: string | null; note?: string | null };
+  identity?: { username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
+  arguments: { id?: string; priceInr?: number; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -942,7 +943,11 @@ function artistStage(e: Img, c: Img | undefined) {
   if (str(e, 'purchaseState') === 'CANCELLED') return { stage: 'CLOSED', label: 'Order cancelled by the customer' };
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
-  if (str(e, 'zohoPOId')) return { stage: 'ORDERED', label: 'Ordered · price fixed · send your invoice' };
+  if (str(e, 'zohoPOId')) {
+    const p = str(e, 'artistStage');
+    const label = p === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : p === 'FINISHED' ? 'Finished · send it to the frame shop' : p === 'STARTED' ? 'In progress' : 'Ordered · price fixed · tap Started when you begin';
+    return { stage: 'ORDERED', label };
+  }
   const status = str(e, 'status') || 'RECEIVED';
   if (status === 'CANCELLED') return { stage: 'CLOSED', label: 'Not going ahead' };
   if (num(c, 'artistPriceInr')) return { stage: 'PRICED', label: status === 'PAID' ? 'Customer paid · order coming' : 'Price given · waiting for customer' };
@@ -972,13 +977,22 @@ async function artistList() {
         artistReadyBy: str(c, 'artistReadyBy'),
         artistNote: str(c, 'artistNote'),
         locked: !!str(e, 'zohoPOId'),
+        ordered: !!str(e, 'zohoPOId') && str(e, 'purchaseState') !== 'CANCELLED',
+        progress: str(e, 'artistStage'),
+        startedAt: str(e, 'artistStartedAt'),
+        finishedAt: str(e, 'artistFinishedAt'),
+        shippedAt: str(e, 'artistShippedAt'),
+        artistCourier: str(e, 'artistCourier'),
+        artistAwb: str(e, 'artistAwb'),
+        progressBy: str(e, 'artistBy'),
+        priceBy: str(c, 'artistBy'),
         ...artistStage(e, c),
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-async function artistQuote(args: ApiEvent['arguments']) {
+async function artistQuote(args: ApiEvent['arguments'], by = 'Siva') {
   const id = args.id ?? '';
   const enquiryTable = process.env.ENQUIRY_TABLE;
   const costingTable = process.env.COSTING_TABLE;
@@ -998,7 +1012,8 @@ async function artistQuote(args: ApiEvent['arguments']) {
     ':c': { S: now },
     ':t': { S: 'Costing' },
   };
-  const sets = ['artistPriceInr = :p', 'artistAt = :a', 'updatedAt = :a', 'createdAt = if_not_exists(createdAt, :c)', '#tn = if_not_exists(#tn, :t)'];
+  values[':b'] = { S: by };
+  const sets = ['artistPriceInr = :p', 'artistAt = :a', 'artistBy = :b', 'updatedAt = :a', 'createdAt = if_not_exists(createdAt, :c)', '#tn = if_not_exists(#tn, :t)'];
   const removes: string[] = [];
   if (readyBy) { sets.push('artistReadyBy = :r'); values[':r'] = { S: readyBy }; } else removes.push('artistReadyBy');
   if (note) { sets.push('artistNote = :n'); values[':n'] = { S: note }; } else removes.push('artistNote');
@@ -1013,6 +1028,51 @@ async function artistQuote(args: ApiEvent['arguments']) {
   );
   console.log(`Artist price INR ${price} saved for ${str(e, 'ref')}`);
   return { ok: true, ref: str(e, 'ref'), artistPriceInr: price, artistReadyBy: readyBy, artistNote: note };
+}
+
+/** Who made an Artist desk change: Siva (ARTISTS) or the studio (ADMINS), for the audit trail. */
+function actor(ev: ApiEvent): string {
+  const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+  const email = String(ev.identity?.claims?.email ?? ev.identity?.username ?? '');
+  if (groups.includes('ADMINS')) return `Kalai Art House${email ? ` (${email})` : ''}`;
+  return 'Siva';
+}
+
+/** Siva reports progress on an ordered work: STARTED → FINISHED → SHIPPED (to the frame shop). */
+const PROGRESS = ['STARTED', 'FINISHED', 'SHIPPED'];
+async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('ENQUIRY_TABLE is not configured');
+  const id = args.id ?? '';
+  const step = String(args.step ?? '').toUpperCase();
+  if (!PROGRESS.includes(step)) throw new Error('Unknown step');
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+  const e = got.Item as Img | undefined;
+  if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Order not found');
+  if (str(e, 'purchaseState') === 'CANCELLED') throw new Error('This order was cancelled by the customer.');
+  if (!str(e, 'zohoPOId')) throw new Error('Not ordered yet: wait until the customer has paid and the order is placed.');
+  const current = PROGRESS.indexOf(str(e, 'artistStage'));
+  const target = PROGRESS.indexOf(step);
+  if (target < current) throw new Error(`Already marked ${str(e, 'artistStage').toLowerCase()}.`);
+  const courier = String(args.courier ?? '').trim().slice(0, 60);
+  const awb = String(args.awb ?? '').trim().slice(0, 60);
+  if (step === 'SHIPPED' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
+  const now = new Date().toISOString();
+  const set: Record<string, string> = { artistStage: PROGRESS[Math.max(target, current)], artistBy: by, updatedAt: now };
+  // Earlier steps are filled in too if skipped (e.g. "Finished" without "Started").
+  if (!str(e, 'artistStartedAt')) set.artistStartedAt = now;
+  if (target >= 1 && !str(e, 'artistFinishedAt')) set.artistFinishedAt = now;
+  if (target >= 2) {
+    if (!str(e, 'artistShippedAt')) set.artistShippedAt = now;
+    set.artistCourier = courier;
+    set.artistAwb = awb;
+  }
+  const names: Record<string, string> = {};
+  const values: Record<string, AttributeValue> = {};
+  const parts = Object.entries(set).map(([k, v], i) => { names[`#p${i}`] = k; values[`:p${i}`] = { S: v }; return `#p${i} = :p${i}`; });
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+  console.log(`Artist progress ${set.artistStage} for ${str(e, 'ref')}`);
+  return { ok: true, ref: str(e, 'ref'), ...set };
 }
 
 async function artistPhoto(id: string) {
@@ -1308,10 +1368,11 @@ async function onStreamRecord(rec: StreamRecord) {
 export const handler = async (event: StreamEvent | ApiEvent) => {
   if ('arguments' in event) {
     const a = event.arguments ?? {};
-    const field = event.info?.fieldName ?? event.fieldName ?? (a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    const field = event.info?.fieldName ?? event.fieldName ?? (a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
     if (field === 'artistList') return JSON.stringify(await artistList());
-    if (field === 'artistQuote') return JSON.stringify(await artistQuote(event.arguments));
+    if (field === 'artistQuote') return JSON.stringify(await artistQuote(event.arguments, actor(event)));
     if (field === 'artistPhoto') return JSON.stringify(await artistPhoto(event.arguments.id ?? ''));
+    if (field === 'artistProgress') return JSON.stringify(await artistProgress(event.arguments, actor(event)));
     return JSON.stringify(await checkZoho(event.arguments.id ?? ''));
   }
 

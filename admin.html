@@ -70,7 +70,14 @@ td.mono{font-family:var(--mono);font-size:13px}
 @media (max-width:480px){.two{grid-template-columns:1fr}}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 [hidden]{display:none!important}
-.tabs{display:flex;gap:6px;margin:0 0 16px;border-bottom:1px solid var(--line)}
+.fb-list{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+.review{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:14px 16px;display:grid;gap:8px}
+#reviewBox .review{border:0;padding:0;background:none}
+.rv-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.rv-stars{color:var(--gold);font-size:20px;letter-spacing:2px}
+.rv-text{margin:0;font-size:15px;line-height:1.5}
+.review .links{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tabs{display:flex;overflow-x:auto;gap:6px;margin:0 0 16px;border-bottom:1px solid var(--line)}
 .tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:8px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
 .tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--gold)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 12px}
@@ -133,6 +140,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button type="button" role="tab" id="tabOrders" aria-selected="true">Orders</button>
       <button type="button" role="tab" id="tabReports" aria-selected="false">Reports</button>
+      <button type="button" role="tab" id="tabFeedback" aria-selected="false">Feedback</button>
       <button type="button" role="tab" id="ratesBtn" aria-selected="false">Rates</button>
     </nav>
     <div id="ordersPane">
@@ -171,6 +179,16 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
         <tbody id="rRows"></tbody>
         <tfoot id="rFoot"></tfoot>
       </table></div>
+    </div>
+
+    <div id="feedbackPane" hidden>
+      <div class="bar">
+        <h1 style="font-size:28px;margin-right:auto">Customer feedback</h1>
+        <select id="fbFilter" aria-label="Show"><option value="">All reviews</option><option value="WAITING">Waiting to publish</option><option value="PUBLISHED">On the website</option><option value="LOW">3 stars or less</option></select>
+      </div>
+      <div class="tiles" id="fbTiles"></div>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Customers rate an order once it is Delivered. Only reviews where the customer ticked “you may show my first name and review” can be published; published reviews appear in “What our customers say” on the website.</p>
+      <div id="fbList" class="fb-list"></div>
     </div>
   </section>
 </main>

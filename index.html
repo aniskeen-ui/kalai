@@ -124,6 +124,11 @@ textarea{min-height:80px;resize:vertical}
 .ok-msg{background:var(--gold-soft);border-radius:var(--r);padding:12px 14px;font-size:14px}
 
 /* faq */
+.rev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:14px}
+.rev{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;display:grid;gap:10px;margin:0}
+.rev .st{color:var(--gold);font-size:18px;letter-spacing:2px}
+.rev blockquote{margin:0;font-size:16px;line-height:1.55}
+.rev figcaption{font-size:13px;color:var(--muted)}
 .faq{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
 details{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px}
 summary{font-weight:600;cursor:pointer}
@@ -398,6 +403,11 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
   <div><div class="kind" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">Our artist</div>
   <h2 style="font-size:clamp(28px,3.4vw,38px);margin-top:6px">Siva Raja</h2>
   <p class="note" style="font-size:15px">Painter, sketch artist and story illustrator. Every watercolour and pencil sketch in this gallery, and every commission, is drawn by hand in his studio and shipped to you.</p></div>
+</div></section>
+
+<section id="reviews" hidden><div class="wrap">
+  <div class="sec-head"><div><h2>What our customers say</h2><p id="revAvg"></p></div></div>
+  <div class="rev-grid" id="revGrid"></div>
 </div></section>
 
 <section id="help"><div class="wrap">

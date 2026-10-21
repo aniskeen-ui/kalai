@@ -60,6 +60,14 @@ const schema = a.schema({
       zohoCreditNote: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoCreditNoteId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoRefundId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Siva's progress, reported on the Artist desk: STARTED → FINISHED → SHIPPED (to the frame shop).
+      artistStage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      artistStartedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      artistFinishedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      artistShippedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      artistCourier: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      artistAwb: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      artistBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
@@ -73,6 +81,7 @@ const schema = a.schema({
       artistReadyBy: a.string(),
       artistNote: a.string(),
       artistAt: a.string(),
+      artistBy: a.string(),
       sizeTier: a.string(),
       delivery: a.string(),
       framingOverride: a.float(),
@@ -85,6 +94,35 @@ const schema = a.schema({
     })
     .identifier(['enquiryId'])
     .authorization((allow) => [allow.group('ADMINS')]),
+
+  // Customer feedback: one per delivered order, written by the customer. Private: only the customer and ADMINS.
+  Review: a
+    .model({
+      enquiryId: a.id().required(),
+      ref: a.string(),
+      title: a.string(),
+      firstName: a.string(),
+      rating: a.integer().required(),
+      comment: a.string(),
+      consent: a.boolean(),
+      published: a.boolean().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      publishedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+    })
+    .identifier(['enquiryId'])
+    .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
+
+  // Reviews the studio chose to publish (customer consented): shown on the website to everyone.
+  PublicReview: a
+    .model({
+      enquiryId: a.id().required(),
+      firstName: a.string(),
+      rating: a.integer().required(),
+      comment: a.string(),
+      title: a.string(),
+      date: a.string(),
+    })
+    .identifier(['enquiryId'])
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
   // Master rates (framing and India courier per size tier, local courier, customs, fee, margin, VAT, FX).
   Rates: a
@@ -104,6 +142,12 @@ const schema = a.schema({
   artistQuote: a
     .mutation()
     .arguments({ id: a.id().required(), priceInr: a.float().required(), readyBy: a.string(), note: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+  artistProgress: a
+    .mutation()
+    .arguments({ id: a.id().required(), step: a.string().required(), courier: a.string(), awb: a.string() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
@@ -129,5 +173,7 @@ export const data = defineData({
   schema,
   authorizationModes: {
     defaultAuthorizationMode: 'userPool',
+    // Public, read-only key used only to show published reviews on the website (renew yearly by redeploying).
+    apiKeyAuthorizationMode: { expiresInDays: 365 },
   },
 });

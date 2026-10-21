@@ -83,17 +83,76 @@ function card(x) {
     <h2>${esc(x.title)}</h2>
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
+    ${progressBlock(x)}
     <form class="aform" data-id="${esc(x.id)}" novalidate>
       <div class="field"><label for="p-${esc(x.id)}">Your price (INR)</label><input id="p-${esc(x.id)}" type="number" min="1" step="1" inputmode="numeric" value="${x.artistPriceInr ?? ''}" ${dis} required></div>
       <div class="field"><label for="r-${esc(x.id)}">Ready to ship by</label><input id="r-${esc(x.id)}" type="date" value="${esc(x.artistReadyBy)}" ${dis}></div>
       <div class="field"><label for="n-${esc(x.id)}">Note (optional)</label><input id="n-${esc(x.id)}" value="${esc(x.artistNote)}" placeholder="e.g. needs 5 days" ${dis}></div>
       <div class="field wide"><button class="btn" type="submit" ${dis}>${x.artistPriceInr ? 'Update price' : 'Send price'}</button></div>
-      <div class="wide ok" id="m-${esc(x.id)}" role="status">${x.locked ? 'Price fixed: order placed.' : ''}</div>
+      <div class="wide ok" id="m-${esc(x.id)}" role="status">${x.locked ? 'Price fixed: order placed.' : ''}${x.priceBy && x.priceBy !== 'Siva' && x.artistPriceInr ? ' Price entered for you by Kalai Art House.' : ''}</div>
     </form>
   </article>`;
 }
 
+const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
+function progressBlock(x) {
+  if (!x.ordered) return '';
+  const p = x.progress || '';
+  const step = (key, label, at) => `<li class="${at ? 'done' : ''}"><span>${at ? '✓' : '○'}</span> ${label}${at ? ` <span class="muted">${esc(day(at))}</span>` : ''}</li>`;
+  const next = !p ? `<button type="button" class="btn" data-step="STARTED">I've started this work</button>`
+    : p === 'STARTED' ? `<button type="button" class="btn" data-step="FINISHED">It's finished</button>`
+    : '';
+  const ship = p === 'FINISHED' || p === 'SHIPPED' ? `<div class="aform">
+      <div class="field"><label for="sc-${esc(x.id)}">Courier to the frame shop</label><select id="sc-${esc(x.id)}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${x.artistCourier === c || (c === 'Other' && x.artistCourier && !COURIERS.includes(x.artistCourier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>
+        <input id="sco-${esc(x.id)}" placeholder="Courier name" value="${x.artistCourier && !COURIERS.includes(x.artistCourier) ? esc(x.artistCourier) : ''}" ${x.artistCourier && !COURIERS.includes(x.artistCourier) ? '' : 'hidden'} style="margin-top:6px"></div>
+      <div class="field"><label for="sa-${esc(x.id)}">AWB / tracking no.</label><input id="sa-${esc(x.id)}" value="${esc(x.artistAwb)}"></div>
+      <div class="field"><button type="button" class="btn" data-step="SHIPPED">${p === 'SHIPPED' ? 'Update shipping' : 'Sent to frame shop'}</button></div>
+    </div>` : '';
+  return `<div class="progress" id="pg-${esc(x.id)}">
+    <ol>${step('STARTED', 'Started', x.startedAt)}${step('FINISHED', 'Finished', x.finishedAt)}${step('SHIPPED', 'Sent to frame shop', x.shippedAt)}${x.artistAwb ? ` <li class="muted" style="list-style:none">${esc(x.artistCourier)} · AWB ${esc(x.artistAwb)}</li>` : ''}</ol>
+    ${x.progressBy && x.progressBy !== 'Siva' ? `<div class="muted" style="font-size:12px">Last update made for you by Kalai Art House.</div>` : ''}
+    ${next}${ship}
+    <div class="ok" id="pm-${esc(x.id)}" role="status"></div>
+  </div>`;
+}
+
+function wireProgress(x) {
+  const box = document.getElementById('pg-' + x.id);
+  if (!box) return;
+  const sel = document.getElementById('sc-' + x.id);
+  if (sel) sel.onchange = () => { document.getElementById('sco-' + x.id).hidden = sel.value !== 'Other'; };
+  box.querySelectorAll('[data-step]').forEach((b) => {
+    b.onclick = async () => {
+      const msg = document.getElementById('pm-' + x.id);
+      box.querySelectorAll('.err').forEach((e) => e.remove());
+      const step = b.dataset.step;
+      let courier = null, awb = null;
+      if (step === 'SHIPPED') {
+        courier = sel.value === 'Other' ? document.getElementById('sco-' + x.id).value.trim() : sel.value;
+        awb = document.getElementById('sa-' + x.id).value.trim();
+        if (!courier || !awb) { msg.insertAdjacentHTML('afterend', '<div class="err">Choose the courier and enter the AWB / tracking number.</div>'); return; }
+      }
+      b.disabled = true; msg.textContent = 'Saving…';
+      try {
+        const { data, errors } = await client.mutations.artistProgress({ id: x.id, step, courier, awb });
+        if (errors?.length) throw new Error(errors[0].message);
+        const r = parse(data) || {};
+        Object.assign(x, { progress: r.artistStage || step, startedAt: r.artistStartedAt || x.startedAt, finishedAt: r.artistFinishedAt || x.finishedAt, progressBy: r.artistBy || x.progressBy, shippedAt: r.artistShippedAt || x.shippedAt, artistCourier: r.artistCourier || x.artistCourier, artistAwb: r.artistAwb || x.artistAwb });
+        x.label = x.progress === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : x.progress === 'FINISHED' ? 'Finished · send it to the frame shop' : 'In progress';
+        render();
+        const m2 = document.getElementById('pm-' + x.id);
+        if (m2) m2.textContent = 'Saved. Kalai Art House can see it now.';
+      } catch (ex) {
+        msg.textContent = '';
+        msg.insertAdjacentHTML('afterend', `<div class="err">Could not save: ${esc(ex.message)}</div>`);
+        b.disabled = false;
+      }
+    };
+  });
+}
+
 function wire(x) {
+  wireProgress(x);
   const form = document.querySelector(`form[data-id="${CSS.escape(x.id)}"]`);
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();

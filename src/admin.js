@@ -83,6 +83,16 @@ async function loadCostings() {
 
 let all = [];
 let selectedId = null;
+const reviews = new Map(); // enquiryId -> Review
+async function loadReviews() {
+  reviews.clear();
+  let nextToken = null;
+  do {
+    const res = await client.models.Review.list({ limit: 500, nextToken });
+    (res.data || []).forEach((r) => reviews.set(r.enquiryId, r));
+    nextToken = res.nextToken;
+  } while (nextToken);
+}
 
 Object.entries(STATUS).forEach(([k, v]) => $('fStatus').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`));
 
@@ -104,6 +114,7 @@ async function start() {
   if (!groups.includes('ADMINS')) { show('denyView'); return; }
   show('deskView');
   if (location.hash === '#reports') showPane('reports', 'tabReports');
+  if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
   await loadRates();
   await load();
 }
@@ -124,15 +135,97 @@ $('reload').onclick = load;
 $('ratesBtn').onclick = () => { showPane('orders', 'ratesBtn'); selectedId = null; render(); showRates(); };
 $('tabOrders').onclick = () => showPane('orders', 'tabOrders');
 $('tabReports').onclick = () => showPane('reports', 'tabReports');
+$('tabFeedback').onclick = () => showPane('feedback', 'tabFeedback');
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {
   $('ordersPane').hidden = pane !== 'orders';
   $('reportsPane').hidden = pane !== 'reports';
-  ['tabOrders', 'tabReports', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', pane === 'reports' ? '#reports' : location.pathname); } catch { /* ignore */ }
+  $('feedbackPane').hidden = pane !== 'feedback';
+  ['tabOrders', 'tabReports', 'tabFeedback', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', pane === 'reports' || pane === 'feedback' ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
+  if (pane === 'feedback') renderFeedback();
 }
+
+// ---------- Feedback: customer reviews, publish to the website ----------
+const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+function avgRating(list) {
+  return list.length ? list.reduce((a, r) => a + (r.rating || 0), 0) / list.length : null;
+}
+// A review must belong to a delivered order of the same customer before it can go on the website.
+function isGenuine(r) {
+  const e = all.find((x) => x.id === r.enquiryId);
+  return !!e && ['DELIVERED', 'REPLACEMENT'].includes(e.status) && (!e.owner || !r.owner || e.owner === r.owner);
+}
+function reviewCard(r, withOrder = true) {
+  const e = all.find((x) => x.id === r.enquiryId);
+  const genuine = isGenuine(r);
+  const canPublish = !!r.consent && genuine;
+  return `<article class="review" data-id="${esc(r.enquiryId)}">
+    <div class="rv-top"><span class="rv-stars" aria-label="${r.rating} out of 5">${stars(r.rating)}</span>
+      ${r.published ? '<span class="pill DELIVERED">On website</span>' : !genuine ? '<span class="pill CANCELLED">Doesn’t match a delivered order</span>' : canPublish ? '<span class="pill">Not published</span>' : '<span class="pill CANCELLED">Private (no consent)</span>'}</div>
+    ${r.comment ? `<p class="rv-text">“${esc(r.comment)}”</p>` : '<p class="muted rv-text">No comment, rating only.</p>'}
+    <div class="muted" style="font-size:12px">${esc(r.firstName || e?.customerName || '')} · ${esc(r.ref || e?.ref || '')} · ${esc(r.title || e?.title || '')} · ${esc(when(r.createdAt))}</div>
+    <div class="links">
+      ${r.published || canPublish ? (r.published ? '<button class="btn ghost" type="button" data-act="hide">Hide from website</button>' : '<button class="btn" type="button" data-act="publish">Publish on website</button>') : ''}
+      ${withOrder && e ? '<button class="btn ghost" type="button" data-act="open">Open order</button>' : ''}
+    </div>
+    <div class="ok" role="status"></div>
+  </article>`;
+}
+function wireReviews(root) {
+  root.querySelectorAll('.review').forEach((box) => {
+    const r = reviews.get(box.dataset.id);
+    box.querySelectorAll('[data-act]').forEach((b) => {
+      b.onclick = async () => {
+        const msg = box.querySelector('[role=status]');
+        if (b.dataset.act === 'open') { const e = all.find((x) => x.id === r.enquiryId); showPane('orders', 'tabOrders'); selectedId = e.id; render(); showDetail(e); return; }
+        b.disabled = true; msg.className = 'ok'; msg.textContent = 'Saving…';
+        try {
+          await setPublished(r, b.dataset.act === 'publish');
+          msg.textContent = b.dataset.act === 'publish' ? 'Published: it now shows on the website.' : 'Hidden from the website.';
+          setTimeout(() => { renderFeedback(); if (selectedId === r.enquiryId) { const e = all.find((x) => x.id === selectedId); if (e) showDetail(e); } }, 900);
+        } catch (ex) { msg.className = 'err'; msg.textContent = ex.message || 'Could not save.'; b.disabled = false; }
+      };
+    });
+  });
+}
+async function setPublished(r, on) {
+  if (on) {
+    if (!r.consent) throw new Error('The customer did not agree to show this review.');
+    const row = { enquiryId: r.enquiryId, firstName: r.firstName || '', rating: r.rating, comment: r.comment || '', title: r.title || '', date: String(r.createdAt || new Date().toISOString()).slice(0, 10) };
+    const ex = await client.models.PublicReview.get({ enquiryId: r.enquiryId });
+    const res = ex.data ? await client.models.PublicReview.update(row) : await client.models.PublicReview.create(row);
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+  } else {
+    const res = await client.models.PublicReview.delete({ enquiryId: r.enquiryId });
+    if (res.errors?.length && !/not found|ConditionalCheck/i.test(res.errors[0].message)) throw new Error(res.errors[0].message);
+  }
+  const up = await client.models.Review.update({ enquiryId: r.enquiryId, published: on, publishedAt: on ? new Date().toISOString() : null });
+  if (up.errors?.length) throw new Error(up.errors[0].message);
+  reviews.set(r.enquiryId, { ...r, ...up.data, published: on });
+}
+function renderFeedback() {
+  const f = $('fbFilter').value;
+  const list = [...reviews.values()].filter(isGenuine).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const shown = list.filter((r) => !f || (f === 'PUBLISHED' ? r.published : f === 'WAITING' ? r.consent && !r.published : f === 'LOW' ? r.rating <= 3 : true));
+  const avg = avgRating(list);
+  const delivered = all.filter((e) => e.status === 'DELIVERED').length;
+  const tile = (k, v, cls = '') => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
+  $('fbTiles').innerHTML = [
+    tile('Reviews', list.length),
+    tile('Average', avg == null ? '–' : `${avg.toFixed(1)} ★`, avg != null && avg < 4 ? 'neg' : ''),
+    tile('On website', list.filter((r) => r.published).length),
+    tile('Waiting to publish', list.filter((r) => r.consent && !r.published).length),
+    tile('3 stars or less', list.filter((r) => r.rating <= 3).length, list.some((r) => r.rating <= 3) ? 'neg' : ''),
+    tile('Delivered, not rated', Math.max(0, all.filter((e) => e.status === 'DELIVERED' && !reviews.has(e.id)).length)),
+  ].join('');
+  $('fbList').innerHTML = shown.length ? shown.map((r) => reviewCard(r)).join('')
+    : `<p class="muted">${list.length ? 'No reviews match this filter.' : `No reviews yet. Customers can rate an order once it is marked Delivered (${delivered} delivered so far).`}</p>`;
+  wireReviews($('fbList'));
+}
+$('fbFilter').addEventListener('change', renderFeedback);
 
 // ---------- Reports: sales, cost and margin per order ----------
 const SOLD = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT', 'REFUNDED'];
@@ -199,6 +292,7 @@ function renderReport() {
     tile('Total cost', money(T.cost)),
     tile('Margin', money(T.margin), T.margin < 0 ? 'neg' : ''),
     tile('Margin %', pct == null ? '–' : (pct * 100).toFixed(1) + '%', pct != null && pct < 0.1 ? 'neg' : ''),
+    (() => { const rv = lines.map((l) => reviews.get(l.e.id)).filter(Boolean); const a = avgRating(rv); return tile('Customer rating', a == null ? '–' : `${a.toFixed(1)} ★ (${rv.length})`, a != null && a < 4 ? 'neg' : ''); })(),
   ].join('') + (lines.length - costed.length ? `<div class="tile"><div class="k">Without costing</div><div class="v neg">${lines.length - costed.length}</div></div>` : '');
   const td = (v, cls = '') => `<td class="num ${cls}">${money(v)}</td>`;
   $('rRows').innerHTML = lines.length ? lines.map((l) => {
@@ -247,8 +341,10 @@ async function load() {
     } while (nextToken);
     all = items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     await loadCostings().catch(() => {});
+    await loadReviews().catch(() => {});
     render();
     if (!$('reportsPane').hidden) renderReport();
+    if (!$('feedbackPane').hidden) renderFeedback();
     if (selectedId) { const e = all.find((x) => x.id === selectedId); if (e) showDetail(e); }
   } catch (ex) {
     $('rows').innerHTML = `<tr><td colspan="7" class="err">Could not load enquiries: ${esc(ex.message)}</td></tr>`;
@@ -292,7 +388,7 @@ function costingSection(e) {
   const dis = lockedPO ? 'disabled' : '';
   const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${c.sizeTier === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
   const fromSiva = c.artistAt
-    ? `From Siva ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
+    ? `${c.artistBy && c.artistBy !== 'Siva' ? 'Entered on Siva’s behalf (Artist desk)' : 'From Siva'} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
     : 'Siva hasn\'t priced this yet (Artist desk). You can also type his price here.';
   return `<fieldset class="cost" id="costing">
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
@@ -314,6 +410,13 @@ function costingSection(e) {
   </fieldset>`;
 }
 
+const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '');
+function sivaProgress(e) {
+  if (!e.artistStage) return e.zohoPOId ? "Siva hasn't marked this as started yet." : '';
+  return [`Started ${day(e.artistStartedAt)}`, e.artistFinishedAt ? `Finished ${day(e.artistFinishedAt)}` : '', e.artistShippedAt ? `Sent to frame shop ${day(e.artistShippedAt)}${e.artistAwb ? ` (${e.artistCourier} · AWB ${e.artistAwb})` : ''}` : '',
+    e.artistBy ? `last update by ${e.artistBy === 'Siva' ? 'Siva' : 'you, on his behalf'}` : ''].filter(Boolean).join(' · ');
+}
+
 function purchaseSection(e) {
   if (!hasArtist(e) || !(isLocked(e) || e.zohoState === 'TEST')) return '';
   const st = e.purchaseState || '';
@@ -321,6 +424,7 @@ function purchaseSection(e) {
   return `<fieldset class="cost" id="purchase">
     <legend>Siva Raja (purchase)</legend>
     <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || 'Siva\'s order is recorded once the customer has paid and the costing has his price.')}</div>
+    ${sivaProgress(e) ? `<div style="font-size:13px"><b>Siva's progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
     <div class="two">
       <div class="field"><label for="pInv">Siva's invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From his invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
       <div class="field"><label for="pPaid">Paid to Siva: bank ref</label><input id="pPaid" value="${esc(e.artistPaidRef)}" placeholder="Transfer reference" ${!e.zohoPOId || e.zohoVendorPaymentId ? 'disabled' : ''}></div>
@@ -369,10 +473,12 @@ function afterSection(e) {
   return `<fieldset class="cost" id="afterBox">
     <legend>Cancellation, damage or refund</legend>
     ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.refundMessage)}</div>` : ''}
+    ${!done && e.zohoPOId ? `<div style="font-size:13px"><b>Siva:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
     <div class="field"><label for="aAction">What happened?</label><select id="aAction" ${dis}>
       <option value="">Nothing: order is fine</option>
       ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${e.refundAction === k ? 'selected' : ''}>${v.label}</option>`).join('')}
     </select></div>
+    <div class="err" id="aWarn" hidden></div>
     <div id="aMoney" class="two" ${e.refundAction && e.refundAction !== 'DAMAGED_REPLACE' ? '' : 'hidden'}>
       <div class="field"><label for="aAmount">Refund amount (AED)</label><input id="aAmount" type="number" min="0" step="0.01" value="${e.refundAmount ?? ''}" ${dis}></div>
       <div class="field"><label for="aMethod">Refund via</label><select id="aMethod" ${dis}>${[['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${(e.refundMethod || e.paymentMethod || 'ZIINA') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
@@ -562,6 +668,7 @@ async function showDetail(e) {
     </dl>
     <div class="links" id="fileLinks">${e.fileKey ? '<span class="muted">Loading upload…</span>' : '<span class="muted">No upload attached.</span>'}</div>
     ${zohoPanel(e)}
+    ${reviews.has(e.id) ? `<fieldset class="cost" id="reviewBox"><legend>Customer review</legend>${reviewCard(reviews.get(e.id), false)}</fieldset>` : e.status === 'DELIVERED' ? '<div class="muted" style="font-size:13px">Delivered: the customer can now rate this order under My enquiries.</div>' : ''}
     <form id="editForm" novalidate style="display:grid;gap:12px">
       <div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
         <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
@@ -599,6 +706,7 @@ async function showDetail(e) {
     $('waLinks').innerHTML = `<a href="https://wa.me/${digits}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Send update on WhatsApp</a>`;
   };
   waLink();
+  if ($('reviewBox')) wireReviews($('reviewBox'));
   ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
   $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); });
   // Courier dropdown (works on phones); "Other…" opens a text box. The text box always holds the value saved.
@@ -617,6 +725,10 @@ async function showDetail(e) {
       $('aNoteBox').hidden = !a;
       if ($('aConfirmBox')) $('aConfirmBox').style.display = a ? 'flex' : 'none';
       if (a && a.pct > 0 && !e.refundState) $('aAmount').value = Math.round(Number(e.quotedPrice || 0) * a.pct * 100) / 100;
+      const v = $('aAction').value;
+      const warn = v === 'CANCEL_FULL' && e.artistStartedAt ? `Siva marked this as started on ${day(e.artistStartedAt)}: policy is the 50% refund. Continue only if you agreed otherwise.`
+        : v === 'CANCEL_HALF' && e.zohoPOId && !e.artistStartedAt ? "Siva hasn't marked this as started: policy is a full refund. Continue only if he told you he started." : '';
+      $('aWarn').textContent = warn; $('aWarn').hidden = !warn;
     });
   }
   if ($('costOut')) {
