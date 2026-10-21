@@ -1,4 +1,5 @@
-// Customer accounts: sign up / sign in, save enquiries, "My enquiries" panel.
+// Customer accounts: sign up / sign in, save enquiries, "My enquiries & orders" panel
+// (tabs: Orders · Enquiries · Cancellations & refunds).
 import './amplify-config.js';
 import {
   signUp, confirmSignUp, resendSignUpCode, signIn, signOut, autoSignIn,
@@ -69,6 +70,13 @@ const css = `
 .req .row{display:flex;gap:8px;flex-wrap:wrap}
 .req .row .btn{flex:1}
 .enq-msg.warn{border-left-color:var(--kumkum)}
+.acct-sm{display:none}
+@media (max-width:640px){.acct-lg{display:none}.acct-sm{display:inline}}
+.acct-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.acct-tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:8px 10px;font:inherit;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
+.acct-tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--gold)}
+.acct-tabs b{font-family:var(--mono);font-weight:400;font-size:12px;margin-left:4px}
+.rate-open{justify-self:start}
 `;
 document.head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
 
@@ -89,7 +97,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const btn = document.getElementById('acctBtn');
-function setButton() { if (btn) btn.textContent = state.user ? 'My enquiries' : 'Sign in'; }
+function setButton() { if (btn) btn.innerHTML = state.user ? '<span class="acct-lg">My enquiries &amp; orders</span><span class="acct-sm">My orders</span>' : 'Sign in'; }
 if (btn) btn.onclick = () => { state.user ? showList() : showSignIn(); open(); };
 
 function form(html, onSubmit) {
@@ -230,7 +238,8 @@ function rateBlock(e) {
   if (e.status !== 'DELIVERED') return '';
   const r = myReviews.get(e.id);
   if (r) return `<div class="rated">You rated this <span aria-label="${r.rating} out of 5">${starText(r.rating)}</span>. Thank you for your feedback.${r.published ? ' It is now on our website.' : ''}</div>`;
-  return `<form class="rate" data-id="${esc(e.id)}" novalidate>
+  return `<button type="button" class="btn rate-open" data-rate="${esc(e.id)}">★ Rate your ${e.kind === 'GIFT' ? 'framed gift' : 'artwork'}</button>
+  <form class="rate" data-id="${esc(e.id)}" novalidate hidden>
     <b>How did we do? Rate your ${e.kind === 'GIFT' ? 'framed gift' : 'artwork'}</b>
     <div class="stars" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="false" aria-label="${n} star${n > 1 ? 's' : ''}" data-n="${n}">★</button>`).join('')}</div>
     <textarea name="comment" maxlength="600" placeholder="Tell us about the painting, the packing and delivery (optional)"></textarea>
@@ -240,6 +249,7 @@ function rateBlock(e) {
   </form>`;
 }
 function wireRate(root, items) {
+  root.querySelectorAll('[data-rate]').forEach((b) => { b.onclick = () => { b.hidden = true; b.nextElementSibling.hidden = false; }; });
   root.querySelectorAll('form.rate').forEach((f) => {
     const e = items.find((x) => x.id === f.dataset.id);
     let rating = 0;
@@ -370,6 +380,7 @@ function wireRequests(root, items) {
           if (errors?.length) throw new Error(errors[0].message);
           const r = typeof data === 'string' ? JSON.parse(data) : data;
           Object.assign(e, { cancelRequest: action, cancelState: r.state, cancelRequestedAt: r.at, cancelRefundDue: r.due, status: r.status || e.status });
+          currentTab = 'CANCEL';
           showList();
         } catch (ex) {
           err.textContent = ex.message || 'Could not send your request.';
@@ -403,9 +414,24 @@ function card(e) {
   </article>`;
 }
 
+const ORDER_ST = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+const TABS = [
+  ['ORDERS', 'Orders', (e) => ORDER_ST.includes(e.status) && e.cancelState !== 'REQUESTED'],
+  ['ENQ', 'Enquiries', (e) => ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED')],
+  ['CANCEL', 'Cancellations & refunds', (e) => ['CANCELLED', 'REFUNDED'].includes(e.status) || e.cancelState === 'REQUESTED' || e.cancelState === 'DECLINED'],
+];
+let currentTab = null;
+const POLICY_NOTE = `<p class="acct-info" style="margin:0;font-size:13px">To cancel, open the order under <b>Orders</b> or <b>Enquiries</b> and tap “Cancel this order”: you see the refund before you confirm. Before payment it's free; after payment you get a full refund until the artist starts, then 50%. Shipped orders can't be cancelled; damage can be reported with photos within 48 hours of delivery. <a href="#terms" class="acct-terms" style="color:var(--kumkum)">Full terms</a></p>`;
+
 async function showList() {
-  title.textContent = 'My enquiries';
-  body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b></p><div id="enqList" class="acct-info">Loading your enquiries…</div>
+  title.textContent = 'My enquiries & orders';
+  if (!state.email) {
+    try { state.email = (await fetchUserAttributes()).email || ''; } catch { /* keep going */ }
+    if (!state.email) state.email = state.user?.signInDetails?.loginId || '';
+  }
+  body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b></p>
+    <nav class="acct-tabs" role="tablist" id="acctTabs"></nav>
+    <div id="enqList" class="acct-info">Loading…</div>
     <button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;
   body.querySelector('#signOut').onclick = async () => { await signOut(); state.user = null; setButton(); showSignIn('You are signed out.'); };
   body.querySelector('#refresh').onclick = showList;
@@ -429,12 +455,27 @@ async function showList() {
     }
     list.className = '';
     list.style.cssText = 'display:grid;gap:12px';
-    list.innerHTML = items.length ? items.map(card).join('')
-      : `<p class="acct-info">No enquiries yet. Tap "Ask for price" on a painting, request a commission, or send a Little Artists gift, and it will appear here.</p>`;
-    wireRate(list, items);
-    wireRequests(list, items);
+    if (!items.length) {
+      body.querySelector('#acctTabs').hidden = true;
+      list.innerHTML = `<p class="acct-info">Nothing here yet. Tap "Ask for price" on a painting, request a commission, or send a Little Artists gift, and it will appear here.</p>`;
+      return;
+    }
+    const groups = Object.fromEntries(TABS.map(([k, , f]) => [k, items.filter(f)]));
+    if (!currentTab || !groups[currentTab]) currentTab = groups.ORDERS.length ? 'ORDERS' : groups.ENQ.length ? 'ENQ' : 'CANCEL';
+    const nav = body.querySelector('#acctTabs');
+    const draw = () => {
+      nav.innerHTML = TABS.map(([k, label]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === currentTab}">${label}<b>${groups[k].length}</b></button>`).join('');
+      nav.querySelectorAll('[data-tab]').forEach((b) => { b.onclick = () => { currentTab = b.dataset.tab; draw(); }; });
+      const shown = groups[currentTab];
+      list.innerHTML = (currentTab === 'CANCEL' ? POLICY_NOTE : '') + (shown.length ? shown.map(card).join('')
+        : `<p class="acct-info">${currentTab === 'ORDERS' ? 'No orders yet. Once you pay for an enquiry it moves here.' : currentTab === 'ENQ' ? 'No open enquiries.' : 'No cancellations or refunds.'}</p>`);
+      list.querySelectorAll('.acct-terms').forEach((a) => { a.onclick = () => close(); });
+      wireRate(list, items);
+      wireRequests(list, items);
+    };
+    draw();
   } catch (ex) {
-    list.textContent = 'We could not load your enquiries. ' + friendly(ex);
+    list.textContent = 'We could not load your enquiries and orders. ' + friendly(ex);
   }
 }
 

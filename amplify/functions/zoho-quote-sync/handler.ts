@@ -1373,7 +1373,7 @@ async function onStreamRecord(rec: StreamRecord) {
   }
 }
 
-// ---------- Customer requests (My enquiries): cancel, or report damage on delivery ----------
+// ---------- Customer requests (My enquiries & orders): cancel, or report damage on delivery ----------
 // Policy (Terms clause 9): before payment → cancelled at once, nothing to pay. After payment and before
 // the work starts → full refund; once the artist (or, for Little Artists, the framer) has started → 50%.
 // Shipped → can't be cancelled. Delivered → damage reported with photos within 48 hours: refund or replacement.
@@ -1499,7 +1499,7 @@ async function sendMail(m: Mail) {
   console.log(`Email sent: "${m.subject}"`);
 }
 
-const MY = { label: 'Open My enquiries', url: `${SITE}/#my-enquiries` };
+const MY = { label: 'Open My enquiries & orders', url: `${SITE}/#my-enquiries` };
 const DESK = (id: string) => ({ label: 'Open in Order Management', url: `${SITE}/admin.html#order=${id}` });
 
 /** Which emails a change to an enquiry should send (customer + studio). Pure: easy to test. */
@@ -1526,7 +1526,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
       kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
         : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
-      `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries on our website.`]);
+      `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries & orders on our website.`]);
     studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`]);
     return out;
   }
@@ -1554,12 +1554,12 @@ function mailsFor(rec: StreamRecord): Mail[] {
     if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
       kind === 'GIFT' ? "We'll email you when it is framed and on its way." : "We'll email you when the artist starts, when it is being framed and when it ships.",
-      'Changed your mind? You can request a cancellation under My enquiries: before the work starts you get a full refund.']);
+      'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
     if (st === 'FRAMING') cust(`Being framed: ${title}`, [`Good news: <b>${h(title)}</b> is now at our framing studio in Dubai.`, msgLine, "We'll email you the courier and tracking number when it ships."]);
-    if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries within 48 hours.']);
+    if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries & orders within 48 hours.']);
     if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
-      'If anything arrived damaged, report it with photos under My enquiries within 48 hours and choose a replacement or a refund.',
-      'We would be grateful for your feedback: you can rate your order under My enquiries.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
+      'If anything arrived damaged, report it with photos under My enquiries & orders within 48 hours and choose a replacement or a refund.',
+      'We would be grateful for your feedback: you can rate your order under My enquiries & orders.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
     if (st === 'REPLACEMENT') cust(`Your replacement is being prepared (${ref})`, [`We're sorry <b>${h(title)}</b> arrived damaged. Your replacement is being prepared at no cost, and we'll email you the tracking number when it ships.`, msgLine]);
     if (st === 'CANCELLED') {
       const self = str(img, 'cancelRequest') === 'CANCEL';

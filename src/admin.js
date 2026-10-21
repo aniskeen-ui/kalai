@@ -460,7 +460,7 @@ function shippingSection(e) {
       </div>
       <div class="field"><label for="eAwb">AWB / tracking no.</label><input id="eAwb" value="${esc(e.trackingNo)}" placeholder="e.g. 4489 2201 7731"></div>
     </div>
-    <div class="muted" style="font-size:12px">Saving as <b>Shipped</b> creates the delivery challan in Zoho; <b>Delivered</b> marks it delivered. The customer sees the courier and tracking number under My enquiries.</div>
+    <div class="muted" style="font-size:12px">Saving as <b>Shipped</b> creates the delivery challan in Zoho; <b>Delivered</b> marks it delivered. The customer sees the courier and tracking number under My enquiries & orders.</div>
   </fieldset>`;
 }
 
@@ -472,7 +472,7 @@ const AFTER = {
   DAMAGED_REPLACE: { label: 'Damaged in transit, customer wants a replacement / repair', pct: 0, status: 'REPLACEMENT' },
 };
 const AFTER_DONE = ['DONE', 'TEST', 'REPLACEMENT'];
-// The customer's own request (My enquiries) → the matching box option, pre-filled.
+// The customer's own request (My enquiries & orders) → the matching box option, pre-filled.
 const isReq = (e) => e.cancelState === 'REQUESTED';
 function reqAction(e) {
   if (!isReq(e)) return '';
@@ -708,7 +708,7 @@ async function showDetail(e) {
     </dl>
     <div class="links" id="fileLinks">${e.fileKey ? '<span class="muted">Loading upload…</span>' : '<span class="muted">No upload attached.</span>'}</div>
     ${zohoPanel(e)}
-    ${reviews.has(e.id) ? `<fieldset class="cost" id="reviewBox"><legend>Customer review</legend>${reviewCard(reviews.get(e.id), false)}</fieldset>` : e.status === 'DELIVERED' ? '<div class="muted" style="font-size:13px">Delivered: the customer can now rate this order under My enquiries.</div>' : ''}
+    ${reviews.has(e.id) ? `<fieldset class="cost" id="reviewBox"><legend>Customer review</legend>${reviewCard(reviews.get(e.id), false)}</fieldset>` : e.status === 'DELIVERED' ? '<div class="muted" style="font-size:13px">Delivered: the customer can now rate this order under My enquiries & orders.</div>' : ''}
     <form id="editForm" novalidate style="display:grid;gap:12px">
       <div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
         <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
@@ -742,7 +742,7 @@ async function showDetail(e) {
       price ? `Price: AED ${price}` : '', msg, link ? `Pay securely here: ${link}` : '',
       SHIP_STATUSES.includes($('eStatus').value) && $('eCourier').value.trim()
         ? `${$('eStatus').value === 'DELIVERED' ? 'Delivered' : 'Shipped'} with ${$('eCourier').value.trim()}${$('eAwb').value.trim() ? `, tracking no. ${$('eAwb').value.trim()}` : ''}` : '',
-      'You can also track it under My enquiries on art.pranixtechno.com'].filter(Boolean).join('\n');
+      'You can also track it under My enquiries & orders on art.pranixtechno.com'].filter(Boolean).join('\n');
     $('waLinks').innerHTML = `<a href="https://wa.me/${digits}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Send update on WhatsApp</a>`;
   };
   waLink();
@@ -886,7 +886,7 @@ async function showDetail(e) {
       });
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(e, data || {});
-      $('saveMsg').textContent = $('eStatus').value === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries and is emailed when the status or message changes.';
+      $('saveMsg').textContent = $('eStatus').value === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries & orders and is emailed when the status or message changes.';
       render();
       // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
       void toZoho;
