@@ -457,6 +457,8 @@ function statusBlock(e, k, s) {
 }
 
 function sivaProgress(e) {
+  const stopped = String(e.refundAction || '').startsWith('CANCEL') && ['REFUNDED', 'CANCELLED'].includes(e.status) && e.purchaseState !== 'CANCELLED' && e.zohoPOId;
+  if (stopped) return `Stopped: customer cancelled after he started${e.artistStartedAt ? ` (${day(e.artistStartedAt)})` : ''}. Pay him for the work done as agreed (his invoice no. → bill).`;
   if (!e.artistStage) return e.zohoPOId ? "Siva hasn't marked this as started yet." : '';
   return [`Started ${day(e.artistStartedAt)}`, e.artistFinishedAt ? `Finished ${day(e.artistFinishedAt)}` : '', e.artistShippedAt ? `Sent to frame shop ${day(e.artistShippedAt)}${e.artistAwb ? ` (${e.artistCourier} · AWB ${e.artistAwb})` : ''}` : '',
     e.artistBy ? `last update by ${e.artistBy === 'Siva' ? 'Siva' : 'you, on his behalf'}` : ''].filter(Boolean).join(' · ');

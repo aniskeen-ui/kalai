@@ -1025,10 +1025,14 @@ async function costingFor(ids: string[]) {
   return out;
 }
 
+/** Customer cancelled after Siva started (50% refund): his order stops, he is still paid for the work done. */
+const sivaStopped = (e: Img) => str(e, 'refundAction').startsWith('CANCEL') && ['REFUNDED', 'CANCELLED'].includes(str(e, 'status')) && str(e, 'purchaseState') !== 'CANCELLED' && !!str(e, 'zohoPOId');
+
 function artistStage(e: Img, c: Img | undefined) {
   if (str(e, 'purchaseState') === 'CANCELLED') return { stage: 'CLOSED', label: 'Order cancelled by the customer' };
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
+  if (sivaStopped(e)) return { stage: 'ORDERED', label: 'Customer cancelled · please stop · send your invoice for the work done' };
   const rw = str(e, 'reworkType').startsWith('SIVA') ? str(e, 'reworkStage') : null;
   if (rw !== null && rw !== 'READY' && str(e, 'reworkType') === 'SIVA_REPAIR' && !str(e, 'sivaReceivedAt')) {
     return { stage: 'ORDERED', label: str(e, 'toSivaSentAt') ? 'Damaged piece on its way to you · tap Received when it arrives' : 'Repair needed · the damaged piece will be sent to you' };
@@ -1074,6 +1078,7 @@ async function artistList() {
         artistNote: str(c, 'artistNote'),
         locked: !!str(e, 'zohoPOId'),
         ordered: !!str(e, 'zohoPOId') && str(e, 'purchaseState') !== 'CANCELLED',
+        stopped: sivaStopped(e),
         progress: str(e, 'artistStage'),
         startedAt: str(e, 'artistStartedAt'),
         finishedAt: str(e, 'artistFinishedAt'),
@@ -1148,6 +1153,7 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const e = got.Item as Img | undefined;
   if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Order not found');
   if (str(e, 'purchaseState') === 'CANCELLED') throw new Error('This order was cancelled by the customer.');
+  if (sivaStopped(e)) throw new Error('The customer cancelled this order: please stop. Send your invoice for the work done.');
   if (str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL') throw new Error('On hold: the customer asked to cancel. Please wait for Kalai Art House before continuing.');
   if (!str(e, 'zohoPOId')) throw new Error('Not ordered yet: wait until the customer has paid and the order is placed.');
   const current = PROGRESS.indexOf(str(e, 'artistStage'));

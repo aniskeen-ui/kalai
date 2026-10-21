@@ -103,6 +103,10 @@ function progressBlock(x) {
   if (!x.ordered) return '';
   // During a rework the original steps are done: the Rework card above has the buttons.
   if (x.rework) return '';
+  if (x.stopped) {
+    const done = [x.startedAt && `started ${esc(day(x.startedAt))}`, x.finishedAt && `finished ${esc(day(x.finishedAt))}`, x.shippedAt && `sent ${esc(day(x.shippedAt))}`].filter(Boolean).join(', ');
+    return `<div class="progress"><div class="err" style="font-size:13px">The customer cancelled this order${done ? ` (you had ${done})` : ''}. Please stop work. Send your invoice for the work done; Kalai Art House will confirm the amount with you.</div></div>`;
+  }
   if (x.onHold) return `<div class="progress"><div class="err" style="font-size:14px">On hold: the customer has asked to cancel. Please don't continue with this work until Kalai Art House confirms.</div></div>`;
   const p = x.progress || '';
   const step = (key, label, at) => `<li class="${at ? 'done' : ''}"><span>${at ? '✓' : '○'}</span> ${label}${at ? ` <span class="muted">${esc(day(at))}</span>` : ''}</li>`;
