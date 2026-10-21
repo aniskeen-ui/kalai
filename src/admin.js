@@ -218,7 +218,7 @@ function purchaseSection(e) {
   </fieldset>`;
 }
 
-const COURIERS = ['Aramex', 'DHL', 'Emirates Post', 'Quiqup', 'SMSA', 'Own delivery'];
+const COURIERS = ['Aramex', 'DHL', 'Jeebly', 'Quiqup', 'Emirates Post', 'SMSA', 'Own delivery'];
 const SHIP_STATUSES = ['SHIPPED', 'DELIVERED'];
 function shippingSection(e) {
   const st = e.deliveryState || '';
@@ -227,8 +227,14 @@ function shippingSection(e) {
     <legend>Delivery</legend>
     ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.deliveryMessage)}</div>` : ''}
     <div class="two">
-      <div class="field"><label for="eCourier">Courier</label><input id="eCourier" list="courierList" value="${esc(e.courierName)}" placeholder="Aramex, DHL…">
-        <datalist id="courierList">${COURIERS.map((c) => `<option value="${c}">`).join('')}</datalist></div>
+      <div class="field"><label for="eCourierSel">Courier</label>
+        <select id="eCourierSel">
+          <option value="">Choose…</option>
+          ${COURIERS.map((c) => `<option value="${c}" ${e.courierName === c ? 'selected' : ''}>${c}</option>`).join('')}
+          <option value="__other" ${e.courierName && !COURIERS.includes(e.courierName) ? 'selected' : ''}>Other…</option>
+        </select>
+        <input id="eCourier" value="${esc(e.courierName)}" placeholder="Courier name" ${e.courierName && !COURIERS.includes(e.courierName) ? '' : 'hidden'} style="margin-top:6px">
+      </div>
       <div class="field"><label for="eAwb">AWB / tracking no.</label><input id="eAwb" value="${esc(e.trackingNo)}" placeholder="e.g. 4489 2201 7731"></div>
     </div>
     <div class="muted" style="font-size:12px">Saving as <b>Shipped</b> creates the delivery challan in Zoho; <b>Delivered</b> marks it delivered. The customer sees the courier and tracking number under My enquiries.</div>
@@ -451,6 +457,15 @@ async function showDetail(e) {
   waLink();
   ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
   $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); });
+  // Courier dropdown (works on phones); "Other…" opens a text box. The text box always holds the value saved.
+  $('eCourierSel').addEventListener('change', () => {
+    const v = $('eCourierSel').value;
+    const other = v === '__other';
+    $('eCourier').hidden = !other;
+    $('eCourier').value = other ? (COURIERS.includes($('eCourier').value) ? '' : $('eCourier').value) : v;
+    if (other) $('eCourier').focus();
+    waLink();
+  });
   if ($('costOut')) {
     renderCost();
     ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice'].forEach((id) => { $(id).addEventListener('input', renderCost); $(id).addEventListener('change', renderCost); });
