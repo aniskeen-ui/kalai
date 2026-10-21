@@ -908,7 +908,7 @@ async function afterSales(img: Img) {
   const id = str(img, 'id');
   const action = str(img, 'refundAction');
   // Test mode whose draft credit note failed (e.g. missing Zoho permission): try again on the next save of the order.
-  const retryTestNote = str(img, 'refundState') === 'TEST' && !str(img, 'zohoCreditNoteId') && /Credit note not created/.test(str(img, 'refundMessage')) && action !== 'DAMAGED_REPLACE';
+  const retryTestNote = str(img, 'refundState') === 'TEST' && !str(img, 'zohoCreditNoteId') && /Credit note not created|Credit note and refund of .* not posted/.test(str(img, 'refundMessage')) && action !== 'DAMAGED_REPLACE';
   if (!action || (AFTER_DONE.includes(str(img, 'refundState')) && !retryTestNote)) return;
   const testing = await testMode();
   const amount = round2(Number(num(img, 'refundAmount') ?? 0));
