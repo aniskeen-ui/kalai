@@ -103,6 +103,7 @@ async function start() {
   const groups = session.tokens?.accessToken?.payload?.['cognito:groups'] || [];
   if (!groups.includes('ADMINS')) { show('denyView'); return; }
   show('deskView');
+  if (location.hash === '#reports') showPane('reports', 'tabReports');
   await loadRates();
   await load();
 }
@@ -120,7 +121,116 @@ $('loginForm').addEventListener('submit', async (e) => {
 });
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; show('loginView'); };
 $('reload').onclick = load;
-$('ratesBtn').onclick = () => { selectedId = null; render(); showRates(); };
+$('ratesBtn').onclick = () => { showPane('orders', 'ratesBtn'); selectedId = null; render(); showRates(); };
+$('tabOrders').onclick = () => showPane('orders', 'tabOrders');
+$('tabReports').onclick = () => showPane('reports', 'tabReports');
+
+// ---------- tabs: Orders · Reports · Rates ----------
+function showPane(pane, tabId) {
+  $('ordersPane').hidden = pane !== 'orders';
+  $('reportsPane').hidden = pane !== 'reports';
+  ['tabOrders', 'tabReports', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', pane === 'reports' ? '#reports' : location.pathname); } catch { /* ignore */ }
+  if (pane === 'reports') renderReport();
+}
+
+// ---------- Reports: sales, cost and margin per order ----------
+const SOLD = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT', 'REFUNDED'];
+const r2 = (n) => Math.round(n * 100) / 100;
+const money = (v) => (v == null ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+function parseCosts(c) {
+  let v = c?.costs;
+  try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
+  return v && typeof v === 'object' ? v : null;
+}
+
+/** One report line: sales, refund, net sales, each cost (estimated from the Costing box) and margin. */
+function reportLine(e) {
+  const c = costings.get(e.id);
+  const costs = parseCosts(c);
+  const price = Number(e.quotedPrice || 0);
+  const refund = e.refundAction && e.refundAction !== 'DAMAGED_REPLACE' ? Number(e.refundAmount || 0) : 0;
+  const vat = c?.delivery === 'OUTSIDE' ? 0 : rates.vat;
+  const net = (price - refund) / (1 + vat);
+  const fee = price * rates.fee;
+  let k = null;
+  let note = '';
+  if (costs && (costs.artistAed != null || costs.framing != null)) {
+    k = { artist: Number(costs.artistAed || 0), framing: Number(costs.framing || 0), india: Number(costs.indiaCourier || 0), customs: Number(costs.customs || 0), local: Number(costs.localCourier || 0) };
+  } else if (c?.artistPriceInr) {
+    k = { artist: c.artistPriceInr * rates.fx, framing: 0, india: 0, customs: 0, local: 0 };
+    note = 'costing not saved';
+  } else if (e.kind === 'GIFT') {
+    k = { artist: 0, framing: Number(rates.tiers.S?.framing || 0), india: 0, customs: 0, local: Number(rates.local || 0) };
+    note = 'est. from Rates';
+  } else {
+    note = 'no costing';
+  }
+  if (k) {
+    if (e.purchaseState === 'CANCELLED') { k.artist = 0; k.india = 0; k.customs = 0; }
+    if (String(e.refundAction || '').startsWith('CANCEL')) { k.framing = 0; k.local = 0; }
+  }
+  const total = k ? k.artist + k.framing + k.india + k.customs + k.local : null;
+  const margin = k ? net - fee - total : null;
+  return { e, price, refund, net: r2(net), fee: r2(fee), k, total: total == null ? null : r2(total), margin: margin == null ? null : r2(margin), pct: margin == null || !net ? null : margin / net, note };
+}
+
+function reportLines() {
+  const from = $('rFrom').value, to = $('rTo').value, kind = $('rKind').value;
+  return all
+    .filter((e) => SOLD.includes(e.status || ''))
+    .filter((e) => !kind || e.kind === kind)
+    .filter((e) => { const d = String(e.createdAt || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); })
+    .map(reportLine);
+}
+
+function renderReport() {
+  const lines = reportLines();
+  const sum = (f) => lines.reduce((a, l) => a + (f(l) || 0), 0);
+  const costed = lines.filter((l) => l.k);
+  const T = { sales: sum((l) => l.price), refund: sum((l) => l.refund), net: sum((l) => l.net), fee: sum((l) => l.fee), cost: sum((l) => l.total), margin: costed.reduce((a, l) => a + l.margin, 0), costedNet: costed.reduce((a, l) => a + l.net, 0) };
+  const pct = T.costedNet ? T.margin / T.costedNet : null;
+  const tile = (k, v, cls = '') => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
+  $('rTiles').innerHTML = [
+    tile('Orders', lines.length),
+    tile('Sales (AED)', money(T.sales)),
+    tile('Refunds', money(T.refund)),
+    tile('Net sales', money(T.net)),
+    tile('Total cost', money(T.cost)),
+    tile('Margin', money(T.margin), T.margin < 0 ? 'neg' : ''),
+    tile('Margin %', pct == null ? '–' : (pct * 100).toFixed(1) + '%', pct != null && pct < 0.1 ? 'neg' : ''),
+  ].join('') + (lines.length - costed.length ? `<div class="tile"><div class="k">Without costing</div><div class="v neg">${lines.length - costed.length}</div></div>` : '');
+  const td = (v, cls = '') => `<td class="num ${cls}">${money(v)}</td>`;
+  $('rRows').innerHTML = lines.length ? lines.map((l) => {
+    const d = l.e.createdAt ? new Date(l.e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
+    return `<tr data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(d)}</td><td class="mono">${esc(l.e.ref)}</td>
+      <td style="white-space:normal;min-width:160px">${esc(l.e.title)}${l.note ? `<br><span class="flag">${esc(l.note)}</span>` : ''}</td><td>${esc(l.e.customerName)}</td>
+      <td><span class="pill ${esc(l.e.status)}">${esc(STATUS[l.e.status] || l.e.status)}</span></td>
+      ${td(l.price)}${td(l.refund || null)}${td(l.net)}${td(l.k?.artist)}${td(l.k?.framing)}${td(l.k?.india)}${td(l.k?.customs)}${td(l.k?.local)}${td(l.fee)}${td(l.total)}
+      ${td(l.margin, l.margin != null && l.margin < 0 ? 'neg' : '')}<td class="num ${l.pct != null && l.pct < 0.1 ? 'neg' : ''}">${l.pct == null ? '–' : (l.pct * 100).toFixed(1) + '%'}</td></tr>`;
+  }).join('') : '<tr><td colspan="17" class="muted">No paid orders in this period.</td></tr>';
+  const k = (f) => costed.reduce((a, l) => a + (f(l.k) || 0), 0);
+  $('rFoot').innerHTML = lines.length ? `<tr><td colspan="5">Total (${lines.length} orders)</td>${td(T.sales)}${td(T.refund || null)}${td(T.net)}${td(k((x) => x.artist))}${td(k((x) => x.framing))}${td(k((x) => x.india))}${td(k((x) => x.customs))}${td(k((x) => x.local))}${td(T.fee)}${td(T.cost)}${td(T.margin, T.margin < 0 ? 'neg' : '')}<td class="num">${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}</td></tr>` : '';
+  $('rRows').querySelectorAll('tr[data-id]').forEach((tr) => {
+    const open = () => { const e = all.find((x) => x.id === tr.dataset.id); if (!e) return; showPane('orders', 'tabOrders'); selectedId = e.id; render(); showDetail(e); };
+    tr.onclick = open;
+    tr.onkeydown = (ev) => { if (ev.key === 'Enter') open(); };
+  });
+}
+
+['rFrom', 'rTo', 'rKind'].forEach((id) => $(id).addEventListener('change', renderReport));
+$('rCsv').onclick = () => {
+  const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Payment fee', 'Total cost', 'Margin', 'Margin %', 'Note'];
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = reportLines().map((l) => [String(l.e.createdAt || '').slice(0, 10), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
+    l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '',
+    l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%', l.note]);
+  const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `kalai-orders-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+};
 $('fStatus').onchange = render;
 $('fKind').onchange = render;
 
@@ -138,6 +248,7 @@ async function load() {
     all = items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     await loadCostings().catch(() => {});
     render();
+    if (!$('reportsPane').hidden) renderReport();
     if (selectedId) { const e = all.find((x) => x.id === selectedId); if (e) showDetail(e); }
   } catch (ex) {
     $('rows').innerHTML = `<tr><td colspan="7" class="err">Could not load enquiries: ${esc(ex.message)}</td></tr>`;
