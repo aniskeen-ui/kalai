@@ -323,7 +323,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
       <div class="field"><label for="cName">Your name</label><input id="cName" placeholder="Priya Raman" autocomplete="name"></div>
       <div class="field"><label for="cPhone">Mobile (UAE)</label><input id="cPhone" placeholder="+971 50 123 4567" inputmode="tel" autocomplete="tel"></div>
     </div>
-    <div class="field"><label for="cPhoto">Reference photo</label><input id="cPhoto" type="file" accept="image/*"></div>
+    <div class="field"><label for="cPhoto">Reference photo <span style="color:var(--kumkum)">*</span></label><input id="cPhoto" type="file" accept="image/*" required aria-required="true"><span class="note">Required: the artist paints from this photo. A clear, well-lit photo works best (JPG or PNG, up to 15 MB).</span></div>
     <div class="field"><label for="cNotes">Notes for the artist</label><textarea id="cNotes" placeholder="Our golden retriever Bruno, sitting on the balcony at sunset"></textarea></div>
     <button class="btn primary" type="submit">Request a quote</button>
     <div class="ok-msg" id="commOk" hidden></div>
@@ -485,6 +485,10 @@ const CONFIG = {
 };
 /* ================================================= */
 function newRef(){const d=new Date(),p=n=>String(n).padStart(2,"0");return "KA-"+String(d.getFullYear()).slice(2)+p(d.getMonth()+1)+p(d.getDate())+"-"+Math.random().toString(36).slice(2,6).toUpperCase()}
+/* Photo orders (commissions, Little Artists) need an account so the photo is uploaded securely and the order can be tracked. */
+function needSignIn(ok){const a=window.kalaiAccount;if(a&&a.user)return false;
+  ok.hidden=false;ok.style.color="var(--kumkum)";ok.textContent="Please sign in or create a free account first, so your photo is uploaded securely and you can follow your order. Your details stay filled in.";
+  if(a)a.open();return true}
 async function sendEnquiry(subject, fields, files){
   const ref=newRef();
   fields=Object.assign({"Reference":ref},fields);
@@ -670,10 +674,15 @@ function openModal(p){
 const val=n=>document.querySelector(`input[name="${n}"]:checked`).value;
 document.getElementById("commForm").onsubmit=e=>{e.preventDefault();const ok=document.getElementById("commOk");
   const n=document.getElementById("cName").value.trim(),ph=document.getElementById("cPhone").value.trim();
-  if(!n||!ph){ok.hidden=false;ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can send the quote.";return}
   const photo=document.getElementById("cPhoto").files[0];
+  const bad=m=>{ok.hidden=false;ok.style.color="var(--kumkum)";ok.textContent=m;};
+  if(!photo){bad("Please add a reference photo: the artist paints from it.");document.getElementById("cPhoto").focus();return}
+  if(!/^image\//.test(photo.type||"image/")){bad("The reference photo must be an image (JPG or PNG).");return}
+  if(photo.size>15*1024*1024){bad("That photo is larger than 15 MB. Please choose a smaller one.");return}
+  if(!n||!ph){bad("Please add your name and mobile number so we can send the quote.");return}
+  if(needSignIn(ok))return;
   const url=sendEnquiry("Commission request",{"Name":n,"Mobile":ph,"Style":val("style")==="water"?"Watercolour":"Pencil sketch","Subject":document.querySelector('input[name="subj"]:checked').nextElementSibling.textContent,"Size":document.getElementById("cSize").selectedOptions[0].text,"Frame":document.getElementById("cFrame").selectedOptions[0].text,"Notes":document.getElementById("cNotes").value.trim()},[["Reference photo",photo]]);
-  ok.hidden=false;ok.style.color="var(--fg)";ok.textContent=`Thank you, ${n}. ${CONFIG.formspree?"We've received your photo.":"Please send your reference photo in the WhatsApp chat that just opened."} We'll confirm the price within one working day. If WhatsApp didn't open, tap here: `;url.then(u=>ok.appendChild(waLink(u)))};
+  ok.hidden=false;ok.style.color="var(--fg)";ok.textContent=`Thank you, ${n}. We've received your photo, and you can follow this under My enquiries & orders. We'll confirm the price within one working day. If WhatsApp didn't open, tap here: `;url.then(u=>ok.appendChild(waLink(u)))};
 
 /* toast */
 let tt;function toast(m){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2200)}
@@ -699,9 +708,11 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
     const need=[["kDraw","the drawing"],["kName","your child's first name"],["kTo","who the gift is for"],["kAddr","the delivery address"],["kParent","your name"],["kPhone","your mobile"]].filter(([id])=>id==="kDraw"?!$(id).files.length:!$(id).value.trim()).map(x=>x[1]);
     if(need.length){ok.style.color="var(--kumkum)";ok.textContent="Please add "+need.join(", ")+".";return}
     if(!$("kConsent").checked){ok.style.color="var(--kumkum)";ok.textContent="Please confirm you are the parent or guardian before sending.";return}
+    const df=$("kDraw").files[0];if(!/^image\//.test(df.type||"image/")||df.size>15*1024*1024){ok.style.color="var(--kumkum)";ok.textContent="The drawing must be a photo (JPG or PNG) up to 15 MB.";return}
+    if(needSignIn(ok))return;
     const extras=[...document.querySelectorAll('[id^="kx-"]:checked')].map(x=>x.parentElement.querySelector("span").firstChild.textContent.trim()).join(", ");
     const url=sendEnquiry("Little Artists gift",{"Child":$("kName").value.trim()+", age "+$("kAge").value,"Gift for":$("kTo").value.trim(),"Emirate":$("kEmirate").selectedOptions[0].text,"Address":$("kAddr").value.trim(),"Frame":document.querySelector('input[name="kf"]:checked').value,"Extras":extras,"Card message":$("kMsg").value.trim(),"Parent":$("kParent").value.trim(),"Mobile":$("kPhone").value.trim(),"Total":$("kFee").textContent,"Consent":"Parent/guardian confirmed"},[["Drawing",$("kDraw").files[0]]]);
-    ok.style.color="var(--fg)";ok.textContent="Thank you. "+(CONFIG.formspree?"We've received the drawing.":"Please send the drawing photo in the WhatsApp chat that just opened.")+" We'll WhatsApp you a secure payment link for "+$("kFee").textContent+", and the framed drawing reaches "+$("kTo").value.trim()+" 5 to 7 days after payment. If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
+    ok.style.color="var(--fg)";ok.textContent="Thank you. We've received the drawing, and you can follow this under My enquiries & orders. We'll WhatsApp you a secure payment link for "+$("kFee").textContent+", and the framed drawing reaches "+$("kTo").value.trim()+" 5 to 7 days after payment. If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
 })();
 
 /* little artists around the world (illustrations) */

@@ -428,6 +428,18 @@ function costingSection(e) {
 }
 
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '');
+// Status control linked to Siva's page: the work must have left Siva (his "Sent to frame shop") before
+// it can be framed or shipped. Replacements follow their own rework checks; Little Artists has no Siva step.
+const AFTER_SIVA = ['FRAMING', 'SHIPPED', 'DELIVERED'];
+const needsSiva = (e) => hasArtist(e) && !!e.zohoPOId && e.purchaseState !== 'CANCELLED' && e.refundAction !== 'DAMAGED_REPLACE';
+const sivaDone = (e) => e.artistStage === 'SHIPPED';
+function statusBlock(e, k, s) {
+  if (k === s) return '';
+  if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return 'waiting for Siva';
+  if (k === 'DELIVERED' && !['SHIPPED', 'DELIVERED'].includes(s)) return 'ship it first';
+  return '';
+}
+
 function sivaProgress(e) {
   if (!e.artistStage) return e.zohoPOId ? "Siva hasn't marked this as started yet." : '';
   return [`Started ${day(e.artistStartedAt)}`, e.artistFinishedAt ? `Finished ${day(e.artistFinishedAt)}` : '', e.artistShippedAt ? `Sent to frame shop ${day(e.artistShippedAt)}${e.artistAwb ? ` (${e.artistCourier} · AWB ${e.artistAwb})` : ''}` : '',
@@ -873,7 +885,8 @@ async function showDetail(e) {
       <div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
         <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
       <div class="two">
-        <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === s ? 'selected' : ''} ${locked && BEFORE_PAYMENT.includes(k) && k !== s ? 'disabled' : ''}>${v}${locked && BEFORE_PAYMENT.includes(k) && k !== s ? ' (locked)' : ''}</option>`).join('')}</select></div>
+        <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
+          ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once Siva marks it <b>Sent to frame shop</b> on his page (you can do it for him there).</span>` : ''}</div>
         <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}></div>
       </div>
       ${shippingSection(e)}
@@ -1034,6 +1047,11 @@ async function showDetail(e) {
     }
     if ($('rwType') && !$('rwType').disabled && !$('rwType').value && s === 'REPLACEMENT' && $('rwReady')?.checked) {
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose the fix (frame shop or Siva) in the Replacement box.</div>');
+      b.disabled = false; return;
+    }
+    const blockWhy = statusBlock(e, $('eStatus').value, s);
+    if (blockWhy) {
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'waiting for Siva' ? 'Siva hasn\'t marked this work “Sent to frame shop” yet. Update it on his page first (you can do it for him there).' : 'Mark it Shipped before Delivered.'}</div>`);
       b.disabled = false; return;
     }
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {

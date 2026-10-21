@@ -1324,6 +1324,14 @@ async function onStreamRecord(rec: StreamRecord) {
   // Cancelled before payment: decline the quote.
   if (status === 'CANCELLED' && oldStatus !== 'CANCELLED' && !str(img, 'zohoInvoiceId')) await declineQuote(img);
 
+  // Linked to Siva's page: a work can't be framed or shipped before Siva has sent it to the frame shop.
+  // (The Studio desk blocks this too; this catches any other route.) Replacements and Little Artists are exempt.
+  if (status !== oldStatus && ['FRAMING', 'SHIPPED', 'DELIVERED'].includes(status) && ['PRICE', 'COMMISSION'].includes(str(img, 'kind'))
+    && str(img, 'zohoPOId') && str(img, 'purchaseState') !== 'CANCELLED' && str(img, 'refundAction') !== 'DAMAGED_REPLACE' && str(img, 'artistStage') !== 'SHIPPED') {
+    await writeBack(id, { status: oldStatus, zohoMessage: `Status kept at ${oldStatus}: Siva hasn't marked the work "Sent to frame shop" yet. ${str(img, 'zohoMessage').replace(/^Status kept at [^:]+: [^.]+\. /, '')}`.slice(0, 500) });
+    console.log(`Kept ${str(img, 'ref')} at ${oldStatus}: Siva not sent yet`);
+    return;
+  }
   // Delivered: remember when (the customer has 48 hours to report damage).
   if (status === 'DELIVERED' && oldStatus !== 'DELIVERED') await writeBack(id, { deliveredAt: new Date().toISOString() });
   // Shipped / Delivered: delivery challan in Zoho (needs the invoice first).
