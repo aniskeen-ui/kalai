@@ -106,6 +106,8 @@ const schema = a.schema({
       toSivaSentAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       sivaReceivedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       reworkBackAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Zoho IDs of earlier delivery challans (the damaged delivery), so Check Zoho still lists them.
+      prevChallans: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),

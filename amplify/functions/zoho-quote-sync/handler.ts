@@ -855,6 +855,7 @@ async function afterSales(img: Img) {
     if (action === 'DAMAGED_REPLACE') {
       await writeBack(id, {
         refundState: 'REPLACEMENT',
+        prevChallans: [str(img, 'prevChallans'), str(img, 'zohoChallanId')].filter(Boolean).join(',') || null,
         refundMessage: `${label}. ${testing ? 'Test mode: challan not marked returned. ' : str(img, 'zohoChallan') ? `Challan ${str(img, 'zohoChallan')} marked returned. ` : ''}Set Shipped again with the new courier and AWB to create a new delivery challan.`,
         zohoChallan: null,
         zohoChallanId: null,
@@ -1115,15 +1116,25 @@ async function zget(path: string): Promise<any> {
   return r.ok ? (r.body as any) : {};
 }
 
-async function collectDocs(ref: string): Promise<Doc[]> {
+async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Doc[]> {
   const q = encodeURIComponent(ref);
-  const [est, inv, bill, dcs, cns] = await Promise.all([
+  const rw = encodeURIComponent(`${ref}-RW`);
+  const [est, inv, bill, rwBill, dcs, cns] = await Promise.all([
     zget(`/estimates?reference_number=${q}`),
     zget(`/invoices?reference_number=${q}&filter_by=Status.All`),
     zget(`/bills?reference_number=${q}`),
-    zget(`/deliverychallans?reference_number=${q}`),
+    zget(`/bills?reference_number=${rw}`),
+    zget(`/deliverychallans?reference_number=${q}&filter_by=Status.All`),
     zget(`/creditnotes?reference_number=${q}`),
   ]);
+  // Siva's rework bill carries "<ref>-RW".
+  bill.bills = [...(bill.bills ?? []), ...(rwBill.bills ?? []).map((b: { reference_number?: string }) => ({ ...b, reference_number: ref, rework: true }))];
+  // Challans of earlier deliveries (a damaged one before a replacement) are read by id, in case the list leaves them out.
+  const listed = new Set((dcs.deliverychallans ?? []).map((c: { deliverychallan_id: string }) => c.deliverychallan_id));
+  for (const id of prevChallans.filter((x) => x && !listed.has(x))) {
+    const one = await zget(`/deliverychallans/${id}`);
+    if (one.deliverychallan) (dcs.deliverychallans ??= []).push({ ...one.deliverychallan, reference_number: ref });
+  }
   const same = (x: { reference_number?: string }) => (x.reference_number ?? '').trim() === ref;
   const docs: Doc[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1142,7 +1153,7 @@ async function collectDocs(ref: string): Promise<Doc[]> {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const b of (bill.bills ?? []).filter(same) as any[]) {
-    docs.push({ group: 'PURCHASE', type: 'Bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}` });
+    docs.push({ group: 'PURCHASE', type: b.rework ? 'Bill (rework)' : 'Bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}` });
     if (['draft', 'void'].includes(b.status)) continue;
     const pays = await zget(`/bills/${b.bill_id}/payments`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1156,7 +1167,7 @@ async function collectDocs(ref: string): Promise<Doc[]> {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (dcs.deliverychallans ?? []).filter(same) as any[]) {
-    docs.push({ group: 'DELIVERY', type: 'Delivery challan', id: c.deliverychallan_id, number: c.deliverychallan_number, status: c.status, date: c.date, total: c.total, url: `${BOOKS_APP}/deliverychallans/${c.deliverychallan_id}` });
+    docs.push({ group: 'DELIVERY', type: prevChallans.includes(c.deliverychallan_id) ? 'Delivery challan (damaged delivery)' : 'Delivery challan', id: c.deliverychallan_id, number: c.deliverychallan_number, status: c.status, date: c.date, total: c.total, url: `${BOOKS_APP}/deliverychallans/${c.deliverychallan_id}` });
   }
   return docs;
 }
@@ -1184,7 +1195,7 @@ async function checkZoho(id: string) {
   const img = got?.Item as Img | undefined;
   if (!img) return result;
   try {
-    const docs = await collectDocs(str(img, 'ref'));
+    const docs = await collectDocs(str(img, 'ref'), str(img, 'prevChallans').split(',').map((x) => x.trim()).filter(Boolean));
     await saveDocs(id, docs);
     // Backfill the purchase links if the documents exist in Zoho but the enquiry doesn't know them yet.
     const bill = docs.find((d) => d.type === 'Bill' && d.status !== 'void');
@@ -1712,14 +1723,14 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
     if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
-      kind === 'GIFT' ? "We'll email you when it is framed and on its way." : "We'll email you when the artist starts, when it is being framed and when it ships.",
+      "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
-    if (st === 'FRAMING') cust(`Being framed: ${title}`, [`Good news: <b>${h(title)}</b> is now at our framing studio in Dubai.`, msgLine, "We'll email you the courier and tracking number when it ships."]);
+    // Being framed: shown on My enquiries & orders only (no email).
     if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries & orders within 48 hours.']);
     if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
       'If anything arrived damaged, report it with photos under My enquiries & orders within 48 hours and choose a replacement or a refund.',
       'We would be grateful for your feedback: you can rate your order under My enquiries & orders.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
-    if (st === 'REPLACEMENT') cust(`Your replacement is being prepared (${ref})`, [`We're sorry <b>${h(title)}</b> arrived damaged. Your replacement is being prepared at no cost, and we'll email you the tracking number when it ships.`, msgLine]);
+    // Replacement: the customer already got "We've received your damage report"; progress is on their page.
     if (st === 'CANCELLED') {
       const self = str(img, 'cancelRequest') === 'CANCEL';
       cust(`Cancelled: ${ref}`, [self ? `As you asked, your enquiry for <b>${h(title)}</b> is cancelled. Nothing was paid, so there is nothing more to do.` : `Your enquiry for <b>${h(title)}</b> is now closed.`, msgLine, 'You are welcome back any time.']);
@@ -1727,10 +1738,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
     }
   }
 
-  // Siva started: the cancellation terms change, so tell the customer.
-  if (str(img, 'artistStage') === 'STARTED' && str(old, 'artistStage') !== 'STARTED' && ['PAID', 'FRAMING'].includes(st)) {
-    cust(`The artist has started ${title}`, [`Siva Raja has started work on <b>${h(title)}</b>. We'll let you know when it is finished and being framed.`]);
-  }
+  // Artist started: shown on the customer's page (and in the cancellation terms there), no email.
 
   // A customer request (cancel / damage) or the studio's answer to it.
   const cs = str(img, 'cancelState'), ocs = str(old, 'cancelState');
@@ -1760,9 +1768,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
       `Courier: <b>${h(str(img, 'returnCourier'))}</b> · return AWB <b>${h(str(img, 'returnAwb'))}</b>. The driver brings the label; please pack it in the original packaging if you still have it.`,
       "We'll email you when it reaches our framing studio."]);
   }
-  if (str(img, 'returnReceivedAt') && !str(old, 'returnReceivedAt') && str(img, 'returnMode') !== 'NONE') {
-    cust(`We've received ${title}`, [`The damaged <b>${h(title)}</b> has reached our framing studio in Dubai. Your replacement is now being made, and we'll email you the tracking number when it ships.`]);
-  }
+  // Received at the frame shop: shown on the customer's replacement tracker, no email.
 
   // A new message on the order without a status change.
   if (!statusChanged && msg && msg !== str(old, 'adminMessage')) cust(`A message about your order ${ref}`, [`About <b>${h(title)}</b>:`, h(msg)]);

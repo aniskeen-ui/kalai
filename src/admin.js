@@ -615,6 +615,7 @@ function reworkSection(e) {
       <div class="muted" style="font-size:12px">Claim with the courier within its time limit (e.g. Aramex: 60 days from pickup), with the AWB, the customer's photos and the declared value.</div>
     </details>
     <div class="marginline ${rc.net > 0 ? 'low' : ''}" id="rwSum">Extra cost ${aed(rc.cost, 2)}${rc.received ? ` − insurance ${aed(rc.received, 2)}` : ''} = <b>${aed(rc.net, 2)}</b> taken from this order's margin.</div>
+    ${ready && e.status === 'REPLACEMENT' ? `<div class="reqbox" style="border-color:var(--ok)"><b>Next: ship it to the customer</b><span>Status → Shipped, then choose the courier and enter the new AWB in the Delivery box, and save. That creates the new delivery challan and emails the customer the tracking number.</span><button type="button" class="btn" id="rwShip" style="justify-self:start">Ship the replacement</button></div>` : ''}
     <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:13px"><input type="checkbox" id="rwReady" style="width:auto;margin-top:3px" ${ready ? 'checked disabled' : ''}> <span>${ready ? `Checked and ready ${esc(when(e.reworkReadyAt))}` : 'I have checked the reworked piece (at the frame shop or by photo): it is ready to ship. Shipping is allowed only after this.'}</span></label>
   </fieldset>`;
 }
@@ -949,6 +950,14 @@ async function showDetail(e) {
     const keys = String(e.cancelPhotos || '').split('\n').filter(Boolean);
     Promise.all(keys.map((k) => getUrl({ path: k, options: { expiresIn: 900 } }).then((r) => r.url.toString()).catch(() => null)))
       .then((urls) => { $('reqPhotos').innerHTML = urls.map((u, i) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener">Damage photo ${i + 1}</a>` : `<span class="err">Photo ${i + 1} unavailable</span>`)).join('') + '<span class="muted">Links work for 15 minutes.</span>'; });
+  }
+  if ($('rwShip')) {
+    $('rwShip').onclick = () => {
+      $('eStatus').value = 'SHIPPED';
+      $('eStatus').dispatchEvent(new Event('change'));
+      $('shipBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => $('eCourierSel').focus(), 400);
+    };
   }
   if ($('rtMode')) {
     $('rtMode').addEventListener('change', () => {

@@ -148,9 +148,10 @@ If Zoho asks which account a refund is paid from: copy the account ID (Banking �
 
 ## Order emails (Amazon SES)
 
-The function emails customers from **Kalai Art House <noreply@pranixtechno.com>** (replies go to kalaiarthouse@pranixtechno.com):
-enquiry received · price sent (with Pay button) · payment received · artist started · being framed · shipped (courier + tracking) ·
-delivered (rate + 48-hour damage note) · cancelled · replacement · refund done · request received / declined · new message from you.
+The function emails customers from **Kalai Art House <noreply@pranixtechno.com>** (replies go to kalaiarthouse@pranixtechno.com), only when they need to act or keep a record:
+enquiry received · price (Pay button) · payment received · shipped (courier + tracking) · delivered (rating + 48-hour damage note) ·
+cancelled · refund done · their cancellation / damage request received · request declined · return pickup booked · a new message from you.
+Progress steps (artist started, being framed, replacement progress, received at the frame shop) are shown on My enquiries & orders only.
 The studio (kalaiarthouse@pranixtechno.com) gets: new enquiry, cancellation request, damage report, customer cancelled before paying.
 
 - Switch off all emails: `aws ssm put-parameter --name /kalai/email/enabled --type String --overwrite --value off` (on again: `--value on`).
