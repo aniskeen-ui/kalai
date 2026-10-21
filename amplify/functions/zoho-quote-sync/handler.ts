@@ -548,9 +548,11 @@ async function recordArtistOrder(img: Img) {
 }
 
 /** Expense account for Siva's bills: SSM /kalai/zoho/artist_account_id if set, else "Cost of Goods Sold" if readable. */
+let cachedAccountAt = 0;
 let cachedAccount: string | null | undefined;
 async function artistAccountId(): Promise<string | null> {
-  if (cachedAccount !== undefined) return cachedAccount;
+  // Re-read every 10 minutes, and never remember "not set": saving the SSM parameter takes effect without a redeploy.
+  if (cachedAccount && Date.now() - cachedAccountAt < 600_000) return cachedAccount;
   let id: string | null = null;
   try {
     const r = await ssm.send(new GetParameterCommand({ Name: '/kalai/zoho/artist_account_id' }));
@@ -559,13 +561,14 @@ async function artistAccountId(): Promise<string | null> {
     id = null;
   }
   if (!id) {
+    // Only an account clearly meant for artworks; never another business line's cost account.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = (await zoho('/chartofaccounts?filter_by=AccountType.CostOfGoodsSold')).body as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const acc = (r.chartofaccounts ?? []).find((a: any) => /cost of goods sold/i.test(a.account_name)) ?? (r.chartofaccounts ?? [])[0];
+    const acc = (r.chartofaccounts ?? []).find((a: any) => /artwork|kalai/i.test(a.account_name));
     id = acc?.account_id ?? null;
   }
-  cachedAccount = id;
+  if (id) { cachedAccount = id; cachedAccountAt = Date.now(); }
   return id;
 }
 
