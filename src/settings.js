@@ -10,10 +10,9 @@ const FIELDS = [
 ];
 // Home page texts. Blank = the built-in text (shown as the grey example).
 const TEXTS = [
-  { k: 'heroTitle', group: 'Top of the home page', label: 'Headline', max: 120, def: 'Original watercolours and pencil sketches,' },
-  { k: 'heroHighlight', group: 'Top of the home page', label: 'Headline, gold part', max: 80, def: 'painted for your walls' },
+  { k: 'heroLines', group: 'Top of the home page', label: 'Headlines: one per line, put | before the gold part. With more than one, they take turns with the picture.', max: 1500, rows: 5, def: 'Original watercolours and pencil sketches, | painted for your walls' },
   { k: 'heroText', group: 'Top of the home page', label: 'Text under the headline', max: 400, rows: 3, def: 'Hand-painted originals and commissioned portraits of your pets, home and family, by artists in Kerala and Tamil Nadu. Priced in dirhams, delivered across the UAE with customs and duties already included.' },
-  { k: 'kidsTitle', group: 'Little Artists section', label: 'Heading', max: 120, def: 'You remember every first.' },
+  { k: 'kidsTitle', group: 'Little Artists section', label: 'Heading: one per line. With more than one, they take turns (same seconds as the picture).', max: 600, rows: 3, def: 'You remember every first.' },
   { k: 'kidsText', group: 'Little Artists section', label: 'Story (leave an empty line between paragraphs)', max: 1500, rows: 7, def: 'The first smile. The first time they crawled across the floor to reach you. The first wobbly step, the first word, the first time they waved goodbye. Every small new thing your child does stays with you for years.\n\nTheir drawings are the same kind of moment: a sun with a smiling face, a house with a crooked door, the whole family holding hands. Little Artists keeps those moments by turning them into a framed gift for someone who loves your child too.' },
 ];
 let wired = false;
@@ -46,6 +45,8 @@ export async function showSettings() {
     row = r.data;
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
+    // Headline saved before several headlines were possible: show it as the first line.
+    if (!row?.heroLines && (row?.heroTitle || row?.heroHighlight)) $('st-heroLines').value = `${row.heroTitle || TEXTS[0].def.split('|')[0].trim()} | ${row.heroHighlight || TEXTS[0].def.split('|')[1].trim()}`;
     $('stMsg').textContent = row?.updatedAt ? `Last changed ${new Date(row.updatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Built-in texts and 10-second timings until you save.';
   } catch (ex) { $('stMsg').textContent = ex.message; }
 }
@@ -58,6 +59,8 @@ async function save() {
     rec[f.k] = v;
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
+  const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+  [rec.heroTitle, rec.heroHighlight] = first ? [first.split('|')[0].trim() || null, (first.split('|')[1] || '').trim() || null] : [null, null];
   $('stSave').disabled = true; $('stMsg').textContent = 'Saving…';
   try {
     const r = row ? await client.models.SiteSetting.update(rec) : await client.models.SiteSetting.create(rec);

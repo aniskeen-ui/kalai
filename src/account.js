@@ -26,9 +26,22 @@ let kuralSec = 10;
     // Home page texts from Order Management → Settings (blank = keep the built-in text).
     const tx = (v) => String(v ?? '').trim();
     const put = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
-    if (tx(st.heroTitle) || tx(st.heroHighlight)) put('heroH1', `${esc(tx(st.heroTitle) || 'Original watercolours and pencil sketches,')} <em>${esc(tx(st.heroHighlight) || 'painted for your walls')}</em>`);
+    // Headlines take turns with the picture (same seconds); one per line, "plain part | gold part".
+    const heads = tx(st.heroLines) ? tx(st.heroLines).split('\n').map((l) => l.trim()).filter(Boolean)
+      : tx(st.heroTitle) || tx(st.heroHighlight) ? [`${tx(st.heroTitle) || 'Original watercolours and pencil sketches,'} | ${tx(st.heroHighlight) || 'painted for your walls'}`] : [];
+    const headHtml = (l) => { const [a, b] = l.split('|').map((x) => x.trim()); return b ? `${esc(a)} <em>${esc(b)}</em>` : `<em>${esc(a)}</em>`; };
+    const kids = tx(st.kidsTitle).split('\n').map((l) => l.trim()).filter(Boolean);
+    const rot = (id, list, html) => {
+      const el = document.getElementById(id);
+      if (!el || !list.length) return;
+      el.innerHTML = html(list[0]);
+      if (list.length < 2 || !(Number(st.heroSeconds) > 0)) return;
+      el.style.transition = 'opacity .6s'; let i = 0;
+      setInterval(() => { if (document.hidden) return; el.style.opacity = '0'; setTimeout(() => { i = (i + 1) % list.length; el.innerHTML = html(list[i]); el.style.opacity = '1'; }, 600); }, Number(st.heroSeconds) * 1000);
+    };
+    rot('heroH1', heads, headHtml);
     if (tx(st.heroText)) put('heroP', esc(tx(st.heroText)));
-    if (tx(st.kidsTitle)) put('kidsH2', esc(tx(st.kidsTitle)));
+    rot('kidsH2', kids, (l) => esc(l));
     if (tx(st.kidsText)) put('kidsStory', tx(st.kidsText).split(/\n\s*\n/).map((x) => `<p class="story">${esc(x.trim()).replace(/\n/g, '<br>')}</p>`).join(''));
   } catch { /* defaults stay */ }
 })();
