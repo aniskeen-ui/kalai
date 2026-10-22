@@ -779,8 +779,14 @@ const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return nu
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 async function showDailyMessage() {
   try {
-    const r = await client.models.Announcement.list({ authMode: 'apiKey', limit: 50 });
     const nowIso = new Date().toISOString();
+    // Today's kural (Dubai date), else yesterday's: read directly by id, so the list size never matters.
+    const day = (ms) => new Date(ms + 4 * 3600_000).toISOString().slice(0, 10);
+    let r = { data: [] };
+    for (const d of [day(Date.now()), day(Date.now() - 86_400_000), day(Date.now() - 2 * 86_400_000)]) {
+      const g = await client.models.Announcement.get({ id: `kural-${d}` }, { authMode: 'apiKey' }).catch(() => null);
+      if (g?.data) { r = { data: [g.data] }; break; }
+    }
     // The card shows only the Thirukkural (published 06:05 Dubai each morning). Before today's is out
     // (midnight to 06:05) it keeps showing the latest one. Hand-written messages are not shown here.
     const kurals = (r.data || []).filter((x) => x.source === 'KURAL').sort((a, b) => String(b.showFrom || b.createdAt).localeCompare(String(a.showFrom || a.createdAt)));
