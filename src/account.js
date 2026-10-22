@@ -543,7 +543,9 @@ async function showList() {
     let nextToken = null;
     do {
       const res = await client.models.Enquiry.list({ limit: 100, nextToken });
-      if (res.errors?.length) throw new Error(res.errors[0].message);
+      // Studio-only fields (payout, Ziina ids…) come back as "Not Authorized to access X": the rest of the order is fine.
+      const real = (res.errors || []).filter((x) => !/Not Authorized to access \w+ on type Enquiry/i.test(x.message || ''));
+      if (real.length) throw new Error(real[0].message);
       items.push(...res.data);
       nextToken = res.nextToken;
     } while (nextToken);
