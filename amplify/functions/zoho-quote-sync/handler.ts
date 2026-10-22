@@ -5,6 +5,7 @@ import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
  * Kalai Art House ↔ Zoho Books.
@@ -1418,6 +1419,11 @@ async function onStreamRecord(rec: StreamRecord) {
   const oldPrice = old ? num(old, 'quotedPrice') : price;
   const locked = str(img, 'zohoPaymentId') !== '';
 
+  // Price sent: create the Ziina payment link (unless the studio typed its own link), so the email carries it.
+  await ziinaPriceLink(rec, img);
+  // Refund approved on the desk and the customer paid by Ziina: send it back through Ziina.
+  await ziinaRefund(img);
+
   // After-sales action chosen on the Studio desk (refund / replacement).
   if (str(img, 'refundAction')) await afterSales(img);
   // Siva's rework for a replacement: his bill and payment.
@@ -2093,6 +2099,163 @@ async function sellerOrders(action: string, d: Dict, sellerId: string, profile: 
   return { order: view(fresh.Item as Img) };
 }
 
+
+// ---------- Ziina (online card payments) ----------
+// /kalai/ziina/token (SecureString): API access token from ziina.com/business/connect.
+// /kalai/ziina/webhook_secret (SecureString): signs Ziina's notifications to our webhook (Lambda function URL).
+// /kalai/ziina/test_mode: "off" for real payments; if missing it follows the Zoho test mode.
+// Price sent → payment link (payment intent) on the order and in the email. Ziina tells us when it is paid →
+// the order turns Paid (method Ziina, reference = payment id) and the usual Zoho invoice follows.
+// A refund approved on the desk with "Refund via Ziina" goes back to the customer's card through Ziina.
+const ZIINA_API = 'https://api-v2.ziina.com/api';
+const ZIINA_IPS = ['3.29.184.186', '3.29.190.95', '20.233.47.127', '13.202.161.181'];
+const secureCache = new Map<string, { v: string | null; at: number }>();
+async function secureParam(name: string): Promise<string | null> {
+  const c = secureCache.get(name);
+  if (c && c.v && Date.now() - c.at < 600_000) return c.v;
+  let v: string | null = null;
+  try { v = ((await ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true }))).Parameter?.Value ?? '').trim() || null; } catch { v = null; }
+  secureCache.set(name, { v, at: Date.now() });
+  return v;
+}
+async function ziinaTest(): Promise<boolean> {
+  const v = await optionalParam('/kalai/ziina/test_mode');
+  return v ? v.toLowerCase() !== 'off' : testMode();
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ziinaCall(path: string, init: RequestInit = {}): Promise<{ ok: boolean; status: number; body: any }> {
+  const token = await secureParam('/kalai/ziina/token');
+  if (!token) throw new Error('Ziina is not connected yet (no token saved).');
+  const r = await fetch(`${ZIINA_API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json', ...(init.headers ?? {}) } });
+  const text = await r.text();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = { message: text.slice(0, 200) }; }
+  return { ok: r.ok, status: r.status, body };
+}
+const fils = (aed: number) => Math.round(aed * 100);
+
+async function ziinaPriceLink(rec: StreamRecord, img: Img) {
+  if (str(img, 'status') !== 'PRICE_SENT') return;
+  const price = num(img, 'quotedPrice') ?? 0;
+  if (!(price >= 2)) return;
+  const link = str(img, 'paymentLink');
+  const mine = !!str(img, 'ziinaIntentId');
+  if (link && !mine) return; // the studio's own link
+  if (mine && num(img, 'ziinaAmount') === price && link) return; // link already matches the price
+  if (!(await secureParam('/kalai/ziina/token'))) return;
+  const id = str(img, 'id'), ref = str(img, 'ref');
+  try {
+    const test = await ziinaTest();
+    const r = await ziinaCall('/payment_intent', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: fils(price), currency_code: 'AED', test,
+        message: `Kalai Art House ${ref}: ${str(img, 'title')}`.slice(0, 200),
+        success_url: `${SITE}/?paid=${encodeURIComponent(ref)}#my-enquiries`,
+        cancel_url: `${SITE}/#my-enquiries`,
+        failure_url: `${SITE}/?payfail=${encodeURIComponent(ref)}#my-enquiries`,
+      }),
+    });
+    if (!r.ok || !r.body?.redirect_url) throw new Error(`Ziina payment link failed (${r.status}): ${r.body?.message ?? JSON.stringify(r.body).slice(0, 200)}`);
+    await writeBack(id, { paymentLink: r.body.redirect_url, ziinaIntentId: r.body.id, ziinaAmount: price, ziinaTest: test ? 'yes' : null, ziinaMessage: `${test ? 'Test ' : ''}Ziina payment link created for AED ${price.toLocaleString('en-US')}.` });
+    // The same stream record goes on to the email step: give it the link.
+    if (rec.dynamodb?.NewImage) rec.dynamodb.NewImage.paymentLink = { S: r.body.redirect_url };
+    console.log(`Ziina link for ${ref}: ${r.body.id}${test ? ' (test)' : ''}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Ziina link failed for ${ref}:`, err);
+    await writeBack(id, { ziinaMessage: msg.slice(0, 400) });
+  }
+}
+
+async function ziinaRefund(img: Img) {
+  const action = str(img, 'refundAction');
+  const amount = num(img, 'refundAmount') ?? 0;
+  if (!action || action === 'DAMAGED_REPLACE' || !(amount > 0)) return;
+  if (str(img, 'refundMethod') !== 'ZIINA' || !str(img, 'ziinaIntentId') || str(img, 'paymentMethod') !== 'ZIINA' || str(img, 'ziinaRefundId')) return;
+  const id = str(img, 'id'), ref = str(img, 'ref');
+  try {
+    const rid = crypto.randomUUID();
+    const r = await ziinaCall('/refund', { method: 'POST', body: JSON.stringify({ id: rid, payment_intent_id: str(img, 'ziinaIntentId'), amount: fils(amount), currency_code: 'AED', test: str(img, 'ziinaTest') === 'yes' }) });
+    if (!r.ok) throw new Error(`Ziina refund failed (${r.status}): ${r.body?.message ?? r.body?.error?.message ?? ''}`);
+    await writeBack(id, { ziinaRefundId: r.body.id ?? rid, ziinaRefundState: String(r.body.status ?? 'pending'), ziinaMessage: `${str(img, 'ziinaTest') === 'yes' ? 'Test ' : ''}Ziina refund of AED ${amount.toLocaleString('en-US')} ${r.body.status === 'completed' ? 'completed' : 'sent (pending)'}.`, ...(str(img, 'refundRef') ? {} : { refundRef: `Ziina ${String(r.body.id ?? rid).slice(0, 18)}` }) });
+    console.log(`Ziina refund for ${ref}: AED ${amount}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Ziina refund failed for ${ref}:`, err);
+    await writeBack(id, { ziinaRefundId: null, ziinaRefundState: 'failed', ziinaMessage: `Refund NOT sent through Ziina: ${msg}`.slice(0, 400) });
+  }
+}
+
+type UrlEvent = { requestContext: { http: { method: string; sourceIp: string } }; headers?: Record<string, string>; body?: string; isBase64Encoded?: boolean };
+/** Ziina's notifications (Lambda function URL, public). Checked by sender IP and HMAC signature, then confirmed with Ziina's API. */
+async function ziinaWebhook(ev: UrlEvent) {
+  const res = (statusCode: number, body = 'ok') => ({ statusCode, body });
+  if (ev.requestContext.http.method !== 'POST') return res(200, 'Kalai Art House webhook');
+  const ip = ev.requestContext.http.sourceIp;
+  if (!ZIINA_IPS.includes(ip)) { console.warn(`Webhook from unknown IP ${ip}`); return res(403, 'forbidden'); }
+  const raw = ev.isBase64Encoded ? Buffer.from(ev.body ?? '', 'base64').toString('utf8') : (ev.body ?? '');
+  const secret = await secureParam('/kalai/ziina/webhook_secret');
+  const sig = String(Object.entries(ev.headers ?? {}).find(([k]) => k.toLowerCase() === 'x-hmac-signature')?.[1] ?? '');
+  if (secret) {
+    const want = createHmac('sha256', secret).update(raw).digest('hex');
+    if (sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want))) { console.warn('Webhook signature mismatch'); return res(401, 'bad signature'); }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let msg: any = {};
+  try { msg = JSON.parse(raw); } catch { return res(400, 'bad json'); }
+  const data = msg.data ?? {};
+  const table = process.env.ENQUIRY_TABLE!;
+  if (msg.event === 'payment_intent.status.updated' && data.id) {
+    const e = (await scanAll(table)).find((x) => str(x, 'ziinaIntentId') === String(data.id));
+    if (!e) { console.warn(`Ziina payment ${data.id}: no order`); return res(200); }
+    // Don't trust the notification alone: read the payment from Ziina.
+    const got = await ziinaCall(`/payment_intent/${encodeURIComponent(String(data.id))}`);
+    const pi = got.ok ? got.body : data;
+    const st = String(pi.status ?? data.status ?? '');
+    const now = new Date().toISOString();
+    if (st === 'completed') {
+      const paidOk = Number(pi.amount) === fils(num(e, 'quotedPrice') ?? 0);
+      const card = pi.card_details ? `${pi.card_details.card_brand ?? 'card'} ••${pi.card_details.card_last_four ?? ''}` : '';
+      if (['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') && paidOk) {
+        await updateEnquiry(str(e, 'id'), { status: 'PAID', paymentMethod: 'ZIINA', paymentRef: String(pi.id), ziinaPaidAt: now, ...(card ? { ziinaCard: card } : {}) });
+        console.log(`Ziina paid ${str(e, 'ref')}: AED ${Number(pi.amount) / 100}`);
+      } else {
+        await writeBack(str(e, 'id'), { ziinaPaidAt: now, ziinaMessage: paidOk ? `Ziina payment received (order was already ${str(e, 'status')}).` : `Ziina payment of AED ${Number(pi.amount) / 100} does not match the price AED ${num(e, 'quotedPrice')}: check it and mark Paid yourself.` });
+      }
+    } else if (st === 'failed' || st === 'canceled') {
+      await writeBack(str(e, 'id'), { ziinaMessage: `Ziina payment ${st}${pi.latest_error?.message ? `: ${pi.latest_error.message}` : ''}.`.slice(0, 400) });
+    }
+    return res(200);
+  }
+  if (msg.event === 'refund.status.updated' && data.id) {
+    const e = (await scanAll(table)).find((x) => str(x, 'ziinaRefundId') === String(data.id));
+    if (e) await writeBack(str(e, 'id'), { ziinaRefundState: String(data.status ?? ''), ziinaMessage: `Ziina refund ${data.status === 'completed' ? 'completed' : String(data.status ?? '')}.` });
+    return res(200);
+  }
+  return res(200);
+}
+
+/** Studio: is Ziina connected, and register our webhook address with Ziina. */
+async function ziinaAdmin(ev: ApiEvent) {
+  const action = String(ev.arguments.action ?? '');
+  const d = parseData(ev.arguments.data);
+  const token = !!(await secureParam('/kalai/ziina/token'));
+  const secret = !!(await secureParam('/kalai/ziina/webhook_secret'));
+  const test = await ziinaTest();
+  if (action === 'status') return { token, secret, test };
+  if (action === 'connect') {
+    const url = txt(d.url, 300);
+    if (!/^https:\/\/[a-z0-9]+\.lambda-url\.[a-z0-9-]+\.on\.aws\/?$/.test(url)) throw new Error('Webhook address missing: redeploy, then try again.');
+    if (!token) throw new Error('Save the Ziina token first (CloudShell command).');
+    const r = await ziinaCall('/webhook', { method: 'POST', body: JSON.stringify({ url, ...(secret ? { secret: await secureParam('/kalai/ziina/webhook_secret') } : {}) }) });
+    if (!r.ok) throw new Error(`Ziina webhook setup failed (${r.status}): ${r.body?.message ?? ''}`);
+    return { token, secret, test, connected: true };
+  }
+  throw new Error('Unknown action');
+}
+
 // ---------- Daily message translation ----------
 const translator = new TranslateClient({});
 async function translateMessage(a: { text?: string; source?: string | null }) {
@@ -2548,12 +2711,14 @@ async function notify(rec: StreamRecord) {
   }
 }
 
-export const handler = async (event: StreamEvent | ApiEvent) => {
+export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
+  if ('requestContext' in event && event.requestContext?.http) return ziinaWebhook(event);
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
+    if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));
@@ -2569,7 +2734,7 @@ export const handler = async (event: StreamEvent | ApiEvent) => {
   }
 
   const failures: { itemIdentifier: string }[] = [];
-  for (const rec of event.Records) {
+  for (const rec of (event as StreamEvent).Records) {
     const img = rec.dynamodb?.NewImage;
     try {
       await onStreamRecord(rec);

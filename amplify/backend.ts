@@ -1,7 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Stack } from 'aws-cdk-lib';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-import { StartingPosition, EventSourceMapping } from 'aws-cdk-lib/aws-lambda';
+import { StartingPosition, EventSourceMapping, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -73,6 +73,7 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
     resources: [
       `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/zoho/*`,
       `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/email/*`,
+      `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/ziina/*`,
     ],
   }),
 );
@@ -101,3 +102,8 @@ backend.auth.resources.cfnResources.cfnUserPool.addPropertyOverride(
   `arn:aws:ses:${authStack.region}:${authStack.account}:identity/pranixtechno.com`,
 );
 
+
+// Ziina payment notifications: a public HTTPS address for the same function (checked by IP + signature inside).
+// The address is published in amplify_outputs.json so the studio page can register it with Ziina.
+const ziinaHook = backend.zohoQuoteSync.resources.lambda.addFunctionUrl({ authType: FunctionUrlAuthType.NONE });
+backend.addOutput({ custom: { ziinaWebhookUrl: ziinaHook.url } });

@@ -7,6 +7,7 @@ import { showCatalogue } from './catalogue.js';
 import { showMessages } from './messages.js';
 import { showMarket } from './market.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
+import outputs from '../amplify_outputs.json';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -866,7 +867,11 @@ function showRates() {
       <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="rRound" style="width:auto" ${rates.round9 ? 'checked' : ''}> Round suggested prices up to end in 9</label>
       <div class="ok" id="ratesMsg" role="status"></div>
       <button class="btn" type="submit">Save rates</button>
-    </form>`;
+    </form>
+    <fieldset class="cost" id="ziinaBox"><legend>Online payments (Ziina)</legend><div id="zStatus" class="muted" style="font-size:13px">Checking…</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="zConnect">Connect payment notifications</button></div>
+      <div class="muted" style="font-size:12px">Do this once after saving the Ziina token in CloudShell: Ziina then tells the website when a customer has paid, and the order turns Paid by itself.</div></fieldset>`;
+  ziinaStatus();
   $('ratesForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const b = ev.target.querySelector('button'); b.disabled = true; $('ratesMsg').textContent = '';
@@ -911,6 +916,26 @@ function docsList(e) {
     <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
 }
 
+async function ziinaStatus(msg = '') {
+  try {
+    const r = await client.mutations.ziinaAdmin({ action: 'status' });
+    if (r.errors?.length) throw new Error(r.errors[0].message);
+    const z = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    $('zStatus').innerHTML = `${z.token ? '✓ Token saved' : '✗ No token yet (run the CloudShell command)'} · ${z.secret ? '✓ signing secret saved' : '✗ no signing secret'} · ${z.test ? '<b>test mode</b> (no real money)' : '<b style="color:var(--ok)">live</b>'}${msg ? ` · ${esc(msg)}` : ''}`;
+  } catch (ex) { $('zStatus').textContent = 'Could not check Ziina: ' + ex.message; }
+}
+document.addEventListener('click', async (ev) => {
+  if (ev.target?.id !== 'zConnect') return;
+  const b = ev.target; b.disabled = true;
+  try {
+    const url = outputs?.custom?.ziinaWebhookUrl;
+    if (!url) throw new Error('The webhook address is not deployed yet. Wait for the build to finish, refresh (Ctrl+F5) and try again.');
+    const r = await client.mutations.ziinaAdmin({ action: 'connect', data: JSON.stringify({ url }) });
+    if (r.errors?.length) throw new Error(r.errors[0].message);
+    await ziinaStatus('✓ notifications connected');
+  } catch (ex) { $('zStatus').textContent = ex.message; } finally { b.disabled = false; }
+});
+
 function zohoPanel(e) {
   const st = e.zohoState || '';
   const color = st === 'PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
@@ -926,6 +951,16 @@ function zohoPanel(e) {
     ${isLocked(e) ? `<div class="muted" style="font-size:12px">🔒 Locked: the payment is in Zoho, so the price can't change and the status can't go back to Received, Price sent or Cancelled. If the payment failed, void invoice ${esc(e.zohoInvoice || '')} or delete its payment in Zoho, then press <b>Check Zoho</b> to unlock.</div>` : ''}
     ${docsList(e)}
     <div class="ok" id="zohoMsg" role="status"></div>
+  </div>
+  ${ziinaLine(e)}`;
+}
+function ziinaLine(e) {
+  if (!e.ziinaIntentId && !e.ziinaMessage) return '';
+  const paid = !!e.ziinaPaidAt && e.paymentMethod === 'ZIINA';
+  const refund = e.ziinaRefundId ? ` · refund ${esc(e.ziinaRefundState || 'pending')}` : '';
+  return `<div class="card" style="padding:10px 14px;display:grid;gap:4px;background:var(--sunk);font-size:13px">
+    <b style="color:${paid ? 'var(--ok)' : 'var(--fg)'}">${paid ? '✓ Paid online with Ziina' : 'Ziina payment link'}${e.ziinaTest === 'yes' ? ' <span class="chip">test</span>' : ''}</b>
+    <div>${esc(e.ziinaMessage || '')}${paid ? ` ${esc(when(e.ziinaPaidAt))}${e.ziinaCard ? ` · ${esc(e.ziinaCard)}` : ''}` : e.ziinaAmount ? ` Link for AED ${Number(e.ziinaAmount).toLocaleString('en-US')}; the order turns Paid by itself when the customer pays.` : ''}${refund}</div>
   </div>`;
 }
 
@@ -995,7 +1030,8 @@ async function showDetail(e) {
       ${marketSection(e)}
       ${reworkSection(e)}
       ${afterSection(e)}
-      <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="https://… from Telr, Tap or Stripe" value="${esc(e.paymentLink)}"></div>
+      <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="Leave empty: a Ziina link is created when you save as Price sent" value="${esc(e.paymentLink)}">
+        <span class="muted" style="font-size:12px">${e.ziinaIntentId ? 'Created by Ziina automatically. Change the price and save again (still Price sent) to get a new link.' : 'Leave empty and save as <b>Price sent</b>: the Ziina link is made for you and emailed to the customer.'}</span></div>
       <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
       <div class="ok" id="saveMsg" role="status"></div>
       <button class="btn" type="submit">Save and update customer</button>

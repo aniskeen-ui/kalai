@@ -597,9 +597,19 @@ Hub.listen('auth', ({ payload }) => {
   if (payload.event === 'signedIn') loadUser();
   if (payload.event === 'signedOut') { state.user = null; setButton(); }
 });
-loadUser().then(() => {
+loadUser().then(async () => {
   // Links in our emails: art.pranixtechno.com/#my-enquiries opens the panel (sign-in first if needed).
-  if (location.hash === "#my-enquiries") { state.user ? showList() : showSignIn(); open(); }
+  const qp = new URLSearchParams(location.search);
+  if (location.hash === "#my-enquiries") {
+    if (state.user) {
+      await showList();
+      const paid = qp.get('paid'), fail = qp.get('payfail');
+      if (paid) body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0;border-left-color:var(--ok)">Thank you! We have received your payment for <b>${esc(paid)}</b>. It shows as <b>Paid</b> here within a minute, and we email your confirmation.</p>`);
+      if (fail) body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0;border-left-color:var(--kumkum)">The payment for <b>${esc(fail)}</b> did not go through. Nothing was charged; tap <b>Pay now</b> to try again, or contact us on WhatsApp.</p>`);
+      if (paid || fail) try { history.replaceState(null, '', location.pathname + '#my-enquiries'); } catch { /* ignore */ }
+    } else showSignIn();
+    open();
+  }
 });
 
 /* ---------- save an enquiry (called by the site's forms) ---------- */

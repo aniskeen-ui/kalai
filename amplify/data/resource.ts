@@ -134,6 +134,15 @@ const schema = a.schema({
       zohoSellerBill: a.string().authorization((allow) => [allow.group('ADMINS')]),
       zohoSellerBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       zohoSellerPaymentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      // Ziina online payments: payment link (intent) created at Price sent, paid by webhook, refunds back to the card.
+      ziinaIntentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaAmount: a.float().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaTest: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaPaidAt: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaCard: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaRefundId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaRefundState: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      ziinaMessage: a.string().authorization((allow) => [allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
@@ -361,6 +370,13 @@ const schema = a.schema({
     .arguments({ data: a.string().required() })
     .returns(a.string())
     .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+  // Studio: Ziina status and webhook registration.
+  ziinaAdmin: a
+    .mutation()
+    .arguments({ action: a.string().required(), data: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
   // Studio: approve / reject sellers and listings.
   marketAdmin: a
