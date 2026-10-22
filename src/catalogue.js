@@ -94,6 +94,7 @@ function row(p) {
         <input data-f="size" value="${esc(p.size)}" placeholder="Size, e.g. 38 × 28 cm" aria-label="Size">
         <input data-f="medium" value="${esc(p.medium)}" placeholder="Medium" aria-label="Medium">
         <input data-f="priceAed" type="number" min="0" step="1" value="${p.priceAed ?? ''}" placeholder="Your price AED (internal)" aria-label="Price AED">
+        <label style="display:inline-flex;gap:5px;align-items:center;font-size:12px;font-weight:400;white-space:nowrap" title="The picture is an AI-made preview; the artist paints the order by hand"><input data-f="aiPreview" type="checkbox" ${p.aiPreview ? 'checked' : ''} style="width:auto"> AI preview</label>
       </div>
       <textarea data-f="description" rows="1" placeholder="Short description shown on the website" aria-label="Description">${esc(p.description)}</textarea>
       <span class="cg-saved muted" aria-live="polite"></span>
@@ -108,7 +109,7 @@ function wireRows(list) {
     el.querySelectorAll('[data-f]').forEach((inp) => {
       inp.onchange = async () => {
         const f = inp.dataset.f;
-        let v = inp.value.trim();
+        let v = inp.type === 'checkbox' ? inp.checked : inp.value.trim();
         if (f === 'title' && !v) { inp.value = p.title; return; }
         if (f === 'priceAed') v = v === '' ? null : Number(v);
         const patch = { id: p.id, [f]: v };
@@ -183,9 +184,11 @@ const SUGGEST = {
   'AT-0000013': ['Green Valley with Palms', 'land', 'Palm trees, a red path and a stream in a green valley.'],
   'AT-0000009': ['Rock Ruins Among the Palms', 'land', 'Old stone ruins among palms and bright patterned fields.'],
 };
+// Pictures that look AI-made (suggested "ai": the website then labels them as AI previews; orders are hand-made).
+const AI_LOOK = new Set(['AT-0000001', 'AT-0000016', 'AT-0000002', 'AT-0000017', 'AT-0000013', 'AT-0000015', 'AT-0000025', 'AT-0000006', 'AT-0000007', 'AT-0000018', 'AT-0000019']);
 function titlesText(all) {
   return items.filter((p) => p.status !== 'HIDDEN' && (all || !p.named)).sort((a, b) => String(a.code).localeCompare(String(b.code)))
-    .map((p) => { const s = SUGGEST[p.code]; return [p.code || p.id, s ? s[0] : p.named ? p.title : '', s ? s[1] : p.subject || '', s ? s[2] : p.description || ''].join(' | '); }).join('\n');
+    .map((p) => { const s = SUGGEST[p.code]; return [p.code || p.id, s ? s[0] : p.named ? p.title : '', s ? s[1] : p.subject || '', s ? s[2] : p.description || '', p.aiPreview || AI_LOOK.has(p.code) ? 'ai' : ''].join(' | ').replace(/ \| $/, ''); }).join('\n');
 }
 function wireTitles() {
   $('cgTitlesBtn').onclick = () => { $('cgTitlesBox').hidden = false; $('cgTitles').value = titlesText(false) || titlesText(true); $('cgTitlesMsg').textContent = ''; };
@@ -195,12 +198,13 @@ function wireTitles() {
     const lines = $('cgTitles').value.split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((x) => x[0] && x[1]);
     let ok = 0; const bad = [];
     $('cgTitlesGo').disabled = true;
-    for (const [code, title, subject, description] of lines) {
+    for (const [code, title, subject, description, ai] of lines) {
       const p = items.find((x) => x.code === code || x.id === code);
       if (!p || title.length < 2) { bad.push(code); continue; }
       const rec = { id: p.id, title: title.slice(0, 80), named: `Studio ${new Date().toISOString()}` };
       if (SUBJECTS[subject]) rec.subject = subject;
       if (description) rec.description = description.slice(0, 1000);
+      rec.aiPreview = /^ai$/i.test(ai || '');
       const r = await client.models.Product.update(rec);
       if (r.errors?.length) bad.push(code); else { Object.assign(p, rec); ok++; }
       $('cgTitlesMsg').textContent = `Saving… ${ok} of ${lines.length}`;

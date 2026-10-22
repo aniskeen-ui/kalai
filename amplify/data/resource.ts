@@ -238,6 +238,8 @@ const schema = a.schema({
       code: a.string(), // artwork code AT-0000001…, assigned by the function, never changes
       // Fixed prices set in Order management → Pricing (AED, per frame: none/black/white/oak/walnut/gold).
       priceMatrix: a.string(),
+      // The picture is an AI-made preview of the design; the artist paints the ordered work by hand.
+      aiPreview: a.boolean(),
       priceApprovedAt: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),

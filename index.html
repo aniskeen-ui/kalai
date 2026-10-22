@@ -259,6 +259,8 @@ footer p{margin:2px 0}
 .room-cap{font-size:12px;color:var(--muted);margin:0}
 .byline{font-size:14px;color:var(--muted);margin:-4px 0 0}
 .pprice{font-size:26px;font-family:var(--display)}
+.ai-tag{background:#e8eefc!important;color:#2a4a9a!important}
+.ai-note{font-size:13px;background:#eef2fc;border-left:3px solid #4a6fd1;padding:6px 10px;border-radius:4px;color:var(--fg)}
 .cur-sel{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-sel option{color:#111}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
@@ -683,7 +685,7 @@ function drawGrid(){
       g.appendChild(card);return;
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
-      <h3>${cleanName(p.name)}</h3>${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).length?`<div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")}</div>`:""}<div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
+      <h3>${cleanName(p.name)}</h3>${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).length?`<div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")}</div>`:""}<div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span>${p.ai?` <span class="tag ai-tag" title="The picture is an AI-made preview of the design. Your artwork is painted by hand.">AI preview · hand-painted to order</span>`:""}</div>
       <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`${p.prices?`<span class="price">${money(priceOf(p,"black",baseSize(p)))}<small style="display:block;font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">framed · unframed ${money(priceOf(p,"none"))}</small></span>`:`<span class="note">Price on request</span>`}<button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
@@ -909,14 +911,15 @@ function openModal(p){
       <p class="room-cap" id="vCap">Photo of the original by the artist.</p>
     </div>
     <div class="info">
-     <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · One of a kind</div>
+     <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · ${p.ai?"Hand-painted to order":"One"} of a kind</div>
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
+     ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; allow about 2–3 weeks before dispatch.</div>`:""}
      ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>`:""}
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
      <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size?p.size+" (artwork)":"Ask us"}</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
-       <dt>Dispatch</dt><dd>${p.ship}</dd></dl>
+       <dt>Dispatch</dt><dd>${p.ai?"Painted by hand to order · about 2–3 weeks":p.ship}</dd></dl>
      <div class="badges">
        <div class="badge"><i>✦</i><div><b>Original &amp; signed</b>Hand-made by the artist, not a print</div></div>
        <div class="badge"><i>✓</i><div><b>Certificate of authenticity</b>Signed certificate with every original</div></div>
@@ -934,7 +937,7 @@ function openModal(p){
   const lensTip=()=>LENS?" Move over the picture to look closer.":"";
   const show=v=>{cur=v;box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
     box.querySelector("#vFrames").hidden=v==="art";if(box.querySelector("#vSizes"))box.querySelector("#vSizes").hidden=v==="art"||FRAME.k==="none";box.querySelector(".viewer").classList.toggle("lens-on",LENS&&v!=="room");
-    if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent="Photo of the original by the artist."+lensTip();}
+    if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent=(p.ai?"AI-generated preview of the design. Your artwork is painted by hand by our artist from it, so the finished piece will differ a little.":"Photo of the original by the artist.")+lensTip();}
     else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+(p.prices?" A preview of the look; the price above is for this frame.":" A preview of the look: we confirm the exact frame and its price with you.")+lensTip();}
     else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (${frameDims(p)?`${frameDims(p)[0]} × ${frameDims(p)[1]}`:`about ${p.wcm+16} × ${p.hcm+16}`} cm framed)`}. Pick a frame above to see it on the wall.`;}
     window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));
