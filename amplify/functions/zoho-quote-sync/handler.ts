@@ -2432,6 +2432,15 @@ async function assignCodes() {
       out.customers++;
     }
   }
+  // Offer master numbers PRM-0001… (in order of creation).
+  const prtable = process.env.PROMO_TABLE;
+  if (prtable) {
+    const promos = (await scanAll(prtable)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')));
+    let max = promos.reduce((m, p) => Math.max(m, codeNum(str(p, 'number'))), 0);
+    for (const p of promos.filter((x) => !str(x, 'number'))) {
+      await ddb.send(new UpdateItemCommand({ TableName: prtable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #n = :n', ConditionExpression: 'attribute_not_exists(#n)', ExpressionAttributeNames: { '#n': 'number' }, ExpressionAttributeValues: { ':n': { S: `PRM-${pad(++max)}` } } })).catch(() => {});
+    }
+  }
   const ptable = process.env.PRODUCT_TABLE;
   if (ptable) {
     const prods = (await scanAll(ptable)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')) || str(a, 'id').localeCompare(str(b, 'id')));
@@ -2453,7 +2462,10 @@ async function findPromo(code: string) {
   const table = process.env.PROMO_TABLE;
   if (!table || !code) return null;
   const now = new Date().toISOString();
-  const p = (await scanAll(table)).find((x) => str(x, 'code').toUpperCase() === code.toUpperCase());
+  // The same code may be re-used by a later offer (Re-use in the Offers tab): take the one running now, if any.
+  const same = (await scanAll(table)).filter((x) => str(x, 'code').toUpperCase() === code.toUpperCase());
+  const live = (x: Img) => !!x.active?.BOOL && (!str(x, 'startAt') || str(x, 'startAt') <= now) && (!str(x, 'endAt') || str(x, 'endAt') >= now);
+  const p = same.find(live) ?? same.sort((a, b) => str(b, 'startAt').localeCompare(str(a, 'startAt')))[0];
   if (!p) return { error: 'This code is not valid.' };
   if (!p.active?.BOOL) return { error: 'This offer has ended.' };
   if (str(p, 'startAt') && str(p, 'startAt') > now) return { error: 'This offer has not started yet.' };
@@ -2475,7 +2487,9 @@ function discountFor(p: Img, kind: string, price: number): { amount: number; err
 async function bumpUses(code: string, delta: number) {
   const table = process.env.PROMO_TABLE;
   if (!table || !code) return;
-  const p = (await scanAll(table)).find((x) => str(x, 'code').toUpperCase() === code.toUpperCase());
+  const now = new Date().toISOString();
+  const same = (await scanAll(table)).filter((x) => str(x, 'code').toUpperCase() === code.toUpperCase());
+  const p = same.find((x) => !!x.active?.BOOL && (!str(x, 'startAt') || str(x, 'startAt') <= now) && (!str(x, 'endAt') || str(x, 'endAt') >= now)) ?? same.sort((a, b) => str(b, 'startAt').localeCompare(str(a, 'startAt')))[0];
   if (!p) return;
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET usedCount = if_not_exists(usedCount, :z) + :d', ExpressionAttributeValues: { ':z': { N: '0' }, ':d': { N: String(delta) } } }));
 }

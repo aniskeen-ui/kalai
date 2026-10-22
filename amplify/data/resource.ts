@@ -355,6 +355,8 @@ const schema = a.schema({
       maxUses: a.integer(),
       usedCount: a.integer(),
       sortOrder: a.integer(),
+      number: a.string(), // master number PRM-0001…, never changes
+      copiedFrom: a.string(), // number of the offer it was re-used from
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
