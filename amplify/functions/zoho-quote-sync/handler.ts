@@ -1072,15 +1072,15 @@ function artistStage(e: Img, c: Img | undefined) {
   return { stage: 'NEEDED', label: 'Price needed' };
 }
 
-async function artistList() {
+async function artistList(admin = false) {
   const table = process.env.ENQUIRY_TABLE;
   if (!table) throw new Error('ENQUIRY_TABLE is not configured');
   // Siva's desk: orders not allocated to another artist.
   const enquiries = (await scanAll(table)).filter((e) => ['PRICE', 'COMMISSION'].includes(str(e, 'kind')) && !str(e, 'artistId'));
-  return artistRows(enquiries);
+  return artistRows(enquiries, admin);
 }
 
-async function artistRows(enquiries: Img[]) {
+async function artistRows(enquiries: Img[], admin = false) {
   const costing = await costingFor(enquiries.map((e) => str(e, 'id')));
   return enquiries
     .map((e) => {
@@ -1094,6 +1094,8 @@ async function artistRows(enquiries: Img[]) {
         kind: str(e, 'kind'),
         title: str(e, 'title'),
         createdAt: str(e, 'createdAt'),
+        customerCode: str(e, 'customerCode'), // a code only: artists never see who the customer is
+        customerName: admin ? str(e, 'customerName') : '',
         brief,
         hasPhoto: str(e, 'kind') === 'COMMISSION' && !!str(e, 'fileKey'),
         artistPriceInr: num(c, 'artistPriceInr'),
@@ -3073,7 +3075,10 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'guestEnquiry') return JSON.stringify(await guestEnquiry(event.arguments));
     if (field === 'artistRework') return JSON.stringify(await artistRework(event.arguments, actor(event)));
     if (field === 'customerRequest') return JSON.stringify(await customerRequest(event));
-    if (field === 'artistList') return JSON.stringify(await artistList());
+    if (field === 'artistList') {
+      const g = event.identity?.groups ?? (event.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+      return JSON.stringify(await artistList(g.includes('ADMINS')));
+    }
     if (field === 'artistQuote') return JSON.stringify(await artistQuote(event.arguments, actor(event)));
     if (field === 'artistPhoto') return JSON.stringify(await artistPhoto(event.arguments.id ?? ''));
     if (field === 'artistProgress') return JSON.stringify(await artistProgress(event.arguments, actor(event)));

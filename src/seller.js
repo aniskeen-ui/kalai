@@ -146,13 +146,21 @@ function route() {
   }
   show('deskView');
   $('tabComm').hidden = profile.type !== 'ARTIST';
+  // Siva works only through his desk (Kalai's own orders): his portal shows just that, without the self-listing tabs.
+  const sivaOnly = deskTab() && /\bs(h)?iva\b/i.test(`${profile.business} ${profile.contactName}`) && !listings.length;
+  if (sivaOnly) {
+    $('tabProducts').hidden = true; $('tabOrders').hidden = true; $('tabComm').hidden = true; $('dNew').hidden = true;
+    $('tabDesk').textContent = 'My desk';
+    pane('desk');
+  } else
   pane(location.hash === '#orders' ? 'orders' : location.hash === '#commissions' ? 'commissions' : location.hash === '#studio' && deskTab() ? 'desk' : 'products');
-  if (profile.type === 'ARTIST' && location.hash !== '#commissions') call('commissions').then((r) => { comms = r.items || []; commCur = r.currency || 'INR'; const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length; $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions'; }).catch(() => {});
+  if (profile.type === 'ARTIST' && location.hash !== '#commissions' && !$('tabComm').hidden) call('commissions').then((r) => { comms = r.items || []; commCur = r.currency || 'INR'; const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length; $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions'; }).catch(() => {});
   $('dBiz').textContent = profile.business;
   $('dPhoto').hidden = !profile.photoKey;
   if (profile.photoKey) imgUrl(profile.photoKey).then((u) => { $('dPhoto').src = u; });
   $('tabProducts').textContent = profile.type === 'ARTIST' ? 'My artworks' : 'My products';
   $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
+  if ($('tabProducts').hidden) $('dTerms').textContent = 'Price new works, follow your orders and payments, and name your works.';
   drawList();
 }
 

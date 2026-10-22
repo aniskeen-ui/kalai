@@ -111,15 +111,43 @@ async function renderWorks(force = false) {
   });
 }
 
+// Search: order no. / artwork, customer (code; the studio also sees the name), dates (Dubai time).
+let finderSig = '';
+function fillFinder() {
+  const sig = items.map((x) => x.id + x.customerCode).join();
+  if (sig === finderSig) return;
+  finderSig = sig;
+  $('dlRefs').innerHTML = items.map((x) => `<option value="${esc(x.ref)}">${esc(x.title)}</option>`).join('');
+  const cs = new Map();
+  items.forEach((x) => { if (!x.customerCode) return; const c = cs.get(x.customerCode) || { code: x.customerCode, name: x.customerName, n: 0 }; c.n++; cs.set(x.customerCode, c); });
+  const cur = $('qCust').value;
+  $('qCust').innerHTML = '<option value="">All customers</option>' + [...cs.values()].sort((a, b) => (a.name || a.code).localeCompare(b.name || b.code))
+    .map((c) => `<option value="${esc(c.code)}">${c.name ? `${esc(c.name)} · ` : ''}${esc(c.code)} (${c.n})</option>`).join('');
+  $('qCust').value = cs.has(cur) ? cur : '';
+}
+const dubaiDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
+function found(x) {
+  const q = $('qRef').value.trim().toLowerCase(), c = $('qCust').value, from = $('qFrom').value, to = $('qTo').value;
+  return (!q || [x.ref, x.title].some((v) => String(v || '').toLowerCase().includes(q))) && (!c || x.customerCode === c)
+    && (!from || dubaiDay(x.createdAt) >= from) && (!to || dubaiDay(x.createdAt) <= to);
+}
+const searching = () => !!($('qRef').value.trim() || $('qCust').value || $('qFrom').value || $('qTo').value);
+let qT;
+$('qRef').addEventListener('input', () => { clearTimeout(qT); qT = setTimeout(render, 200); });
+['qCust', 'qFrom', 'qTo'].forEach((id) => $(id).addEventListener('change', render));
+$('qClear').onclick = () => { ['qRef', 'qCust', 'qFrom', 'qTo'].forEach((id) => { $(id).value = ''; }); render(); };
+
 function render() {
+  $('finder').hidden = filter === 'WORKS';
   if (filter === 'WORKS') { renderWorks(); return; }
+  fillFinder();
   const needed = items.filter((x) => x.stage === 'NEEDED' || reworkPriceNeeded(x));
   $('cNeeded').textContent = needed.length ? `(${needed.length})` : '';
-  const list = filter === 'NEEDED' ? needed
+  const list = (filter === 'NEEDED' ? needed
     : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage))
-    : items;
+    : items).filter(found);
   if (!list.length) {
-    $('list').innerHTML = `<p class="muted">${filter === 'NEEDED' ? 'Nothing to price right now.' : filter === 'OPEN' ? 'No orders yet. Orders appear here once a customer has paid.' : 'No enquiries yet.'}</p>`;
+    $('list').innerHTML = `<p class="muted">${searching() ? 'Nothing matches your search. <button type="button" class="linkbtn" onclick="document.getElementById(\'qClear\').click()">Clear search</button>' : filter === 'NEEDED' ? 'Nothing to price right now.' : filter === 'OPEN' ? 'No orders yet. Orders appear here once a customer has paid.' : 'No enquiries yet.'}</p>`;
     return;
   }
   $('list').innerHTML = list.map(card).join('');
@@ -130,7 +158,7 @@ function card(x) {
   const brief = x.brief.map(({ k, v }) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
   const dis = x.locked ? 'disabled' : '';
   return `<article class="acard" id="c-${esc(x.id)}">
-    <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span>${x.kind === 'COMMISSION' ? 'Commission' : 'Catalogue work'}</span><span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
+    <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span>${x.kind === 'COMMISSION' ? 'Commission' : 'Catalogue work'}</span>${x.customerCode ? `<span class="mono" title="Customer">${x.customerName ? esc(x.customerName) + ' · ' : ''}${esc(x.customerCode)}</span>` : ''}<span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
     <h2>${esc(x.title)}</h2>
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
