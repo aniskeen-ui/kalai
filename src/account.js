@@ -485,6 +485,7 @@ function wireAddress(root, items) {
   });
 }
 
+const parseDet = (d) => { try { const v = typeof d === 'string' ? JSON.parse(d) : d; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
 function card(e) {
   const st = e.status || 'RECEIVED';
   const steps = e.kind === 'MARKET' ? MARKET_STEPS : STEPS;
@@ -500,7 +501,7 @@ function card(e) {
     ${e.quotedPrice ? `<div>Price: <span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span></div>` : ''}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
     ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
-    ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
+    ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(parseDet(e.details).Maker || e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
     ${e.kind === 'MARKET' && st === 'RECEIVED' ? '<div class="enq-msg">Thank you for your order. We are confirming it with the maker and will send you a secure payment link shortly.</div>' : ''}
     ${e.kind === 'MARKET' && st === 'PAID' ? `<div class="enq-msg">${e.sellerStage === 'READY' ? 'The maker has packed it; our courier is collecting it.' : 'Paid: the maker is preparing your order.'}</div>` : ''}
     ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}

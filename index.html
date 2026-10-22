@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Original watercolours and sketches by Siva Raja, custom portrait commissions and framed gifts of children's drawings, delivered across the UAE.">
+<meta name="description" content="Original watercolours and sketches, hand-made by our artists, custom portrait commissions and framed gifts of children's drawings, delivered across the UAE.">
 <title>Kalai Art House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -277,8 +277,8 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <div class="promises"><span>Duties paid, no charges at the door</span><span>Signed by the artist</span><span>Insured courier delivery</span></div>
   </div>
   <div class="hero-art" aria-hidden="true">
-    <img id="heroA" alt="Watercolour by Siva Raja">
-    <img id="heroB" class="b" alt="Ink sketch by Siva Raja">
+    <img id="heroA" alt="Original watercolour">
+    <img id="heroB" class="b" alt="Original ink sketch">
   </div>
 </div></section>
 
@@ -416,9 +416,9 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 
 <section id="artist"><div class="wrap" style="max-width:1100px">
   <div style="max-width:820px"><div class="kind" id="artistKicker" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">Our artist</div>
-  <h2 style="font-size:clamp(28px,3.4vw,38px);margin-top:6px">Siva Raja</h2>
-  <p class="note" style="font-size:15px">Painter, sketch artist and story illustrator. Every watercolour and pencil sketch in this gallery, and every commission, is drawn by hand in his studio and shipped to you.</p>
-  <button class="btn ghost-dark" type="button" data-artist-pick="Siva Raja" style="margin-top:6px">See Siva's works</button></div>
+  <h2 style="font-size:clamp(28px,3.4vw,38px);margin-top:6px">Meet the artist</h2>
+  <p class="note" style="font-size:15px">Painter, sketch artist and story illustrator. Every watercolour and pencil sketch in this gallery, and every commission, is drawn by hand in the artist's studio and shipped to you.</p>
+</div>
   <div id="moreArtists" hidden><h3 style="font-size:22px;margin-top:34px">More artists at Kalai</h3><div class="artists-grid" id="artistsGrid"></div></div>
 </div></section>
 
@@ -549,7 +549,7 @@ const fmt=n=>"AED "+n.toLocaleString("en-US");
 /* seeded random */
 function rng(s){return()=>{s=(s*9301+49297)%233280;return s/233280}}
 
-function mk(p){const im=document.createElement("img");im.src=p.img;im.alt=p.name+", "+(p.medium||"artwork")+" by "+(p.artist||"Siva Raja");im.decoding="async";return im}
+function mk(p){const im=document.createElement("img");im.src=p.img;im.alt=p.name+", "+(p.medium||"original artwork");im.decoding="async";return im}
 
 /* hero */
 document.getElementById("heroA").src=PRODUCTS[1].img;document.getElementById("heroB").src=PRODUCTS[8].img;
@@ -565,21 +565,24 @@ function drawChips(){
   c.innerHTML=[["all","All subjects"],...Object.entries(SUBJECTS)].map(([k,v])=>`<button class="chip-f" data-subj="${k}" aria-pressed="${k===subj}">${v}</button>`).join("");
   c.querySelectorAll("[data-subj]").forEach(b=>b.onclick=()=>{subj=b.dataset.subj;drawChips();drawGrid()});
 }
-/* Works by approved artists (from the artist portal), shown alongside Siva's. */
+/* Works by approved artists (from the artist portal), shown in the collection.
+   Artist names are not shown on the website (SHOW_ARTIST_NAMES = false): no names on cards, no artist dropdown, no artist cards. */
+const SHOW_ARTIST_NAMES=false;
+const cleanName=n=>String(n||"").replace(/^\s*siva\s*raja\s*[-:,]?\s*/i,"")||String(n||"");
 let ARTWORKS=[];let artistF="all";
 const esc2=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function drawArtistSel(){
   const sel=document.getElementById("artistSel");if(!sel)return;
   const names=[...new Set(PRODUCTS.map(p=>p.artist||"Siva Raja").concat(ARTWORKS.map(p=>p.artist)))].filter(Boolean);
   sel.innerHTML='<option value="all">All artists</option>'+names.map(n=>`<option value="${esc2(n)}" ${n===artistF?"selected":""}>${esc2(n)}</option>`).join("");
-  sel.hidden=names.length<2;
+  sel.hidden=!SHOW_ARTIST_NAMES||names.length<2;
   sel.onchange=()=>{artistF=sel.value;drawGrid()};
 }
 window.kalaiPickArtist=function(name){artistF=name;drawArtistSel();drawGrid();document.getElementById("collection").scrollIntoView({behavior:"smooth"})};
 document.addEventListener("click",e=>{const b=e.target.closest("[data-artist-pick]");if(b)window.kalaiPickArtist(b.dataset.artistPick)});
 window.kalaiShowArtistWorks=function(list){ARTWORKS=list||[];drawArtistSel();drawGrid()};
 window.kalaiShowArtists=function(list){
-  const g=document.getElementById("artistsGrid"),box=document.getElementById("moreArtists");if(!g||!list.length)return;
+  const g=document.getElementById("artistsGrid"),box=document.getElementById("moreArtists");if(!SHOW_ARTIST_NAMES||!g||!list.length)return;
   g.innerHTML=list.map(a=>`<article class="artist-card">${a.img?`<img src="${esc2(a.img)}" alt="${esc2(a.name)}">`:""}<h3>${esc2(a.name)}</h3>
     <div class="meta">${esc2(a.mediums||"")}${a.place?` · ${esc2(a.place)}`:""}</div>${a.about?`<p>${esc2(a.about)}</p>`:""}
     <button class="btn ghost-dark" type="button" data-artist-pick="${esc2(a.name)}" style="justify-self:start">See works</button></article>`).join("");
@@ -597,19 +600,19 @@ function drawGrid(){
     card.appendChild(fb);
     if(p.market){
       card.insertAdjacentHTML("beforeend",`<div class="kind">${esc2(p.category||"Original artwork")}</div>
-      <h3>${esc2(p.name)}</h3><div class="meta">by ${esc2(p.artist)}${p.stock>0?"":' · <b style="color:var(--kumkum)">Sold</b>'}</div>
+      <h3>${esc2(p.name)}</h3><div class="meta">${SHOW_ARTIST_NAMES?"by "+esc2(p.artist):"Original artwork"}${p.stock>0?"":' · <b style="color:var(--kumkum)">Sold</b>'}</div>
       ${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
       <div class="row"><span class="price">AED ${Number(p.price).toLocaleString("en-GB")}</span>${p.stock>0?`<button class="add" type="button" data-order-art="${esc2(p.id)}">Order</button>`:""}</div>`);
       g.appendChild(card);return;
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
-      <h3>${p.name}</h3><div class="meta">${p.artist||"Siva Raja"}${p.size?" · "+p.size:""}</div><div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
+      <h3>${cleanName(p.name)}</h3><div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")||"Original artwork"}</div><div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
       <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`<span class="note">Price on request</span><button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
   g.querySelectorAll("[data-order-art]").forEach(b=>b.onclick=()=>{const p=ARTWORKS.find(x=>x.id===b.dataset.orderArt);if(!p)return;
-    const item={id:p.id,title:p.name,seller:p.artist,price:p.price,stock:p.stock,img:p.img};
+    const item={id:p.id,title:p.name,seller:SHOW_ARTIST_NAMES?p.artist:"our artist",price:p.price,stock:p.stock,img:p.img};
     if(window.kalaiMarketOrder){window.kalaiMarketOrder(item);return}sendEnquiry("Artwork order: "+p.name,{"Item":p.name,"Artist":p.artist,"Price":"AED "+p.price,"Listing":p.id});});
 }
 /* Catalogue from Order Management (replaces the built-in list once it has published works). */
@@ -628,7 +631,7 @@ window.kalaiShowMarket=function(list){
 window.kalaiShowCatalogue=function(list){
   if(!list||!list.length)return;
   PRODUCTS.splice(0,PRODUCTS.length,...list);
-  PRODUCTS.forEach(p=>{const m=String(p.size||"").match(/(\d+)\s*[×x]\s*(\d+)/);p.wcm=m?+m[1]:30;p.hcm=m?+m[2]:40;if(!SUBJECTS[p.subject])p.subject="land";});
+  PRODUCTS.forEach(p=>{p.name=cleanName(p.name);const m=String(p.size||"").match(/(\d+)\s*[×x]\s*(\d+)/);p.wcm=m?+m[1]:30;p.hcm=m?+m[2]:40;if(!SUBJECTS[p.subject])p.subject="land";});
   drawChips();drawArtistSel();drawGrid();
 };
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawGrid()});
@@ -678,7 +681,7 @@ function openAsk(p,offer){
   const art=document.createElement("div");art.className="art";art.appendChild(mk(p));box.appendChild(art);
   box.insertAdjacentHTML("beforeend",`<div class="info"><button class="x" id="mClose" aria-label="Close">×</button>
    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${offer?"Make an offer":"Price enquiry"}</div>
-   <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${p.medium} · ${p.size}</p>
+   <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${[p.medium,p.size].filter(Boolean).join(" · ")}</p>
    <form id="askForm" novalidate style="display:grid;gap:12px">
      <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
@@ -728,7 +731,7 @@ function openModal(p){
     <div class="info">
      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · One of a kind</div>
      <h2 style="font-size:30px">${p.name}</h2>
-     <p class="byline">by Siva Raja · Tamil Nadu, India</p>
+     <p class="byline">Hand-made by our artist</p>
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
      <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size} (artwork)</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
@@ -741,7 +744,7 @@ function openModal(p){
      </div>
      <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">Ask for price</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}</div>
      <p class="note" style="margin:0">We reply on WhatsApp within one working day with the price, framing options and delivery date.</p>
-     <details><summary>About the artist</summary><p>Siva Raja is a painter, sketch artist and story illustrator from Tamil Nadu. His watercolours and pen drawings record village life, old streets, rivers and trees in South India. Every work here is drawn or painted by hand and signed.</p></details>
+     <details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>
      <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
      ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
     </div>`);

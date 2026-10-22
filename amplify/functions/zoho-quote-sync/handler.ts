@@ -1945,7 +1945,8 @@ async function marketOrder(ev: ApiEvent) {
   const unit = Number(l.customerPrice), total = r2(unit * qty), sellerAmount = r2(Number(l.sellerPrice) * qty);
   const ref = newRef();
   const now = new Date().toISOString();
-  const details = { Item: String(l.title), Maker: String(l.sellerName ?? seller.business), Quantity: String(qty), 'Unit price': `AED ${unit}`, Delivery: l.deliveryBy === 'KALAI' ? 'Kalai Art House delivers' : 'The maker delivers', Country: country === 'India' ? 'India: add the shipping to India to the price before sending the payment link' : '', Note: txt(d.note, 300) };
+  // Artist names are not shown to customers: their order says "Artist" (the studio still sees the name in sellerName).
+  const details = { Item: String(l.title), Maker: seller.type === 'ARTIST' ? 'Artist' : String(l.sellerName ?? seller.business), Quantity: String(qty), 'Unit price': `AED ${unit}`, Delivery: l.deliveryBy === 'KALAI' ? 'Kalai Art House delivers' : 'The maker delivers', Country: country === 'India' ? 'India: add the shipping to India to the price before sending the payment link' : '', Note: txt(d.note, 300) };
   const row: Dict = {
     id: crypto.randomUUID(), __typename: 'Enquiry', createdAt: now, updatedAt: now, owner: me.owner,
     ref, kind: 'MARKET', title: String(l.title), details: JSON.stringify(details), status: 'RECEIVED',
