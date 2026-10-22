@@ -31,6 +31,7 @@ export async function showCatalogue() {
   await load();
 }
 
+let codesAsked = false;
 async function load() {
   $('cgList').innerHTML = '<p class="muted">Loading the catalogue…</p>';
   try {
@@ -42,6 +43,8 @@ async function load() {
       all.push(...r.data);
       nextToken = r.nextToken;
     } while (nextToken);
+    // Works without an artwork code (imported before codes existed, or just now) get one, then the list reloads.
+    if (all.some((p) => !p.code) && !codesAsked) { codesAsked = true; client.mutations.assignCodes().then(() => { codesAsked = false; load(); }).catch(() => {}); }
     items = all.sort((a, b) => String(b.publishAt || b.createdAt).localeCompare(String(a.publishAt || a.createdAt)));
     draw();
   } catch (ex) {
@@ -84,7 +87,7 @@ function row(p) {
     <div class="cg-fields">
       <div class="cg-top"><input data-f="title" value="${esc(p.title)}" aria-label="Title" class="cg-title">
         <span class="cg-badge ${s}">${STATE_LABEL[s]}${s === 'SCHEDULED' || (s === 'PUBLISHED' && p.publishAt) ? ` · ${esc(day(p.publishAt))}` : ''}</span>
-        <span class="muted" style="font-size:11px;white-space:nowrap" title="Shown in enquiries for untitled works">No. ${esc(String(p.id).slice(0, 8))}${p.named ? ` · named by ${esc(String(p.named).split(' 20')[0])}` : ' · <b style="color:var(--kumkum)">untitled on website</b>'}</span></div>
+        <span class="muted" style="font-size:11px;white-space:nowrap" title="Artwork code: shown on the website and in enquiries"><b class="mono">${esc(p.code || 'code pending')}</b>${p.named ? ` · named by ${esc(String(p.named).split(' 20')[0])}` : ' · <b style="color:var(--kumkum)">untitled on website</b>'}</span></div>
       <div class="cg-grid">
         <select data-f="kind" aria-label="Type">${opt(KINDS, p.kind || 'water')}</select>
         <select data-f="subject" aria-label="Subject">${opt(SUBJECTS, p.subject || 'land')}</select>

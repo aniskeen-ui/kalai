@@ -681,7 +681,7 @@ function openAsk(p,offer){
   const art=document.createElement("div");art.className="art";art.appendChild(mk(p));box.appendChild(art);
   box.insertAdjacentHTML("beforeend",`<div class="info"><button class="x" id="mClose" aria-label="Close">×</button>
    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${offer?"Make an offer":"Price enquiry"}</div>
-   <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${[p.medium,p.size].filter(Boolean).join(" · ")}</p>
+   <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${[p.medium,p.size].filter(Boolean).join(" · ")}${p.code?` · <span style="font-family:var(--mono)">${p.code}</span>`:""}</p>
    <form id="askForm" novalidate style="display:grid;gap:12px">
      <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
@@ -697,7 +697,7 @@ function openAsk(p,offer){
     const off=offer?document.getElementById("aOffer").value.replace(/[^\d.]/g,""):"";
     if(!n||!ph){ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can reply.";return}
     if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
-    const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")"+(p.untitled?" · catalogue no. "+String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
+    const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")","Artwork no.":p.code||(p.untitled?String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
     if(offer)fields["Offer"]="AED "+off;
     fields["Framing"]=document.getElementById("aFrame").value;fields["Message"]=document.getElementById("aMsg").value.trim();
     const url=sendEnquiry((offer?"Price enquiry (offer): ":"Price enquiry: ")+p.name,fields);

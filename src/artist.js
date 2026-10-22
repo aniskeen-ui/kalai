@@ -82,7 +82,7 @@ async function renderWorks(force = false) {
   $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. ${todo ? `<b>${todo} still to name.</b>` : '<b class="wdone">All named. Thank you!</b>'}</p>`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
-        <div class="field"><label>Title</label><input name="title" maxlength="80" value="${esc(w.title)}" placeholder="A short, meaningful title"></div>
+        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title</label><input name="title" maxlength="80" value="${esc(w.title)}" placeholder="A short, meaningful title"></div>
         <div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
         <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description)}</textarea></div>
         <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? '<span class="wdone">✓ Named</span>' : ''}</span></div>

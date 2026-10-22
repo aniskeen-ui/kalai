@@ -380,6 +380,12 @@ $('rCsv').onclick = () => {
   document.body.appendChild(a); a.click(); a.remove();
 };
 $('fStatus').onchange = render;
+let searchT;
+$('fSearch').addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(render, 200); });
+['fFrom', 'fTo'].forEach((id) => $(id).addEventListener('change', render));
+$('fClear').onclick = () => { $('fSearch').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
+// Click a customer code on an order: list all that customer's orders.
+document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-cust]'); if (!b) return; $('fSearch').value = b.dataset.cust; $('fStatus').value = ''; render(); });
 $('fKind').onchange = render;
 
 // Approved portal artists, for allocating price enquiries / commissions (Siva is the default).
@@ -388,6 +394,7 @@ async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
 }
+let codesAsked = false;
 let curAed = false; // the open order's artist prices in AED (artist in the UAE)
 
 async function load() {
@@ -405,6 +412,11 @@ async function load() {
     await loadCostings().catch(() => {});
     await loadReviews().catch(() => {});
     await loadArtists().catch(() => {});
+    // Older enquiries (before codes existed) get their customer code once, then the list reloads.
+    if (!codesAsked && items.some((e) => !e.customerCode)) {
+      codesAsked = true;
+      client.mutations.assignCodes().then(() => load()).catch(() => {});
+    }
     render();
     if (!$('reportsPane').hidden) renderReport();
     if (!$('feedbackPane').hidden) renderFeedback();
@@ -433,13 +445,19 @@ function render() {
       render();
     };
   });
-  const list = all.filter((e) => (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk));
+  // Search: order no., customer name, mobile, email, customer code, artwork code / title; dates in Dubai time.
+  const q = $('fSearch').value.trim().toLowerCase(), from = $('fFrom').value, to = $('fTo').value;
+  const dubaiDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
+  const hit = (e) => !q || [e.ref, e.customerName, e.phone, e.email, e.customerCode, e.title, e.deliveryName, e.deliveryPhone, typeof e.details === 'string' ? e.details : JSON.stringify(e.details || '')]
+    .some((v) => String(v || '').toLowerCase().includes(q) || (q.replace(/\D/g, '').length >= 5 && String(v || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))));
+  const list = all.filter((e) => (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk)
+    && hit(e) && (!from || dubaiDay(e.createdAt) >= from) && (!to || dubaiDay(e.createdAt) <= to));
   $('rows').innerHTML = list.length ? list.map((e) => {
     const s = e.status || 'RECEIVED';
     const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
       <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
-      <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}</td>
+      <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}${e.customerCode ? `<br><span class="muted mono" style="font-size:11px">${esc(e.customerCode)}</span>` : ''}</td>
       <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? 'AED ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">Nothing matches this filter.</td></tr>';
@@ -1034,7 +1052,7 @@ async function showDetail(e) {
     <div><div class="muted" style="font-family:var(--mono);font-size:13px">${esc(e.ref)} · ${esc(KIND[e.kind] || '')}</div>
     <h2 style="font-size:22px;margin-top:4px">${esc(e.title)}</h2></div>
     <dl class="kv">
-      <dt>Customer</dt><dd>${esc(e.customerName)}</dd>
+      <dt>Customer</dt><dd>${esc(e.customerName)}${e.customerCode ? ` · <button type="button" class="linkbtn mono" data-cust="${esc(e.customerCode)}" title="Show all orders of this customer">${esc(e.customerCode)}</button>` : ''}</dd>
       <dt>Email</dt><dd>${esc(e.email)}</dd>
       ${Object.entries(det).filter(([k, v]) => v !== '' && v != null && !['Reference', 'Name', 'Mobile', 'Parent'].includes(k)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
     </dl>

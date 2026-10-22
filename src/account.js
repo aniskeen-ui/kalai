@@ -557,7 +557,7 @@ async function showList() {
   }
   let admin = false;
   try { admin = ((await fetchAuthSession()).tokens?.accessToken?.payload?.['cognito:groups'] || []).includes('ADMINS'); } catch { /* not admin */ }
-  body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b></p>
+  body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b><span id="custNo"></span></p>
     ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
     <nav class="acct-tabs" role="tablist" id="acctTabs"></nav>
     <div id="enqList" class="acct-info">Loading…</div>
@@ -577,6 +577,8 @@ async function showList() {
       nextToken = res.nextToken;
     } while (nextToken);
     items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const cc = !admin && items.find((x) => x.customerCode)?.customerCode;
+    if (cc && body.querySelector('#custNo')) body.querySelector('#custNo').innerHTML = ` · customer no. <b style="font-family:var(--mono)">${esc(cc)}</b>`;
     myReviews.clear();
     if (items.some((x) => x.status === 'DELIVERED')) {
       try {
@@ -832,7 +834,7 @@ async function showCatalogue() {
     const list = await Promise.all(live.map(async (p) => {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
-      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
     }));
     window.kalaiShowCatalogue(list.filter((x) => x.img));
   } catch (ex) { console.warn('Catalogue not loaded; showing the built-in collection.', ex); }

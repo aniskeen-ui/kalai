@@ -1418,6 +1418,8 @@ async function onStreamRecord(rec: StreamRecord) {
   const id = str(img, 'id');
 
   if (rec.eventName === 'INSERT') {
+    // Customer code for the new enquiry (same code as the customer's earlier orders).
+    if (!str(img, 'customerCode')) await assignCodes().catch((err) => console.warn('Customer code not assigned', err));
     const quote = await createQuote(img);
     await writeBack(id, { zohoState: 'QUOTED', zohoQuote: quote.number, zohoMessage: `Quote ${quote.number} created in Zoho` });
     return;
@@ -2379,7 +2381,7 @@ async function artistWorks(ev: ApiEvent) {
   if (action === 'list') {
     const items = (await scanAll(table)).filter((x) => str(x, 'status') !== 'HIDDEN' && str(x, 'imageKey'));
     return {
-      works: items.map((x) => ({ id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named') }))
+      works: items.map((x) => ({ id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named'), code: str(x, 'code') }))
         .sort((a, b) => Number(!!a.named) - Number(!!b.named) || a.id.localeCompare(b.id)),
     };
   }
@@ -2399,6 +2401,47 @@ async function artistWorks(ev: ApiEvent) {
     return { ok: true, id, ...set };
   }
   throw new Error('Unknown action');
+}
+
+// ---------- Customer codes (CUST-0001) and artwork codes (ART-0001) ----------
+// Customer = the signed-in account, else the email, else the mobile number. Codes are given in order of the first
+// enquiry and never change. New enquiries get theirs as they arrive; assignCodes fills in anything missing.
+const custKey = (e: Img) => {
+  const owner = str(e, 'owner').split('::')[0];
+  if (owner) return `o:${owner}`;
+  const email = str(e, 'email').toLowerCase();
+  if (email) return `e:${email}`;
+  const phone = str(e, 'phone').replace(/\D/g, '').slice(-9);
+  return phone ? `p:${phone}` : `id:${str(e, 'id')}`;
+};
+const codeNum = (c: string) => Number((c.match(/(\d+)$/) ?? [])[1] ?? 0);
+const pad = (n: number) => String(n).padStart(4, '0');
+async function assignCodes() {
+  const out = { customers: 0, artworks: 0 };
+  const table = process.env.ENQUIRY_TABLE;
+  if (table) {
+    const all = (await scanAll(table)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')));
+    const byKey = new Map<string, string>();
+    let max = 0;
+    all.forEach((e) => { const c = str(e, 'customerCode'); if (c) { byKey.set(custKey(e), c); max = Math.max(max, codeNum(c)); } });
+    for (const e of all.filter((x) => !str(x, 'customerCode'))) {
+      const k = custKey(e);
+      let code = byKey.get(k);
+      if (!code) { code = `CUST-${pad(++max)}`; byKey.set(k, code); }
+      await writeBack(str(e, 'id'), { customerCode: code });
+      out.customers++;
+    }
+  }
+  const ptable = process.env.PRODUCT_TABLE;
+  if (ptable) {
+    const prods = (await scanAll(ptable)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')) || str(a, 'id').localeCompare(str(b, 'id')));
+    let max = prods.reduce((m, p) => Math.max(m, codeNum(str(p, 'code'))), 0);
+    for (const p of prods.filter((x) => !str(x, 'code'))) {
+      await ddb.send(new UpdateItemCommand({ TableName: ptable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #c = :c', ConditionExpression: 'attribute_not_exists(#c)', ExpressionAttributeNames: { '#c': 'code' }, ExpressionAttributeValues: { ':c': { S: `ART-${pad(++max)}` } } })).catch(() => {});
+      out.artworks++;
+    }
+  }
+  return out;
 }
 
 // ---------- Discount codes (Offers tab) ----------
@@ -2977,6 +3020,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
     if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));
     if (field === 'applyCode') return JSON.stringify(await applyCode(event));
+    if (field === 'assignCodes') return JSON.stringify(await assignCodes());
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));

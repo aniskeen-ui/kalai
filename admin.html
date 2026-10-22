@@ -44,6 +44,7 @@ label{font-size:13px;font-weight:600}
 .desk{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 .bar select{width:auto}
+.searchbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px}.searchbar input[type=search]{flex:1;min-width:240px}.searchbar label{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600}.searchbar input[type=date]{width:auto}
 .counts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
 .count{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;font:inherit;font-size:13px;color:var(--fg);cursor:pointer}
 .count:hover{border-color:var(--gold)}
@@ -203,6 +204,11 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
         <option value="">All types</option><option value="PRICE">Price enquiries</option><option value="COMMISSION">Commissions</option><option value="GIFT">Little Artists</option><option value="MARKET">Crafts shop</option>
       </select>
       <button class="btn" id="reload" type="button">Refresh</button>
+    </div>
+    <div class="searchbar">
+      <input id="fSearch" type="search" placeholder="Search: order no., customer name, mobile, email, CUST- or ART- code" aria-label="Search orders">
+      <label>From <input id="fFrom" type="date"></label><label>To <input id="fTo" type="date"></label>
+      <button class="btn small ghost" id="fClear" type="button">Clear</button>
     </div>
     <div class="counts" id="counts"></div>
     <div class="desk">
