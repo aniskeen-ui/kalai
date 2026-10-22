@@ -921,7 +921,7 @@ async function ziinaStatus(msg = '') {
     const r = await client.mutations.ziinaAdmin({ action: 'status' });
     if (r.errors?.length) throw new Error(r.errors[0].message);
     const z = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-    $('zStatus').innerHTML = `${z.token ? '✓ Token saved' : '✗ No token yet (run the CloudShell command)'} · ${z.secret ? '✓ signing secret saved' : '✗ no signing secret'} · ${z.test ? '<b>test mode</b> (no real money)' : '<b style="color:var(--ok)">live</b>'}${msg ? ` · ${esc(msg)}` : ''}`;
+    $('zStatus').innerHTML = `${z.token ? '✓ Token saved' : '✗ No valid token yet (run the CloudShell command)'} · ${z.secret ? '✓ signing secret saved' : '✗ no signing secret'} · ${z.test ? '<b>test mode</b> (no real money)' : '<b style="color:var(--ok)">live</b>'}${msg ? ` · ${esc(msg)}` : ''}`;
   } catch (ex) { $('zStatus').textContent = 'Could not check Ziina: ' + ex.message; }
 }
 document.addEventListener('click', async (ev) => {

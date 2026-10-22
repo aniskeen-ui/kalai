@@ -2126,7 +2126,12 @@ async function ziinaTest(): Promise<boolean> {
 async function ziinaCall(path: string, init: RequestInit = {}): Promise<{ ok: boolean; status: number; body: any }> {
   const token = await secureParam('/kalai/ziina/token');
   if (!token) throw new Error('Ziina is not connected yet (no token saved).');
-  const r = await fetch(`${ZIINA_API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json', ...(init.headers ?? {}) } });
+  // Never echo the token: a bad value (e.g. pasted commands) is reported without its content.
+  if (!/^[A-Za-z0-9._~+/=-]{20,4000}$/.test(token)) throw new Error('The saved Ziina token is not valid (it contains spaces or other text). Save it again in CloudShell.');
+  let r: Response;
+  try {
+    r = await fetch(`${ZIINA_API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json', ...(init.headers ?? {}) } });
+  } catch { throw new Error('Could not reach Ziina. Try again in a minute.'); }
   const text = await r.text();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any = {};
@@ -2241,7 +2246,8 @@ async function ziinaWebhook(ev: UrlEvent) {
 async function ziinaAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
-  const token = !!(await secureParam('/kalai/ziina/token'));
+  const raw = await secureParam('/kalai/ziina/token');
+  const token = !!raw && /^[A-Za-z0-9._~+/=-]{20,4000}$/.test(raw);
   const secret = !!(await secureParam('/kalai/ziina/webhook_secret'));
   const test = await ziinaTest();
   if (action === 'status') return { token, secret, test };
