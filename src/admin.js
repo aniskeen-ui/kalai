@@ -1096,18 +1096,40 @@ async function waitForZoho(id, since) {
   }
 }
 
+// Picture beside the order: the customer's photo (commission), else the artwork from the catalogue.
+let thumbProducts = null;
+async function showThumb(e, det) {
+  const box = $('dThumb'); if (!box) return;
+  const put = (url, label) => { if ($('dThumb') !== box) return; box.href = url; box.querySelector('img').src = url; box.querySelector('span').textContent = label; box.hidden = false; };
+  try {
+    if (e.fileKey && /\.(jpe?g|png|webp|heic|gif)$/i.test(e.fileKey)) { const { url } = await getUrl({ path: e.fileKey, options: { expiresIn: 900 } }); put(url.toString(), "Customer's photo"); return; }
+    if (e.kind !== 'PRICE') return;
+    if (!thumbProducts) {
+      thumbProducts = [];
+      let nextToken = null;
+      do { const r = await client.models.Product.list({ limit: 500, nextToken, selectionSet: ['id', 'title', 'code', 'imageKey'] }); thumbProducts.push(...(r.data || [])); nextToken = r.nextToken; } while (nextToken);
+    }
+    const code = String(det['Artwork no.'] || '').trim();
+    const name = String(e.title || '').replace(/^Price enquiry( \(offer\))?: /i, '').trim().toLowerCase();
+    const p = thumbProducts.find((x) => code && (x.code === code || x.id.startsWith(code))) || thumbProducts.find((x) => String(x.title || '').trim().toLowerCase() === name);
+    if (p?.imageKey) { const { url } = await getUrl({ path: p.imageKey, options: { expiresIn: 900 } }); put(url.toString(), p.code ? `Artwork ${p.code}` : 'Artwork'); }
+  } catch { /* no picture */ }
+}
+
 async function showDetail(e) {
   const det = parseDetails(e.details);
   const s = e.status || 'RECEIVED';
   const locked = isLocked(e);
   $('detail').innerHTML = `
+    <div class="dtop"><div class="dtop-main">
     <div><div class="muted" style="font-family:var(--mono);font-size:13px">${esc(e.ref)} · ${esc(KIND[e.kind] || '')}</div>
     <h2 style="font-size:22px;margin-top:4px">${esc(e.title)}</h2></div>
     <dl class="kv">
       <dt>Customer</dt><dd>${esc(e.customerName)}${e.customerCode ? ` · <button type="button" class="linkbtn mono" style="font-size:11px;padding:0 3px;border:0;background:none;text-decoration:underline;color:var(--muted)" data-cust="${esc(e.customerCode)}" title="Show all orders of this customer">${esc(e.customerCode)}</button>` : ''}</dd>
       <dt>Email</dt><dd>${esc(e.email)}</dd>
       ${Object.entries(det).filter(([k, v]) => v !== '' && v != null && !['Reference', 'Name', 'Mobile', 'Parent'].includes(k)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
-    </dl>
+    </dl></div>
+    <a class="dthumb" id="dThumb" hidden target="_blank" rel="noopener" title="Open the full picture"><img alt=""><span></span></a></div>
     <div class="links" id="fileLinks">${e.fileKey ? '<span class="muted">Loading upload…</span>' : '<span class="muted">No upload attached.</span>'}</div>
     ${zohoPanel(e)}
     ${reviews.has(e.id) ? `<fieldset class="cost" id="reviewBox"><legend>Customer review</legend>${reviewCard(reviews.get(e.id), false)}</fieldset>` : e.status === 'DELIVERED' ? '<div class="muted" style="font-size:13px">Delivered: the customer can now rate this order under My enquiries & orders.</div>' : ''}
@@ -1195,6 +1217,7 @@ async function showDetail(e) {
     ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice'].forEach((id) => { $(id).addEventListener('input', renderCost); $(id).addEventListener('change', renderCost); });
   }
 
+  showThumb(e, det);
   if (e.fileKey) {
     try {
       const { url } = await getUrl({ path: e.fileKey, options: { expiresIn: 900 } });
