@@ -157,6 +157,8 @@ async function start() {
   const groups = session.tokens?.accessToken?.payload?.['cognito:groups'] || [];
   if (!groups.includes('ADMINS')) { show('denyView'); return; }
   show('deskView');
+  // Orders open on today's date (Dubai); Clear shows all dates.
+  if (!$('fFrom').value && !$('fTo').value) { const today = new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10); $('fFrom').value = today; $('fTo').value = today; }
   if (location.hash === '#reports') showPane('reports', 'tabReports');
   if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
   if (location.hash === '#catalogue') showPane('catalogue', 'tabCatalogue');
@@ -508,7 +510,7 @@ function render() {
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}${e.customerCode ? `<br><span class="muted mono" style="font-size:11px">${esc(e.customerCode)}</span>` : ''}</td>
       <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? 'AED ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
-  }).join('') : '<tr><td colspan="7" class="muted">Nothing matches this filter.</td></tr>';
+  }).join('') : `<tr><td colspan="7" class="muted">${$('fFrom').value || $('fTo').value ? 'No orders on these dates. Press <b>Clear</b> to see all dates.' : 'Nothing matches this filter.'}</td></tr>`;
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {
     const pick = () => { const e = all.find((x) => x.id === tr.dataset.id); if (e) { selectedId = e.id; render(); showDetail(e); } };
     tr.onclick = pick;
@@ -1104,6 +1106,7 @@ async function waitForZoho(id, since) {
 
 // Picture beside the order: the customer's photo (commission), else the artwork from the catalogue.
 let thumbProducts = null;
+let builtIn = null;
 async function showThumb(e, det) {
   const box = $('dThumb'); if (!box) return;
   const put = (url, label) => { if ($('dThumb') !== box) return; box.href = url; box.querySelector('img').src = url; box.querySelector('span').textContent = label; box.hidden = false; };
@@ -1118,7 +1121,16 @@ async function showThumb(e, det) {
     const code = String(det['Artwork no.'] || '').trim();
     const name = String(e.title || '').replace(/^(Price enquiry( \(offer\))?|Artwork order): /i, '').trim().toLowerCase();
     const p = thumbProducts.find((x) => code && (x.code === code || x.id.startsWith(code))) || thumbProducts.find((x) => String(x.title || '').trim().toLowerCase() === name);
-    if (p?.imageKey) { const { url } = await getUrl({ path: p.imageKey, options: { expiresIn: 900 } }); put(url.toString(), p.code ? `Artwork ${p.code}` : 'Artwork'); }
+    if (p?.imageKey) { const { url } = await getUrl({ path: p.imageKey, options: { expiresIn: 900 } }); put(url.toString(), p.code ? `Artwork ${p.code}` : 'Artwork'); return; }
+    // Works built into the website (not in the Catalogue): read their pictures from the home page once.
+    if (!builtIn) {
+      builtIn = [];
+      const html = await fetch('/', { cache: 'force-cache' }).then((r) => r.text());
+      const m = html.match(/const PRODUCTS=(\[[\s\S]*?\]);\n/);
+      if (m) try { builtIn = JSON.parse(m[1]); } catch { builtIn = []; }
+    }
+    const b = builtIn.find((x) => String(x.name || '').trim().toLowerCase() === name || (code && x.id === code));
+    if (b?.img) put(b.img, 'Artwork');
   } catch { /* no picture */ }
 }
 
