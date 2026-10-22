@@ -57,7 +57,7 @@ function draw() {
     const m = list.find((x) => x.id === row.dataset.id);
     row.querySelectorAll('[data-act]').forEach((b) => {
       b.onclick = async () => {
-        if (b.dataset.act === 'reuse') { $('msgTa').value = m.ta || ''; $('msgEn').value = m.en || ''; $('msgAr').value = m.ar || ''; $('msgTa').focus(); preview(); return; }
+        if (b.dataset.act === 'reuse') { $('msgTa').value = m.ta || ''; $('msgEn').value = m.en || ''; $('msgAr').value = m.ar || ''; $('msgKural').checked = m.source === 'KURAL'; $('msgTa').focus(); preview(); return; }
         b.disabled = true;
         const r = await client.models.Announcement.update({ id: m.id, active: false });
         if (r.errors?.length) { $('msgMsg').textContent = r.errors[0].message; b.disabled = false; return; }
@@ -122,7 +122,7 @@ function wire() {
     try {
       // One message at a time: the new one replaces whatever is on the website (or scheduled).
       for (const m of list.filter((x) => stateOf(x) !== 'ENDED')) await client.models.Announcement.update({ id: m.id, active: false });
-      const r = await client.models.Announcement.create({ ta, en, ar, active: true, showFrom: from, showUntil: until });
+      const r = await client.models.Announcement.create({ ta, en, ar, active: true, showFrom: from, showUntil: until, ...($('msgKural').checked ? { source: 'KURAL', ref: 'Thirukkural' } : {}) });
       if (r.errors?.length) throw new Error(r.errors[0].message);
       $('msgMsg').textContent = from > new Date().toISOString() ? `Scheduled for ${when(from)}.` : 'Published: it shows on the website now.';
       await load();
