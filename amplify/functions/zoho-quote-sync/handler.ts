@@ -2578,6 +2578,24 @@ async function applyCode(ev: ApiEvent) {
 // Kural number cycles 1 → 1330 by date. Tamil couplet + short English translation from the open Thirukkural API;
 // Arabic by Amazon Translate. Switch off with SSM /kalai/kural/enabled = off. The studio's own message wins on the site.
 const KURAL_API = 'https://api-thirukkural.web.app/kural/';
+// Rupees per dirham for prices shown in ₹ on the website: every morning, from the European Central Bank's USD→INR
+// rate (Frankfurter, free, no key) and the dirham's fixed peg (3.6725 per dollar). Off when Settings says "keep my rate".
+async function refreshInr() {
+  const table = process.env.SITE_TABLE;
+  if (!table) return;
+  const row = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: 'site' } } }));
+  if (row.Item && row.Item.inrAuto?.BOOL === false) return;
+  const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=INR');
+  if (!r.ok) throw new Error(`Frankfurter ${r.status}`);
+  const usdInr = Number(((await r.json()) as { rates?: { INR?: number } }).rates?.INR);
+  if (!(usdInr > 50 && usdInr < 200)) throw new Error('Odd rate');
+  const rate = Math.round((usdInr / 3.6725) * 100) / 100, now = new Date().toISOString();
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: 'site' } },
+    UpdateExpression: 'SET inrPerAed = :r, inrRateAt = :t, updatedAt = :t, createdAt = if_not_exists(createdAt, :t), #tn = :tn',
+    ExpressionAttributeNames: { '#tn': '__typename' }, ExpressionAttributeValues: { ':r': { N: String(rate) }, ':t': { S: now }, ':tn': { S: 'SiteSetting' } } }));
+  console.log(`INR per AED ${rate}`);
+}
+
 async function dailyKural(force: boolean) {
   const table = process.env.ANNOUNCE_TABLE;
   if (!table) throw new Error('Not configured');
@@ -3072,7 +3090,7 @@ async function notify(rec: StreamRecord) {
 export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
   if ('requestContext' in event && event.requestContext?.http) return ziinaWebhook(event);
   // Every morning (EventBridge schedule): the Thirukkural of the day.
-  if ((event as { task?: string }).task === 'dailyKural') return dailyKural(false);
+  if ((event as { task?: string }).task === 'dailyKural') { await refreshInr().catch((e) => console.log('INR rate not updated', e)); return dailyKural(false); }
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
