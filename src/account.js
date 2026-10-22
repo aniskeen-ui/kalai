@@ -705,6 +705,7 @@ window.kalaiMarketOrder = (p) => {
 
 /* ---------- daily message: small notice at the side of the page, Tamil / English / Arabic ---------- */
 const MSG_TITLE = { ta: 'இன்றைய செய்தி', en: "Today's message", ar: 'رسالة اليوم' };
+const KURAL_TITLE = { ta: 'இன்றைய திருக்குறள்', en: 'Thirukkural of the day', ar: 'حكمة اليوم من الثيروكورال' };
 const LANG_LABEL = { ta: 'தமிழ்', en: 'English', ar: 'العربية' };
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
@@ -713,7 +714,8 @@ async function showDailyMessage() {
     const r = await client.models.Announcement.list({ authMode: 'apiKey', limit: 50 });
     const nowIso = new Date().toISOString();
     const m = (r.data || []).filter((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso))
-      .sort((a, b) => String(b.showFrom).localeCompare(String(a.showFrom)))[0];
+      // The studio's own message comes first; otherwise the Thirukkural of the day.
+      .sort((a, b) => Number(a.source === 'KURAL') - Number(b.source === 'KURAL') || String(b.showFrom).localeCompare(String(a.showFrom)))[0];
     if (!m) return;
     const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
     if (!langs.length) return;
@@ -740,8 +742,8 @@ async function showDailyMessage() {
     document.body.append(box, tab);
     const draw = () => {
       box.setAttribute('lang', lang); box.dir = lang === 'ar' ? 'rtl' : 'ltr';
-      box.innerHTML = `<div class="kmsg-head"><b>${esc(MSG_TITLE[lang])}</b><span class="kmsg-langs">${langs.map((l) => `<button type="button" data-l="${l}" aria-pressed="${l === lang}">${LANG_LABEL[l]}</button>`).join('')}</span><button class="kmsg-x" type="button" aria-label="Close">×</button></div><p>${esc(m[lang])}</p>`;
-      tab.textContent = `📢 ${MSG_TITLE[lang]}`;
+      box.innerHTML = `<div class="kmsg-head"><b>${esc((m.source === 'KURAL' ? KURAL_TITLE : MSG_TITLE)[lang])}</b><span class="kmsg-langs">${langs.map((l) => `<button type="button" data-l="${l}" aria-pressed="${l === lang}">${LANG_LABEL[l]}</button>`).join('')}</span><button class="kmsg-x" type="button" aria-label="Close">×</button></div><p>${esc(m[lang])}</p>`;
+      tab.textContent = `${m.source === 'KURAL' ? '📜' : '📢'} ${(m.source === 'KURAL' ? KURAL_TITLE : MSG_TITLE)[lang]}`;
       box.querySelectorAll('[data-l]').forEach((b) => { b.onclick = () => { lang = b.dataset.l; lsSet('kalai-lang', lang); draw(); }; });
       box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; lsSet('kalai-msg-closed', m.id); };
     };

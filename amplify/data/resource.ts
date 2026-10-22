@@ -236,6 +236,8 @@ const schema = a.schema({
       active: a.boolean(),
       showFrom: a.string(),
       showUntil: a.string(),
+      source: a.string(), // KURAL = the automatic Thirukkural of the day; empty = the studio's own message
+      ref: a.string(), // e.g. "Kural 123 · Chapter …"
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
@@ -374,6 +376,14 @@ const schema = a.schema({
     .arguments({ id: a.id().required() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Studio: publish today's Thirukkural now (it is also published every morning automatically).
+  dailyKural: a
+    .mutation()
+    .arguments({ action: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Artist desk: list catalogue works and give them a title, size and description.

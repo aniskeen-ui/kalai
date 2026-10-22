@@ -2,6 +2,8 @@ import { defineBackend } from '@aws-amplify/backend';
 import { Stack } from 'aws-cdk-lib';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { StartingPosition, EventSourceMapping, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
+import { Rule, Schedule, RuleTargetInput } from 'aws-cdk-lib/aws-events';
+import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -52,11 +54,12 @@ backend.zohoQuoteSync.addEnvironment('SELLER_TABLE', tableName('SellerProfile'))
 backend.zohoQuoteSync.addEnvironment('LISTING_TABLE', tableName('Listing'));
 backend.zohoQuoteSync.addEnvironment('MARKET_TABLE', tableName('MarketItem'));
 backend.zohoQuoteSync.addEnvironment('ARTIST_TABLE', tableName('ArtistProfile'));
+backend.zohoQuoteSync.addEnvironment('ANNOUNCE_TABLE', tableName('Announcement'));
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Scan', 'dynamodb:Query', 'dynamodb:BatchGetItem'],
-    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile')],
+    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile'), tableArn('Announcement')],
   }),
 );
 
@@ -75,6 +78,7 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
       `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/zoho/*`,
       `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/email/*`,
       `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/ziina/*`,
+      `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/kural/*`,
     ],
   }),
 );
@@ -108,3 +112,9 @@ backend.auth.resources.cfnResources.cfnUserPool.addPropertyOverride(
 // The address is published in amplify_outputs.json so the studio page can register it with Ziina.
 const ziinaHook = backend.zohoQuoteSync.resources.lambda.addFunctionUrl({ authType: FunctionUrlAuthType.NONE });
 backend.addOutput({ custom: { ziinaWebhookUrl: ziinaHook.url } });
+
+// Thirukkural of the day: every morning at 06:05 Dubai (02:05 UTC) the function publishes the day's kural.
+new Rule(fnStack, 'DailyKuralRule', {
+  schedule: Schedule.cron({ minute: '5', hour: '2' }),
+  targets: [new LambdaFunction(backend.zohoQuoteSync.resources.lambda, { event: RuleTargetInput.fromObject({ task: 'dailyKural' }) })],
+});

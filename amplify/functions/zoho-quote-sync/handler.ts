@@ -2331,6 +2331,46 @@ async function artistWorks(ev: ApiEvent) {
   throw new Error('Unknown action');
 }
 
+// ---------- Thirukkural of the day (flash panel on the website) ----------
+// Kural number cycles 1 → 1330 by date. Tamil couplet + short English translation from the open Thirukkural API;
+// Arabic by Amazon Translate. Switch off with SSM /kalai/kural/enabled = off. The studio's own message wins on the site.
+const KURAL_API = 'https://api-thirukkural.web.app/kural/';
+async function dailyKural(force: boolean) {
+  const table = process.env.ANNOUNCE_TABLE;
+  if (!table) throw new Error('Not configured');
+  if (!force && (await optionalParam('/kalai/kural/enabled'))?.toLowerCase() === 'off') return { skipped: 'off' };
+  const dubai = new Date(Date.now() + 4 * 3600_000);
+  const day = dubai.toISOString().slice(0, 10);
+  const n = (Math.floor(Date.UTC(dubai.getUTCFullYear(), dubai.getUTCMonth(), dubai.getUTCDate()) / 86_400_000) % 1330) + 1;
+  const id = `kural-${day}`;
+  if (!force) {
+    const have = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+    if (have.Item) return { skipped: 'already', id };
+  }
+  const r = await fetch(`${KURAL_API}${n}`, { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error(`Thirukkural service answered ${r.status}`);
+  const k = (await r.json()) as { line1?: string; line2?: string; eng?: string; chap_eng?: string; chap_tam?: string };
+  const ta = [k.line1, k.line2].filter(Boolean).join('\n').trim();
+  const en = String(k.eng ?? '').trim();
+  if (!ta) throw new Error('Thirukkural service returned no text');
+  let ar = '';
+  try { if (en) ar = (await translator.send(new TranslateTextCommand({ Text: en, SourceLanguageCode: 'en', TargetLanguageCode: 'ar' }))).TranslatedText ?? ''; } catch { ar = ''; }
+  // Yesterday's kural comes down; the studio's own messages are left alone.
+  for (const x of (await scanAll(table)).filter((x) => str(x, 'source') === 'KURAL' && x.active?.BOOL && str(x, 'id') !== id)) {
+    await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(x, 'id') } }, UpdateExpression: 'SET active = :f', ExpressionAttributeValues: { ':f': { BOOL: false } } }));
+  }
+  const from = new Date(`${day}T00:00:00+04:00`).toISOString();
+  const until = new Date(new Date(from).getTime() + 86_400_000).toISOString();
+  const now = new Date().toISOString();
+  await putRow(table, {
+    id, __typename: 'Announcement', createdAt: now, updatedAt: now, active: true, showFrom: from, showUntil: until, source: 'KURAL',
+    ta: `${ta}\n— திருக்குறள் ${n}`, en: en ? `${en}\n— Thirukkural ${n}` : '', ar: ar ? `${ar}\n— ثيروكورال ${n}` : '',
+    ref: `Kural ${n}${k.chap_eng ? ` · ${k.chap_eng}` : ''}`,
+  });
+  console.log(`Thirukkural ${n} published for ${day}`);
+  return { ok: true, id, n };
+}
+
 // ---------- Daily message translation ----------
 const translator = new TranslateClient({});
 async function translateMessage(a: { text?: string; source?: string | null }) {
@@ -2788,6 +2828,8 @@ async function notify(rec: StreamRecord) {
 
 export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
   if ('requestContext' in event && event.requestContext?.http) return ziinaWebhook(event);
+  // Every morning (EventBridge schedule): the Thirukkural of the day.
+  if ((event as { task?: string }).task === 'dailyKural') return dailyKural(false);
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
@@ -2795,6 +2837,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
     if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
+    if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));

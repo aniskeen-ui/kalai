@@ -38,7 +38,7 @@ function draw() {
   $('msgList').innerHTML = list.length ? list.map((m) => {
     const s = stateOf(m);
     return `<article class="msg-row" data-id="${esc(m.id)}">
-      <div class="msg-top"><span class="cg-badge ${s === 'LIVE' ? 'PUBLISHED' : s === 'SCHEDULED' ? 'SCHEDULED' : 'HIDDEN'}">${LABEL[s]}</span>
+      <div class="msg-top"><span class="cg-badge ${s === 'LIVE' ? 'PUBLISHED' : s === 'SCHEDULED' ? 'SCHEDULED' : 'HIDDEN'}">${LABEL[s]}</span>${m.source === 'KURAL' ? `<span class="cg-badge">📜 Thirukkural${m.ref ? ` · ${esc(m.ref)}` : ''}</span>` : ''}
         <span class="muted" style="font-size:12px">${esc(when(m.showFrom || m.createdAt))}${m.showUntil ? ` → ${esc(when(m.showUntil))}` : ''}</span>
         <span style="margin-left:auto;display:flex;gap:6px">${s !== 'ENDED' ? '<button class="btn small ghost" data-act="end" type="button">Take down</button>' : ''}<button class="btn small ghost" data-act="reuse" type="button">Edit as new</button></span></div>
       <div class="msg-langs"><div lang="ta">${esc(m.ta)}</div><div lang="en">${esc(m.en)}</div><div lang="ar" dir="rtl">${esc(m.ar)}</div></div>
@@ -66,6 +66,16 @@ function preview() {
 
 function wire() {
   $('msgFrom').value = localInput(new Date());
+  $('kuralNow').onclick = async () => {
+    const b = $('kuralNow'); b.disabled = true; $('msgMsg').textContent = 'Fetching today\'s Thirukkural…';
+    try {
+      const r = await client.mutations.dailyKural({ action: 'now' });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+      $('msgMsg').textContent = `Thirukkural ${out.n} is on the website now.`;
+      await load();
+    } catch (ex) { $('msgMsg').textContent = 'Could not publish: ' + (ex.message || ex); } finally { b.disabled = false; }
+  };
   ['msgTa', 'msgEn', 'msgAr'].forEach((id) => $(id).addEventListener('input', preview));
   $('msgPrevLang').onchange = preview;
   $('msgTranslate').onclick = async () => {
