@@ -1,5 +1,6 @@
 // Artist desk (Siva): price works for Kalai Art House. No customer details or selling prices are shown here.
 import './amplify-config.js';
+import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';

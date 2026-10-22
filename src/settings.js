@@ -89,6 +89,7 @@ async function save() {
     if (r.errors?.length) throw new Error(r.errors[0].message);
     row = r.data;
     $('stMsg').textContent = 'Saved. Visitors see it the next time they open the website.';
+    window.kalaiApplyLook?.(rec.siteLook);
   } catch (ex) { $('stMsg').textContent = ex.message; } finally { $('stSave').disabled = false; }
 }
 

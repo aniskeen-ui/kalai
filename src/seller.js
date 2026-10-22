@@ -1,6 +1,7 @@
 // Seller portal: sign up, apply, and (once approved) list products with a price calculator.
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
 import './amplify-config.js';
+import './skin.js';
 import {
   fetchAuthSession, signIn, signUp, confirmSignUp, resendSignUpCode, autoSignIn, signOut, getCurrentUser,
   fetchUserAttributes, resetPassword, confirmResetPassword,

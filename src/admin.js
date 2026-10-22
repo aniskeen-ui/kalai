@@ -1,5 +1,6 @@
 // Studio desk: list every enquiry, view uploads, set price / payment link / status / message.
 import './amplify-config.js';
+import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
