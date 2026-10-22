@@ -369,7 +369,6 @@ const schema = a.schema({
       heroTitle: a.string(),
       heroHighlight: a.string(),
       heroText: a.string(),
-      siteLook: a.string(), // classic | magazine
       heroLines: a.string(), // several headlines, one per line, "plain part | gold part"; they take turns
       kidsTitle: a.string(),
       kidsText: a.string(), // paragraphs separated by a blank line
