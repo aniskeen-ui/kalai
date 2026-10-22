@@ -79,7 +79,7 @@ async function renderWorks(force = false) {
   $('cWorks').textContent = todo ? `(${todo})` : '';
   if (filter !== 'WORKS') return;
   if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
-  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then it shows as “Untitled”. ${todo ? `<b>${todo} still to name.</b>` : '<b class="wdone">All named. Thank you!</b>'}</p>`
+  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. ${todo ? `<b>${todo} still to name.</b>` : '<b class="wdone">All named. Thank you!</b>'}</p>`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
         <div class="field"><label>Title</label><input name="title" maxlength="80" value="${esc(w.title)}" placeholder="A short, meaningful title"></div>

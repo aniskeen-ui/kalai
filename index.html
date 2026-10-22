@@ -568,7 +568,7 @@ function drawChips(){
 /* Works by approved artists (from the artist portal), shown in the collection.
    Artist names are not shown on the website (SHOW_ARTIST_NAMES = false): no names on cards, no artist dropdown, no artist cards. */
 const SHOW_ARTIST_NAMES=false;
-const cleanName=n=>{const t=String(n||"").replace(/\bsiva\s*raja\b\s*[-:,]?/gi," ").replace(/\s+/g," ").trim();return t||"Original artwork"};
+const cleanName=n=>{const t=String(n||"").replace(/\bsiva\s*raja\b\s*[-:,]?/gi," ").replace(/\s+/g," ").trim();return t||"Original"};
 let ARTWORKS=[];let artistF="all";
 const esc2=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function drawArtistSel(){
@@ -606,7 +606,7 @@ function drawGrid(){
       g.appendChild(card);return;
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
-      <h3>${cleanName(p.name)}</h3><div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")||"Original artwork"}</div><div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
+      <h3>${cleanName(p.name)}</h3>${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).length?`<div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")}</div>`:""}<div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
       <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`<span class="note">Price on request</span><button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });

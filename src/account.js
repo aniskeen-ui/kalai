@@ -9,6 +9,7 @@ import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones, countryRegionHtml, wireRegion, addressLine } from './phone.js';
+import { cleanTitle } from './title.js';
 
 autoPhones();
 
@@ -775,7 +776,7 @@ async function showCatalogue() {
     const list = await Promise.all(live.map(async (p) => {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
-      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : 'Untitled', untitled: !p.named, size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
     }));
     window.kalaiShowCatalogue(list.filter((x) => x.img));
   } catch (ex) { console.warn('Catalogue not loaded; showing the built-in collection.', ex); }
