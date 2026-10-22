@@ -725,21 +725,21 @@ async function showDailyMessage() {
     // Starts in Tamil for the kural (else the visitor's language), then changes language every 10 seconds.
     let lang = kural && langs.includes('ta') ? 'ta' : (langs.includes((navigator.language || 'en').slice(0, 2)) ? (navigator.language || 'en').slice(0, 2) : (langs.includes('en') ? 'en' : langs[0]));
     document.head.insertAdjacentHTML('beforeend', `<style>
-.kmsg{position:fixed;right:16px;bottom:16px;z-index:30;width:min(340px,calc(100vw - 32px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;display:grid;gap:8px;animation:kmsgIn .35s ease-out}
+.kmsg{position:fixed;right:12px;bottom:12px;z-index:30;width:min(220px,calc(100vw - 24px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:7px 9px;display:grid;gap:4px;animation:kmsgIn .35s ease-out}
 @keyframes kmsgIn{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
 .kmsg-img{display:flex;justify-content:center;margin-top:-2px}
-.kmsg-img img{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:#f7e7c1}
-.kmsg-head{display:flex;align-items:center;gap:8px}
-.kmsg-head b{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-right:auto}
-.kmsg-langs{display:flex;gap:4px}
-.kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:2px 8px;font:inherit;font-size:11px;cursor:pointer}
+.kmsg-img img{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:#f7e7c1}
+.kmsg-head{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.kmsg-head b{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);margin-right:auto}
+.kmsg-langs{display:flex;gap:2px}
+.kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:0 5px;font:inherit;font-size:9px;line-height:16px;cursor:pointer}
 .kmsg-langs button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1b2b}
-.kmsg-x{background:none;border:0;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
-.kmsg p{margin:0;font-size:14px;line-height:1.6;white-space:pre-line;min-height:4.8em;transition:opacity .4s}
+.kmsg-x{background:none;border:0;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
+.kmsg p{margin:0;font-size:11px;line-height:1.45;white-space:pre-line;min-height:4.4em;transition:opacity .4s}
 .kmsg p.fade{opacity:0}
 .kmsg-bar{height:2px;background:var(--line);border-radius:2px;overflow:hidden}.kmsg-bar i{display:block;height:100%;width:0;background:var(--gold)}
 .kmsg-bar i.run{animation:kmsgBar 10s linear forwards}@keyframes kmsgBar{to{width:100%}}
-.kmsg-tab{position:fixed;right:16px;bottom:16px;z-index:30;border:1px solid var(--gold);background:var(--surface);color:var(--fg);border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+.kmsg-tab{position:fixed;right:12px;bottom:12px;z-index:30;border:1px solid var(--gold);background:var(--surface);color:var(--fg);border-radius:999px;padding:4px 9px;font:inherit;font-size:11px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
 @media (prefers-reduced-motion:reduce){.kmsg{animation:none}.kmsg p{transition:none}}
 </style>`);
     const box = document.createElement('aside');
