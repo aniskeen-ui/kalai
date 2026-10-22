@@ -157,8 +157,8 @@ async function start() {
   const groups = session.tokens?.accessToken?.payload?.['cognito:groups'] || [];
   if (!groups.includes('ADMINS')) { show('denyView'); return; }
   show('deskView');
-  // Orders open on today's date (Dubai); Clear shows all dates.
-  if (!$('fFrom').value && !$('fTo').value) { const today = new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10); $('fFrom').value = today; $('fTo').value = today; }
+  // Orders open on the last 2 days, yesterday and today (Dubai); Clear shows all dates.
+  if (!$('fFrom').value && !$('fTo').value) { const d = (ms) => new Date(ms + 4 * 3600_000).toISOString().slice(0, 10); $('fFrom').value = d(Date.now() - 86_400_000); $('fTo').value = d(Date.now()); }
   if (location.hash === '#reports') showPane('reports', 'tabReports');
   if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
   if (location.hash === '#catalogue') showPane('catalogue', 'tabCatalogue');
