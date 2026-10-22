@@ -9,7 +9,9 @@ import { getUrl } from 'aws-amplify/storage';
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const aed = (v) => (v == null || !Number.isFinite(v) ? '–' : 'AED ' + Math.round(v).toLocaleString('en-US'));
+// The UAE dirham sign, drawn (fonts don't have it yet).
+export const DHS = '<svg class="dhs" viewBox="0 0 24 20" role="img" aria-label="Dhs"><g fill="currentColor"><rect x="5.2" y="2" width="2.8" height="16"/><rect x="3.4" y="2" width="5" height="1.3"/><rect x="3.4" y="16.7" width="5" height="1.3"/><path d="M7.6 2h3.2a8 8 0 0 1 0 16H7.6v-1.3h3.2a6.6 6.6 0 0 0 0-13.4H7.6z"/><path d="M1.2 7.7q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/><path d="M1.2 11.1q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/></g></svg>';
+const aed = (v) => (v == null || !Number.isFinite(v) ? '–' : DHS + Math.round(v).toLocaleString('en-US'));
 const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
 export const STYLES = [
@@ -192,7 +194,7 @@ function drawCalc(w) {
         <span class="muted" style="font-size:12px">${ap?.artistPriceAt ? `Artist's price given ${new Date(ap.artistPriceAt).toLocaleDateString('en-GB')}` : 'No price from the artist yet: type one to simulate.'}</span>
       </div>
       ${b.artistAed == null ? '<p class="muted">Enter the artist\'s price to see the calculation.</p>' : `
-      <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>AED · frame ${esc(b.fsize)} cm</th>${STYLES.map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody>
+      <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>${DHS} · frame ${esc(b.fsize)} cm</th>${STYLES.map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody>
         <tr><td>Artist (₹${Number(b.inr).toLocaleString('en-IN')} × ${P.fx})</td>${cell(() => Math.round(b.artistAed))}</tr>
         <tr><td>Courier India → Dubai</td>${cell(() => Math.round(b.courier))}</tr>
         <tr><td>Customs ${(P.customs * 100).toFixed(1)}%</td>${cell(() => Math.round(b.customs))}</tr>
@@ -206,7 +208,7 @@ function drawCalc(w) {
         <tr class="pc-final"><td><b>Final price on website</b></td>${STYLES.map((s) => `<td><input data-final="${s.k}" type="number" min="0" step="1" value="${basePrice(m, s.k) ?? b.styles[s.k].price}" style="width:84px"></td>`).join('')}</tr>
         <tr><td>Your margin at that price</td>${STYLES.map((s) => `<td class="num mono" data-mg="${s.k}"></td>`).join('')}</tr>
       </tbody></table></div>
-      <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>Bigger frames (customer's choice), AED</th>${STYLES.filter((s) => s.k !== 'none').map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody id="pcSizes"></tbody></table></div>
+      <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>Bigger frames (customer's choice), ${DHS}</th>${STYLES.filter((s) => s.k !== 'none').map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody id="pcSizes"></tbody></table></div>
       <div class="muted" style="font-size:12px;margin-top:-6px">A bigger frame adds its extra frame cost, with your margin and card charges, rounded up to Dhs 25. "No frame" has one price.</div>
       <div class="marketline">Market check (${b.tier}, ${md === 'sk' ? 'sketch' : 'watercolour'}): Kalai band <b>${aed(band[0])}–${aed(band[1])}</b> · <span id="pcVerdict"></span><br>
         <span class="muted">Competitors, similar originals: Saatchi Art ${esc(mk?.saatchi || '')} · Dubai print shops (copies, not originals) AED 125–400.</span>

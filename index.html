@@ -263,7 +263,7 @@ footer p{margin:2px 0}
 .ai-tag{background:#e8eefc!important;color:#2a4a9a!important}
 .ai-note{font-size:13px;background:#eef2fc;border-left:3px solid #4a6fd1;padding:6px 10px;border-radius:4px;color:var(--fg)}
 .dhs{width:1.05em;height:.9em;vertical-align:-.08em;margin-right:.15em}
-.cur-sel{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-sel option{color:#111}.pprice .note{font-family:var(--body);font-size:13px}
+.cur-sel{white-space:nowrap;background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-pick{position:relative}.cur-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.18);display:grid;min-width:120px;overflow:hidden;z-index:30}.cur-menu button{background:none;border:0;color:inherit;font:inherit;font-size:14px;text-align:left;padding:9px 14px;cursor:pointer;white-space:nowrap}.cur-menu button:hover{background:var(--sunk)}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 .badge b{display:block;font-size:13px}
@@ -334,7 +334,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
   <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
-  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><select id="curSel" class="cur-sel" aria-label="Currency"><option value="AED">AED Dhs</option><option value="USD">$ USD</option><option value="INR">₹ INR</option></select><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
+  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><div class="cur-pick"><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
 <section class="hero" style="padding-block:0"><div class="wrap">
@@ -1066,9 +1066,13 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
 })();
 drawChips();drawGrid();updateCount();
 /* currency picker (header): prices shown in Dhs, $ or ₹; payment is always in dirhams */
-(function(){const c=document.getElementById("curSel");if(!c)return;c.value=CUR;
-  window.kalaiRedrawPrices=()=>{drawGrid();if(typeof drawMarket==="function")try{drawMarket()}catch(e){}if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
-  c.onchange=()=>{CUR=c.value;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}window.kalaiRedrawPrices()}})();
+(function(){const btn=document.getElementById("curBtn"),menu=document.getElementById("curMenu");if(!btn)return;
+  const label=k=>k==="USD"?"$ USD":k==="INR"?"₹ INR":DHS_SIGN+" AED";
+  const paint=()=>{btn.innerHTML=label(CUR)+" ▾";menu.querySelector('[data-cur="AED"]').innerHTML=DHS_SIGN+" AED";};paint();
+  window.kalaiRedrawPrices=()=>{drawGrid();if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
+  btn.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden;btn.setAttribute("aria-expanded",String(!menu.hidden))};
+  document.addEventListener("click",()=>{menu.hidden=true;btn.setAttribute("aria-expanded","false")});
+  menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();
 </script>
 <script type="module" src="/src/account.js"></script>
 </body>
