@@ -10,7 +10,7 @@ const schema = a.schema({
   Enquiry: a
     .model({
       ref: a.string().required(),
-      kind: a.enum(['PRICE', 'COMMISSION', 'GIFT']),
+      kind: a.enum(['PRICE', 'COMMISSION', 'GIFT', 'MARKET']),
       title: a.string().required(),
       details: a.json(),
       customerName: a.string(),
@@ -116,6 +116,22 @@ const schema = a.schema({
       deliveryLandmark: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       addressAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       addressBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Crafts shop (marketplace) orders: kind MARKET, created by the marketOrder mutation at the listing's price.
+      listingId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      sellerName: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      qty: a.integer().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      unitPrice: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      sellerStage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]), // READY (for Kalai pickup) | DISPATCHED (seller's courier) | DELIVERED
+      sellerReadyAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      sellerDispatchedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      sellerId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      sellerAmount: a.float().authorization((allow) => [allow.group('ADMINS')]), // what the seller receives for this order
+      commissionPct: a.float().authorization((allow) => [allow.group('ADMINS')]),
+      sellerPaidRef: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      zohoSellerBill: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      zohoSellerBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      zohoSellerPaymentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
@@ -231,6 +247,7 @@ const schema = a.schema({
       adminNote: a.string(),
       appliedAt: a.string(),
       approvedAt: a.string(),
+      zohoVendorId: a.string(),
       owner: a.string(),
     })
     .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -322,6 +339,13 @@ const schema = a.schema({
   sellerAction: a
     .mutation()
     .arguments({ action: a.string().required(), data: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+  // Website: order a Crafts shop item (signed-in customer); the price is taken from the listing, not the browser.
+  marketOrder: a
+    .mutation()
+    .arguments({ data: a.string().required() })
     .returns(a.string())
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(zohoQuoteSync)),

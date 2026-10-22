@@ -24,7 +24,8 @@ export const STATUS = {
   CANCELLED: 'Cancelled',
 };
 const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
-const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift' };
+const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop' };
+const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
 
 /* ---------- styles ---------- */
 const css = `
@@ -156,7 +157,7 @@ function showSignIn(msg = '') {
     const email = String(fd.get('email')).trim().toLowerCase();
     const { nextStep } = await signIn({ username: email, password: String(fd.get('password')) });
     if (nextStep.signInStep === 'CONFIRM_SIGN_UP') { await resendSignUpCode({ username: email }); showConfirm(email); return; }
-    if (nextStep.signInStep === 'DONE') { await loadUser(); showList(); return; }
+    if (nextStep.signInStep === 'DONE') { await loadUser(); afterSignIn(); return; }
     throw new Error('Additional sign-in step required: ' + nextStep.signInStep);
   });
   body.querySelector('#toSignUp').onclick = showSignUp;
@@ -198,7 +199,7 @@ function showConfirm(email) {
   async (fd) => {
     const { nextStep } = await confirmSignUp({ username: email, confirmationCode: String(fd.get('code')).trim() });
     if (nextStep.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
-      try { await autoSignIn(); await loadUser(); showList(); return; } catch (e) { /* fall through to manual sign-in */ }
+      try { await autoSignIn(); await loadUser(); afterSignIn(); return; } catch (e) { /* fall through to manual sign-in */ }
     }
     showSignIn('Email confirmed. Please sign in.');
   });
@@ -432,7 +433,7 @@ function replacementTracker(e) {
 const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
 const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'FRAMING', 'REPLACEMENT'];
 function addressBlock(e) {
-  if (!ADDR_OPEN.includes(e.status) || e.cancelState === 'REQUESTED') return '';
+  if (!(ADDR_OPEN.includes(e.status) || (e.kind === 'MARKET' && (e.status || 'RECEIVED') === 'RECEIVED')) || e.cancelState === 'REQUESTED') return '';
   if (e.deliveryAddress) {
     return `<div class="addr"><b>Deliver to</b> ${esc(e.deliveryName)} · ${esc(e.deliveryPhone)}<br>${esc(e.deliveryAddress)}${e.deliveryLandmark ? ` (near ${esc(e.deliveryLandmark)})` : ''}, ${esc(e.deliveryEmirate)}
       <button type="button" class="req-open" data-addr="${esc(e.id)}">Change</button></div>`;
@@ -482,7 +483,8 @@ function wireAddress(root, items) {
 
 function card(e) {
   const st = e.status || 'RECEIVED';
-  const idx = STEPS.indexOf(st);
+  const steps = e.kind === 'MARKET' ? MARKET_STEPS : STEPS;
+  const idx = steps.indexOf(st);
   const pillCls = st === 'DELIVERED' ? 'pill done' : st === 'CANCELLED' || st === 'REFUNDED' ? 'pill stop' : 'pill';
   const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const pay = st === 'PRICE_SENT' && e.paymentLink
@@ -490,10 +492,13 @@ function card(e) {
   return `<article class="enq">
     <div class="enq-top"><span class="enq-title">${esc(e.title)}</span><span class="${pillCls}">${esc(STATUS[st] || st)}</span></div>
     <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')} · ${esc(date)}</div>
-    ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true">${STEPS.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true" style="grid-template-columns:repeat(${steps.length},1fr)">${steps.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     ${e.quotedPrice ? `<div>Price: <span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span></div>` : ''}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
     ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
+    ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
+    ${e.kind === 'MARKET' && st === 'RECEIVED' ? '<div class="enq-msg">Thank you for your order. We are confirming it with the maker and will send you a secure payment link shortly.</div>' : ''}
+    ${e.kind === 'MARKET' && st === 'PAID' ? `<div class="enq-msg">${e.sellerStage === 'READY' ? 'The maker has packed it; our courier is collecting it.' : 'Paid: the maker is preparing your order.'}</div>` : ''}
     ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
     ${replacementTracker(e)}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
@@ -620,6 +625,62 @@ async function save({ ref, subject, fields, files }) {
   });
   if (errors?.length) throw new Error(errors[0].message);
 }
+
+
+/* ---------- Crafts shop: order an item (signed in; the price comes from the listing on the server) ---------- */
+let pendingOrder = null;
+function afterSignIn() { if (pendingOrder) { const p = pendingOrder; pendingOrder = null; showOrder(p); } else showList(); }
+let lastAddr = null;
+async function showOrder(p) {
+  title.textContent = 'Order';
+  const max = Math.max(1, Math.min(10, Number(p.stock) || 1));
+  // Reuse the last delivery address the customer gave us, if any.
+  if (!lastAddr) {
+    try {
+      const r = await client.models.Enquiry.list({ limit: 100 });
+      const withAddr = (r.data || []).filter((x) => x.deliveryAddress && (!x.email || !state.email || x.email === state.email)).sort((a, b) => String(b.addressAt || '').localeCompare(String(a.addressAt || '')))[0];
+      lastAddr = withAddr ? { name: withAddr.deliveryName, phone: withAddr.deliveryPhone, emirate: withAddr.deliveryEmirate, address: withAddr.deliveryAddress, landmark: withAddr.deliveryLandmark } : {};
+    } catch { lastAddr = {}; }
+  }
+  const a = lastAddr || {};
+  const f = form(`
+    <div style="display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:center">${p.img ? `<img src="${esc(p.img)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:4px">` : '<span></span>'}
+      <div><b>${esc(p.title)}</b><div class="acct-info">by ${esc(p.seller)} · AED ${Number(p.price).toLocaleString('en-US')} each, delivery in the UAE included</div></div></div>
+    <form novalidate>
+      <div class="field"><label for="moQty">Quantity</label><select id="moQty" name="qty">${Array.from({ length: max }, (_, i) => `<option>${i + 1}</option>`).join('')}</select></div>
+      <div class="field"><label for="moName">Receiver's name</label><input id="moName" name="name" autocomplete="name" value="${esc(a.name)}"></div>
+      <div class="field"><label for="moPhone">Receiver's mobile</label><input id="moPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(a.phone)}"></div>
+      <div class="field"><label for="moEmi">Emirate</label><select id="moEmi" name="emirate"><option value="">Choose…</option>${EMIRATES.map((x) => `<option ${x === a.emirate ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label for="moAddr">Address</label><textarea id="moAddr" name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(a.address)}</textarea></div>
+      <div class="field"><label for="moLand">Landmark (optional)</label><input id="moLand" name="landmark" value="${esc(a.landmark)}"></div>
+      <div class="field"><label for="moNote">Note to the maker (optional)</label><input id="moNote" name="note" maxlength="300"></div>
+      <div class="enq-msg" id="moTotal"></div>
+      <p class="acct-info" style="margin:0;font-size:12px">You pay Kalai Art House by a secure link we send you; the order is confirmed once paid. Until it is dispatched you can cancel for a full refund. By ordering you agree to our <a href="#terms" class="acct-terms" style="color:var(--kumkum)">terms</a>.</p>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Place order</button>
+    </form>
+    <button class="acct-link" id="moBack">Back to My enquiries &amp; orders</button>`,
+  async (fd) => {
+    const data = Object.fromEntries(['qty', 'name', 'phone', 'emirate', 'address', 'landmark', 'note'].map((k) => [k, String(fd.get(k) || '').trim()]));
+    const r = await client.mutations.marketOrder({ data: JSON.stringify({ listingId: p.id, ...data }) });
+    if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+    const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    lastAddr = { name: data.name, phone: data.phone, emirate: data.emirate, address: data.address, landmark: data.landmark };
+    currentTab = 'ENQ';
+    await showList();
+    body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Order <b>${esc(out.ref)}</b> placed: AED ${Number(out.total).toLocaleString('en-US')}. We'll email you a secure payment link shortly.</p>`);
+  });
+  const total = () => { body.querySelector('#moTotal').innerHTML = `Total: <b>AED ${(Number(p.price) * Number(f.qty.value)).toLocaleString('en-US')}</b>`; };
+  f.qty.onchange = total; total();
+  body.querySelector('#moBack').onclick = showList;
+  if (!a.name) f.name.focus();
+}
+window.kalaiMarketOrder = (p) => {
+  if (state.user) { showOrder(p); open(); return; }
+  pendingOrder = p;
+  showSignIn('Sign in or create a free account to order, so you can pay securely and follow the delivery.');
+  open();
+};
 
 /* ---------- daily message: small notice at the side of the page, Tamil / English / Arabic ---------- */
 const MSG_TITLE = { ta: 'இன்றைய செய்தி', en: "Today's message", ar: 'رسالة اليوم' };

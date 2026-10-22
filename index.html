@@ -462,6 +462,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <div><b style="color:var(--fg)">13. Liability.</b> We are responsible for delivering the artwork as described. Our total liability for an order is limited to the amount you paid for it, except where the law does not allow this limit.</div>
     <div><b style="color:var(--fg)">14. Law.</b> These terms are governed by the laws of the United Arab Emirates as applied in the Emirate of Dubai, and the courts of Dubai have jurisdiction.</div>
     <div><b style="color:var(--fg)">15. Changes.</b> We may update these terms; the version on this page at the time of your order applies to that order.</div>
+    <div><b style="color:var(--fg)">16. Crafts shop.</b> Items in the Crafts shop are made and sold by independent makers we have checked; the maker's name is shown on each item. You order and pay through Kalai Art House, which handles your payment, delivery updates, cancellations and refunds under these terms. Until an item is dispatched you can cancel it for a full refund; after delivery, report damage with photos within 48 hours. Prices include delivery within the UAE.</div>
   </div>
 </div></section>
 
@@ -564,7 +565,7 @@ window.kalaiShowMarket=function(list){
     ${p.description?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${e(p.description)}</div>`:""}
     <div class="row"><span class="price">AED ${Number(p.price).toLocaleString("en-GB")}</span>${p.stock>0?`<button class="add" type="button" data-mbuy="${i}">Order</button>`:""}</div></article>`).join("");
   g.querySelectorAll("[data-mbuy]").forEach(b=>b.onclick=()=>{const p=list[+b.dataset.mbuy];
-    sendEnquiry("Crafts shop order: "+p.title,{"Item":p.title,"Maker":p.seller,"Price":"AED "+p.price+" (incl. delivery in the UAE)","Listing":p.id,"Link":location.origin+"/#market"});});
+    if(window.kalaiMarketOrder){window.kalaiMarketOrder(p);return;}sendEnquiry("Crafts shop order: "+p.title,{"Item":p.title,"Maker":p.seller,"Price":"AED "+p.price+" (incl. delivery in the UAE)","Listing":p.id,"Link":location.origin+"/#market"});});
   g.querySelectorAll("[data-mi]").forEach(b=>b.onclick=()=>window.open(list[+b.dataset.mi].img,"_blank","noopener"));
   sec.hidden=false;const l=document.getElementById("marketLink");if(l)l.hidden=false;
 };

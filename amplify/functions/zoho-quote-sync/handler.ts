@@ -51,7 +51,7 @@ type ZohoBody = {
   vendorpayment?: { payment_id: string; payment_number?: string };
 };
 
-const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift' };
+const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order' };
 const INVOICE_PREFIX = 'KAH-INV-';
 // Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
 // so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
@@ -213,7 +213,7 @@ function quoteParts(img: Img) {
     .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total'].includes(k))
     .map(([k, v]) => `${k}: ${v}`);
   // Price enquiries start at 0. Commissions use the website estimate, gifts the total shown.
-  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' ? amount(details['Total']) : 0;
+  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' ? amount(details['Total']) : kind === 'MARKET' ? num(img, 'quotedPrice') ?? 0 : 0;
   return {
     ref,
     name: title.slice(0, 100),
@@ -634,6 +634,7 @@ async function payVendor(img: Img) {
 
 /** Run whichever purchase step is due. Never throws: problems go to purchaseMessage. */
 async function purchaseSteps(start: Img) {
+  if (str(start, 'kind') === 'MARKET') { await marketSteps(start); return; }
   let img: Img = { ...start };
   const id = str(img, 'id');
   const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
@@ -1773,6 +1774,8 @@ async function sellerAction(ev: ApiEvent) {
     return { listing: row, price: p, backToReview: old?.status === 'APPROVED' && status === 'SUBMITTED' };
   }
 
+  if (['orders', 'orderReady', 'orderDispatched', 'orderDelivered'].includes(action)) return sellerOrders(action, d, me.sub, profile);
+
   const id = txt(d.id, 60);
   const l = plain(await getRow(L, { id: { S: id } }));
   if (!l || l.sellerId !== me.sub) throw new Error('Listing not found');
@@ -1847,6 +1850,224 @@ async function marketAdmin(ev: ApiEvent) {
     return { listing: row };
   }
   throw new Error('Unknown action');
+}
+
+
+// ---------- Crafts shop orders ----------
+// Customer orders on the website (marketOrder) → Enquiry kind MARKET at the listing's price, status Received.
+// Studio sends the payment link (Price sent) and marks Paid as usual → invoice. Then marketSteps:
+//   Paid      → the maker's order is recorded, stock goes down, the maker is emailed (address only if they deliver).
+//   Maker     → "Ready for pickup" (Kalai delivers) or "Dispatched" with courier + AWB (status Shipped, challan).
+//   Delivered → the maker's payout bill in Zoho (bill no. <ref>-MP); studio's bank ref → payment made (live only).
+//   Cancelled with a refund before dispatch → the maker's order is cancelled and the stock put back.
+function newRef() {
+  const d = new Date(Date.now() + 4 * 3600_000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `KA-${String(d.getUTCFullYear()).slice(2)}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
+async function marketOrder(ev: ApiEvent) {
+  const { S, L } = mtables();
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const me = who(ev);
+  const d = parseData(ev.arguments.data);
+  const l = plain(await getRow(L, { id: { S: txt(d.listingId, 60) } }));
+  if (!l || l.status !== 'APPROVED') throw new Error('Sorry, this item is no longer available.');
+  const seller = plain(await getRow(S, { id: { S: String(l.sellerId) } }));
+  if (seller?.status !== 'APPROVED') throw new Error('Sorry, this item is no longer available.');
+  const qty = Math.max(1, Math.floor(numIn(d.qty, 99)));
+  if (qty > Number(l.stock ?? 0)) throw new Error(Number(l.stock ?? 0) > 0 ? `Only ${l.stock} left in stock.` : 'Sorry, this item is out of stock.');
+  const name = txt(d.name, 80), phone = txt(d.phone, 30), emirate = txt(d.emirate, 30), address = txt(d.address, 400), landmark = txt(d.landmark, 120);
+  if (!name) throw new Error('Add the name of the person receiving it.');
+  if (phone.replace(/\D/g, '').length < 7) throw new Error('Add a mobile number the courier can call.');
+  if (!EMIRATES.includes(emirate)) throw new Error('Choose the emirate.');
+  if (address.length < 10) throw new Error('Add the full address: villa or flat number, building, street and area.');
+  const unit = Number(l.customerPrice), total = r2(unit * qty), sellerAmount = r2(Number(l.sellerPrice) * qty);
+  const ref = newRef();
+  const now = new Date().toISOString();
+  const details = { Item: String(l.title), Maker: String(l.sellerName ?? seller.business), Quantity: String(qty), 'Unit price': `AED ${unit}`, Delivery: l.deliveryBy === 'KALAI' ? 'Kalai Art House delivers' : 'The maker delivers', Note: txt(d.note, 300) };
+  const row: Dict = {
+    id: crypto.randomUUID(), __typename: 'Enquiry', createdAt: now, updatedAt: now, owner: me.owner,
+    ref, kind: 'MARKET', title: String(l.title), details: JSON.stringify(details), status: 'RECEIVED',
+    customerName: txt(d.customerName, 80) || name, phone, email: me.email, quotedPrice: total,
+    deliveryName: name, deliveryPhone: phone, deliveryEmirate: emirate, deliveryAddress: address, deliveryLandmark: landmark, addressAt: now, addressBy: 'Customer',
+    listingId: String(l.id), sellerId: String(l.sellerId), sellerName: String(l.sellerName ?? seller.business), qty, unitPrice: unit, deliveryBy: String(l.deliveryBy),
+    sellerAmount, commissionPct: Number(l.commissionPct ?? 0),
+  };
+  await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row), ConditionExpression: 'attribute_not_exists(id)' }));
+  console.log(`Crafts shop order ${ref}: ${l.title} × ${qty} = AED ${total}`);
+  return { ok: true, ref, total };
+}
+
+/** Update an enquiry as a "desk edit" (no zohoAt), so the stream reacts to it (challan, emails). */
+async function updateEnquiry(id: string, set: Dict) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const names: Record<string, string> = {};
+  const values: Record<string, AttributeValue> = {};
+  const parts = Object.entries({ ...set, updatedAt: new Date().toISOString() }).map(([k, v], i) => {
+    names[`#u${i}`] = k; values[`:u${i}`] = typeof v === 'number' ? { N: String(v) } : { S: String(v) }; return `#u${i} = :u${i}`;
+  });
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values, ConditionExpression: 'attribute_exists(id)' }));
+}
+
+async function changeStock(listingId: string, delta: number) {
+  const { L } = mtables();
+  const l = plain(await getRow(L, { id: { S: listingId } }));
+  if (!l) return;
+  const row: Dict = { ...l, stock: Math.max(0, Number(l.stock ?? 0) + delta), updatedAt: new Date().toISOString() };
+  await putRow(L, row);
+  if (row.status === 'APPROVED') await publishItem(row);
+}
+
+let marketAccount: string | null | undefined;
+async function sellerVendorId(sellerId: string): Promise<{ id: string; name: string }> {
+  const { S } = mtables();
+  const p = plain(await getRow(S, { id: { S: sellerId } }));
+  if (!p) throw new Error('Seller not found');
+  const name = String(p.business || p.contactName || 'Seller').slice(0, 99);
+  if (p.zohoVendorId) return { id: String(p.zohoVendorId), name };
+  const found = await zoho(`/contacts?contact_name=${encodeURIComponent(name)}&contact_type=vendor`);
+  let id = found.ok ? found.body.contacts?.find((c) => c.contact_name === name)?.contact_id : undefined;
+  if (!id) {
+    const created = await zoho('/contacts', { method: 'POST', body: JSON.stringify({ contact_name: name, contact_type: 'vendor', notes: `Crafts shop seller on art.pranixtechno.com. ${p.email ?? ''} ${p.phone ?? ''} ${p.iban ? `IBAN ${p.iban}` : ''}`.trim() }) });
+    if (!created.ok || !created.body.contact) throw new Error(`Zoho vendor create failed (${created.status}): ${created.body.message}`);
+    id = created.body.contact.contact_id;
+  }
+  await putRow(S, { ...p, zohoVendorId: id, updatedAt: new Date().toISOString() });
+  return { id, name };
+}
+
+async function marketSteps(img: Img) {
+  const id = str(img, 'id');
+  const ref = str(img, 'ref');
+  const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
+  if (!str(img, 'zohoPaymentId') && !testing) return;
+  const state = str(img, 'purchaseState');
+  const qty = num(img, 'qty') ?? 1;
+  const amountDue = num(img, 'sellerAmount') ?? 0;
+  const seller = str(img, 'sellerName');
+  try {
+    // Cancelled with a refund before it was dispatched: the maker's order stops and the stock goes back.
+    if (str(img, 'refundAction').startsWith('CANCEL')) {
+      if (state === 'ORDERED') {
+        await changeStock(str(img, 'listingId'), qty);
+        await writeBack(id, { purchaseState: 'CANCELLED', purchaseMessage: `Order to ${seller} cancelled (customer refunded); stock put back.` });
+        const p = plain(await getRow(mtables().S, { id: { S: str(img, 'sellerId') } }));
+        if (p?.email) await sendMail({ to: String(p.email), subject: `Order cancelled: ${str(img, 'title')} (${ref})`, lines: [`Hello ${h(p.contactName)},`, `The customer cancelled order <b>${h(ref)}</b> for <b>${h(str(img, 'title'))}</b> × ${qty}. Please do not send it.`, 'The stock has been added back to your listing.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
+      }
+      return;
+    }
+    if (!state) {
+      await changeStock(str(img, 'listingId'), -qty);
+      await writeBack(id, { purchaseState: 'ORDERED', purchaseMessage: `Order sent to ${seller}: AED ${amountDue.toLocaleString('en-US')} to pay them after delivery.` });
+      const p = plain(await getRow(mtables().S, { id: { S: str(img, 'sellerId') } }));
+      const kalai = str(img, 'deliveryBy') === 'KALAI';
+      if (p?.email) {
+        await sendMail({
+          to: String(p.email), subject: `New order: ${str(img, 'title')} × ${qty} (${ref})`,
+          lines: [`Hello ${h(p.contactName)},`, `You have a paid order <b>${h(ref)}</b>: <b>${h(str(img, 'title'))}</b> × ${qty}. You receive <b>${aed(amountDue)}</b> after delivery.`,
+            kalai ? `Kalai Art House collects it from you${p.address ? ` at ${h(p.address)}` : ''}. Please pack it well and mark it <b>Ready for pickup</b> in the seller portal.`
+              : `Please deliver it to <b>${h(str(img, 'deliveryName'))}</b>, ${h(str(img, 'deliveryPhone'))}, ${h(str(img, 'deliveryAddress'))}${str(img, 'deliveryLandmark') ? ` (near ${h(str(img, 'deliveryLandmark'))})` : ''}, ${h(str(img, 'deliveryEmirate'))} within 2 working days, then enter the courier and tracking number in the seller portal.`],
+          button: { label: 'Open the seller portal', url: `${SITE}/seller.html#orders` },
+        }).catch((err) => console.warn('Seller email failed', err));
+      }
+      return;
+    }
+    if (str(img, 'status') !== 'DELIVERED' || state === 'CANCELLED') return;
+    if (!str(img, 'zohoSellerBillId')) {
+      const vendor = await sellerVendorId(str(img, 'sellerId'));
+      if (marketAccount === undefined || marketAccount === null) marketAccount = (await optionalParam('/kalai/zoho/market_account_id')) ?? (await artistAccountId());
+      const unit = r2(amountDue / qty);
+      const r = await zoho('/bills', {
+        method: 'POST',
+        body: JSON.stringify({
+          vendor_id: vendor.id, bill_number: `${ref}-MP`, reference_number: ref, date: dubaiToday(),
+          line_items: [{ name: str(img, 'title').slice(0, 100), description: `Crafts shop order ${ref} · ${qty} × AED ${unit} (seller price; Kalai commission ${num(img, 'commissionPct') ?? 0}% kept)`, rate: unit, quantity: qty, ...(marketAccount ? { account_id: marketAccount } : {}) }],
+          notes: `Kalai Art House crafts shop payout for ${ref}.`,
+        }),
+      });
+      if (!r.ok || !r.body.bill) throw new Error(`Zoho bill for ${vendor.name} failed (${r.status}): ${r.body.message}`);
+      const bill = r.body.bill;
+      const draft = testing ? await keepAsDraft(`/bills/${bill.bill_id}`, bill.status) : null;
+      await writeBack(id, {
+        purchaseState: 'BILLED', zohoSellerBill: bill.bill_number, zohoSellerBillId: bill.bill_id,
+        purchaseMessage: testing ? `Test mode: ${draft === 'draft' ? 'draft' : 'void (test)'} payout bill ${bill.bill_number} for ${vendor.name} · AED ${amountDue.toLocaleString('en-US')}. Payment not recorded while testing.`
+          : `Payout bill ${bill.bill_number}: ${vendor.name} · AED ${amountDue.toLocaleString('en-US')} to pay. Enter your bank ref when paid.`,
+      });
+      return;
+    }
+    if (str(img, 'sellerPaidRef') && !str(img, 'zohoSellerPaymentId')) {
+      if (testing) {
+        if (!/payment not recorded/i.test(str(img, 'purchaseMessage'))) await writeBack(id, { purchaseMessage: `Test mode: payout bill ${str(img, 'zohoSellerBill')} · payment not recorded while testing (ref ${str(img, 'sellerPaidRef')}).` });
+        return;
+      }
+      const vendor = await sellerVendorId(str(img, 'sellerId'));
+      const got = await zoho(`/bills/${str(img, 'zohoSellerBillId')}`);
+      const balance = Number(got.body.bill?.balance ?? 0);
+      let payId = 'paid';
+      if (balance > 0) {
+        const r = await zoho('/vendorpayments', { method: 'POST', body: JSON.stringify({ vendor_id: vendor.id, payment_mode: 'banktransfer', amount: balance, date: dubaiToday(), reference_number: str(img, 'sellerPaidRef'), description: `Crafts shop payout to ${vendor.name} for ${ref}`, bills: [{ bill_id: str(img, 'zohoSellerBillId'), amount_applied: balance }] }) });
+        if (!r.ok || !r.body.vendorpayment) throw new Error(`Zoho payment to ${vendor.name} failed (${r.status}): ${r.body.message}`);
+        payId = r.body.vendorpayment.payment_id;
+      }
+      await writeBack(id, { purchaseState: 'SELLER_PAID', zohoSellerPaymentId: payId, purchaseMessage: `${vendor.name} paid AED ${(balance || amountDue).toLocaleString('en-US')} (ref ${str(img, 'sellerPaidRef')}) against bill ${str(img, 'zohoSellerBill')}.` });
+      const p = plain(await getRow(mtables().S, { id: { S: str(img, 'sellerId') } }));
+      if (p?.email) await sendMail({ to: String(p.email), subject: `Payment sent for ${ref}`, lines: [`Hello ${h(p.contactName)},`, `We've paid <b>${aed(balance || amountDue)}</b> for order ${h(ref)} (${h(str(img, 'title'))}). Bank reference: ${h(str(img, 'sellerPaidRef'))}.`], button: { label: 'Open the seller portal', url: `${SITE}/seller.html#orders` } }).catch(() => {});
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Crafts shop step failed for ${ref}:`, err);
+    await writeBack(id, { purchaseState: 'ERROR', purchaseMessage: msg.slice(0, 500) });
+  }
+}
+
+/** Seller portal: my paid orders, and the steps the maker does. */
+async function sellerOrders(action: string, d: Dict, sellerId: string, profile: Dict) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const view = (e: Img) => {
+    const own = str(e, 'deliveryBy') !== 'KALAI';
+    return {
+      id: str(e, 'id'), ref: str(e, 'ref'), title: str(e, 'title'), qty: num(e, 'qty') ?? 1, amount: num(e, 'sellerAmount') ?? 0, deliveryBy: str(e, 'deliveryBy'),
+      status: str(e, 'status'), purchaseState: str(e, 'purchaseState'), sellerStage: str(e, 'sellerStage'), createdAt: str(e, 'createdAt'),
+      readyAt: str(e, 'sellerReadyAt'), dispatchedAt: str(e, 'sellerDispatchedAt'), courier: str(e, 'courierName'), awb: str(e, 'trackingNo'), deliveredAt: str(e, 'deliveredAt'),
+      onHold: str(e, 'cancelState') === 'REQUESTED', cancelled: str(e, 'purchaseState') === 'CANCELLED',
+      bill: str(e, 'zohoSellerBill'), paidRef: str(e, 'zohoSellerPaymentId') ? str(e, 'sellerPaidRef') : '',
+      ...(own ? { to: { name: str(e, 'deliveryName'), phone: str(e, 'deliveryPhone'), address: str(e, 'deliveryAddress'), landmark: str(e, 'deliveryLandmark'), emirate: str(e, 'deliveryEmirate') } } : {}),
+    };
+  };
+  if (action === 'orders') {
+    const mine = (await scanAll(table)).filter((e) => str(e, 'sellerId') === sellerId && str(e, 'kind') === 'MARKET' && str(e, 'purchaseState'));
+    return { orders: mine.sort((a, b) => str(b, 'createdAt').localeCompare(str(a, 'createdAt'))).map(view) };
+  }
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: txt(d.id, 60) } } }));
+  const e = got.Item as Img | undefined;
+  if (!e || str(e, 'sellerId') !== sellerId || !str(e, 'purchaseState')) throw new Error('Order not found');
+  if (str(e, 'purchaseState') === 'CANCELLED') throw new Error('This order was cancelled. Please do not send it.');
+  if (str(e, 'cancelState') === 'REQUESTED') throw new Error('On hold: the customer asked to cancel. Please wait for our email.');
+  const now = new Date().toISOString();
+  const kalai = str(e, 'deliveryBy') === 'KALAI';
+  if (action === 'orderReady') {
+    if (!kalai) throw new Error('You deliver this order yourself: enter the courier and tracking number instead.');
+    if (str(e, 'status') !== 'PAID') throw new Error('Already collected.');
+    await updateEnquiry(str(e, 'id'), { sellerStage: 'READY', sellerReadyAt: now });
+    await sendMail({ to: STUDIO_EMAIL, subject: `Ready for pickup: ${str(e, 'ref')} (${String(profile.business)})`, lines: [`<b>${h(str(e, 'title'))}</b> × ${num(e, 'qty') ?? 1} is packed and ready.`, `Collect from: ${h(String(profile.address ?? ''))} · ${h(String(profile.contactName ?? ''))} ${h(String(profile.phone ?? ''))}`, 'Book the courier, then mark the order Shipped with the AWB.'], button: { label: 'Open the order', url: `${SITE}/admin.html` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+  } else if (action === 'orderDispatched') {
+    if (kalai) throw new Error('Kalai collects this order: mark it Ready for pickup instead.');
+    if (str(e, 'status') !== 'PAID') throw new Error('Already dispatched.');
+    const courier = txt(d.courier, 60), awb = txt(d.awb, 60);
+    if (!courier) throw new Error('Enter the courier (or "Own delivery").');
+    if (!awb && !/own/i.test(courier)) throw new Error('Enter the tracking number.');
+    await updateEnquiry(str(e, 'id'), { sellerStage: 'DISPATCHED', sellerDispatchedAt: now, courierName: courier, ...(awb ? { trackingNo: awb } : {}), status: 'SHIPPED' });
+  } else if (action === 'orderDelivered') {
+    if (kalai) throw new Error('Kalai delivers this order.');
+    if (str(e, 'status') !== 'SHIPPED') throw new Error('Mark it dispatched first.');
+    await updateEnquiry(str(e, 'id'), { sellerStage: 'DELIVERED', status: 'DELIVERED' });
+  } else throw new Error('Unknown action');
+  const fresh = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: str(e, 'id') } } }));
+  return { order: view(fresh.Item as Img) };
 }
 
 // ---------- Daily message translation ----------
@@ -2040,7 +2261,8 @@ function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
   if (action === 'CANCEL') {
     if (['RECEIVED', 'PRICE_SENT'].includes(status)) return t('FREE', 0, 'Nothing has been paid, so the enquiry is simply cancelled.');
     if (['PAID', 'FRAMING'].includes(status)) {
-      const started = str(e, 'kind') === 'GIFT' ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
+      // Crafts shop: a full refund until it is dispatched (then it is Shipped and can't be cancelled).
+      const started = str(e, 'kind') === 'MARKET' ? false : str(e, 'kind') === 'GIFT' ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
       return started
         ? t('HALF', 0.5, str(e, 'kind') === 'GIFT' ? 'Framing has started, so 50% is refunded.' : 'The artist has started your work, so 50% is refunded to cover the artist\'s time.')
         : t('FULL', 1, 'The work has not started yet, so the full amount is refunded.');
@@ -2181,11 +2403,13 @@ function mailsFor(rec: StreamRecord): Mail[] {
 
   if (rec.eventName === 'INSERT') {
     cust(`We've received your enquiry ${ref}`, [
-      kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
+      kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
+        : kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
         : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
       `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries & orders on our website.`]);
-    studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`]);
+    studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`,
+      kind === 'MARKET' ? `Maker: ${h(str(img, 'sellerName'))} · qty ${num(img, 'qty') ?? 1} · <b>${aed(price)}</b> · ${str(img, 'deliveryBy') === 'KALAI' ? 'Kalai collects and delivers' : 'maker delivers'}. Send the payment link (status Price sent); once Paid the maker is told automatically.` : '']);
     return out;
   }
   if (rec.eventName !== 'MODIFY' || !old) return out;
@@ -2288,6 +2512,7 @@ export const handler = async (event: StreamEvent | ApiEvent) => {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
+    if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));

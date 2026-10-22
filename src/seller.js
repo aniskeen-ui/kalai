@@ -79,6 +79,7 @@ function route() {
     return;
   }
   show('deskView');
+  pane(location.hash === '#orders' ? 'orders' : 'products');
   $('dBiz').textContent = profile.business;
   $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
   drawList();
@@ -186,6 +187,67 @@ async function drawList() {
 function alertRow(b, msg) { const p = document.createElement('div'); p.className = 'err'; p.style.fontSize = '12px'; p.textContent = msg; b.parentElement.appendChild(p); }
 
 $('dNew').onclick = () => edit(null);
+
+// ---------- orders (paid orders only; the customer's address is shown only when you deliver) ----------
+let orders = [];
+const OST = { PAID: 'To send', SHIPPED: 'Dispatched', DELIVERED: 'Delivered', REFUNDED: 'Refunded', REPLACEMENT: 'Replacement' };
+function pane(p) {
+  $('productsPane').hidden = p !== 'orders' ? false : true;
+  $('ordersPane').hidden = p !== 'orders';
+  $('tabProducts').setAttribute('aria-pressed', String(p !== 'orders'));
+  $('tabOrders').setAttribute('aria-pressed', String(p === 'orders'));
+  try { history.replaceState(null, '', p === 'orders' ? '#orders' : location.pathname); } catch { /* ignore */ }
+  if (p === 'orders') loadOrders();
+}
+$('tabProducts').onclick = () => pane('products');
+$('tabOrders').onclick = () => pane('orders');
+const dd = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
+async function loadOrders() {
+  $('oList').innerHTML = '<p class="muted">Loading…</p>';
+  try { orders = (await call('orders')).orders || []; drawOrders(); } catch (ex) { $('oList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
+}
+function orderState(o) {
+  if (o.cancelled) return ['Cancelled', 'REJECTED'];
+  if (o.onHold) return ['On hold', 'SUBMITTED'];
+  if (o.paidRef) return ['Paid to you', 'APPROVED'];
+  if (o.status === 'PAID' && o.sellerStage === 'READY') return ['Waiting for Kalai pickup', 'SUBMITTED'];
+  return [OST[o.status] || o.status, o.status === 'PAID' ? 'SUBMITTED' : o.status === 'DELIVERED' ? 'APPROVED' : ''];
+}
+function drawOrders() {
+  const open = orders.filter((o) => o.status === 'PAID' && !o.cancelled);
+  const owed = orders.filter((o) => o.status === 'DELIVERED' && !o.paidRef && !o.cancelled).reduce((a, o) => a + Number(o.amount || 0), 0);
+  const paid = orders.filter((o) => o.paidRef).reduce((a, o) => a + Number(o.amount || 0), 0);
+  $('oSum').innerHTML = `${open.length} to send · delivered, payment due to you: <b>${aed(owed)}</b> · paid to you so far: <b>${aed(paid)}</b>`;
+  $('tabOrders').textContent = open.length ? `Orders (${open.length})` : 'Orders';
+  if (!orders.length) { $('oList').innerHTML = '<p class="muted">No orders yet. Paid orders appear here, and we email you each one.</p>'; return; }
+  $('oList').innerHTML = orders.map((o) => {
+    const [label, cls] = orderState(o);
+    const kalai = o.deliveryBy === 'KALAI';
+    const live = !o.cancelled && !o.onHold;
+    return `<article class="ocard" data-id="${esc(o.id)}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(o.title)} × ${o.qty}</h3><span class="st ${cls}">${esc(label)}</span><span class="muted" style="margin-left:auto;font-family:var(--mono)">${esc(o.ref)} · ${esc(dd(o.createdAt))}</span></div>
+      <div>You receive <b>${aed(o.amount)}</b>${o.bill ? ` · bill ${esc(o.bill)}` : ''}${o.paidRef ? ` · paid, ref ${esc(o.paidRef)}` : o.status === 'DELIVERED' ? ' · we pay you after delivery' : ''}</div>
+      ${o.cancelled ? '<div class="err">The customer cancelled. Please do not send it; the stock was added back.</div>' : ''}
+      ${o.onHold ? '<div class="err">On hold: the customer asked to cancel. Please wait for our email before sending.</div>' : ''}
+      ${kalai ? `<div class="to">Kalai collects it from your pickup address and delivers it.${o.readyAt ? ` Marked ready ${esc(dd(o.readyAt))}.` : ''}</div>`
+        : o.to ? `<div class="to"><b>Deliver to</b> ${esc(o.to.name)} · <a href="tel:${esc(o.to.phone)}">${esc(o.to.phone)}</a><br>${esc(o.to.address)}${o.to.landmark ? ` (near ${esc(o.to.landmark)})` : ''}, ${esc(o.to.emirate)}</div>` : ''}
+      ${o.courier ? `<div>Sent with <b>${esc(o.courier)}</b>${o.awb ? ` · tracking ${esc(o.awb)}` : ''}${o.dispatchedAt ? ` · ${esc(dd(o.dispatchedAt))}` : ''}</div>` : ''}
+      ${live && o.status === 'PAID' && kalai && o.sellerStage !== 'READY' ? '<div class="acts"><button class="btn small" data-o="orderReady" type="button">Packed: ready for pickup</button><span class="err" data-m></span></div>' : ''}
+      ${live && o.status === 'PAID' && !kalai ? '<div class="acts"><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" list="couriers" placeholder="Aramex / Own delivery"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Tracking no.</span><input data-f="awb"></label><button class="btn small" data-o="orderDispatched" type="button">Mark dispatched</button><span class="err" data-m></span></div>' : ''}
+      ${live && o.status === 'SHIPPED' && !kalai ? '<div class="acts"><button class="btn small ghost" data-o="orderDelivered" type="button">The customer has received it</button><span class="err" data-m></span></div>' : ''}
+    </article>`;
+  }).join('') + '<datalist id="couriers"><option>Aramex</option><option>DHL</option><option>Jeebly</option><option>Quiqup</option><option>Emirates Post</option><option>Own delivery</option></datalist>';
+  document.querySelectorAll('#oList [data-o]').forEach((b) => {
+    b.onclick = async () => {
+      const card = b.closest('.ocard');
+      const data = { id: card.dataset.id, courier: card.querySelector('[data-f="courier"]')?.value.trim(), awb: card.querySelector('[data-f="awb"]')?.value.trim() };
+      if (b.dataset.o === 'orderDelivered' && !confirm('Confirm the customer has received it?')) return;
+      b.disabled = true;
+      try { const r = await call(b.dataset.o, data); orders = orders.map((o) => (o.id === r.order.id ? r.order : o)); drawOrders(); }
+      catch (ex) { card.querySelector('[data-m]').textContent = ex.message; b.disabled = false; }
+    };
+  });
+}
 
 function edit(l) {
   const x = l || { title: '', description: '', category: '', stock: 1, costPrice: '', markupPct: 20, courierCharge: 0, otherCharges: 0, deliveryBy: 'SELLER' };

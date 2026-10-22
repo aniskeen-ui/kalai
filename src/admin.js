@@ -15,7 +15,7 @@ const STATUS = {
   RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed',
   SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
-const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists' };
+const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop' };
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
@@ -287,13 +287,17 @@ function reportLine(e) {
   } else if (c?.artistPriceInr) {
     k = { artist: c.artistPriceInr * rates.fx, framing: 0, india: 0, customs: 0, local: 0 };
     note = 'costing not saved';
+  } else if (e.kind === 'MARKET') {
+    // Crafts shop: the maker's payout is the cost (shown in the Artist column); Kalai's courier when Kalai delivers.
+    k = { artist: e.purchaseState === 'CANCELLED' ? 0 : Number(e.sellerAmount || 0), framing: 0, india: 0, customs: 0, local: e.deliveryBy === 'KALAI' && !String(e.refundAction || '').startsWith('CANCEL') ? Number(rates.local || 0) : 0 };
+    note = 'crafts shop: maker payout in Artist';
   } else if (e.kind === 'GIFT') {
     k = { artist: 0, framing: Number(rates.tiers.S?.framing || 0), india: 0, customs: 0, local: Number(rates.local || 0) };
     note = 'est. from Rates';
   } else {
     note = 'no costing';
   }
-  if (k) {
+  if (k && e.kind !== 'MARKET') {
     if (e.purchaseState === 'CANCELLED') { k.artist = 0; k.india = 0; k.customs = 0; }
     if (String(e.refundAction || '').startsWith('CANCEL')) { k.framing = 0; k.local = 0; }
     // 50% cancellation after Siva started: he is paid half; India courier and customs only if he had sent it.
@@ -463,6 +467,7 @@ const needsSiva = (e) => hasArtist(e) && !!e.zohoPOId && e.purchaseState !== 'CA
 const sivaDone = (e) => e.artistStage === 'SHIPPED';
 function statusBlock(e, k, s) {
   if (k === s) return '';
+  if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
   if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return 'waiting for Siva';
   if (k === 'DELIVERED' && !['SHIPPED', 'DELIVERED'].includes(s)) return 'ship it first';
   return '';
@@ -489,6 +494,24 @@ function purchaseSection(e) {
       <div class="field"><label for="pPaid">Paid to Siva: bank ref</label><input id="pPaid" value="${esc(e.artistPaidRef)}" placeholder="Transfer reference" ${!e.zohoPOId || e.zohoVendorPaymentId ? 'disabled' : ''}></div>
     </div>
     <div class="muted" style="font-size:12px">Save with his invoice number to create the bill in Zoho; save with your bank reference to record the payment made to him.</div>
+  </fieldset>`;
+}
+
+// ---------- Crafts shop order: the maker's side and their payout ----------
+function marketSection(e) {
+  if (e.kind !== 'MARKET') return '';
+  const kalai = e.deliveryBy === 'KALAI';
+  const st = e.purchaseState || '';
+  const color = st === 'SELLER_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
+  const kalaiEarns = Number(e.quotedPrice || 0) - Number(e.sellerAmount || 0);
+  const stage = e.sellerStage === 'READY' ? `Packed, ready for pickup (${day(e.sellerReadyAt)})` : e.sellerStage === 'DISPATCHED' ? `Dispatched by the maker ${day(e.sellerDispatchedAt)}` : e.sellerStage === 'DELIVERED' ? 'Maker confirmed delivery' : st ? (kalai ? 'Waiting for the maker to pack it' : 'Waiting for the maker to dispatch it') : 'Not sent to the maker yet (happens automatically when Paid)';
+  return `<fieldset class="cost" id="marketBox">
+    <legend>Crafts shop · ${esc(e.sellerName)}</legend>
+    <div style="font-size:14px">${esc(e.title)} × ${e.qty || 1} · customer pays ${aed(e.quotedPrice)} · maker receives <b>${aed(e.sellerAmount, 2)}</b> · Kalai keeps ${aed(kalaiEarns, 2)} (${e.commissionPct ?? 0}%${kalai ? ' + delivery fee' : ''})</div>
+    <div style="font-size:13px"><b>${kalai ? 'Kalai collects from the maker and delivers' : 'The maker delivers'}</b> · ${esc(stage)}</div>
+    ${e.purchaseMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage)}</div>` : ''}
+    <div class="field"><label for="mPaid">Paid to the maker: bank ref</label><input id="mPaid" value="${esc(e.sellerPaidRef)}" placeholder="Transfer reference" ${!e.zohoSellerBillId || e.zohoSellerPaymentId ? 'disabled' : ''}></div>
+    <div class="muted" style="font-size:12px">When you mark it Paid the maker gets the order${kalai ? ' (they mark it ready for pickup; you book the courier and mark it Shipped)' : ' (they enter the courier and AWB; the order turns Shipped by itself)'}. When it is Delivered, the maker's payout bill is created in Zoho; enter your bank reference here when you have paid them.</div>
   </fieldset>`;
 }
 
@@ -966,6 +989,7 @@ async function showDetail(e) {
       </div>
       <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? ', then records Siva’s order' : ''}.</div>
       ${purchaseSection(e)}
+      ${marketSection(e)}
       ${reworkSection(e)}
       ${afterSection(e)}
       <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="https://… from Telr, Tap or Stripe" value="${esc(e.paymentLink)}"></div>
@@ -1119,7 +1143,7 @@ async function showDetail(e) {
     }
     const blockWhy = statusBlock(e, $('eStatus').value, s);
     if (blockWhy) {
-      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'waiting for Siva' ? 'Siva hasn\'t marked this work “Sent to frame shop” yet. Update it on his page first (you can do it for him there).' : 'Mark it Shipped before Delivered.'}</div>`);
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'not for crafts' ? 'Crafts shop orders skip “Being framed”.' : blockWhy === 'waiting for Siva' ? 'Siva hasn\'t marked this work “Sent to frame shop” yet. Update it on his page first (you can do it for him there).' : 'Mark it Shipped before Delivered.'}</div>`);
       b.disabled = false; return;
     }
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {
@@ -1138,6 +1162,7 @@ async function showDetail(e) {
     const invNo = $('pInv') && !$('pInv').disabled ? $('pInv').value.trim() : null;
     const paidRef = $('pPaid') && !$('pPaid').disabled ? $('pPaid').value.trim() : null;
     const costingChanged = $('costing') && !e.zohoPOId;
+    const sellerPaid = $('mPaid') && !$('mPaid').disabled ? $('mPaid').value.trim() : null;
     const toZoho = (!locked && (($('eStatus').value === 'PAID' && s !== 'PAID') || (priceVal !== '' && Number(priceVal) !== Number(e.quotedPrice ?? NaN))))
       || (SHIP_STATUSES.includes($('eStatus').value) && $('eStatus').value !== s && !!e.zohoInvoiceId)
       || (locked && hasArtist(e) && (!e.zohoPOId || (invNo && invNo !== (e.artistInvoiceNo || '')) || (paidRef && paidRef !== (e.artistPaidRef || ''))));
@@ -1160,6 +1185,7 @@ async function showDetail(e) {
         courierName: $('eCourier').value.trim() || null,
         trackingNo: $('eAwb').value.trim() || null,
         ...(paidRef != null ? { artistPaidRef: paidRef || null } : {}),
+        ...(sellerPaid != null ? { sellerPaidRef: sellerPaid || null } : {}),
         ...(rw ? rw.enq : {}),
         ...readAddress(e),
         id: e.id,
