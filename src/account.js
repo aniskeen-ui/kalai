@@ -781,10 +781,10 @@ async function showDailyMessage() {
   try {
     const r = await client.models.Announcement.list({ authMode: 'apiKey', limit: 50 });
     const nowIso = new Date().toISOString();
-    const m = (r.data || []).filter((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso))
-      // The card is for the Thirukkural of the day (published 06:05 Dubai each morning); an older hand-written
-      // message shows only on a day the kural is missing.
-      .sort((a, b) => Number(b.source === 'KURAL') - Number(a.source === 'KURAL') || String(b.showFrom).localeCompare(String(a.showFrom)))[0];
+    // The card shows only the Thirukkural (published 06:05 Dubai each morning). Before today's is out
+    // (midnight to 06:05) it keeps showing the latest one. Hand-written messages are not shown here.
+    const kurals = (r.data || []).filter((x) => x.source === 'KURAL').sort((a, b) => String(b.showFrom || b.createdAt).localeCompare(String(a.showFrom || a.createdAt)));
+    const m = kurals.find((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso)) || kurals[0];
     if (!m) return;
     const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
     if (!langs.length) return;
