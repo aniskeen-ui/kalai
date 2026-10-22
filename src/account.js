@@ -31,6 +31,15 @@ let kuralSec = 10;
       if (st.siteLook === 'green') document.documentElement.setAttribute('data-skin', 'green');
       else document.documentElement.removeAttribute('data-skin');
     }
+    // Real room photo for "On a wall" (marked in Settings).
+    try {
+      const mk = st.roomMarks ? JSON.parse(st.roomMarks) : null;
+      if (mk && mk.r > mk.l && mk.top > 0) {
+        const u = (await getUrl({ path: 'catalogue/site/room.jpg', options: { expiresIn: 3600 } })).url.toString();
+        window.kalaiRoom = { ...mk, url: u };
+        new Image().src = u;
+      }
+    } catch { /* drawn room stays */ }
     const tx = (v) => String(v ?? '').trim();
     const put = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
     // Headlines take turns with the picture (same seconds); one per line, "plain part | gold part".

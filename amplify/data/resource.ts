@@ -370,6 +370,7 @@ const schema = a.schema({
       heroHighlight: a.string(),
       heroText: a.string(),
       siteLook: a.string(), // classic | green
+      roomMarks: a.string(), // JSON {l,r,top,ratio,cm}: the sofa in the room photo used by "On a wall"
       heroLines: a.string(), // several headlines, one per line, "plain part | gold part"; they take turns
       kidsTitle: a.string(),
       kidsText: a.string(), // paragraphs separated by a blank line
