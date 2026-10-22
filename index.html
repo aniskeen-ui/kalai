@@ -237,6 +237,19 @@ footer p{margin:2px 0}
 .room .hang{position:absolute;left:50%;transform:translateX(-50%);background:#3b2a1d;padding:1.1%;box-shadow:0 8px 18px rgba(0,0,0,.35)}
 .room .hang .mount{background:#fbf8f1;display:grid;place-items:center}
 .room .hang img{display:block;width:100%;height:auto}
+.fr{display:inline-block;max-width:100%;box-shadow:0 12px 26px rgba(0,0,0,.32),inset 0 0 0 1px rgba(0,0,0,.25);padding:var(--fw,22px);background:var(--fbg,#161616);border-radius:2px;position:relative}
+.fr::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 3px 3px 4px rgba(255,255,255,.18),inset -3px -3px 5px rgba(0,0,0,.35)}
+.fr .mt{background:#fbf8f1;padding:var(--mw,0px);box-shadow:inset 1px 1px 3px rgba(0,0,0,.25)}
+.fr img{display:block;max-width:100%;max-height:52vh;width:auto;height:auto}
+.fr.none{padding:0;background:none;box-shadow:0 10px 26px rgba(0,0,0,.3)}.fr.none::after{display:none}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fchips button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:4px 10px 4px 5px;font-size:12px;cursor:pointer}
+.fchips button i{width:18px;height:18px;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.fchips button[aria-pressed="true"]{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+.fchips label{font-size:12px;display:inline-flex!important;gap:5px;align-items:center;margin:0 0 0 4px!important;white-space:nowrap;width:auto!important}.fchips label input{width:auto!important;margin:0}
+.lens{position:fixed;width:170px;height:170px;border-radius:50%;pointer-events:none;z-index:200;border:3px solid #fff;box-shadow:0 6px 22px rgba(0,0,0,.45);background-repeat:no-repeat;background-color:#fff;transform:translate(-50%,-50%);display:none}
+.lens-on .stage img{cursor:zoom-in;touch-action:none}
+.vtools{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .room svg{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);width:66.7%;height:auto}
 .room-cap{font-size:12px;color:var(--muted);margin:0}
 .byline{font-size:14px;color:var(--muted);margin:-4px 0 0}
@@ -669,7 +682,7 @@ function drawCart(){
 }
 document.getElementById("cartBody").addEventListener("click",e=>{const r=e.target.closest("[data-rm]");if(r){cart=cart.filter(x=>x!==r.dataset.rm);save();updateCount();drawCart()}});
 const scrim=document.getElementById("scrim"),drawer=document.getElementById("drawer"),modal=document.getElementById("modal");
-function closeAll(){drawer.hidden=true;modal.hidden=true;scrim.hidden=true}
+function closeAll(){if(typeof lensEl!=="undefined")lensEl.style.display="none";drawer.hidden=true;modal.hidden=true;scrim.hidden=true}
 document.getElementById("openCart").onclick=()=>{drawCart();drawer.hidden=false;scrim.hidden=false;document.getElementById("closeCart").focus()};
 document.getElementById("closeCart").onclick=closeAll;scrim.onclick=closeAll;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAll()});
@@ -699,7 +712,7 @@ function openAsk(p,offer){
     if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
     const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")","Artwork no.":p.code||(p.untitled?String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
     if(offer)fields["Offer"]="AED "+off;
-    fields["Framing"]=document.getElementById("aFrame").value;fields["Message"]=document.getElementById("aMsg").value.trim();
+    fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();
     const url=sendEnquiry((offer?"Price enquiry (offer): ":"Price enquiry: ")+p.name,fields);
     ok.style.color="var(--fg)";ok.textContent=offer
       ?`Thank you, ${n}. We'll check your offer of AED ${off} for "${p.name}" with the artist and reply on WhatsApp within one working day. If WhatsApp didn't open, tap here: `
@@ -716,15 +729,49 @@ function roomView(p){
   const top=Math.max(4,sofaTopPct-bottomGapPct-heightPct);
   const mountPad=(8/fw*100).toFixed(2);
   return `<div class="room" role="img" aria-label="${p.name} shown to scale on a wall above a two-metre sofa">
-    <div class="hang" style="width:${leftPct}%;top:${top}%"><div class="mount" style="padding:${mountPad}%"><img src="${p.img}" alt=""></div></div>
+    <div class="hang" style="width:${leftPct}%;top:${top}%;${FRAME.k==='none'?'background:none;padding:0':`background:${FRAME.bg}`}"><div class="mount" style="padding:${MOUNT&&FRAME.k!=='none'?mountPad:0}%"><img src="${p.img}" alt=""></div></div>
     <svg viewBox="0 0 200 85" aria-hidden="true"><rect x="0" y="22" width="200" height="45" rx="10" fill="#6d7f86"/><rect x="12" y="6" width="176" height="34" rx="12" fill="#7f9198"/><rect x="0" y="30" width="22" height="40" rx="8" fill="#5e6f75"/><rect x="178" y="30" width="22" height="40" rx="8" fill="#5e6f75"/><rect x="14" y="67" width="6" height="18" fill="#3b2a1d"/><rect x="180" y="67" width="6" height="18" fill="#3b2a1d"/></svg>
   </div>`;
+}
+/* frame preview: colours are a guide; the real moulding comes from our Dubai frame shop */
+const FRAMES=[{k:"none",n:"No frame",bg:"transparent",sw:"repeating-linear-gradient(45deg,#ddd 0 3px,#fff 3px 6px)"},
+  {k:"black",n:"Black slim",bg:"#151515",w:.035},
+  {k:"white",n:"White",bg:"#f3f1ec",w:.035},
+  {k:"oak",n:"Natural oak",bg:"linear-gradient(135deg,#d8b47e,#b98d55 45%,#d2aa70 70%,#a97c47)",w:.05},
+  {k:"walnut",n:"Walnut",bg:"linear-gradient(135deg,#6b4429,#4a2c19 50%,#6e472b 75%,#3f2414)",w:.05},
+  {k:"gold",n:"Gold",bg:"linear-gradient(135deg,#f2d98a,#b88a2e 30%,#f6e3a2 55%,#a77a22 80%,#e3c46e)",w:.06}];
+FRAMES.forEach(f=>{f.sw=f.sw||f.bg});
+let FRAME=FRAMES[1],MOUNT=true;
+function framedHtml(p){
+  const fw=Math.round(400*(FRAME.w||0)),mw=MOUNT&&FRAME.k!=="none"?Math.round(400*.07):0;
+  return `<div class="fr ${FRAME.k==="none"?"none":""}" style="--fbg:${FRAME.bg};--fw:${fw}px;--mw:${mw}px"><div class="mt"><img src="${p.img}" alt="${p.name} in a ${FRAME.n.toLowerCase()} frame"></div></div>`;
+}
+/* magnifying lens: move over the picture (or touch and drag) to look closer */
+let LENS=true;
+const lensEl=document.createElement("div");lensEl.className="lens";lensEl.setAttribute("aria-hidden","true");document.body.appendChild(lensEl);
+function lensAt(img,x,y){
+  const r=img.getBoundingClientRect();
+  if(!LENS||x<r.left||x>r.right||y<r.top||y>r.bottom){lensEl.style.display="none";return}
+  const z=Math.max(2.5,Math.min(4,(img.naturalWidth||r.width)/r.width*1.2));
+  lensEl.style.display="block";lensEl.style.left=x+"px";lensEl.style.top=y+"px";
+  lensEl.style.backgroundImage=`url("${img.currentSrc||img.src}")`;
+  lensEl.style.backgroundSize=`${r.width*z}px ${r.height*z}px`;
+  lensEl.style.backgroundPosition=`${-((x-r.left)*z-85)}px ${-((y-r.top)*z-85)}px`;
+}
+function wireLens(stage){
+  const hit=e=>e.target&&e.target.tagName==="IMG"?e.target:null;
+  stage.addEventListener("pointermove",e=>{const im=hit(e);if(im)lensAt(im,e.clientX,e.clientY);else lensEl.style.display="none"});
+  stage.addEventListener("pointerdown",e=>{const im=hit(e);if(im&&LENS){if(e.pointerType!=="mouse")e.preventDefault();lensAt(im,e.clientX,e.clientY)}});
+  ["pointerleave","pointerup","pointercancel"].forEach(t=>stage.addEventListener(t,e=>{if(t==="pointerleave"||e.pointerType!=="mouse")lensEl.style.display="none"}));
+  document.getElementById("modalBox").addEventListener("scroll",()=>{lensEl.style.display="none"},{passive:true});
 }
 function openModal(p){
   const box=document.getElementById("modalBox");box.className="box wide";box.innerHTML="";
   const sim=PRODUCTS.filter(x=>x.id!==p.id&&x.price&&(x.subject===p.subject||x.kind===p.kind)).sort((a,b)=>(b.subject===p.subject)-(a.subject===p.subject)).slice(0,3);
   box.insertAdjacentHTML("beforeend",`<button class="x xtop" id="mClose" aria-label="Close">×</button><div class="viewer">
-      <div class="vtabs" role="group" aria-label="Choose view"><button type="button" data-v="art" aria-pressed="true">Artwork</button><button type="button" data-v="room" aria-pressed="false">On a wall</button></div>
+      <div class="vtools"><div class="vtabs" role="group" aria-label="Choose view"><button type="button" data-v="art" aria-pressed="true">Artwork</button><button type="button" data-v="frame" aria-pressed="false">Try a frame</button><button type="button" data-v="room" aria-pressed="false">On a wall</button></div>
+        <div class="vtabs"><button type="button" id="vLens" aria-pressed="${LENS}" title="Move over the picture to look closer">🔍 Lens</button></div></div>
+      <div class="fchips" id="vFrames" hidden role="group" aria-label="Frame">${FRAMES.map(f=>`<button type="button" data-fr="${f.k}" aria-pressed="${f.k===FRAME.k}"><i style="--sw:${f.sw}"></i>${f.n}</button>`).join("")}<label><input type="checkbox" id="vMount" ${MOUNT?"checked":""}> White mount</label></div>
       <div class="stage" id="vStage"></div>
       <p class="room-cap" id="vCap">Photo of the original by the artist.</p>
     </div>
@@ -733,7 +780,7 @@ function openModal(p){
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
-     <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size} (artwork)</dd>
+     <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size?p.size+" (artwork)":"Ask us"}</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
        <dt>Dispatch</dt><dd>${p.ship}</dd></dl>
      <div class="badges">
@@ -749,10 +796,19 @@ function openModal(p){
      ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
     </div>`);
   const stage=box.querySelector("#vStage"),cap=box.querySelector("#vCap");
-  const show=v=>{box.querySelectorAll(".vtabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
-    if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent="Photo of the original by the artist.";}
-    else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, with a frame and mount (about ${p.wcm+16} × ${p.hcm+16} cm framed).`;}};
-  box.querySelectorAll(".vtabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));show("art");
+  let cur="art";
+  const lensTip=()=>LENS?" Move over the picture to look closer.":"";
+  const show=v=>{cur=v;box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
+    box.querySelector("#vFrames").hidden=v==="art";box.querySelector(".viewer").classList.toggle("lens-on",LENS&&v!=="room");
+    if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent="Photo of the original by the artist."+lensTip();}
+    else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+" A preview of the look: we confirm the exact frame and its price with you."+lensTip();}
+    else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (about ${p.wcm+16} × ${p.hcm+16} cm framed)`}.`;}
+    window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));};
+  box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.onclick=()=>show(b.dataset.v));
+  box.querySelectorAll("[data-fr]").forEach(b=>b.onclick=()=>{FRAME=FRAMES.find(f=>f.k===b.dataset.fr);box.querySelectorAll("[data-fr]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
+  box.querySelector("#vMount").onchange=e=>{MOUNT=e.target.checked;show(cur)};
+  box.querySelector("#vLens").onclick=e=>{LENS=!LENS;e.currentTarget.setAttribute("aria-pressed",LENS);lensEl.style.display="none";show(cur)};
+  window.kalaiFrameChoice="";wireLens(stage);show("art");
   modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mClose").focus();
 }
 
