@@ -257,7 +257,8 @@ const schema = a.schema({
       experience: a.string(),
       commissions: a.string(), // YES | NO
       portfolio: a.string(),
-      sampleKeys: a.string(), // JSON array of S3 keys under market/{identity}/samples/
+      sampleKeys: a.string(), // JSON array of S3 keys under market/{identity}/samples/ (artists: sample works; sellers: product photos)
+      photoKey: a.string(), // profile photo or shop logo
       accountNumber: a.string(), // India bank account
       ifsc: a.string(),
       owner: a.string(),

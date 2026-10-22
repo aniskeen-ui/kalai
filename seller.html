@@ -215,7 +215,11 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
           <div class="two"><div class="field"><label for="pExp">Experience</label><select id="pExp"><option value="">Choose…</option><option>Less than 2 years</option><option>2 to 5 years</option><option>5 to 10 years</option><option>More than 10 years</option></select></div>
             <div class="field"><label for="pComm">Do you take commissions (paint from a customer's photo)?</label><select id="pComm"><option value="YES">Yes</option><option value="NO">No, only my own works</option></select></div></div>
           <div class="field"><label for="pLink">Portfolio, Instagram or website (optional)</label><input id="pLink" type="url" placeholder="https://instagram.com/…"></div>
-          <div class="field"><label>Sample works: upload 3 to 8 photos of your best pieces</label><div class="thumbs" id="pSamples"></div><input id="pSampleFiles" type="file" accept="image/*" multiple><span class="muted" style="font-size:12px">Clear, straight photos in daylight work best. Up to 10 MB each.</span></div>
+        </fieldset>
+        <fieldset class="sbox" style="padding:12px"><legend style="font-size:13px;font-weight:700">Photos</legend>
+          <div class="field"><label data-l-artist="Your photo (shown on your artist profile)" data-l-seller="Your shop logo or photo">Your shop logo or photo</label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><img id="pPhotoImg" alt="" hidden style="width:84px;height:84px;object-fit:cover;border-radius:50%;background:var(--sunk)"><input id="pPhotoFile" type="file" accept="image/*"><button type="button" class="linkbtn" id="pPhotoDel" hidden>Remove</button></div></div>
+          <div class="field"><label data-l-artist="Sample works: upload 3 to 8 photos of your best pieces" data-l-seller="Photos of your products: upload 1 to 8">Photos of your products: upload 1 to 8</label><div class="thumbs" id="pSamples"></div><input id="pSampleFiles" type="file" accept="image/*" multiple><span class="muted" style="font-size:12px">Clear, straight photos in daylight work best. Up to 10 MB each. On a phone you can take a photo directly.</span></div>
         </fieldset>
         <div class="field"><label for="pAbout" data-l-artist="About you and your art (shown to customers when approved)" data-l-seller="About your products">About your products</label><textarea id="pAbout" rows="4"></textarea></div>
         <fieldset class="sbox" style="padding:10px"><legend style="font-size:13px;font-weight:700">Where we pay you</legend>
@@ -234,7 +238,7 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
 
   <section id="deskView" class="wrapc" hidden>
     <div class="sbox" style="gap:6px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h2 id="dBiz" style="margin-right:auto"></h2><button class="btn ghost small" id="dProfile" type="button">My details</button><button class="btn" id="dNew" type="button">New listing</button></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><img id="dPhoto" alt="" hidden style="width:44px;height:44px;object-fit:cover;border-radius:50%"><h2 id="dBiz" style="margin-right:auto"></h2><button class="btn ghost small" id="dProfile" type="button">My details</button><button class="btn" id="dNew" type="button">New listing</button></div>
       <div class="muted" id="dTerms" style="font-size:13px"></div>
     </div>
     <div class="authtabs" role="tablist"><button type="button" id="tabProducts" aria-pressed="true">My products</button><button type="button" id="tabOrders" aria-pressed="false">Orders</button></div>

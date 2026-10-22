@@ -1738,7 +1738,7 @@ async function sellerAction(ev: ApiEvent) {
       bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
       accountNumber: txt(d.accountNumber, 30).replace(/\s+/g, ''), ifsc: txt(d.ifsc, 20).toUpperCase().replace(/\s+/g, ''),
       mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', portfolio: txt(d.portfolio, 300),
-      sampleKeys: '[]',
+      sampleKeys: '[]', photoKey: '',
     };
     const artist = type === 'ARTIST';
     if (!f.business || !f.contactName || f.phone.replace(/\D/g, '').length < 9) throw new Error(artist ? 'Add your artist name, full name and mobile.' : 'Add your business name, contact name and mobile.');
@@ -1751,7 +1751,10 @@ async function sellerAction(ev: ApiEvent) {
     try { samples = (JSON.parse(String(d.sampleKeys ?? '[]')) as unknown[]).filter((k): k is string => typeof k === 'string' && k.startsWith('market/')).slice(0, 8); } catch { samples = []; }
     if (artist && !f.mediums) throw new Error('Tick the mediums you work in.');
     if (artist && samples.length < 3) throw new Error('Upload at least 3 photos of your work.');
+    if (!artist && !samples.length) throw new Error('Upload at least 1 photo of your products.');
     f.sampleKeys = JSON.stringify(samples);
+    const photo = txt(d.photoKey, 300);
+    f.photoKey = photo.startsWith('market/') ? photo : '';
     const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : 'APPLIED';
     const row = { ...(profile ?? {}), ...f, id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
     await putRow(S, row);
@@ -1759,7 +1762,7 @@ async function sellerAction(ev: ApiEvent) {
       await sendMail({
         to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : 'seller'} application: ${f.business}`,
         lines: [`<b>${h(f.business)}</b> · ${h(f.contactName)} · ${h(f.phone)} · ${h(me.email)} · ${h(f.emirate)}${country === 'India' ? ', India' : ''}`,
-          artist ? `Mediums: ${h(f.mediums)} · ${h(f.experience || 'experience not given')} · commissions: ${f.commissions === 'YES' ? 'yes' : 'no'} · ${samples.length} sample photos` : `Sells: ${h(f.about)}`,
+          artist ? `Mediums: ${h(f.mediums)} · ${h(f.experience || 'experience not given')} · commissions: ${f.commissions === 'YES' ? 'yes' : 'no'} · ${samples.length} sample photos` : `Sells: ${h(f.about)} · ${samples.length} product photos`,
           artist ? `About: ${h(f.about)}` : f.tradeLicence ? `Trade licence: ${h(f.tradeLicence)}` : 'No trade licence given.',
           f.portfolio ? `Portfolio: ${h(f.portfolio)}` : '',
           'Approve or reject under Sellers, and set the commission %.'].filter(Boolean),

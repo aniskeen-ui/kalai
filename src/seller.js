@@ -100,6 +100,8 @@ function route() {
   show('deskView');
   pane(location.hash === '#orders' ? 'orders' : 'products');
   $('dBiz').textContent = profile.business;
+  $('dPhoto').hidden = !profile.photoKey;
+  if (profile.photoKey) imgUrl(profile.photoKey).then((u) => { $('dPhoto').src = u; });
   $('tabProducts').textContent = profile.type === 'ARTIST' ? 'My artworks' : 'My products';
   $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
   drawList();
@@ -159,6 +161,25 @@ $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = 
 // ---------- application (artists and sellers) ----------
 const AF = { pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pLink: 'portfolio' };
 let samples = [];
+let photoKey = '';
+async function drawPhoto() {
+  $('pPhotoImg').hidden = !photoKey; $('pPhotoDel').hidden = !photoKey;
+  if (photoKey) $('pPhotoImg').src = await imgUrl(photoKey);
+}
+$('pPhotoFile').onchange = async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 10 * 1024 * 1024) { $('pErr').textContent = `${f.name} is larger than 10 MB.`; return; }
+  $('pErr').textContent = 'Uploading…';
+  try {
+    const name = `${Date.now()}-${f.name.replace(/[^\w.-]+/g, '_')}`;
+    const r = await uploadData({ path: ({ identityId }) => `market/${identityId}/profile/${name}`, data: f, options: { contentType: f.type } }).result;
+    photoKey = r.path; $('pErr').textContent = '';
+  } catch (ex) { $('pErr').textContent = 'Upload failed: ' + (ex.message || ex); }
+  e.target.value = '';
+  drawPhoto();
+};
+$('pPhotoDel').onclick = () => { photoKey = ''; drawPhoto(); };
 const sampleKeys = (p) => { try { return JSON.parse(p?.sampleKeys || '[]'); } catch { return []; } };
 function applyKind() {
   const art = isArtist();
@@ -184,6 +205,8 @@ function fillApply() {
   $('pMediums').innerHTML = MEDIUMS.map((m) => `<label><input type="checkbox" value="${esc(m)}" ${chosen.includes(m) ? 'checked' : ''}> ${esc(m)}</label>`).join('');
   samples = sampleKeys(profile);
   drawSamples();
+  photoKey = profile?.photoKey || '';
+  drawPhoto();
   bankKind(); applyKind();
 }
 async function drawSamples() {
@@ -215,9 +238,11 @@ $('applyForm').addEventListener('submit', async (e) => {
   const data = {}; for (const [id, k] of Object.entries(AF)) data[k] = $(id).value.trim();
   data.type = isArtist() ? 'ARTIST' : 'SELLER';
   data.country = $('pCountry').value; data.emirate = $('pRegion').value;
+  data.sampleKeys = JSON.stringify(samples);
+  data.photoKey = photoKey;
+  if (data.type === 'SELLER' && !samples.length) { $('pErr').textContent = 'Upload at least 1 photo of your products.'; return; }
   if (data.type === 'ARTIST') {
     data.mediums = [...$('pMediums').querySelectorAll('input:checked')].map((x) => x.value).join(', ');
-    data.sampleKeys = JSON.stringify(samples);
     if (!data.mediums) { $('pErr').textContent = 'Tick the mediums you work in.'; return; }
     if (samples.length < 3) { $('pErr').textContent = 'Upload at least 3 photos of your work.'; return; }
   }
@@ -226,7 +251,7 @@ $('applyForm').addEventListener('submit', async (e) => {
 });
 $('dProfile').onclick = () => {
   show('applyView'); fillApply(); $('applyTitle').textContent = 'My details';
-  $('applyNote').innerHTML = `Update your contact${profile.type === 'ARTIST' ? ', samples' : ''}, address or bank details. <button class="linkbtn" type="button" id="backDesk">Back to my listings</button>`;
+  $('applyNote').innerHTML = `Update your contact, photos, address or bank details. <button class="linkbtn" type="button" id="backDesk">Back to my listings</button>`;
   $('backDesk').onclick = () => route();
 };
 
