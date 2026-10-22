@@ -2395,10 +2395,12 @@ async function artistWorks(ev: ApiEvent) {
   if (!table) throw new Error('Not configured');
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
+  const ptab = process.env.ARTPRICE_TABLE;
   if (action === 'list') {
     const items = (await scanAll(table)).filter((x) => str(x, 'status') !== 'HIDDEN' && str(x, 'imageKey'));
+    const prices = new Map(ptab ? (await scanAll(ptab)).map((x) => [str(x, 'productId'), x] as const) : []);
     return {
-      works: items.map((x) => ({ id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named'), code: str(x, 'code') }))
+      works: items.map((x) => { const pr = prices.get(str(x, 'id')); return { id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named'), code: str(x, 'code'), artistPrice: num(pr, 'artistPrice'), currency: str(pr, 'currency') || 'INR' }; })
         .sort((a, b) => Number(!!a.named) - Number(!!b.named) || a.id.localeCompare(b.id)),
     };
   }
@@ -2412,6 +2414,18 @@ async function artistWorks(ev: ApiEvent) {
     const size = txt(d.size, 40), description = txt(d.description, 1000);
     if (size) set.size = size;
     if (description) set.description = description;
+    // The artist's own price (INR) for this work, kept apart from the public catalogue.
+    const price = d.price === '' || d.price == null ? null : Number(d.price);
+    if (price != null) {
+      if (!Number.isFinite(price) || price < 100 || price > 10_000_000) throw new Error('Enter your price in rupees (at least 100).');
+      if (ptab) {
+        const now = new Date().toISOString();
+        await ddb.send(new UpdateItemCommand({ TableName: ptab, Key: { productId: { S: id } },
+          UpdateExpression: 'SET artistPrice = :p, currency = :c, artistPriceAt = :t, updatedAt = :t, createdAt = if_not_exists(createdAt, :t), #tn = :tn',
+          ExpressionAttributeNames: { '#tn': '__typename' },
+          ExpressionAttributeValues: { ':p': { N: String(Math.round(price)) }, ':c': { S: 'INR' }, ':t': { S: now }, ':tn': { S: 'ArtworkPrice' } } }));
+      }
+    }
     const names: Record<string, string> = {}; const values: Record<string, AttributeValue> = {};
     const parts = Object.entries(set).map(([k, v], i) => { names[`#w${i}`] = k; values[`:w${i}`] = { S: v }; return `#w${i} = :w${i}`; });
     await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));

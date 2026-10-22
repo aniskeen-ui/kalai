@@ -236,8 +236,26 @@ const schema = a.schema({
       // website shows "Untitled" instead of the imported file name.
       named: a.string(),
       code: a.string(), // artwork code AT-0000001…, assigned by the function, never changes
+      // Fixed prices set in Order management → Pricing (AED, per frame: none/black/white/oak/walnut/gold).
+      priceMatrix: a.string(),
+      priceApprovedAt: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
+  // The artist's own price for a catalogue work (INR or AED) and the studio's price calculation. Studio only:
+  // never public. The artist sets his price on his desk (through the function).
+  ArtworkPrice: a
+    .model({
+      productId: a.id().required(),
+      artistPrice: a.float(),
+      currency: a.string(), // INR | AED
+      artistPriceAt: a.string(),
+      artistNote: a.string(),
+      calc: a.string(), // JSON of the inputs used in the last calculation
+      approvedAt: a.string(),
+    })
+    .identifier(['productId'])
+    .authorization((allow) => [allow.group('ADMINS')]),
 
   // Daily message shown as a small notice on the website, in Tamil, English and Arabic.
   Announcement: a

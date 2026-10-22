@@ -80,17 +80,18 @@ async function renderWorks(force = false) {
       works = (parse(r.data) || {}).works || [];
     } catch (ex) { if (filter === 'WORKS') $('list').innerHTML = `<p class="err">Could not load your works: ${esc(ex.message)}</p>`; return; }
   }
-  const todo = works.filter((w) => !w.named).length;
+  const todo = works.filter((w) => !w.named || w.artistPrice == null).length;
   $('cWorks').textContent = todo ? `(${todo})` : '';
   if (filter !== 'WORKS') return;
   if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
-  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. ${todo ? `<b>${todo} still to name.</b>` : '<b class="wdone">All named. Thank you!</b>'}</p>`
+  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
         ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title</label><input name="title" maxlength="80" value="${esc(w.title)}" placeholder="A short, meaningful title"></div>
-        <div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
+        <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
+        <div class="field"><label>My price (₹, artwork only)</label><input name="price" type="number" min="100" step="50" inputmode="numeric" value="${w.artistPrice ?? ''}" placeholder="e.g. 3000"></div></div>
         <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description)}</textarea></div>
-        <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? '<span class="wdone">✓ Named</span>' : ''}</span></div>
+        <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? `<span class="wdone">✓ Named${w.artistPrice != null ? ' · priced' : ''}</span>` : ''}</span></div>
       </form></article>`).join('');
   document.querySelectorAll('.wcard img[data-key]').forEach(async (img) => {
     try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no picture */ }
@@ -101,11 +102,11 @@ async function renderWorks(force = false) {
       const id = f.closest('.wcard').dataset.w;
       const m = f.querySelector('[data-m]'); const b = f.querySelector('button'); b.disabled = true; m.textContent = 'Saving…';
       try {
-        const r = await client.mutations.artistWorks({ action: 'save', data: JSON.stringify({ id, title: f.title.value, size: f.size.value, description: f.description.value }) });
+        const r = await client.mutations.artistWorks({ action: 'save', data: JSON.stringify({ id, title: f.title.value, size: f.size.value, description: f.description.value, price: f.price.value }) });
         if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
-        const w = works.find((x) => x.id === id); Object.assign(w, { title: f.title.value.trim(), size: f.size.value.trim(), description: f.description.value.trim(), named: 'yes' });
+        const w = works.find((x) => x.id === id); Object.assign(w, { title: f.title.value.trim(), size: f.size.value.trim(), description: f.description.value.trim(), named: 'yes', artistPrice: f.price.value ? Number(f.price.value) : w.artistPrice });
         m.innerHTML = '<span class="wdone">✓ Saved: now on the website</span>';
-        const todo2 = works.filter((x) => !x.named).length; $('cWorks').textContent = todo2 ? `(${todo2})` : '';
+        const todo2 = works.filter((x) => !x.named || x.artistPrice == null).length; $('cWorks').textContent = todo2 ? `(${todo2})` : '';
       } catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
     };
   });

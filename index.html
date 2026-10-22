@@ -258,6 +258,7 @@ footer p{margin:2px 0}
 .room svg{position:absolute;inset:0;width:100%;height:100%}
 .room-cap{font-size:12px;color:var(--muted);margin:0}
 .byline{font-size:14px;color:var(--muted);margin:-4px 0 0}
+.pprice{font-size:26px;font-family:var(--display)}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 .badge b{display:block;font-size:13px}
@@ -682,7 +683,7 @@ function drawGrid(){
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
       <h3>${cleanName(p.name)}</h3>${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).length?`<div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")}</div>`:""}<div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
-      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`<span class="note">Price on request</span><button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
+      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`${p.prices?`<span class="price">AED ${Number(p.prices.black).toLocaleString("en-GB")}<small style="display:block;font-size:11px;font-weight:400;color:var(--muted)">framed · unframed AED ${Number(p.prices.none).toLocaleString("en-GB")}</small></span>`:`<span class="note">Price on request</span>`}<button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
@@ -760,15 +761,16 @@ function openAsk(p,offer){
   const box=document.getElementById("modalBox");box.className="box";box.innerHTML="";
   const art=document.createElement("div");art.className="art";art.appendChild(mk(p));box.appendChild(art);
   box.insertAdjacentHTML("beforeend",`<div class="info"><button class="x" id="mClose" aria-label="Close">×</button>
-   <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${offer?"Make an offer":"Price enquiry"}</div>
+   <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${offer?"Make an offer":p.prices?"Order":"Price enquiry"}</div>
    <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${[p.medium,p.size].filter(Boolean).join(" · ")}${p.code?` · <span style="font-family:var(--mono)">${p.code}</span>`:""}</p>
    <form id="askForm" novalidate style="display:grid;gap:12px">
      <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
      ${offer?`<div class="field"><label for="aOffer">Your offer (AED)</label><input id="aOffer" inputmode="numeric" placeholder="e.g. 350"></div>`:""}
-     <div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>
+     ${p.prices&&!offer?`<div class="field"><label for="aFrame">Frame</label><select id="aFrame">${FRAMES.map(f=>`<option value="${f.k}" ${f.k===(window.kalaiPriceStyle||"black")?"selected":""}>${f.n} · AED ${Number(p.prices[f.k]).toLocaleString("en-GB")}</option>`).join("")}</select><span class="note" style="font-size:12px">Price includes the white mount and glass, and delivery in the UAE.</span></div>`
+     :`<div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>`}
      <div class="field"><label for="aMsg">Anything else? (optional)</label><textarea id="aMsg" placeholder="Is it available? Can it be delivered before the 28th?"></textarea></div>
-     <button class="btn primary" type="submit">${offer?"Send my offer":"Ask for price"}</button>
+     <button class="btn primary" type="submit">${offer?"Send my offer":p.prices?"Send my order":"Ask for price"}</button>
      <div class="ok-msg" id="askOk" hidden></div>
    </form></div>`);
   modal.hidden=false;scrim.hidden=false;document.getElementById("mClose").onclick=closeAll;
@@ -779,10 +781,12 @@ function openAsk(p,offer){
     if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
     const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")","Artwork no.":p.code||(p.untitled?String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
     if(offer)fields["Offer"]="AED "+off;
-    fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();
-    const url=sendEnquiry((offer?"Price enquiry (offer): ":"Price enquiry: ")+p.name,fields);
+    if(p.prices&&!offer){const k=document.getElementById("aFrame").value,f=FRAMES.find(x=>x.k===k);fields["Framing"]=k==="none"?"Unframed":f.n+" frame, white mount";fields["Price"]="AED "+p.prices[k]+" (website price)";}
+    else fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();
+    const url=sendEnquiry((offer?"Price enquiry (offer): ":p.prices?"Artwork order: ":"Price enquiry: ")+p.name,fields);
     ok.style.color="var(--fg)";ok.textContent=offer
       ?`Thank you, ${n}. We'll check your offer of AED ${off} for "${p.name}" with the artist and reply on WhatsApp within one working day. If WhatsApp didn't open, tap here: `
+      :p.prices?`Thank you, ${n}. We've received your order for "${p.name}" (${fields["Price"]}). We'll confirm it's ready and send you the payment link on WhatsApp within one working day. If WhatsApp didn't open, tap here: `
       :`Thank you, ${n}. We'll send the price and delivery date for "${p.name}" on WhatsApp within one working day. If WhatsApp didn't open, tap here: `;
     url.then(u=>ok.appendChild(waLink(u)))};
   document.getElementById("aName").focus();
@@ -887,6 +891,7 @@ function openModal(p){
      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · One of a kind</div>
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
+     ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>`:""}
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
      <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size?p.size+" (artwork)":"Ask us"}</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
@@ -897,8 +902,8 @@ function openModal(p){
        <div class="badge"><i>⛟</i><div><b>Delivered across the UAE</b>Duties paid, insured courier</div></div>
        <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
      </div>
-     <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">Ask for price</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
-     <p class="note" style="margin:0">We reply on WhatsApp within one working day with the price, framing options and delivery date.</p>
+     <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">${p.prices?"Order this work":"Ask for price"}</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
+     <p class="note" style="margin:0">${p.prices?"The price changes with the frame you pick under “Try a frame”. It includes the mount, glass and insured delivery in the UAE.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
      <details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>
      <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
      ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
@@ -909,14 +914,17 @@ function openModal(p){
   const show=v=>{cur=v;box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
     box.querySelector("#vFrames").hidden=v==="art";box.querySelector(".viewer").classList.toggle("lens-on",LENS&&v!=="room");
     if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent="Photo of the original by the artist."+lensTip();}
-    else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+" A preview of the look: we confirm the exact frame and its price with you."+lensTip();}
+    else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+(p.prices?" A preview of the look; the price above is for this frame.":" A preview of the look: we confirm the exact frame and its price with you.")+lensTip();}
     else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (about ${p.wcm+16} × ${p.hcm+16} cm framed)`}. Pick a frame above to see it on the wall.`;}
-    window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));};
+    window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));
+    if(p.prices&&document.getElementById("mPrice")){const k=v==="art"&&!window.kalaiPriceStyle?"black":FRAME.k;if(v!=="art")window.kalaiPriceStyle=k;const st=window.kalaiPriceStyle||k;
+      document.getElementById("mPrice").textContent="AED "+Number(p.prices[st]).toLocaleString("en-GB");
+      document.getElementById("mPriceNote").textContent=st==="none"?"unframed":(FRAMES.find(f=>f.k===st)||{}).n.toLowerCase()+" frame"+(MOUNT?", white mount":"")+" · delivered in the UAE";}};
   box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.onclick=()=>show(b.dataset.v));
   box.querySelectorAll("[data-fr]").forEach(b=>b.onclick=()=>{FRAME=FRAMES.find(f=>f.k===b.dataset.fr);box.querySelectorAll("[data-fr]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vMount").onchange=e=>{MOUNT=e.target.checked;show(cur)};
   box.querySelector("#vLens").onclick=e=>{LENS=!LENS;e.currentTarget.setAttribute("aria-pressed",LENS);lensEl.style.display="none";show(cur)};
-  window.kalaiFrameChoice="";wireLens(stage);show("art");
+  window.kalaiFrameChoice="";window.kalaiPriceStyle="";wireLens(stage);show("art");
   modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("mClose").focus();
   // Each artwork has its own link (…/#art-ID): shareable, and the phone's Back button closes it.
   try{if(location.hash!=="#art-"+p.id)history.pushState({art:p.id},"","#art-"+p.id)}catch(e){}

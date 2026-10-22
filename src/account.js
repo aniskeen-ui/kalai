@@ -704,7 +704,7 @@ async function save({ ref, subject, fields, files }) {
     }).result;
     fileKey = res.path;
   }
-  const kind = subject.startsWith('Price') ? 'PRICE' : subject.startsWith('Commission') ? 'COMMISSION' : 'GIFT';
+  const kind = subject.startsWith('Price') || subject.startsWith('Artwork order') ? 'PRICE' : subject.startsWith('Commission') ? 'COMMISSION' : 'GIFT';
   const title = kind === 'PRICE' ? (fields['Artwork'] || 'Price enquiry').split(' (')[0]
     : kind === 'COMMISSION' ? `Commission: ${fields['Subject'] || ''} (${fields['Style'] || ''})`
     : `Little Artists gift for ${fields['Gift for'] || ''}`;
@@ -889,7 +889,7 @@ async function showCatalogue() {
     const list = await Promise.all(live.map(async (p) => {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
-      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img };
     }));
     window.kalaiShowCatalogue(list.filter((x) => x.img));
   } catch (ex) { console.warn('Catalogue not loaded; showing the built-in collection.', ex); }
@@ -987,7 +987,7 @@ showPublicReviews();
 
 /* Visitor not signed in: a catalogue price enquiry is still saved for the studio (public key; no tracking for the visitor). */
 async function saveGuest({ ref, subject, fields }) {
-  if (!subject.startsWith('Price')) return false;
+  if (!subject.startsWith('Price') && !subject.startsWith('Artwork order')) return false;
   const { errors } = await client.mutations.guestEnquiry({
     ref, title: (fields['Artwork'] || 'Price enquiry').split(' (')[0], details: JSON.stringify(fields),
     customerName: fields['Name'] || '', phone: fields['Mobile'] || '', email: fields['Email'] || null,
