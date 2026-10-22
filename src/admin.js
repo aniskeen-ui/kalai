@@ -419,10 +419,20 @@ function render() {
   const fs = $('fStatus').value, fk = $('fKind').value;
   const counts = {};
   all.forEach((e) => { const s = e.status || 'RECEIVED'; counts[s] = (counts[s] || 0) + 1; });
-  $('counts').innerHTML = Object.keys(STATUS).filter((k) => counts[k])
-    .map((k) => `<span class="count">${STATUS[k]} <b>${counts[k]}</b></span>`).join('') || '<span class="muted">No enquiries yet.</span>';
+  // Click a count to show only those orders; click it again (or "All") to show everything.
+  $('counts').innerHTML = (all.length ? `<button type="button" class="count" data-st="" aria-pressed="${!fs}">All <b>${all.length}</b></button>` : '')
+    + (Object.keys(STATUS).filter((k) => counts[k])
+      .map((k) => `<button type="button" class="count" data-st="${k}" aria-pressed="${fs === k}">${STATUS[k]} <b>${counts[k]}</b></button>`).join('') || '<span class="muted">No enquiries yet.</span>');
   const reqs = all.filter(isReq).length;
-  if (reqs) $('counts').insertAdjacentHTML('afterbegin', `<span class="count req">Customer requests <b>${reqs}</b></span>`);
+  if (reqs) $('counts').insertAdjacentHTML('afterbegin', `<button type="button" class="count req" data-st="__REQ" aria-pressed="${fs === '__REQ'}">Customer requests <b>${reqs}</b></button>`);
+  $('counts').querySelectorAll('[data-st]').forEach((b) => {
+    b.onclick = () => {
+      const v = b.dataset.st === fs ? '' : b.dataset.st;
+      if (v && ![...$('fStatus').options].some((o) => o.value === v)) $('fStatus').insertAdjacentHTML('beforeend', `<option value="${v}">${v === '__REQ' ? 'Customer requests' : esc(STATUS[v] || v)}</option>`);
+      $('fStatus').value = v;
+      render();
+    };
+  });
   const list = all.filter((e) => (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk));
   $('rows').innerHTML = list.length ? list.map((e) => {
     const s = e.status || 'RECEIVED';
