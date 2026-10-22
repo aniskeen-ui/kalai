@@ -2407,10 +2407,11 @@ async function artistWorks(ev: ApiEvent) {
   if (action === 'save') {
     const id = txt(d.id, 80);
     const title = txt(d.title, 80).replace(/\s+/g, ' ');
-    if (title.length < 2) throw new Error('Give the work a title (2 to 80 letters).');
+    const priceOnly = !title && d.price !== '' && d.price != null; // the artist may give his price before the title
+    if (!priceOnly && title.length < 2) throw new Error('Give the work a title (2 to 80 letters).');
     const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
     if (!got.Item) throw new Error('Work not found');
-    const set: Record<string, string> = { title, named: `${actor(ev)} ${new Date().toISOString()}`, updatedAt: new Date().toISOString() };
+    const set: Record<string, string> = priceOnly ? { updatedAt: new Date().toISOString() } : { title, named: `${actor(ev)} ${new Date().toISOString()}`, updatedAt: new Date().toISOString() };
     const size = txt(d.size, 40), description = txt(d.description, 1000);
     if (size) set.size = size;
     if (description) set.description = description;

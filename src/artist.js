@@ -105,8 +105,8 @@ async function renderWorks(force = false) {
       try {
         const r = await client.mutations.artistWorks({ action: 'save', data: JSON.stringify({ id, title: f.title.value, size: f.size.value, description: f.description.value, price: f.price.value }) });
         if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
-        const w = works.find((x) => x.id === id); Object.assign(w, { title: f.title.value.trim(), size: f.size.value.trim(), description: f.description.value.trim(), named: 'yes', artistPrice: f.price.value ? Number(f.price.value) : w.artistPrice });
-        m.innerHTML = '<span class="wdone">✓ Saved: now on the website</span>';
+        const w = works.find((x) => x.id === id); Object.assign(w, { title: f.title.value.trim() || w.title, size: f.size.value.trim(), description: f.description.value.trim(), named: f.title.value.trim() ? 'yes' : w.named, artistPrice: f.price.value ? Number(f.price.value) : w.artistPrice });
+        m.innerHTML = f.title.value.trim() ? '<span class="wdone">✓ Saved: now on the website</span>' : '<span class="wdone">✓ Price saved</span> <span class="muted">· add a title too</span>';
         const todo2 = works.filter((x) => !x.named || x.artistPrice == null).length; $('cWorks').textContent = todo2 ? `(${todo2})` : '';
       } catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
     };
