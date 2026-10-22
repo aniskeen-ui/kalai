@@ -5,6 +5,11 @@ import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 
 const client = generateClient();
+// Shown inside the artist & seller portal (seller.html "Studio orders" tab): no own header there.
+if (new URLSearchParams(location.search).get('embed') === '1') {
+  document.documentElement.classList.add('embed');
+  const st = document.createElement('style'); st.textContent = 'html.embed header.top{display:none} html.embed body{background:transparent}'; document.head.appendChild(st);
+}
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);

@@ -1763,15 +1763,30 @@ async function unpublishItem(id: string) {
 
 async function sellerAction(ev: ApiEvent) {
   const { S, L } = mtables();
-  const me = who(ev);
+  let me = who(ev);
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   const now = new Date().toISOString();
+  // The studio (ADMINS) can open any artist's or seller's portal and work in it on their behalf.
+  const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+  const admin = groups.includes('ADMINS');
+  if (action === 'portals') {
+    if (!admin) throw new Error('Not allowed');
+    return { portals: (await scanAll(S)).map(plain).filter((p): p is Dict => !!p).map((p) => ({ id: p.id, business: p.business, contactName: p.contactName, type: p.type, status: p.status, country: p.country }))
+      .sort((a, b) => String(a.business).localeCompare(String(b.business))) };
+  }
+  const viewAs = txt(d.viewAs, 80);
+  if (viewAs && viewAs !== me.sub) {
+    if (!admin) throw new Error('Not allowed');
+    const p = plain(await getRow(S, { id: { S: viewAs } }));
+    if (!p) throw new Error('Portal not found');
+    me = { sub: viewAs, owner: String(p.owner ?? ''), email: String(p.email ?? '') };
+  }
   const profile = plain(await getRow(S, { id: { S: me.sub } }));
 
   if (action === 'me') {
     const listings = profile ? (await scanAll(L)).filter((x) => str(x, 'sellerId') === me.sub).map(plain) : [];
-    return { profile, listings };
+    return { profile, listings, admin, viewing: viewAs && viewAs !== who(ev).sub ? viewAs : '' };
   }
 
   if (action === 'apply') {

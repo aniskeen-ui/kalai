@@ -107,6 +107,7 @@ function sellerCard(s) {
       ${s.status === 'APPROVED' ? '<button class="btn small" data-a="approveSeller" type="button">Save rates</button><button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
         : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`}
+      <a class="btn small ghost" href="/seller.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open ${s.type === 'ARTIST' ? 'artist' : 'seller'} portal</a>
       <span class="err" data-msg></span>
     </div>
     ${s.status === 'APPROVED' ? '<div class="muted" style="font-size:11px">A new rate applies to new listings and when you approve a listing again; live listings keep the % they were approved at.</div>' : ''}

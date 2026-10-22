@@ -2,7 +2,7 @@
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
 import './amplify-config.js';
 import {
-  signIn, signUp, confirmSignUp, resendSignUpCode, autoSignIn, signOut, getCurrentUser,
+  fetchAuthSession, signIn, signUp, confirmSignUp, resendSignUpCode, autoSignIn, signOut, getCurrentUser,
   fetchUserAttributes, resetPassword, confirmResetPassword,
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
@@ -15,7 +15,7 @@ const wantArtist = new URLSearchParams(location.search).get('as') === 'artist';
 const MEDIUMS = ['Watercolour', 'Pencil / charcoal', 'Acrylic', 'Oil', 'Ink / pen', 'Digital', 'Mixed media', 'Sculpture / craft'];
 const isArtist = () => (profile?.type ? profile.type === 'ARTIST' : document.querySelector('input[name="pType"]:checked')?.value === 'ARTIST');
 function brand() {
-  const art = profile ? profile.type === 'ARTIST' : wantArtist;
+  const art = profile ? profile.type === 'ARTIST' : wantArtist || (typeof groups !== 'undefined' && groups.includes('ARTISTS'));
   $('brand').textContent = art ? 'KALAI · Artist portal' : 'KALAI · Seller portal';
   document.title = art ? 'Kalai Artist Portal' : 'Kalai Seller Portal';
   if (art) {
@@ -48,8 +48,15 @@ export function priceOf(l, pct, fee) {
   return { markup, courier, sellerPrice, commission, delivery, customerPrice: Math.ceil(sellerPrice + commission + delivery) };
 }
 
+// Studio view: an admin opens someone's portal (?view=<id>); every call then acts for that artist or seller.
+let viewAs = new URLSearchParams(location.search).get('view') || '';
+let groups = [];
+const isAdminUser = () => groups.includes('ADMINS');
+// Siva's own desk (Kalai's studio orders) lives in artist.html; it shows here as the "Studio orders" tab.
+const deskTab = () => groups.includes('ARTISTS') || (isAdminUser() && (!profile || /\bs(h)?iva\b/i.test(`${profile.business} ${profile.contactName}`)));
 async function call(action, data) {
-  const r = await client.mutations.sellerAction({ action, data: data ? JSON.stringify(data) : undefined });
+  const body = viewAs ? { ...(data || {}), viewAs } : data;
+  const r = await client.mutations.sellerAction({ action, data: body ? JSON.stringify(body) : undefined });
   if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
   return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
 }
@@ -64,6 +71,9 @@ async function start() {
   try { await getCurrentUser(); } catch { show('loginView'); setMode('in'); return; }
   const attrs = await fetchUserAttributes().catch(() => ({}));
   $('who').textContent = attrs.email || '';
+  groups = (await fetchAuthSession().catch(() => null))?.tokens?.accessToken?.payload?.['cognito:groups'] || [];
+  if (isAdminUser()) await adminBar();
+  else viewAs = '';
   try {
     const r = await call('me');
     profile = r.profile; listings = r.listings || [];
@@ -74,9 +84,46 @@ async function start() {
   route();
 }
 
+async function adminBar() {
+  $('adminBar').hidden = false;
+  try {
+    const list = (await call('portals')).portals || [];
+    const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)}${p.country === 'India' ? ' (India)' : ''} · ${esc(({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' })[p.status] || p.status)}</option>`;
+    const art = list.filter((p) => p.type === 'ARTIST'), sel = list.filter((p) => p.type !== 'ARTIST');
+    $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${art.length ? `<optgroup label="Artists">${art.map(opt).join('')}</optgroup>` : ''}${sel.length ? `<optgroup label="Sellers">${sel.map(opt).join('')}</optgroup>` : ''}`;
+    $('viewAs').value = list.some((p) => p.id === viewAs) ? viewAs : '';
+    if (!$('viewAs').value) viewAs = '';
+  } catch (ex) { $('adminNote').textContent = ex.message; }
+  $('viewAs').onchange = async () => {
+    viewAs = $('viewAs').value;
+    const u = new URL(location.href); if (viewAs) u.searchParams.set('view', viewAs); else u.searchParams.delete('view'); u.hash = '';
+    history.replaceState(null, '', u);
+    $('deskFrame').removeAttribute('src');
+    orders = []; comms = [];
+    try { const r = await call('me'); profile = r.profile; listings = r.listings || []; route(); } catch (ex) { show('statusView'); $('statusBox').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
+  };
+}
+
+// Siva signs in with his artist-desk login: without a portal profile he still gets his studio orders here.
+function deskOnly() {
+  show('deskView');
+  $('dBiz').textContent = isAdminUser() ? 'Studio orders' : 'My studio orders';
+  $('dPhoto').hidden = true;
+  $('dNew').hidden = true; $('dProfile').hidden = true;
+  $('tabProducts').hidden = true; $('tabOrders').hidden = true; $('tabComm').hidden = true; $('tabDesk').hidden = false;
+  $('dTerms').innerHTML = isAdminUser() ? 'Siva Raja\'s desk: Kalai Art House\'s own commissions and artworks.' : 'Kalai Art House\'s orders for you. Want to sell your own works here too? <button class="linkbtn" id="dApply" type="button">Apply as an artist</button>';
+  if ($('dApply')) $('dApply').onclick = () => { show('applyView'); fillApply(); $('applyTitle').textContent = 'Artist application'; };
+  pane('desk');
+}
+
 function route() {
   brand();
   const s = profile?.status;
+  $('dNew').hidden = false; $('dProfile').hidden = false; $('tabProducts').hidden = false; $('tabOrders').hidden = false;
+  $('tabDesk').hidden = !deskTab();
+  $('tabDesk').textContent = isAdminUser() && !groups.includes('ARTISTS') ? 'Studio orders (Siva)' : 'Studio orders';
+  if (!profile && groups.includes('ARTISTS') && !viewAs) { deskOnly(); return; }
+  if (!profile && isAdminUser() && !viewAs) { deskOnly(); $('tabDesk').textContent = 'Studio orders (Siva)'; return; }
   if (!profile || s === 'REJECTED') {
     show('applyView');
     fillApply();
@@ -99,7 +146,7 @@ function route() {
   }
   show('deskView');
   $('tabComm').hidden = profile.type !== 'ARTIST';
-  pane(location.hash === '#orders' ? 'orders' : location.hash === '#commissions' ? 'commissions' : 'products');
+  pane(location.hash === '#orders' ? 'orders' : location.hash === '#commissions' ? 'commissions' : location.hash === '#studio' && deskTab() ? 'desk' : 'products');
   if (profile.type === 'ARTIST' && location.hash !== '#commissions') call('commissions').then((r) => { comms = r.items || []; commCur = r.currency || 'INR'; const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length; $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions'; }).catch(() => {});
   $('dBiz').textContent = profile.business;
   $('dPhoto').hidden = !profile.photoKey;
@@ -304,17 +351,30 @@ let orders = [];
 const OST = { PAID: 'To send', SHIPPED: 'Dispatched', DELIVERED: 'Delivered', REFUNDED: 'Refunded', REPLACEMENT: 'Replacement' };
 function pane(p) {
   if (p === 'commissions' && profile?.type !== 'ARTIST') p = 'products';
+  if (p === 'desk' && $('tabDesk').hidden) p = 'products';
+  $('deskPane').hidden = p !== 'desk';
+  $('tabDesk').setAttribute('aria-pressed', String(p === 'desk'));
+  if (p === 'desk') openDesk();
   $('productsPane').hidden = p !== 'products';
   $('ordersPane').hidden = p !== 'orders';
   $('commPane').hidden = p !== 'commissions';
   $('tabProducts').setAttribute('aria-pressed', String(p === 'products'));
   $('tabOrders').setAttribute('aria-pressed', String(p === 'orders'));
   $('tabComm').setAttribute('aria-pressed', String(p === 'commissions'));
-  try { history.replaceState(null, '', p === 'products' ? location.pathname + location.search : '#' + p); } catch { /* ignore */ }
+  try { history.replaceState(null, '', p === 'products' ? location.pathname + location.search : location.pathname + location.search + '#' + (p === 'desk' ? 'studio' : p)); } catch { /* ignore */ }
   if (p === 'orders') loadOrders();
   if (p === 'commissions') loadComms();
 }
 $('tabComm').onclick = () => pane('commissions');
+$('tabDesk').onclick = () => pane('desk');
+// The artist desk page, embedded (same site and same sign-in); its height follows its content.
+function openDesk() {
+  const f = $('deskFrame');
+  if (f.getAttribute('src')) return;
+  f.src = '/artist.html?embed=1';
+  clearInterval(openDesk.t);
+  openDesk.t = setInterval(() => { try { const h = f.contentDocument?.documentElement?.scrollHeight; if (h) f.style.height = Math.max(h + 20, 400) + 'px'; } catch { /* ignore */ } }, 700);
+}
 
 // ---------- Commissions allocated to me (artists) ----------
 let comms = [];
