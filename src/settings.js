@@ -33,7 +33,7 @@ export async function showSettings() {
     }).join('');
     box.innerHTML = `<h3 style="margin:0;font-size:17px">Website look</h3>
       <div class="field" style="max-width:520px"><label for="st-look">Look</label><select id="st-look" style="max-width:260px"><option value="classic">Classic (navy and gold)</option><option value="magazine">Magazine (white, bold black, red)</option></select>
-      <div class="muted" style="font-size:12px">Try before you switch: <a href="/?look=magazine" target="_blank" rel="noopener">preview Magazine</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview Classic</a> (a preview only changes your own browser).</div></div>
+      <div class="muted" style="font-size:12px">Try before you switch: <a href="/?look=magazine" target="_blank" rel="noopener">preview Magazine</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview Classic</a> (a preview only changes your own browser; <a href="/?look=auto" target="_blank" rel="noopener">end preview</a> to see what visitors see).</div></div>
       <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}

@@ -7,7 +7,7 @@
 <title>Kalai Art House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Archivo:wght@700;800;900&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<script>(function(){var q=new URLSearchParams(location.search).get("look"),k=null;try{if(q==="magazine"||q==="classic")localStorage.setItem("kalaiLookPreview",q);k=localStorage.getItem("kalaiLookPreview")||localStorage.getItem("kalaiLook")}catch(e){k=q}if(k==="magazine")document.documentElement.setAttribute("data-skin","mag")})();</script>
+<script>(function(){var q=new URLSearchParams(location.search).get("look"),k=null;try{if(q==="magazine"||q==="classic")localStorage.setItem("kalaiLookPreview",q);if(q==="auto")localStorage.removeItem("kalaiLookPreview");k=localStorage.getItem("kalaiLookPreview")||localStorage.getItem("kalaiLook")}catch(e){k=q}if(k==="magazine")document.documentElement.setAttribute("data-skin","mag")})();</script>
 <script>
 /* Theme: remembers 🌙 / ☀️ choice per browser; otherwise follows the device setting. */
 (function(){var t=null;try{t=localStorage.getItem('kalaiTheme')}catch(e){}if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);
