@@ -1,5 +1,5 @@
 import { env } from '$amplify/env/zoho-quote-sync';
-import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, PutItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, PutItemCommand, DeleteItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -30,7 +30,7 @@ type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImag
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
   identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
+  arguments: { data?: string | null; text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -1651,6 +1651,204 @@ function reworkForArtist(e: Img, c: Img | undefined) {
   };
 }
 
+// ---------- Marketplace: seller portal and studio approval ----------
+// Kalai collects the customer's money and pays the seller. The seller sets their own price (cost + markup + courier
+// if they deliver + other charges = seller price). Kalai adds its commission % (fixed per seller at approval, adjustable
+// per listing) and, when Kalai delivers, its delivery fee: that is the customer price shown on the website.
+type Dict = Record<string, unknown>;
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const numIn = (v: unknown, max = 1_000_000) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : 0; };
+const txt = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
+
+function priceOf(l: { costPrice: number; markupPct: number; courierCharge: number; otherCharges: number; deliveryBy: string; commissionPct: number; kalaiDeliveryFee: number }) {
+  const markup = r2(l.costPrice * l.markupPct / 100);
+  const sellerPrice = r2(l.costPrice + markup + (l.deliveryBy === 'SELLER' ? l.courierCharge : 0) + l.otherCharges);
+  const commission = r2(sellerPrice * l.commissionPct / 100);
+  const delivery = l.deliveryBy === 'KALAI' ? l.kalaiDeliveryFee : 0;
+  const customerPrice = Math.ceil(sellerPrice + commission + delivery);
+  return { markup, sellerPrice, commission, delivery, customerPrice };
+}
+
+function toAttrs(o: Dict): Record<string, AttributeValue> {
+  const out: Record<string, AttributeValue> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === null || v === undefined || v === '') continue;
+    out[k] = typeof v === 'number' ? { N: String(v) } : typeof v === 'boolean' ? { BOOL: v } : { S: String(v) };
+  }
+  return out;
+}
+const plain = (img: Img | undefined) => (img ? Object.fromEntries(Object.entries(img).map(([k, v]) => [k, fromAttr(v as AttributeValue)])) : null) as Dict | null;
+async function getRow(table: string, key: Record<string, AttributeValue>) {
+  return (await ddb.send(new GetItemCommand({ TableName: table, Key: key }))).Item as Img | undefined;
+}
+async function putRow(table: string, row: Dict) {
+  await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row) }));
+}
+async function delRow(table: string, key: Record<string, AttributeValue>) {
+  await ddb.send(new DeleteItemCommand({ TableName: table, Key: key }));
+}
+function mtables() {
+  const S = process.env.SELLER_TABLE, L = process.env.LISTING_TABLE, M = process.env.MARKET_TABLE;
+  if (!S || !L || !M) throw new Error('Marketplace is not configured');
+  return { S, L, M };
+}
+function who(ev: ApiEvent) {
+  const sub = ev.identity?.sub ?? String(ev.identity?.claims?.sub ?? '');
+  const username = ev.identity?.username ?? sub;
+  if (!sub) throw new Error('Please sign in.');
+  return { sub, owner: `${sub}::${username}`, email: String(ev.identity?.claims?.email ?? '') };
+}
+const parseData = (d: unknown): Dict => { try { return (typeof d === 'string' ? JSON.parse(d || '{}') : (d ?? {})) as Dict; } catch { return {}; } };
+
+async function publishItem(l: Dict) {
+  const { M } = mtables();
+  await putRow(M, {
+    listingId: l.id, __typename: 'MarketItem', createdAt: l.approvedAt ?? new Date().toISOString(), updatedAt: new Date().toISOString(),
+    sellerName: l.sellerName, title: l.title, description: l.description, category: l.category, imageKeys: l.imageKeys,
+    price: l.customerPrice, stock: l.stock, deliveryBy: l.deliveryBy, publishedAt: l.approvedAt,
+  });
+}
+async function unpublishItem(id: string) {
+  const { M } = mtables();
+  try { await delRow(M, { listingId: { S: id } }); } catch { /* not published */ }
+}
+
+async function sellerAction(ev: ApiEvent) {
+  const { S, L } = mtables();
+  const me = who(ev);
+  const action = String(ev.arguments.action ?? '');
+  const d = parseData(ev.arguments.data);
+  const now = new Date().toISOString();
+  const profile = plain(await getRow(S, { id: { S: me.sub } }));
+
+  if (action === 'me') {
+    const listings = profile ? (await scanAll(L)).filter((x) => str(x, 'sellerId') === me.sub).map(plain) : [];
+    return { profile, listings };
+  }
+
+  if (action === 'apply') {
+    const f = {
+      business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), tradeLicence: txt(d.tradeLicence, 60),
+      emirate: txt(d.emirate, 30), address: txt(d.address, 300), about: txt(d.about, 1000), categories: txt(d.categories, 200),
+      bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
+    };
+    if (!f.business || !f.contactName || f.phone.replace(/\D/g, '').length < 7) throw new Error('Add your business name, contact name and mobile.');
+    if (!f.about) throw new Error('Tell us what you sell.');
+    if (f.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(f.iban)) throw new Error('Check the IBAN (e.g. AE07 0331 2345 6789 0123 456).');
+    const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : 'APPLIED';
+    const row = { ...(profile ?? {}), ...f, id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
+    await putRow(S, row);
+    if (!profile || profile.status === 'REJECTED') {
+      await sendMail({ to: STUDIO_EMAIL, subject: `New seller application: ${f.business}`, lines: [`<b>${h(f.business)}</b> · ${h(f.contactName)} · ${h(f.phone)} · ${h(me.email)}`, `Sells: ${h(f.about)}`, f.tradeLicence ? `Trade licence: ${h(f.tradeLicence)}` : 'No trade licence given.', 'Approve or reject under Sellers, and set the commission %.'], button: { label: 'Open Sellers', url: `${SITE}/admin.html#sellers` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+    }
+    return { profile: row };
+  }
+
+  if (!profile || profile.status !== 'APPROVED') throw new Error('Your seller account is not approved yet.');
+
+  if (action === 'saveListing') {
+    const id = txt(d.id, 60) || crypto.randomUUID();
+    const old = d.id ? plain(await getRow(L, { id: { S: id } })) : null;
+    if (old && old.sellerId !== me.sub) throw new Error('Listing not found');
+    let keys: string[] = [];
+    try { keys = (JSON.parse(String(d.imageKeys ?? '[]')) as string[]).filter((k) => typeof k === 'string' && k.startsWith('market/')).slice(0, 6); } catch { keys = []; }
+    const f = {
+      title: txt(d.title, 120), description: txt(d.description, 2000), category: txt(d.category, 60), stock: Math.max(0, Math.floor(numIn(d.stock, 10000))),
+      costPrice: numIn(d.costPrice), markupPct: numIn(d.markupPct, 1000), courierCharge: numIn(d.courierCharge), otherCharges: numIn(d.otherCharges),
+      deliveryBy: d.deliveryBy === 'KALAI' ? 'KALAI' : 'SELLER', imageKeys: JSON.stringify(keys),
+    };
+    if (!f.title) throw new Error('Add a title.');
+    if (!(f.costPrice > 0)) throw new Error('Enter your cost price.');
+    const commissionPct = Number(old?.commissionPct ?? profile.commissionPct ?? 0);
+    const kalaiDeliveryFee = Number(profile.kalaiDeliveryFee ?? 0);
+    const p = priceOf({ ...f, commissionPct, kalaiDeliveryFee });
+    // A change to anything but stock sends an approved listing back for review.
+    const contentChanged = old && ['title', 'description', 'category', 'imageKeys', 'costPrice', 'markupPct', 'courierCharge', 'otherCharges', 'deliveryBy'].some((k) => String((old as Dict)[k] ?? '') !== String((f as Dict)[k] ?? ''));
+    let status = String(old?.status ?? 'DRAFT');
+    if (status === 'APPROVED' && contentChanged) status = 'SUBMITTED';
+    const row = { ...(old ?? {}), ...f, id, owner: me.owner, sellerId: me.sub, sellerName: profile.business, __typename: 'Listing', commissionPct, kalaiDeliveryFee, sellerPrice: p.sellerPrice, customerPrice: p.customerPrice, status, createdAt: old?.createdAt ?? now, updatedAt: now, ...(status === 'SUBMITTED' && old?.status === 'APPROVED' ? { submittedAt: now } : {}) };
+    await putRow(L, row);
+    if (old?.status === 'APPROVED' && status === 'SUBMITTED') await unpublishItem(id);
+    else if (status === 'APPROVED') await publishItem(row);
+    return { listing: row, price: p, backToReview: old?.status === 'APPROVED' && status === 'SUBMITTED' };
+  }
+
+  const id = txt(d.id, 60);
+  const l = plain(await getRow(L, { id: { S: id } }));
+  if (!l || l.sellerId !== me.sub) throw new Error('Listing not found');
+  if (action === 'submitListing') {
+    if (!['DRAFT', 'REJECTED'].includes(String(l.status))) throw new Error('Already submitted.');
+    if (!(JSON.parse(String(l.imageKeys || '[]')) as string[]).length) throw new Error('Add at least one photo before submitting.');
+    const row = { ...l, status: 'SUBMITTED', submittedAt: now, updatedAt: now, adminNote: '' };
+    await putRow(L, row);
+    await sendMail({ to: STUDIO_EMAIL, subject: `Listing to approve: ${l.title} (${profile.business})`, lines: [`<b>${h(l.title)}</b> from ${h(profile.business)}`, `Seller price AED ${l.sellerPrice} · customer price AED ${l.customerPrice} · delivery by ${l.deliveryBy === 'KALAI' ? 'Kalai' : 'the seller'}`], button: { label: 'Open Sellers', url: `${SITE}/admin.html#sellers` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+    return { listing: row };
+  }
+  if (action === 'pauseListing' || action === 'resumeListing') {
+    const pause = action === 'pauseListing';
+    if (pause && l.status !== 'APPROVED') throw new Error('Only a live listing can be paused.');
+    if (!pause && l.status !== 'PAUSED') throw new Error('Not paused.');
+    const row = { ...l, status: pause ? 'PAUSED' : 'APPROVED', updatedAt: now };
+    await putRow(L, row);
+    if (pause) await unpublishItem(id); else await publishItem(row);
+    return { listing: row };
+  }
+  if (action === 'deleteListing') {
+    await unpublishItem(id);
+    await delRow(L, { id: { S: id } });
+    return { deleted: id };
+  }
+  throw new Error('Unknown action');
+}
+
+async function marketAdmin(ev: ApiEvent) {
+  const { S, L } = mtables();
+  const action = String(ev.arguments.action ?? '');
+  const d = parseData(ev.arguments.data);
+  const now = new Date().toISOString();
+  const id = txt(d.id, 80);
+  if (action.endsWith('Seller')) {
+    const p = plain(await getRow(S, { id: { S: id } }));
+    if (!p) throw new Error('Seller not found');
+    if (action === 'approveSeller') {
+      const pct = numIn(d.commissionPct, 90), fee = numIn(d.kalaiDeliveryFee, 1000);
+      const row = { ...p, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
+      await putRow(S, row);
+      await sendMail({ to: String(p.email ?? ''), subject: 'Your Kalai Art House seller account is approved', lines: [`Hello ${h(p.contactName)},`, `Welcome to the Kalai Art House marketplace. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
+      return { profile: row };
+    }
+    if (action === 'rejectSeller' || action === 'suspendSeller') {
+      const row = { ...p, status: action === 'rejectSeller' ? 'REJECTED' : 'SUSPENDED', adminNote: txt(d.note, 500), updatedAt: now };
+      await putRow(S, row);
+      if (action === 'suspendSeller') for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) { await putRow(L, { ...plain(x), status: 'PAUSED', updatedAt: now }); await unpublishItem(str(x, 'id')); }
+      await sendMail({ to: String(p.email ?? ''), subject: action === 'rejectSeller' ? 'About your Kalai Art House seller application' : 'Your Kalai Art House seller account is paused', lines: [`Hello ${h(p.contactName)},`, action === 'rejectSeller' ? 'Thank you for applying. We are not able to accept your application at the moment.' : 'Your listings are paused for now.', txt(d.note, 500) ? h(txt(d.note, 500)) : ''], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
+      return { profile: row };
+    }
+  }
+  const l = plain(await getRow(L, { id: { S: id } }));
+  if (!l) throw new Error('Listing not found');
+  const seller = plain(await getRow(S, { id: { S: String(l.sellerId) } }));
+  if (action === 'approveListing') {
+    if (seller?.status !== 'APPROVED') throw new Error('The seller is not approved.');
+    const commissionPct = d.commissionPct !== undefined && d.commissionPct !== '' ? numIn(d.commissionPct, 90) : Number(l.commissionPct ?? seller.commissionPct ?? 0);
+    const kalaiDeliveryFee = Number(seller.kalaiDeliveryFee ?? 0);
+    const p = priceOf({ costPrice: Number(l.costPrice), markupPct: Number(l.markupPct), courierCharge: Number(l.courierCharge), otherCharges: Number(l.otherCharges), deliveryBy: String(l.deliveryBy), commissionPct, kalaiDeliveryFee });
+    const row = { ...l, commissionPct, kalaiDeliveryFee, sellerPrice: p.sellerPrice, customerPrice: p.customerPrice, status: 'APPROVED', approvedAt: now, adminNote: txt(d.note, 500), updatedAt: now };
+    await putRow(L, row);
+    await publishItem(row);
+    await sendMail({ to: String(seller.email ?? ''), subject: `Live on Kalai Art House: ${l.title}`, lines: [`Hello ${h(seller.contactName)},`, `<b>${h(l.title)}</b> is now on the website at AED ${p.customerPrice}. You receive AED ${p.sellerPrice} for each sale.`], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
+    return { listing: row, price: p };
+  }
+  if (action === 'rejectListing' || action === 'unpublishListing') {
+    const row = { ...l, status: action === 'rejectListing' ? 'REJECTED' : 'PAUSED', adminNote: txt(d.note, 500), updatedAt: now };
+    await putRow(L, row);
+    await unpublishItem(id);
+    if (action === 'rejectListing') await sendMail({ to: String(seller?.email ?? ''), subject: `Changes needed: ${l.title}`, lines: [`Hello ${h(seller?.contactName ?? '')},`, `We could not publish <b>${h(l.title)}</b> yet.`, txt(d.note, 500) ? `<b>Our note:</b> ${h(txt(d.note, 500))}` : '', 'Edit it in the seller portal and submit it again.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
+    return { listing: row };
+  }
+  throw new Error('Unknown action');
+}
+
 // ---------- Daily message translation ----------
 const translator = new TranslateClient({});
 async function translateMessage(a: { text?: string; source?: string | null }) {
@@ -2089,6 +2287,8 @@ export const handler = async (event: StreamEvent | ApiEvent) => {
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
+    if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));
     if (field === 'customerAddress') return JSON.stringify(await customerAddress(event));

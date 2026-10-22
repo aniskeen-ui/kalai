@@ -698,6 +698,24 @@ async function showCatalogue() {
 }
 showCatalogue();
 
+/* ---------- Crafts shop: approved seller listings (public, read-only) ---------- */
+async function showMarket() {
+  if (typeof window.kalaiShowMarket !== 'function') return;
+  try {
+    const r = await client.models.MarketItem.list({ authMode: 'apiKey', limit: 500 });
+    if (r.errors?.length) throw new Error(r.errors[0].message);
+    const items = (r.data || []).sort((a, b) => (Number(b.stock > 0) - Number(a.stock > 0)) || String(b.publishedAt).localeCompare(String(a.publishedAt)));
+    const list = await Promise.all(items.map(async (m) => {
+      let keys = []; try { keys = JSON.parse(m.imageKeys || '[]'); } catch { /* none */ }
+      let img = '';
+      try { if (keys[0]) img = (await getUrl({ path: keys[0], options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
+      return { id: m.listingId, title: m.title, seller: m.sellerName, category: m.category, description: m.description, price: m.price, stock: Number(m.stock ?? 0), img };
+    }));
+    window.kalaiShowMarket(list.filter((x) => x.img));
+  } catch (ex) { console.warn('Crafts shop not loaded.', ex); }
+}
+showMarket();
+
 /* ---------- published reviews on the website (public, read-only) ---------- */
 async function showPublicReviews() {
   const sec = document.getElementById('reviews');

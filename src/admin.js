@@ -5,6 +5,7 @@ import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { showCatalogue } from './catalogue.js';
 import { showMessages } from './messages.js';
+import { showMarket } from './market.js';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -134,6 +135,7 @@ async function start() {
   if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
   if (location.hash === '#catalogue') showPane('catalogue', 'tabCatalogue');
   if (location.hash === '#messages') showPane('messages', 'tabMessages');
+  if (location.hash === '#sellers') showPane('sellers', 'tabSellers');
   await loadRates();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
@@ -161,6 +163,7 @@ $('tabReports').onclick = () => showPane('reports', 'tabReports');
 $('tabFeedback').onclick = () => showPane('feedback', 'tabFeedback');
 $('tabCatalogue').onclick = () => showPane('catalogue', 'tabCatalogue');
 $('tabMessages').onclick = () => showPane('messages', 'tabMessages');
+$('tabSellers').onclick = () => showPane('sellers', 'tabSellers');
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {
@@ -169,12 +172,14 @@ function showPane(pane, tabId) {
   $('feedbackPane').hidden = pane !== 'feedback';
   $('cataloguePane').hidden = pane !== 'catalogue';
   $('messagesPane').hidden = pane !== 'messages';
-  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
+  $('sellersPane').hidden = pane !== 'sellers';
+  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages', 'sellers'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
   if (pane === 'catalogue') showCatalogue();
   if (pane === 'messages') showMessages();
+  if (pane === 'sellers') showMarket();
 }
 
 // ---------- Feedback: customer reviews, publish to the website ----------

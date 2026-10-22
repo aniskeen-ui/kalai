@@ -14,6 +14,13 @@ export const storage = defineStorage({
       allow.authenticated.to(['read']),
       allow.groups(['ADMINS']).to(['read', 'write', 'delete']),
     ],
+    // Marketplace photos: each seller uploads to their own folder; everyone may view (the website).
+    'market/{entity_id}/*': [
+      allow.entity('identity').to(['read', 'write', 'delete']),
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read']),
+      allow.groups(['ADMINS']).to(['read', 'write', 'delete']),
+    ],
     'uploads/{entity_id}/*': [
       allow.entity('identity').to(['read', 'write', 'delete']),
       // ADMINS read everything; write too, because a signed-in admin uses the group's role (not the customer's)

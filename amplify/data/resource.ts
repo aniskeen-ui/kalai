@@ -209,6 +209,75 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
+  // ---------- Marketplace (seller portal) ----------
+  // All seller writes go through the sellerAction function (it checks the seller is approved and keeps the prices honest).
+  SellerProfile: a
+    .model({
+      business: a.string(),
+      contactName: a.string(),
+      phone: a.string(),
+      email: a.string(),
+      tradeLicence: a.string(),
+      emirate: a.string(),
+      address: a.string(),
+      about: a.string(),
+      categories: a.string(),
+      bankName: a.string(),
+      accountName: a.string(),
+      iban: a.string(),
+      status: a.string(), // APPLIED | APPROVED | REJECTED | SUSPENDED
+      commissionPct: a.float(),
+      kalaiDeliveryFee: a.float(),
+      adminNote: a.string(),
+      appliedAt: a.string(),
+      approvedAt: a.string(),
+      owner: a.string(),
+    })
+    .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+
+  Listing: a
+    .model({
+      sellerId: a.string(),
+      sellerName: a.string(),
+      title: a.string(),
+      description: a.string(),
+      category: a.string(),
+      imageKeys: a.string(), // JSON array of S3 keys under market/
+      stock: a.integer(),
+      costPrice: a.float(),
+      markupPct: a.float(),
+      courierCharge: a.float(),
+      otherCharges: a.float(),
+      sellerPrice: a.float(),
+      deliveryBy: a.string(), // SELLER | KALAI
+      commissionPct: a.float(),
+      kalaiDeliveryFee: a.float(),
+      customerPrice: a.float(),
+      status: a.string(), // DRAFT | SUBMITTED | APPROVED | REJECTED | PAUSED
+      adminNote: a.string(),
+      submittedAt: a.string(),
+      approvedAt: a.string(),
+      owner: a.string(),
+    })
+    .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+
+  // What the website shows: written only when a listing is approved (public fields only).
+  MarketItem: a
+    .model({
+      listingId: a.id().required(),
+      sellerName: a.string(),
+      title: a.string(),
+      description: a.string(),
+      category: a.string(),
+      imageKeys: a.string(),
+      price: a.float(),
+      stock: a.integer(),
+      deliveryBy: a.string(),
+      publishedAt: a.string(),
+    })
+    .identifier(['listingId'])
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
   // Master rates (framing and India courier per size tier, local courier, customs, fee, margin, VAT, FX).
   Rates: a
     .model({
@@ -247,6 +316,21 @@ const schema = a.schema({
     .arguments({ id: a.id().required() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Seller portal: apply, my profile + listings, save / submit / pause / delete a listing.
+  sellerAction: a
+    .mutation()
+    .arguments({ action: a.string().required(), data: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+  // Studio: approve / reject sellers and listings.
+  marketAdmin: a
+    .mutation()
+    .arguments({ action: a.string().required(), data: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Daily message: translate the Tamil text to English and Arabic (Amazon Translate).

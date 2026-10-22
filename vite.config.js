@@ -8,6 +8,7 @@ export default defineConfig({
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         admin: fileURLToPath(new URL('./admin.html', import.meta.url)),
         artist: fileURLToPath(new URL('./artist.html', import.meta.url)),
+        seller: fileURLToPath(new URL('./seller.html', import.meta.url)),
       },
     },
   },

@@ -254,7 +254,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
-  <nav class="links"><a href="#collection">Collection</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
+  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
   <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
@@ -286,6 +286,11 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
   <div class="chips-row" id="subjChips" role="group" aria-label="Filter by subject"></div>
   <p class="count-note" id="countNote"></p>
   <div class="grid" id="grid"></div>
+</div></section>
+
+<section id="market" hidden><div class="wrap">
+  <div class="sec-head"><div><h2>Crafts shop</h2><p>Handmade pieces from independent makers we have checked. You pay Kalai Art House; we pass the order to the maker and look after it until it reaches you. Want to sell here? <a href="/seller.html" style="color:var(--kumkum)">Join as a seller</a>.</p></div></div>
+  <div class="grid" id="marketGrid"></div>
 </div></section>
 
 <section id="commission" class="studio"><div class="wrap">
@@ -551,6 +556,18 @@ function drawGrid(){
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
 }
 /* Catalogue from Order Management (replaces the built-in list once it has published works). */
+window.kalaiShowMarket=function(list){
+  const g=document.getElementById("marketGrid"),sec=document.getElementById("market");if(!g||!list.length)return;
+  const e=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  g.innerHTML=list.map((p,i)=>`<article class="card"><button class="frame" type="button" data-mi="${i}" aria-label="View ${e(p.title)}"><img src="${e(p.img)}" alt="${e(p.title)}" loading="lazy"></button>
+    <div class="kind">${e(p.category||"Handmade")}</div><h3>${e(p.title)}</h3><div class="meta">by ${e(p.seller)}${p.stock>0?"":" · <b style=\"color:var(--kumkum)\">Out of stock</b>"}</div>
+    ${p.description?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${e(p.description)}</div>`:""}
+    <div class="row"><span class="price">AED ${Number(p.price).toLocaleString("en-GB")}</span>${p.stock>0?`<button class="add" type="button" data-mbuy="${i}">Order</button>`:""}</div></article>`).join("");
+  g.querySelectorAll("[data-mbuy]").forEach(b=>b.onclick=()=>{const p=list[+b.dataset.mbuy];
+    sendEnquiry("Crafts shop order: "+p.title,{"Item":p.title,"Maker":p.seller,"Price":"AED "+p.price+" (incl. delivery in the UAE)","Listing":p.id,"Link":location.origin+"/#market"});});
+  g.querySelectorAll("[data-mi]").forEach(b=>b.onclick=()=>window.open(list[+b.dataset.mi].img,"_blank","noopener"));
+  sec.hidden=false;const l=document.getElementById("marketLink");if(l)l.hidden=false;
+};
 window.kalaiShowCatalogue=function(list){
   if(!list||!list.length)return;
   PRODUCTS.splice(0,PRODUCTS.length,...list);
