@@ -1071,7 +1071,7 @@ async function showDetail(e) {
     <div><div class="muted" style="font-family:var(--mono);font-size:13px">${esc(e.ref)} · ${esc(KIND[e.kind] || '')}</div>
     <h2 style="font-size:22px;margin-top:4px">${esc(e.title)}</h2></div>
     <dl class="kv">
-      <dt>Customer</dt><dd>${esc(e.customerName)}${e.customerCode ? ` · <button type="button" class="linkbtn mono" data-cust="${esc(e.customerCode)}" title="Show all orders of this customer">${esc(e.customerCode)}</button>` : ''}</dd>
+      <dt>Customer</dt><dd>${esc(e.customerName)}${e.customerCode ? ` · <button type="button" class="linkbtn mono" style="font-size:11px;padding:0 3px;border:0;background:none;text-decoration:underline;color:var(--muted)" data-cust="${esc(e.customerCode)}" title="Show all orders of this customer">${esc(e.customerCode)}</button>` : ''}</dd>
       <dt>Email</dt><dd>${esc(e.email)}</dd>
       ${Object.entries(det).filter(([k, v]) => v !== '' && v != null && !['Reference', 'Name', 'Mobile', 'Parent'].includes(k)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
     </dl>

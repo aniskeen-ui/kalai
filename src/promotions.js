@@ -41,7 +41,7 @@ function draw() {
     const [label, cls] = state(p);
     const off = p.code ? `${p.discountType === 'AED' ? `AED ${p.discountValue}` : `${p.discountValue}%`} off · ${AREA[p.appliesTo || 'ALL']}${p.minOrder ? ` · min AED ${p.minOrder}` : ''}` : 'No code (banner / page only)';
     return `<article class="mk-card" data-p="${esc(p.id)}">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="mono muted" style="font-size:12px">${esc(p.number || 'PRM-…')}</span><h3>${esc(p.title)}</h3><span class="cg-badge ${cls}">${label}</span>${p.showBanner ? '<span class="cg-badge">Banner</span>' : ''}${p.code ? `<span class="cg-badge" style="font-family:var(--mono)">${esc(p.code)}</span>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="mono muted" style="font-size:12px">${esc(p.number || 'PR-…')}</span><h3>${esc(p.title)}</h3><span class="cg-badge ${cls}">${label}</span>${p.showBanner ? '<span class="cg-badge">Banner</span>' : ''}${p.code ? `<span class="cg-badge" style="font-family:var(--mono)">${esc(p.code)}</span>` : ''}
         <span class="muted" style="margin-left:auto">${p.startAt ? esc(day(p.startAt)) : 'now'} → ${p.endAt ? esc(day(p.endAt)) : 'no end'}</span></div>
       <div class="muted">${esc(off)} · used ${p.usedCount ?? 0}${p.maxUses ? ` of ${p.maxUses}` : ''} time(s)${p.copiedFrom ? ` · re-used from ${esc(p.copiedFrom)}` : ''}</div>
       ${p.bannerText ? `<div style="font-size:13px">Banner: “${esc(p.bannerText)}”</div>` : ''}
@@ -61,7 +61,7 @@ function draw() {
   });
 }
 function edit(p, reuse = false) {
-  // Re-use: a new offer (new PRM number) pre-filled from a saved one; dates are left for you to set.
+  // Re-use: a new offer (new PR number) pre-filled from a saved one; dates are left for you to set.
   editing = reuse ? null : p;
   const base = reuse ? { ...p, startAt: new Date().toISOString(), endAt: '', active: true, copiedFrom: p.number || p.title } : null;
   const x = base || p || { title: '', bannerText: '', showBanner: true, details: '', code: '', discountType: 'PCT', discountValue: 10, minOrder: null, appliesTo: 'ALL', startAt: new Date().toISOString(), endAt: '', active: true, maxUses: null };
@@ -124,7 +124,7 @@ function edit(p, reuse = false) {
       const r = editing ? await client.models.Promotion.update({ id: editing.id, ...rec })
         : await client.models.Promotion.create({ ...rec, usedCount: 0, sortOrder: 0, ...(x.copiedFrom ? { copiedFrom: x.copiedFrom } : {}) });
       if (r.errors?.length) throw new Error(r.errors[0].message);
-      if (!editing) await client.mutations.assignCodes().catch(() => {}); // gives the new offer its PRM number
+      if (!editing) await client.mutations.assignCodes().catch(() => {}); // gives the new offer its PR number
       $('prEdit').hidden = true; $('prEdit').innerHTML = '';
       await load();
     } catch (ex) { $('pfMsg').textContent = ex.message; $('pfSave').disabled = false; }

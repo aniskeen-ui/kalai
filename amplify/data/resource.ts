@@ -135,7 +135,7 @@ const schema = a.schema({
       zohoSellerBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       zohoSellerPaymentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       // Ziina online payments: payment link (intent) created at Price sent, paid by webhook, refunds back to the card.
-      // Customer code (CUST-0001…): one per customer (account, else email, else mobile), assigned by the function.
+      // Customer code (BP-0000001…): one per customer (account, else email, else mobile), assigned by the function.
       customerCode: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Discount code applied by the customer (applyCode): price before the discount and the amount taken off.
       discountCode: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -235,7 +235,7 @@ const schema = a.schema({
       // Set when a real title is given (by the artist on his desk, or the studio in Catalogue). Until then the
       // website shows "Untitled" instead of the imported file name.
       named: a.string(),
-      code: a.string(), // artwork code ART-0001…, assigned by the function, never changes
+      code: a.string(), // artwork code AT-0000001…, assigned by the function, never changes
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
@@ -355,7 +355,7 @@ const schema = a.schema({
       maxUses: a.integer(),
       usedCount: a.integer(),
       sortOrder: a.integer(),
-      number: a.string(), // master number PRM-0001…, never changes
+      number: a.string(), // master number PR-0000001…, never changes
       copiedFrom: a.string(), // number of the offer it was re-used from
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),

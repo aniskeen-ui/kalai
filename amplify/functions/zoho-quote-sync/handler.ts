@@ -2418,7 +2418,8 @@ async function artistWorks(ev: ApiEvent) {
   throw new Error('Unknown action');
 }
 
-// ---------- Customer codes (CUST-0001) and artwork codes (ART-0001) ----------
+// ---------- Codes, all 10 characters: customers BP-0000001, artworks AT-0000001, offers PR-0000001 ----------
+// (Older CUST-0001 / ART-0001 / PRM-0001 codes are converted once, keeping their number.)
 // Customer = the signed-in account, else the email, else the mobile number. Codes are given in order of the first
 // enquiry and never change. New enquiries get theirs as they arrive; assignCodes fills in anything missing.
 const custKey = (e: Img) => {
@@ -2430,7 +2431,8 @@ const custKey = (e: Img) => {
   return phone ? `p:${phone}` : `id:${str(e, 'id')}`;
 };
 const codeNum = (c: string) => Number((c.match(/(\d+)$/) ?? [])[1] ?? 0);
-const pad = (n: number) => String(n).padStart(4, '0');
+const pad = (n: number) => String(n).padStart(7, '0');
+const recode = (prefix: string, c: string) => (c && !c.startsWith(prefix) ? `${prefix}${pad(codeNum(c))}` : c);
 async function assignCodes() {
   const out = { customers: 0, artworks: 0 };
   const table = process.env.ENQUIRY_TABLE;
@@ -2449,26 +2451,33 @@ async function assignCodes() {
     for (const e of all) {
       const ks = keysOf(e);
       const have = str(e, 'customerCode');
-      const code = ks.map((k) => byKey.get(k)).find(Boolean) ?? (have || `CUST-${pad(++max)}`);
+      const code = ks.map((k) => byKey.get(k)).find(Boolean) ?? (recode('BP-', have) || `BP-${pad(++max)}`);
       ks.forEach((k) => { if (!byKey.has(k)) byKey.set(k, code); });
       if (code !== have) { await writeBack(str(e, 'id'), { customerCode: code }); out.customers++; }
     }
   }
-  // Offer master numbers PRM-0001… (in order of creation).
+  // Offer master numbers PR-0000001… (in order of creation).
   const prtable = process.env.PROMO_TABLE;
   if (prtable) {
     const promos = (await scanAll(prtable)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')));
     let max = promos.reduce((m, p) => Math.max(m, codeNum(str(p, 'number'))), 0);
+    for (const p of promos.filter((x) => str(x, 'number') && !str(x, 'number').startsWith('PR-'))) {
+      await ddb.send(new UpdateItemCommand({ TableName: prtable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #n = :n', ExpressionAttributeNames: { '#n': 'number' }, ExpressionAttributeValues: { ':n': { S: recode('PR-', str(p, 'number')) } } })).catch(() => {});
+    }
     for (const p of promos.filter((x) => !str(x, 'number'))) {
-      await ddb.send(new UpdateItemCommand({ TableName: prtable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #n = :n', ConditionExpression: 'attribute_not_exists(#n)', ExpressionAttributeNames: { '#n': 'number' }, ExpressionAttributeValues: { ':n': { S: `PRM-${pad(++max)}` } } })).catch(() => {});
+      await ddb.send(new UpdateItemCommand({ TableName: prtable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #n = :n', ConditionExpression: 'attribute_not_exists(#n)', ExpressionAttributeNames: { '#n': 'number' }, ExpressionAttributeValues: { ':n': { S: `PR-${pad(++max)}` } } })).catch(() => {});
     }
   }
   const ptable = process.env.PRODUCT_TABLE;
   if (ptable) {
     const prods = (await scanAll(ptable)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')) || str(a, 'id').localeCompare(str(b, 'id')));
     let max = prods.reduce((m, p) => Math.max(m, codeNum(str(p, 'code'))), 0);
+    for (const p of prods.filter((x) => str(x, 'code') && !str(x, 'code').startsWith('AT-'))) {
+      await ddb.send(new UpdateItemCommand({ TableName: ptable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #c = :c', ExpressionAttributeNames: { '#c': 'code' }, ExpressionAttributeValues: { ':c': { S: recode('AT-', str(p, 'code')) } } })).catch(() => {});
+      out.artworks++;
+    }
     for (const p of prods.filter((x) => !str(x, 'code'))) {
-      await ddb.send(new UpdateItemCommand({ TableName: ptable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #c = :c', ConditionExpression: 'attribute_not_exists(#c)', ExpressionAttributeNames: { '#c': 'code' }, ExpressionAttributeValues: { ':c': { S: `ART-${pad(++max)}` } } })).catch(() => {});
+      await ddb.send(new UpdateItemCommand({ TableName: ptable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #c = :c', ConditionExpression: 'attribute_not_exists(#c)', ExpressionAttributeNames: { '#c': 'code' }, ExpressionAttributeValues: { ':c': { S: `AT-${pad(++max)}` } } })).catch(() => {});
       out.artworks++;
     }
   }
