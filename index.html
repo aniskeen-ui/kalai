@@ -568,7 +568,7 @@ function drawChips(){
 /* Works by approved artists (from the artist portal), shown in the collection.
    Artist names are not shown on the website (SHOW_ARTIST_NAMES = false): no names on cards, no artist dropdown, no artist cards. */
 const SHOW_ARTIST_NAMES=false;
-const cleanName=n=>String(n||"").replace(/^\s*siva\s*raja\s*[-:,]?\s*/i,"")||String(n||"");
+const cleanName=n=>{const t=String(n||"").replace(/\bsiva\s*raja\b\s*[-:,]?/gi," ").replace(/\s+/g," ").trim();return t||"Original artwork"};
 let ARTWORKS=[];let artistF="all";
 const esc2=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function drawArtistSel(){
