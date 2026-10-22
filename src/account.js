@@ -24,6 +24,13 @@ let kuralSec = 10;
     if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
     if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
     // Home page texts from Order Management → Settings (blank = keep the built-in text).
+    // Website look from Settings (a ?look= preview in this browser wins).
+    let preview = null;
+    try { localStorage.setItem('kalaiLook', st.siteLook === 'green' ? 'green' : 'classic'); preview = localStorage.getItem('kalaiLookPreview'); } catch { /* storage blocked */ }
+    if (!preview) {
+      if (st.siteLook === 'green') document.documentElement.setAttribute('data-skin', 'green');
+      else document.documentElement.removeAttribute('data-skin');
+    }
     const tx = (v) => String(v ?? '').trim();
     const put = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
     // Headlines take turns with the picture (same seconds); one per line, "plain part | gold part".
