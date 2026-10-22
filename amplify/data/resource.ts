@@ -313,8 +313,24 @@ const schema = a.schema({
       stock: a.integer(),
       deliveryBy: a.string(),
       publishedAt: a.string(),
+      sellerType: a.string(), // ARTIST (shown in the collection) | SELLER (Crafts shop)
+      artistKey: a.string(), // links to ArtistProfile.id
     })
     .identifier(['listingId'])
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
+  // Public profile of an approved artist (written by the function on approval; no contact or bank details).
+  ArtistProfile: a
+    .model({
+      name: a.string(),
+      photoKey: a.string(),
+      about: a.string(),
+      mediums: a.string(),
+      region: a.string(),
+      country: a.string(),
+      commissions: a.string(),
+      publishedAt: a.string(),
+    })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
   // Master rates (framing and India courier per size tier, local courier, customs, fee, margin, VAT, FX).

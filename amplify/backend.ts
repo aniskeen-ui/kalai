@@ -51,11 +51,12 @@ backend.zohoQuoteSync.addEnvironment('PRODUCT_TABLE', tableName('Product'));
 backend.zohoQuoteSync.addEnvironment('SELLER_TABLE', tableName('SellerProfile'));
 backend.zohoQuoteSync.addEnvironment('LISTING_TABLE', tableName('Listing'));
 backend.zohoQuoteSync.addEnvironment('MARKET_TABLE', tableName('MarketItem'));
+backend.zohoQuoteSync.addEnvironment('ARTIST_TABLE', tableName('ArtistProfile'));
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Scan', 'dynamodb:Query', 'dynamodb:BatchGetItem'],
-    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem')],
+    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile')],
   }),
 );
 

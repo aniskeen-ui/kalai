@@ -5,7 +5,7 @@ import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, createHash, timingSafeEqual } from 'node:crypto';
 
 /**
  * Kalai Art House ↔ Zoho Books.
@@ -1708,12 +1708,35 @@ function who(ev: ApiEvent) {
 const parseData = (d: unknown): Dict => { try { return (typeof d === 'string' ? JSON.parse(d || '{}') : (d ?? {})) as Dict; } catch { return {}; } };
 
 async function publishItem(l: Dict) {
-  const { M } = mtables();
+  const { S, M } = mtables();
+  // Artists' works go to the collection (with the artist's public key); sellers' products to the Crafts shop.
+  const sp = plain(await getRow(S, { id: { S: String(l.sellerId) } }));
+  const artist = sp?.type === 'ARTIST';
   await putRow(M, {
     listingId: l.id, __typename: 'MarketItem', createdAt: l.approvedAt ?? new Date().toISOString(), updatedAt: new Date().toISOString(),
     sellerName: l.sellerName, title: l.title, description: l.description, category: l.category, imageKeys: l.imageKeys,
     price: l.customerPrice, stock: l.stock, deliveryBy: l.deliveryBy, publishedAt: l.approvedAt,
+    sellerType: artist ? 'ARTIST' : 'SELLER', ...(artist ? { artistKey: artistKey(String(l.sellerId)) } : {}),
   });
+}
+
+// ---------- Public artist profiles ("Our artists" on the website) ----------
+// Keyed by a hash of the artist's account id, so the account id itself is never public. No contact details.
+const artistKey = (sub: string) => createHash('sha256').update(`kalai-artist:${sub}`).digest('hex').slice(0, 16);
+async function publishArtist(p: Dict) {
+  const A = process.env.ARTIST_TABLE;
+  if (!A || p.type !== 'ARTIST') return;
+  const now = new Date().toISOString();
+  await putRow(A, {
+    id: artistKey(String(p.id)), __typename: 'ArtistProfile', createdAt: String(p.approvedAt ?? now), updatedAt: now,
+    name: p.business, photoKey: p.photoKey, about: p.about, mediums: p.mediums, region: p.emirate, country: p.country || 'UAE',
+    commissions: p.commissions, publishedAt: String(p.approvedAt ?? now),
+  });
+}
+async function unpublishArtist(sub: string) {
+  const A = process.env.ARTIST_TABLE;
+  if (!A) return;
+  try { await delRow(A, { id: { S: artistKey(sub) } }); } catch { /* not published */ }
 }
 async function unpublishItem(id: string) {
   const { M } = mtables();
@@ -1764,6 +1787,7 @@ async function sellerAction(ev: ApiEvent) {
     const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : 'APPLIED';
     const row = { ...(profile ?? {}), ...f, id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
     await putRow(S, row);
+    if (row.status === 'APPROVED' && type === 'ARTIST') await publishArtist(row);
     if (!profile || profile.status === 'REJECTED') {
       await sendMail({
         to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : 'seller'} application: ${f.business}`,
@@ -1850,12 +1874,18 @@ async function marketAdmin(ev: ApiEvent) {
       const pct = numIn(d.commissionPct, 90), fee = numIn(d.kalaiDeliveryFee, 1000);
       const row = { ...p, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
+      if (p.type === 'ARTIST') {
+        await publishArtist(row);
+        // Works already live move to the collection with the artist's name.
+        for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) await publishItem(plain(x)!);
+      }
       await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'ARTIST' ? 'artist' : 'seller'} account is approved`, lines: [`Hello ${h(p.contactName)},`, `Welcome to Kalai Art House${p.type === 'ARTIST' ? ' as one of our artists' : ''}. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, p.type === 'ARTIST' ? 'You can now list your artworks with their price. Each one is checked by us before it goes live.' : 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
       return { profile: row };
     }
     if (action === 'rejectSeller' || action === 'suspendSeller') {
       const row = { ...p, status: action === 'rejectSeller' ? 'REJECTED' : 'SUSPENDED', adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
+      await unpublishArtist(id);
       if (action === 'suspendSeller') for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) { await putRow(L, { ...plain(x), status: 'PAUSED', updatedAt: now }); await unpublishItem(str(x, 'id')); }
       await sendMail({ to: String(p.email ?? ''), subject: action === 'rejectSeller' ? 'About your Kalai Art House seller application' : 'Your Kalai Art House seller account is paused', lines: [`Hello ${h(p.contactName)},`, action === 'rejectSeller' ? 'Thank you for applying. We are not able to accept your application at the moment.' : 'Your listings are paused for now.', txt(d.note, 500) ? h(txt(d.note, 500)) : ''], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
       return { profile: row };
