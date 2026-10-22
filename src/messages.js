@@ -1,5 +1,14 @@
 // Messages tab (Order Management): the daily notice on the website, in Tamil, English and Arabic.
 import { generateClient } from 'aws-amplify/data';
+import { uploadData, getUrl, remove } from 'aws-amplify/storage';
+
+const TV_KEY = 'catalogue/site/thiruvalluvar.jpg';
+async function tvShow() {
+  try {
+    const u = (await getUrl({ path: TV_KEY, options: { expiresIn: 900, validateObjectExistence: true } })).url.toString();
+    $('tvImg').src = u; $('tvNote').textContent = 'Your uploaded picture is shown on the website.'; $('tvReset').hidden = false;
+  } catch { $('tvImg').src = '/valluvar.svg'; $('tvNote').textContent = 'Our emblem. Upload a picture you have the right to use (square works best).'; $('tvReset').hidden = true; }
+}
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -66,6 +75,16 @@ function preview() {
 
 function wire() {
   $('msgFrom').value = localInput(new Date());
+  tvShow();
+  $('tvFile').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { $('tvNote').textContent = 'Please use a picture under 5 MB.'; return; }
+    $('tvNote').textContent = 'Uploading…';
+    try { await uploadData({ path: TV_KEY, data: f, options: { contentType: f.type || 'image/jpeg' } }).result; await tvShow(); }
+    catch (ex) { $('tvNote').textContent = 'Upload failed: ' + (ex.message || ex); }
+    e.target.value = '';
+  };
+  $('tvReset').onclick = async () => { try { await remove({ path: TV_KEY }); } catch { /* already gone */ } await tvShow(); };
   $('kuralNow').onclick = async () => {
     const b = $('kuralNow'); b.disabled = true; $('msgMsg').textContent = 'Fetching today\'s Thirukkural…';
     try {

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Thiruvalluvar">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7e7c1"/><stop offset="1" stop-color="#e9c97e"/></linearGradient></defs>
+  <circle cx="60" cy="60" r="58" fill="url(#g)" stroke="#b8862b" stroke-width="3"/>
+  <!-- halo -->
+  <circle cx="60" cy="40" r="22" fill="none" stroke="#c99a3a" stroke-width="2" opacity=".6"/>
+  <!-- hair knot -->
+  <ellipse cx="60" cy="20" rx="8" ry="7" fill="#3a2a1d"/>
+  <!-- face -->
+  <ellipse cx="60" cy="38" rx="12" ry="14" fill="#c98d5c"/>
+  <!-- hair -->
+  <path d="M47 34 Q48 22 60 22 Q72 22 73 34 Q70 27 60 27 Q50 27 47 34Z" fill="#3a2a1d"/>
+  <!-- beard -->
+  <path d="M48 40 Q50 64 60 68 Q70 64 72 40 Q69 50 60 52 Q51 50 48 40Z" fill="#f2f0ea" stroke="#d8d2c4" stroke-width=".8"/>
+  <!-- eyes, brow, ash mark -->
+  <path d="M53 36 q2 -1.4 4 0 M63 36 q2 -1.4 4 0" stroke="#3a2a1d" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+  <path d="M55 30 h10" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- body / white robe -->
+  <path d="M34 104 Q36 74 60 70 Q84 74 86 104 Z" fill="#fbfaf6" stroke="#d8d2c4" stroke-width="1"/>
+  <path d="M60 70 L52 104 M60 70 L70 104" stroke="#e5ddc9" stroke-width="1.2"/>
+  <!-- palm-leaf manuscript (olai) and stylus -->
+  <rect x="38" y="84" width="44" height="8" rx="3" fill="#d9a441" stroke="#9b6b1f" stroke-width="1"/>
+  <path d="M42 88 h28" stroke="#7a5418" stroke-width=".9" stroke-dasharray="3 2"/>
+  <path d="M74 80 L86 70" stroke="#5a4632" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

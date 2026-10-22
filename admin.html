@@ -273,6 +273,10 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
     <div id="messagesPane" hidden>
       <div class="bar"><h1 style="font-size:28px;margin-right:auto">Daily message</h1><button class="btn small ghost" id="kuralNow" type="button">Publish today's Thirukkural now</button></div>
       <p class="muted" style="font-size:12px;margin:0 0 8px">Every morning at 06:05 the website shows the <b>Thirukkural of the day</b> (Tamil, English, Arabic). A message you publish here takes its place for as long as it is on.</p>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px"><img id="tvImg" alt="Thiruvalluvar picture" src="/valluvar.svg" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)">
+        <span style="font-size:13px"><b>Thiruvalluvar picture</b> on the Thirukkural card<br><span class="muted" id="tvNote">Our emblem. Upload a picture you have the right to use (square works best).</span></span>
+        <label class="btn small ghost" style="cursor:pointer">Upload picture<input id="tvFile" type="file" accept="image/*" hidden></label>
+        <button class="btn small ghost" id="tvReset" type="button" hidden>Use the emblem</button></div>
       <div class="msg-edit">
         <div class="msg-form">
           <div class="field"><label for="msgSrc">I'm writing in</label><select id="msgSrc" style="width:auto"><option value="ta">Tamil</option><option value="en">English</option></select></div>

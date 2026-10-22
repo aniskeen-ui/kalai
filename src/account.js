@@ -720,38 +720,66 @@ async function showDailyMessage() {
     if (!m) return;
     const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
     if (!langs.length) return;
-    const nav = (navigator.language || 'en').slice(0, 2);
-    let lang = lsGet('kalai-lang') || (langs.includes(nav) ? nav : 'en');
-    if (!langs.includes(lang)) lang = langs.includes('en') ? 'en' : langs[0];
+    const kural = m.source === 'KURAL';
+    // Starts in Tamil for the kural (else the visitor's language), then changes language every 10 seconds.
+    let lang = kural && langs.includes('ta') ? 'ta' : (langs.includes((navigator.language || 'en').slice(0, 2)) ? (navigator.language || 'en').slice(0, 2) : (langs.includes('en') ? 'en' : langs[0]));
     document.head.insertAdjacentHTML('beforeend', `<style>
-.kmsg{position:fixed;right:16px;bottom:16px;z-index:30;width:min(320px,calc(100vw - 32px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;display:grid;gap:8px;animation:kmsgIn .35s ease-out}
+.kmsg{position:fixed;right:16px;bottom:16px;z-index:30;width:min(340px,calc(100vw - 32px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;display:grid;gap:8px;animation:kmsgIn .35s ease-out}
 @keyframes kmsgIn{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+.kmsg-img{display:flex;justify-content:center;margin-top:-2px}
+.kmsg-img img{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:#f7e7c1}
 .kmsg-head{display:flex;align-items:center;gap:8px}
 .kmsg-head b{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-right:auto}
 .kmsg-langs{display:flex;gap:4px}
 .kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:2px 8px;font:inherit;font-size:11px;cursor:pointer}
 .kmsg-langs button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1b2b}
 .kmsg-x{background:none;border:0;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
-.kmsg p{margin:0;font-size:14px;line-height:1.55;white-space:pre-line}
+.kmsg p{margin:0;font-size:14px;line-height:1.6;white-space:pre-line;min-height:4.8em;transition:opacity .4s}
+.kmsg p.fade{opacity:0}
+.kmsg-bar{height:2px;background:var(--line);border-radius:2px;overflow:hidden}.kmsg-bar i{display:block;height:100%;width:0;background:var(--gold)}
+.kmsg-bar i.run{animation:kmsgBar 10s linear forwards}@keyframes kmsgBar{to{width:100%}}
 .kmsg-tab{position:fixed;right:16px;bottom:16px;z-index:30;border:1px solid var(--gold);background:var(--surface);color:var(--fg);border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
-@media (prefers-reduced-motion:reduce){.kmsg{animation:none}}
+@media (prefers-reduced-motion:reduce){.kmsg{animation:none}.kmsg p{transition:none}}
 </style>`);
     const box = document.createElement('aside');
-    box.className = 'kmsg'; box.setAttribute('aria-label', "Today's message");
+    box.className = 'kmsg'; box.setAttribute('aria-label', kural ? 'Thirukkural of the day' : "Today's message");
     const tab = document.createElement('button');
     tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true;
     document.body.append(box, tab);
-    const draw = () => {
-      box.setAttribute('lang', lang); box.dir = lang === 'ar' ? 'rtl' : 'ltr';
-      box.innerHTML = `<div class="kmsg-head"><b>${esc((m.source === 'KURAL' ? KURAL_TITLE : MSG_TITLE)[lang])}</b><span class="kmsg-langs">${langs.map((l) => `<button type="button" data-l="${l}" aria-pressed="${l === lang}">${LANG_LABEL[l]}</button>`).join('')}</span><button class="kmsg-x" type="button" aria-label="Close">×</button></div><p>${esc(m[lang])}</p>`;
-      tab.textContent = `${m.source === 'KURAL' ? '📜' : '📢'} ${(m.source === 'KURAL' ? KURAL_TITLE : MSG_TITLE)[lang]}`;
-      box.querySelectorAll('[data-l]').forEach((b) => { b.onclick = () => { lang = b.dataset.l; lsSet('kalai-lang', lang); draw(); }; });
-      box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; lsSet('kalai-msg-closed', m.id); };
+    const title = (l) => (kural ? KURAL_TITLE : MSG_TITLE)[l];
+    // Thiruvalluvar picture: the one uploaded in Order Management → Messages, else our emblem.
+    let picture = '/valluvar.svg';
+    if (kural) { try { picture = (await getUrl({ path: 'catalogue/site/thiruvalluvar.jpg', options: { expiresIn: 3600, validateObjectExistence: true } })).url.toString(); } catch { picture = '/valluvar.svg'; } }
+    box.innerHTML = `${kural ? `<div class="kmsg-img"><img alt="Thiruvalluvar" src="${esc(picture)}" onerror="this.onerror=null;this.src='/valluvar.svg'"></div>` : ''}
+      <div class="kmsg-head"><b></b><span class="kmsg-langs">${langs.map((l) => `<button type="button" data-l="${l}">${LANG_LABEL[l]}</button>`).join('')}</span><button class="kmsg-x" type="button" aria-label="Close">×</button></div>
+      <p></p>${langs.length > 1 ? '<div class="kmsg-bar" aria-hidden="true"><i></i></div>' : ''}`;
+    const p = box.querySelector('p'), bar = box.querySelector('.kmsg-bar i');
+    const show = (l, fade = true) => {
+      lang = l;
+      const put = () => {
+        box.setAttribute('lang', lang); p.dir = lang === 'ar' ? 'rtl' : 'ltr'; p.style.textAlign = lang === 'ar' ? 'right' : '';
+        box.querySelector('.kmsg-head b').textContent = title(lang);
+        p.textContent = m[lang];
+        box.querySelectorAll('[data-l]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.l === lang)));
+        tab.textContent = `${kural ? '📜' : '📢'} ${title(lang)}`;
+        p.classList.remove('fade');
+        if (bar) { bar.classList.remove('run'); void bar.offsetWidth; if (!paused) bar.classList.add('run'); }
+      };
+      if (fade) { p.classList.add('fade'); setTimeout(put, 400); } else put();
     };
-    tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); };
-    draw();
+    // Every 10 seconds the next language; paused while the visitor hovers over it or it is closed.
+    let paused = false;
+    let timer = null;
+    const restart = () => { clearInterval(timer); if (langs.length > 1) timer = setInterval(() => { if (!paused && !box.hidden) show(langs[(langs.indexOf(lang) + 1) % langs.length]); }, 10_000); };
+    box.addEventListener('mouseenter', () => { paused = true; bar?.classList.remove('run'); });
+    box.addEventListener('mouseleave', () => { paused = false; restart(); if (bar) { void bar.offsetWidth; bar.classList.add('run'); } });
+    box.querySelectorAll('[data-l]').forEach((b) => { b.onclick = () => { show(b.dataset.l); restart(); }; });
+    box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); };
+    tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); show(lang, false); restart(); };
+    show(lang, false);
+    restart();
     // Closed this same message before: keep it as the small tab.
-    if (lsGet('kalai-msg-closed') === m.id) { box.hidden = true; tab.hidden = false; }
+    if (lsGet('kalai-msg-closed') === m.id) { box.hidden = true; tab.hidden = false; clearInterval(timer); }
   } catch { /* no message */ }
 }
 showDailyMessage();
