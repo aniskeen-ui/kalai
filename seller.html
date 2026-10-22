@@ -242,11 +242,12 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><img id="dPhoto" alt="" hidden style="width:44px;height:44px;object-fit:cover;border-radius:50%"><h2 id="dBiz" style="margin-right:auto"></h2><button class="btn ghost small" id="dProfile" type="button">My details</button><button class="btn" id="dNew" type="button">New listing</button></div>
       <div class="muted" id="dTerms" style="font-size:13px"></div>
     </div>
-    <div class="authtabs" role="tablist"><button type="button" id="tabProducts" aria-pressed="true">My products</button><button type="button" id="tabOrders" aria-pressed="false">Orders</button></div>
+    <div class="authtabs" role="tablist"><button type="button" id="tabProducts" aria-pressed="true">My products</button><button type="button" id="tabOrders" aria-pressed="false">Orders</button><button type="button" id="tabComm" aria-pressed="false" hidden>Commissions</button></div>
     <div id="productsPane" style="display:grid;gap:12px">
       <div id="editBox" hidden></div>
       <div id="lList" style="display:grid;gap:8px"></div>
     </div>
+    <div id="commPane" hidden style="display:grid;gap:8px"><p class="muted" style="font-size:13px;margin:0">Commissions and artwork requests Kalai Art House has allocated to you. Give your price for the artwork itself; once the customer pays, the order is placed and the price is fixed. Then mark your progress and send it to our frame shop.</p><div id="cList" style="display:grid;gap:8px"></div></div>
     <div id="ordersPane" hidden style="display:grid;gap:8px"><div id="oSum" class="muted" style="font-size:13px"></div><div id="oList" style="display:grid;gap:8px"></div></div>
   </section>
 </main>

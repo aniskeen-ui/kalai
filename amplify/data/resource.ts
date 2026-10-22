@@ -135,6 +135,10 @@ const schema = a.schema({
       zohoSellerBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       zohoSellerPaymentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       // Ziina online payments: payment link (intent) created at Price sent, paid by webhook, refunds back to the card.
+      // Artist doing a price enquiry / commission: empty = Siva (Artist desk); else an approved portal artist.
+      artistId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      artistName: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      artistCountry: a.string().authorization((allow) => [allow.group('ADMINS')]),
       ziinaIntentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       ziinaAmount: a.float().authorization((allow) => [allow.group('ADMINS')]),
       ziinaTest: a.string().authorization((allow) => [allow.group('ADMINS')]),
@@ -153,6 +157,7 @@ const schema = a.schema({
     .model({
       enquiryId: a.id().required(),
       artistPriceInr: a.float(),
+      artistPriceAed: a.float(), // portal artists based outside India price in AED
       artistReadyBy: a.string(),
       artistNote: a.string(),
       artistAt: a.string(),

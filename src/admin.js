@@ -46,15 +46,17 @@ const aed = (v, d = 0) => (v == null ? '–' : 'AED ' + Number(v).toLocaleString
 /** Cost build-up for one enquiry, the suggested price and the margin at a given price. */
 function calc(c, price) {
   const tier = rates.tiers[c.sizeTier] || null;
-  const artistAed = c.artistPriceInr ? c.artistPriceInr * rates.fx : null;
+  // Artist price: INR (Siva / artists in India) converted at the master rate, or AED for artists in the UAE.
+  const artistAed = c.artistPriceAed != null ? Number(c.artistPriceAed) : c.artistPriceInr ? c.artistPriceInr * rates.fx : null;
   const framing = c.framingOverride ?? tier?.framing ?? null;
-  const indiaCourier = c.indiaCourierOverride ?? tier?.courier ?? null;
+  // An artist in the UAE: no courier from India and no customs.
+  const indiaCourier = c.indiaCourierOverride ?? (c.local ? 0 : tier?.courier ?? null);
   const localCourier = c.localCourierOverride ?? rates.local;
   const vat = c.delivery === 'OUTSIDE' ? 0 : rates.vat;
   if (artistAed == null || framing == null || indiaCourier == null) {
     return { artistAed, framing, indiaCourier, localCourier, ready: false };
   }
-  const customs = (artistAed + indiaCourier) * rates.customs;
+  const customs = c.local ? 0 : (artistAed + indiaCourier) * rates.customs;
   const total = artistAed + framing + indiaCourier + customs + localCourier;
   // Ziina fee, courier insurance and the breakage reserve are all a % of what the customer pays.
   const pctOfPrice = rates.fee + (rates.ins || 0) + (rates.reserve || 0);
@@ -286,8 +288,8 @@ function reportLine(e) {
   let note = '';
   if (costs && (costs.artistAed != null || costs.framing != null)) {
     k = { artist: Number(costs.artistAed || 0), framing: Number(costs.framing || 0), india: Number(costs.indiaCourier || 0), customs: Number(costs.customs || 0), local: Number(costs.localCourier || 0) };
-  } else if (c?.artistPriceInr) {
-    k = { artist: c.artistPriceInr * rates.fx, framing: 0, india: 0, customs: 0, local: 0 };
+  } else if (c?.artistPriceInr || c?.artistPriceAed) {
+    k = { artist: c.artistPriceAed ?? c.artistPriceInr * rates.fx, framing: 0, india: 0, customs: 0, local: 0 };
     note = 'costing not saved';
   } else if (e.kind === 'MARKET') {
     // Crafts shop: the maker's payout is the cost (shown in the Artist column); Kalai's courier when Kalai delivers.
@@ -375,6 +377,14 @@ $('rCsv').onclick = () => {
 $('fStatus').onchange = render;
 $('fKind').onchange = render;
 
+// Approved portal artists, for allocating price enquiries / commissions (Siva is the default).
+let artists = [];
+async function loadArtists() {
+  const r = await client.models.SellerProfile.list({ limit: 500 });
+  artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
+}
+let curAed = false; // the open order's artist prices in AED (artist in the UAE)
+
 async function load() {
   $('rows').innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
   try {
@@ -389,6 +399,7 @@ async function load() {
     all = items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     await loadCostings().catch(() => {});
     await loadReviews().catch(() => {});
+    await loadArtists().catch(() => {});
     render();
     if (!$('reportsPane').hidden) renderReport();
     if (!$('feedbackPane').hidden) renderFeedback();
@@ -414,7 +425,7 @@ function render() {
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
       <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}</td>
-      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !['CANCELLED', 'DELIVERED'].includes(s) ? ' <span class="chip" title="Siva hasn\'t priced this yet">Artist price needed</span>' : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
+      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? 'AED ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">Nothing matches this filter.</td></tr>';
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -436,16 +447,21 @@ function costingSection(e) {
   const c = costings.get(e.id) || {};
   const lockedPO = !!e.zohoPOId;
   const dis = lockedPO ? 'disabled' : '';
+  curAed = !!e.artistId && e.artistCountry !== 'India';
+  const who = e.artistName || 'Siva';
+  const artistOpts = `<option value="">Siva Raja (Artist desk)</option>${artists.map((a) => `<option value="${esc(a.id)}" data-name="${esc(a.business)}" data-country="${esc(a.country || 'UAE')}" ${a.id === e.artistId ? 'selected' : ''}>${esc(a.business)} (${esc(a.country || 'UAE')}${a.mediums ? ` · ${esc(a.mediums)}` : ''})</option>`).join('')}${e.artistId && !artists.some((a) => a.id === e.artistId) ? `<option value="${esc(e.artistId)}" selected>${esc(e.artistName || 'Artist')}</option>` : ''}`;
   const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${c.sizeTier === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
   const fromSiva = c.artistAt
-    ? `${c.artistBy && c.artistBy !== 'Siva' ? `Entered by you on Siva’s behalf${/Order Management/.test(c.artistBy) ? '' : ' (Artist desk)'}` : 'From Siva'} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
-    : c.artistPriceInr != null ? 'Entered by you on Siva’s behalf.'
-    : 'Siva hasn\'t priced this yet (Artist desk). You can also type his price here.';
+    ? `${c.artistBy && /^Kalai Art House/.test(c.artistBy) ? `Entered by you on ${esc(who)}’s behalf` : `From ${esc(c.artistBy || who)}`} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
+    : (c.artistPriceInr ?? c.artistPriceAed) != null ? `Entered by you on ${esc(who)}’s behalf.`
+    : `${esc(who)} hasn't priced this yet (${e.artistId ? 'artist portal → Commissions' : 'Artist desk'}). You can also type the price here.`;
   return `<fieldset class="cost" id="costing">
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
     ${rates.saved ? '' : '<div class="muted warnline">Rates are placeholders. Set the real ones under <b>Rates</b>.</div>'}
+    <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
+      <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Commissions in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">
-      <div class="field"><label for="cInr">Artist price (INR)</label><input id="cInr" type="number" min="0" step="1" value="${c.artistPriceInr ?? ''}" ${dis}></div>
+      <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? 'AED' : 'INR'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select></div>
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
@@ -488,12 +504,12 @@ function purchaseSection(e) {
   const st = e.purchaseState || '';
   const color = st === 'ARTIST_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
   return `<fieldset class="cost" id="purchase">
-    <legend>Siva Raja (purchase)</legend>
+    <legend>${esc(e.artistName || 'Siva Raja')} (purchase)</legend>
     <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || 'Siva\'s order is recorded once the customer has paid and the costing has his price.')}</div>
-    ${sivaProgress(e) ? `<div style="font-size:13px"><b>Siva's progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
+    ${sivaProgress(e) ? `<div style="font-size:13px"><b>${esc(e.artistName || 'Siva')}'s progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
     <div class="two">
-      <div class="field"><label for="pInv">Siva's invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From his invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
-      <div class="field"><label for="pPaid">Paid to Siva: bank ref</label><input id="pPaid" value="${esc(e.artistPaidRef)}" placeholder="Transfer reference" ${!e.zohoPOId || e.zohoVendorPaymentId ? 'disabled' : ''}></div>
+      <div class="field"><label for="pInv">${esc(e.artistName || 'Siva')}'s invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From his invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
+      <div class="field"><label for="pPaid">Paid to ${esc(e.artistName || 'Siva')}: bank ref</label><input id="pPaid" value="${esc(e.artistPaidRef)}" placeholder="Transfer reference" ${!e.zohoPOId || e.zohoVendorPaymentId ? 'disabled' : ''}></div>
     </div>
     <div class="muted" style="font-size:12px">Save with his invoice number to create the bill in Zoho; save with your bank reference to record the payment made to him.</div>
   </fieldset>`;
@@ -785,7 +801,9 @@ function afterSection(e) {
 
 function readCosting() {
   return {
-    artistPriceInr: n($('cInr')?.value),
+    artistPriceInr: curAed ? null : n($('cInr')?.value),
+    artistPriceAed: curAed ? n($('cInr')?.value) : null,
+    local: curAed,
     sizeTier: $('cTier')?.value || null,
     delivery: $('cDel')?.value || 'UAE',
     framingOverride: n($('cFr')?.value),
@@ -800,10 +818,10 @@ function renderCost() {
   const row = (k, v, note = '') => `<tr><td>${k}</td><td class="mono num">${v}</td><td class="muted">${note}</td></tr>`;
   const t = rates.tiers[$('cTier').value];
   let html = `<table class="costs"><tbody>
-    ${row('Artist', aed(r.artistAed), r.artistAed != null ? `INR ${Number($('cInr').value).toLocaleString('en-IN')} × ${rates.fx}` : 'needs Siva\'s price')}
+    ${row('Artist', aed(r.artistAed), r.artistAed != null ? (curAed ? 'artist in the UAE, price in AED' : `INR ${Number($('cInr').value).toLocaleString('en-IN')} × ${rates.fx}`) : 'needs the artist\'s price')}
     ${row('Framing', aed(r.framing), $('cFr').value ? 'override' : t ? `master ${$('cTier').value}` : 'choose a size tier')}
-    ${row('India courier', aed(r.indiaCourier), $('cIc').value ? 'override' : t ? `master ${$('cTier').value}` : '')}
-    ${r.ready ? row('Customs', aed(r.customs, 2), `${(rates.customs * 100).toFixed(1)}% of artist + courier`) : ''}
+    ${row('India courier', aed(r.indiaCourier), $('cIc').value ? 'override' : curAed ? 'none: artist in the UAE' : t ? `master ${$('cTier').value}` : '')}
+    ${r.ready ? row('Customs', aed(r.customs, 2), curAed ? 'none: artist in the UAE' : `${(rates.customs * 100).toFixed(1)}% of artist + courier`) : ''}
     ${row('Local courier', aed(r.localCourier), $('cLc').value ? 'override' : 'master')}
     ${r.ready ? `<tr class="tot"><td>Total cost</td><td class="mono num">${aed(r.total)}</td><td></td></tr>` : ''}
   </tbody></table>`;
@@ -821,10 +839,10 @@ function renderCost() {
 }
 
 async function saveCosting(e) {
-  const inp = readCosting();
-  const r = calc(inp, n($('ePrice').value));
+  const { local, ...inp } = readCosting();
+  const r = calc({ ...inp, local }, n($('ePrice').value));
   const costs = {
-    artistInr: inp.artistPriceInr, fx: rates.fx, artistAed: r.artistAed != null ? Math.round(r.artistAed * 100) / 100 : null,
+    artistInr: inp.artistPriceInr, artistAedPrice: inp.artistPriceAed, fx: rates.fx, artistAed: r.artistAed != null ? Math.round(r.artistAed * 100) / 100 : null,
     framing: r.framing, indiaCourier: r.indiaCourier, localCourier: r.localCourier,
     customs: r.customs != null ? Math.round(r.customs * 100) / 100 : null, total: r.total ?? null, suggested: r.suggested ?? null,
     price: r.price ?? null, margin: r.margin != null ? Math.round(r.margin * 100) / 100 : null, savedAt: new Date().toISOString(),
@@ -832,7 +850,7 @@ async function saveCosting(e) {
   const existing = costings.get(e.id);
   const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
   // Artist price typed (or changed) here by the studio: record who entered it and when.
-  if (inp.artistPriceInr != null && Number(inp.artistPriceInr) !== Number(existing?.artistPriceInr ?? NaN)) {
+  if ((inp.artistPriceInr != null && Number(inp.artistPriceInr) !== Number(existing?.artistPriceInr ?? NaN)) || (inp.artistPriceAed != null && Number(inp.artistPriceAed) !== Number(existing?.artistPriceAed ?? NaN))) {
     rec.artistAt = new Date().toISOString();
     rec.artistBy = 'Kalai Art House (Order Management)';
   }
@@ -1076,6 +1094,16 @@ async function showDetail(e) {
       $('aWarn').textContent = warn; $('aWarn').hidden = !warn;
     });
   }
+  if ($('cArtist')) {
+    $('cArtist').addEventListener('change', () => {
+      const o = $('cArtist').selectedOptions[0];
+      curAed = !!$('cArtist').value && (o.dataset.country || 'UAE') !== 'India';
+      $('cInrLabel').textContent = `Artist price (${curAed ? 'AED' : 'INR'})`;
+      $('cInr').value = '';
+      $('cArtistNote').textContent = $('cArtist').value ? `Save to allocate to ${o.dataset.name}: they get an email and see it under Commissions in their portal (price in ${curAed ? 'AED' : 'INR'}).` : 'Siva sees it on his Artist desk.';
+      renderCost();
+    });
+  }
   if ($('costOut')) {
     renderCost();
     ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice'].forEach((id) => { $(id).addEventListener('input', renderCost); $(id).addEventListener('change', renderCost); });
@@ -1202,6 +1230,12 @@ async function showDetail(e) {
     const invNo = $('pInv') && !$('pInv').disabled ? $('pInv').value.trim() : null;
     const paidRef = $('pPaid') && !$('pPaid').disabled ? $('pPaid').value.trim() : null;
     const costingChanged = $('costing') && !e.zohoPOId;
+    // Artist allocation (before the order is placed): Siva (empty) or an approved portal artist.
+    let artistPick = null;
+    if ($('cArtist') && !$('cArtist').disabled && ($('cArtist').value || '') !== (e.artistId || '')) {
+      const o = $('cArtist').selectedOptions[0];
+      artistPick = $('cArtist').value ? { artistId: $('cArtist').value, artistName: o.dataset.name || o.textContent, artistCountry: o.dataset.country || 'UAE' } : { artistId: null, artistName: null, artistCountry: null };
+    }
     const sellerPaid = $('mPaid') && !$('mPaid').disabled ? $('mPaid').value.trim() : null;
     const toZoho = (!locked && (($('eStatus').value === 'PAID' && s !== 'PAID') || (priceVal !== '' && Number(priceVal) !== Number(e.quotedPrice ?? NaN))))
       || (SHIP_STATUSES.includes($('eStatus').value) && $('eStatus').value !== s && !!e.zohoInvoiceId)
@@ -1225,6 +1259,7 @@ async function showDetail(e) {
         courierName: $('eCourier').value.trim() || null,
         trackingNo: $('eAwb').value.trim() || null,
         ...(paidRef != null ? { artistPaidRef: paidRef || null } : {}),
+        ...(artistPick ? artistPick : {}),
         ...(sellerPaid != null ? { sellerPaidRef: sellerPaid || null } : {}),
         ...(rw ? rw.enq : {}),
         ...readAddress(e),

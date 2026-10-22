@@ -177,6 +177,14 @@ async function vendorId(): Promise<string> {
   return (cachedVendorId = created.body.contact.contact_id);
 }
 
+/** The artist doing this order: Siva (default) or an approved artist from the portal (artistId = their account). */
+async function orderVendor(img: Img): Promise<{ id: string; name: string }> {
+  const aid = (img?.artistId?.S ?? '').trim();
+  if (aid) return sellerVendorId(aid);
+  return { id: await vendorId(), name: VENDOR_NAME };
+}
+const vendorName = (img: Img) => (img?.artistName?.S ?? '').trim() || VENDOR_NAME;
+
 const str = (img: Img | undefined, k: string) => (img?.[k]?.S ?? '').trim();
 const num = (img: Img | undefined, k: string) => {
   const v = img?.[k]?.N;
@@ -589,7 +597,7 @@ async function createArtistBill(img: Img) {
   const r = await zoho('/bills', {
     method: 'POST',
     body: JSON.stringify({
-      vendor_id: await vendorId(),
+      vendor_id: (await orderVendor(img)).id,
       bill_number: str(img, 'artistInvoiceNo'),
       reference_number: ref,
       date: dubaiToday(),
@@ -619,17 +627,17 @@ async function payVendor(img: Img) {
   const r = await zoho('/vendorpayments', {
     method: 'POST',
     body: JSON.stringify({
-      vendor_id: await vendorId(),
+      vendor_id: (await orderVendor(img)).id,
       payment_mode: 'banktransfer',
       amount: balance,
       date: dubaiToday(),
       reference_number: payRef,
-      description: `Payment to ${VENDOR_NAME} for ${ref}`,
+      description: `Payment to ${vendorName(img)} for ${ref}`,
       bills: [{ bill_id: billId, amount_applied: balance }],
     }),
   });
   if (!r.ok || !r.body.vendorpayment) throw new Error(`Zoho vendor payment failed (${r.status}): ${r.body.message}`);
-  console.log(`Recorded AED ${balance} payment to ${VENDOR_NAME} for ${ref}`);
+  console.log(`Recorded AED ${balance} payment to ${vendorName(img)} for ${ref}`);
   return { id: r.body.vendorpayment.payment_id, amount: balance };
 }
 
@@ -653,7 +661,7 @@ async function purchaseSteps(start: Img) {
         purchaseState: 'ORDERED',
         zohoPO: po.number,
         zohoPOId: po.id,
-        purchaseMessage: `${po.number}: ${VENDOR_NAME} · AED ${po.total.toLocaleString('en-US')} owed when his invoice arrives (price fixed)`,
+        purchaseMessage: `${po.number}: ${vendorName(img)} · AED ${po.total.toLocaleString('en-US')} owed when the artist's invoice arrives (price fixed)`,
       });
       img = { ...img, zohoPO: { S: po.number }, zohoPOId: { S: po.id } };
     }
@@ -664,7 +672,7 @@ async function purchaseSteps(start: Img) {
         const state = await keepAsDraft(`/bills/${bill.id}`, bill.status);
         await writeBack(id, {
           purchaseState: 'BILLED', zohoBill: bill.number, zohoBillId: bill.id,
-          purchaseMessage: `Test mode: ${state === 'draft' ? 'draft' : 'void (test)'} bill ${bill.number} from ${VENDOR_NAME} · AED ${bill.total.toLocaleString('en-US')}. Payment to Siva is not recorded while testing.`,
+          purchaseMessage: `Test mode: ${state === 'draft' ? 'draft' : 'void (test)'} bill ${bill.number} from ${vendorName(img)} · AED ${bill.total.toLocaleString('en-US')}. Payment to the artist is not recorded while testing.`,
         });
         return;
       }
@@ -679,7 +687,7 @@ async function purchaseSteps(start: Img) {
         purchaseState: 'BILLED',
         zohoBill: bill.number,
         zohoBillId: bill.id,
-        purchaseMessage: `Bill ${bill.number} from ${VENDOR_NAME} · AED ${bill.total.toLocaleString('en-US')} to pay`,
+        purchaseMessage: `Bill ${bill.number} from ${vendorName(img)} · AED ${bill.total.toLocaleString('en-US')} to pay`,
       });
       img = { ...img, zohoBill: { S: bill.number }, zohoBillId: { S: bill.id } };
     }
@@ -688,7 +696,7 @@ async function purchaseSteps(start: Img) {
       await writeBack(id, {
         purchaseState: 'ARTIST_PAID',
         zohoVendorPaymentId: pay.id,
-        purchaseMessage: `${VENDOR_NAME} paid${pay.amount ? ` AED ${pay.amount.toLocaleString('en-US')}` : ''} (ref ${str(img, 'artistPaidRef')}) against bill ${str(img, 'zohoBill')}`,
+        purchaseMessage: `${vendorName(img)} paid${pay.amount ? ` AED ${pay.amount.toLocaleString('en-US')}` : ''} (ref ${str(img, 'artistPaidRef')}) against bill ${str(img, 'zohoBill')}`,
       });
     }
   } catch (err) {
@@ -1060,14 +1068,19 @@ function artistStage(e: Img, c: Img | undefined) {
   }
   const status = str(e, 'status') || 'RECEIVED';
   if (status === 'CANCELLED') return { stage: 'CLOSED', label: 'Not going ahead' };
-  if (num(c, 'artistPriceInr')) return { stage: 'PRICED', label: status === 'PAID' ? 'Customer paid · order coming' : 'Price given · waiting for customer' };
+  if (num(c, 'artistPriceInr') || num(c, 'artistPriceAed')) return { stage: 'PRICED', label: status === 'PAID' ? 'Customer paid · order coming' : 'Price given · waiting for customer' };
   return { stage: 'NEEDED', label: 'Price needed' };
 }
 
 async function artistList() {
   const table = process.env.ENQUIRY_TABLE;
   if (!table) throw new Error('ENQUIRY_TABLE is not configured');
-  const enquiries = (await scanAll(table)).filter((e) => ['PRICE', 'COMMISSION'].includes(str(e, 'kind')));
+  // Siva's desk: orders not allocated to another artist.
+  const enquiries = (await scanAll(table)).filter((e) => ['PRICE', 'COMMISSION'].includes(str(e, 'kind')) && !str(e, 'artistId'));
+  return artistRows(enquiries);
+}
+
+async function artistRows(enquiries: Img[]) {
   const costing = await costingFor(enquiries.map((e) => str(e, 'id')));
   return enquiries
     .map((e) => {
@@ -1084,6 +1097,7 @@ async function artistList() {
         brief,
         hasPhoto: str(e, 'kind') === 'COMMISSION' && !!str(e, 'fileKey'),
         artistPriceInr: num(c, 'artistPriceInr'),
+        artistPriceAed: num(c, 'artistPriceAed'),
         artistReadyBy: str(c, 'artistReadyBy'),
         artistNote: str(c, 'artistNote'),
         locked: !!str(e, 'zohoPOId'),
@@ -1105,7 +1119,7 @@ async function artistList() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-async function artistQuote(args: ApiEvent['arguments'], by = 'Siva') {
+async function artistQuote(args: ApiEvent['arguments'], by = 'Siva', currency: 'INR' | 'AED' = 'INR') {
   const id = args.id ?? '';
   const enquiryTable = process.env.ENQUIRY_TABLE;
   const costingTable = process.env.COSTING_TABLE;
@@ -1115,7 +1129,7 @@ async function artistQuote(args: ApiEvent['arguments'], by = 'Siva') {
   if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Enquiry not found');
   if (str(e, 'zohoPOId')) throw new Error('Already ordered: the price can no longer change. Contact Kalai Art House.');
   const price = Number(args.priceInr);
-  if (!(price > 0) || price > 10_000_000) throw new Error('Enter your price in INR (a number above 0).');
+  if (!(price > 0) || price > 10_000_000) throw new Error(`Enter your price in ${currency} (a number above 0).`);
   const readyBy = String(args.readyBy ?? '').slice(0, 10);
   const note = String(args.note ?? '').slice(0, 1000);
   const now = new Date().toISOString();
@@ -1126,8 +1140,8 @@ async function artistQuote(args: ApiEvent['arguments'], by = 'Siva') {
     ':t': { S: 'Costing' },
   };
   values[':b'] = { S: by };
-  const sets = ['artistPriceInr = :p', 'artistAt = :a', 'artistBy = :b', 'updatedAt = :a', 'createdAt = if_not_exists(createdAt, :c)', '#tn = if_not_exists(#tn, :t)'];
-  const removes: string[] = [];
+  const sets = [`${currency === 'AED' ? 'artistPriceAed' : 'artistPriceInr'} = :p`, 'artistAt = :a', 'artistBy = :b', 'updatedAt = :a', 'createdAt = if_not_exists(createdAt, :c)', '#tn = if_not_exists(#tn, :t)'];
+  const removes: string[] = [currency === 'AED' ? 'artistPriceInr' : 'artistPriceAed'];
   if (readyBy) { sets.push('artistReadyBy = :r'); values[':r'] = { S: readyBy }; } else removes.push('artistReadyBy');
   if (note) { sets.push('artistNote = :n'); values[':n'] = { S: note }; } else removes.push('artistNote');
   await ddb.send(
@@ -1139,8 +1153,8 @@ async function artistQuote(args: ApiEvent['arguments'], by = 'Siva') {
       ExpressionAttributeValues: values,
     }),
   );
-  console.log(`Artist price INR ${price} saved for ${str(e, 'ref')}`);
-  return { ok: true, ref: str(e, 'ref'), artistPriceInr: price, artistReadyBy: readyBy, artistNote: note };
+  console.log(`Artist price ${currency} ${price} saved for ${str(e, 'ref')}`);
+  return { ok: true, ref: str(e, 'ref'), currency, artistPriceInr: currency === 'INR' ? price : null, artistPriceAed: currency === 'AED' ? price : null, artistReadyBy: readyBy, artistNote: note };
 }
 
 /** Who made an Artist desk change: Siva (ARTISTS) or the studio (ADMINS), for the audit trail. */
@@ -1173,7 +1187,7 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const awb = String(args.awb ?? '').trim().slice(0, 60);
   if (step === 'SHIPPED' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
   // Once sent, the courier and AWB are fixed for Siva; only Kalai Art House can correct them.
-  if (step === 'SHIPPED' && str(e, 'artistStage') === 'SHIPPED' && by === 'Siva') throw new Error('Already sent: the courier and AWB can only be corrected by Kalai Art House.');
+  if (step === 'SHIPPED' && str(e, 'artistStage') === 'SHIPPED' && !by.startsWith('Kalai Art House')) throw new Error('Already sent: the courier and AWB can only be corrected by Kalai Art House.');
   const now = new Date().toISOString();
   const set: Record<string, string> = { artistStage: PROGRESS[Math.max(target, current)], artistBy: by, updatedAt: now };
   // Earlier steps are filled in too if skipped (e.g. "Finished" without "Started").
@@ -1419,6 +1433,8 @@ async function onStreamRecord(rec: StreamRecord) {
   const oldPrice = old ? num(old, 'quotedPrice') : price;
   const locked = str(img, 'zohoPaymentId') !== '';
 
+  // A commission allocated to a portal artist: tell them.
+  await artistAssigned(img, old);
   // Price sent: create the Ziina payment link (unless the studio typed its own link), so the email carries it.
   await ziinaPriceLink(rec, img);
   // Refund approved on the desk and the customer paid by Ziina: send it back through Ziina.
@@ -1832,6 +1848,7 @@ async function sellerAction(ev: ApiEvent) {
   }
 
   if (['orders', 'orderReady', 'orderDispatched', 'orderDelivered'].includes(action)) return sellerOrders(action, d, me.sub, profile);
+  if (action.startsWith('commission')) return artistCommissions(action, d, me.sub, profile);
 
   const id = txt(d.id, 60);
   const l = plain(await getRow(L, { id: { S: id } }));
@@ -2298,6 +2315,41 @@ async function ziinaAdmin(ev: ApiEvent) {
     return { token, secret, test, connected: true };
   }
   throw new Error('Unknown action');
+}
+
+// ---------- Commissions allocated to a portal artist (instead of Siva) ----------
+// The studio picks the artist on the order (artistId). The artist sees the brief and the customer's photo (no contact
+// details), gives a price (INR if based in India, else AED), then Started → Finished → Sent to the frame shop.
+async function artistCommissions(action: string, d: Dict, sub: string, profile: Dict) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  if (profile.type !== 'ARTIST') throw new Error('Commissions are for artists.');
+  const by = String(profile.business || 'Artist');
+  const currency: 'INR' | 'AED' = profile.country === 'India' ? 'INR' : 'AED';
+  if (action === 'commissions') {
+    const mine = (await scanAll(table)).filter((e) => str(e, 'artistId') === sub && ['PRICE', 'COMMISSION'].includes(str(e, 'kind')));
+    return { currency, items: await artistRows(mine) };
+  }
+  const id = txt(d.id, 60);
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+  if (!got.Item || str(got.Item as Img, 'artistId') !== sub) throw new Error('Commission not found');
+  if (action === 'commissionQuote') return artistQuote({ id, priceInr: Number(d.price), readyBy: txt(d.readyBy, 10), note: txt(d.note, 1000) }, by, currency);
+  if (action === 'commissionProgress') return artistProgress({ id, step: txt(d.step, 20), courier: txt(d.courier, 60), awb: txt(d.awb, 60) }, by);
+  if (action === 'commissionPhoto') return artistPhoto(id);
+  throw new Error('Unknown action');
+}
+
+/** The studio allocated a commission to a portal artist: email them. */
+async function artistAssigned(img: Img, old: Img | undefined) {
+  const aid = str(img, 'artistId');
+  if (!aid || aid === str(old, 'artistId')) return;
+  try {
+    const p = plain(await getRow(mtables().S, { id: { S: aid } }));
+    if (!p?.email || !(await emailsOn())) return;
+    await sendMail({ to: String(p.email), subject: `New ${str(img, 'kind') === 'COMMISSION' ? 'commission' : 'artwork request'} for you: ${str(img, 'ref')}`,
+      lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has allocated <b>${h(str(img, 'title'))}</b> (${h(str(img, 'ref'))}) to you.`, `Please open <b>Commissions</b> in your portal, look at the brief${str(img, 'kind') === 'COMMISSION' ? ' and the customer\'s photo' : ''}, and give your price${p.country === 'India' ? ' in INR' : ' in AED'} and when it can be ready.`],
+      button: { label: 'Open my commissions', url: `${SITE}/seller.html#commissions` } });
+  } catch (err) { console.warn('Artist assignment email failed', err); }
 }
 
 // ---------- Artist desk: name the catalogue works ----------

@@ -98,7 +98,9 @@ function route() {
     return;
   }
   show('deskView');
-  pane(location.hash === '#orders' ? 'orders' : 'products');
+  $('tabComm').hidden = profile.type !== 'ARTIST';
+  pane(location.hash === '#orders' ? 'orders' : location.hash === '#commissions' ? 'commissions' : 'products');
+  if (profile.type === 'ARTIST' && location.hash !== '#commissions') call('commissions').then((r) => { comms = r.items || []; commCur = r.currency || 'INR'; const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length; $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions'; }).catch(() => {});
   $('dBiz').textContent = profile.business;
   $('dPhoto').hidden = !profile.photoKey;
   if (profile.photoKey) imgUrl(profile.photoKey).then((u) => { $('dPhoto').src = u; });
@@ -301,12 +303,75 @@ $('dNew').onclick = () => edit(null);
 let orders = [];
 const OST = { PAID: 'To send', SHIPPED: 'Dispatched', DELIVERED: 'Delivered', REFUNDED: 'Refunded', REPLACEMENT: 'Replacement' };
 function pane(p) {
-  $('productsPane').hidden = p !== 'orders' ? false : true;
+  if (p === 'commissions' && profile?.type !== 'ARTIST') p = 'products';
+  $('productsPane').hidden = p !== 'products';
   $('ordersPane').hidden = p !== 'orders';
-  $('tabProducts').setAttribute('aria-pressed', String(p !== 'orders'));
+  $('commPane').hidden = p !== 'commissions';
+  $('tabProducts').setAttribute('aria-pressed', String(p === 'products'));
   $('tabOrders').setAttribute('aria-pressed', String(p === 'orders'));
-  try { history.replaceState(null, '', p === 'orders' ? '#orders' : location.pathname); } catch { /* ignore */ }
+  $('tabComm').setAttribute('aria-pressed', String(p === 'commissions'));
+  try { history.replaceState(null, '', p === 'products' ? location.pathname + location.search : '#' + p); } catch { /* ignore */ }
   if (p === 'orders') loadOrders();
+  if (p === 'commissions') loadComms();
+}
+$('tabComm').onclick = () => pane('commissions');
+
+// ---------- Commissions allocated to me (artists) ----------
+let comms = [];
+let commCur = 'INR';
+const STEP_LABEL = { STARTED: 'Started', FINISHED: 'Finished', SHIPPED: 'Sent to frame shop' };
+async function loadComms() {
+  $('cList').innerHTML = '<p class="muted">Loading…</p>';
+  try { const r = await call('commissions'); comms = r.items || []; commCur = r.currency || 'INR'; drawComms(); }
+  catch (ex) { $('cList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
+}
+function drawComms() {
+  const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length;
+  $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions';
+  if (!comms.length) { $('cList').innerHTML = '<p class="muted">Nothing allocated to you yet. We email you when we do.</p>'; return; }
+  const price = (x) => (commCur === 'AED' ? x.artistPriceAed : x.artistPriceInr);
+  $('cList').innerHTML = comms.map((x) => {
+    const p = price(x);
+    const canPrice = !x.locked && !['CLOSED'].includes(x.stage);
+    const canWork = x.ordered && !x.stopped && !x.onHold && x.progress !== 'SHIPPED';
+    return `<article class="ocard" data-c="${esc(x.id)}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(x.title)}</h3><span class="st ${x.stage === 'NEEDED' ? 'SUBMITTED' : x.stage === 'PAID' ? 'APPROVED' : ''}">${esc(x.label)}</span><span class="muted" style="margin-left:auto;font-family:var(--mono)">${esc(x.ref)} · ${esc(dd(x.createdAt))}</span></div>
+      ${x.brief?.length ? `<div class="to">${x.brief.map((b) => `<div><b>${esc(b.k)}:</b> ${esc(b.v)}</div>`).join('')}</div>` : ''}
+      ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo>View the customer's reference photo</button> <span class="muted" data-pm></span></div>` : ''}
+      ${p != null ? `<div>Your price: <b>${commCur} ${Number(p).toLocaleString('en-IN')}</b>${x.artistReadyBy ? ` · ready by ${esc(x.artistReadyBy)}` : ''}${x.locked ? ' · fixed (order placed)' : ''}</div>` : ''}
+      ${canPrice ? `<form class="acts" data-price novalidate><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Your price (${commCur})</span><input name="price" type="number" min="1" step="1" value="${p ?? ''}"></label>
+        <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Ready by</span><input name="readyBy" type="date" value="${esc(x.artistReadyBy || '')}"></label>
+        <label class="field" style="gap:2px;flex:1"><span style="font-size:11px;font-weight:700">Note (optional)</span><input name="note" value="${esc(x.artistNote || '')}" style="width:100%"></label>
+        <button class="btn small" type="submit">${p != null ? 'Update price' : 'Send price'}</button></form>` : ''}
+      ${x.ordered ? `<div class="muted" style="font-size:12px">${['STARTED', 'FINISHED', 'SHIPPED'].map((s) => `${x.progress && ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(x.progress) >= ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(s) ? '✓' : '○'} ${STEP_LABEL[s]}`).join(' · ')}${x.artistAwb ? ` · ${esc(x.artistCourier)} AWB ${esc(x.artistAwb)}` : ''}</div>` : ''}
+      ${canWork ? `<div class="acts">${!x.progress ? '<button class="btn small" type="button" data-step="STARTED">I have started</button>' : ''}${['', 'STARTED'].includes(x.progress || '') ? '<button class="btn small ghost" type="button" data-step="FINISHED">Finished</button>' : ''}
+        <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" placeholder="e.g. DHL"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">AWB</span><input data-f="awb"></label><button class="btn small ghost" type="button" data-step="SHIPPED">Sent to frame shop</button></div>` : ''}
+      <span class="err" data-m></span>
+    </article>`;
+  }).join('');
+  document.querySelectorAll('#cList .ocard').forEach((card) => {
+    const id = card.dataset.c;
+    const msg = card.querySelector('[data-m]');
+    card.querySelector('[data-photo]')?.addEventListener('click', async () => {
+      card.querySelector('[data-pm]').textContent = 'Opening…';
+      try { const r = await call('commissionPhoto', { id }); window.open(r.url, '_blank', 'noopener'); card.querySelector('[data-pm]').textContent = 'Opened in a new tab (link works 15 minutes).'; }
+      catch (ex) { card.querySelector('[data-pm]').textContent = ex.message; }
+    });
+    const f = card.querySelector('[data-price]');
+    if (f) f.onsubmit = async (e) => {
+      e.preventDefault(); msg.textContent = '';
+      const b = f.querySelector('button'); b.disabled = true;
+      try { await call('commissionQuote', { id, price: f.price.value, readyBy: f.readyBy.value, note: f.note.value }); await loadComms(); }
+      catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+    };
+    card.querySelectorAll('[data-step]').forEach((b) => {
+      b.onclick = async () => {
+        msg.textContent = ''; b.disabled = true;
+        try { await call('commissionProgress', { id, step: b.dataset.step, courier: card.querySelector('[data-f="courier"]')?.value.trim(), awb: card.querySelector('[data-f="awb"]')?.value.trim() }); await loadComms(); }
+        catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+      };
+    });
+  });
 }
 $('tabProducts').onclick = () => pane('products');
 $('tabOrders').onclick = () => pane('orders');
