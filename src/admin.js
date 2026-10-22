@@ -7,6 +7,7 @@ import { showCatalogue } from './catalogue.js';
 import { showMessages } from './messages.js';
 import { showMarket } from './market.js';
 import { showPromotions } from './promotions.js';
+import { showSettings } from './settings.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import outputs from '../amplify_outputs.json';
 
@@ -142,6 +143,7 @@ async function start() {
   if (location.hash === '#messages') showPane('messages', 'tabMessages');
   if (location.hash === '#sellers') showPane('sellers', 'tabSellers');
   if (location.hash === '#offers') showPane('offers', 'tabOffers');
+  if (location.hash === '#settings') showPane('settings', 'tabSettings');
   await loadRates();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
@@ -171,6 +173,7 @@ $('tabCatalogue').onclick = () => showPane('catalogue', 'tabCatalogue');
 $('tabMessages').onclick = () => showPane('messages', 'tabMessages');
 $('tabSellers').onclick = () => showPane('sellers', 'tabSellers');
 $('tabOffers').onclick = () => showPane('offers', 'tabOffers');
+$('tabSettings').onclick = () => showPane('settings', 'tabSettings');
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {
@@ -181,14 +184,16 @@ function showPane(pane, tabId) {
   $('messagesPane').hidden = pane !== 'messages';
   $('sellersPane').hidden = pane !== 'sellers';
   $('offersPane').hidden = pane !== 'offers';
-  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
+  $('settingsPane').hidden = pane !== 'settings';
+  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'tabSettings', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers', 'settings'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
   if (pane === 'catalogue') showCatalogue();
   if (pane === 'messages') showMessages();
   if (pane === 'sellers') showMarket();
   if (pane === 'offers') showPromotions();
+  if (pane === 'settings') showSettings();
 }
 
 // ---------- Feedback: customer reviews, publish to the website ----------

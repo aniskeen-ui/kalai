@@ -360,6 +360,14 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
+  // Website settings master (one row, id "site"): timings shown on the home page.
+  SiteSetting: a
+    .model({
+      heroSeconds: a.integer(), // home page picture changes every N seconds (default 10)
+      kuralSeconds: a.integer(), // Thirukkural card switches language every N seconds (default 10)
+    })
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
   // Public profile of an approved artist (written by the function on approval; no contact or bank details).
   ArtistProfile: a
     .model({

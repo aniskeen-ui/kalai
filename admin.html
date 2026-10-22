@@ -193,6 +193,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
       <button type="button" role="tab" id="tabSellers" aria-selected="false">Artists &amp; sellers</button>
       <button type="button" role="tab" id="tabOffers" aria-selected="false">Offers</button>
       <button type="button" role="tab" id="ratesBtn" aria-selected="false">Rates</button>
+      <button type="button" role="tab" id="tabSettings" aria-selected="false">Settings</button>
     </nav>
     <div id="ordersPane">
     <div class="bar">
@@ -273,6 +274,11 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
       <div id="cgList" class="cg-list"></div>
     </div>
 
+    <div id="settingsPane" hidden>
+      <div class="bar"><h1 style="font-size:28px;margin-right:auto">Settings</h1></div>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">Website timings. Changes apply the next time a visitor opens the website.</p>
+      <div id="setBox" style="display:grid;gap:14px"></div>
+    </div>
     <div id="offersPane" hidden>
       <div class="bar"><h1 style="font-size:28px;margin-right:auto">Offers</h1><a class="btn small ghost" href="/offers.html" target="_blank" rel="noopener">Open Offers page</a><button class="btn small" id="prNew" type="button">New offer</button></div>
       <p class="muted" style="font-size:12px;margin:0 0 8px">Each offer can show a banner across the top of the website, appear on the Offers page (art.pranixtechno.com/offers.html, easy to share), and carry a discount code that customers type on their order.</p>

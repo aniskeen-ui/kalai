@@ -72,7 +72,11 @@ nav.links a:hover{opacity:1;color:#e8c77f}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{background:var(--gold);color:#1d1b2b}}
 .hero-art{display:grid;grid-template-columns:1fr;gap:18px;max-width:440px;justify-self:end;width:100%}
 .hero-art img{width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:3px;box-shadow:0 18px 40px rgba(0,0,0,.45);background:#2a2640}
-.hero-art .b{width:72%;justify-self:start;margin-top:-56px;position:relative;border:6px solid #fbfaf6}
+.hero-art{position:relative}
+.hero-art img{border:6px solid #fbfaf6;transition:opacity 1.2s ease}
+.hero-art .next{position:absolute;inset:0;opacity:0}
+.hero-art .next.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.hero-art img{transition:none}}
 .promises{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:30px;font-size:13px;color:#cfc9e2}
 .promises span::before{content:"◆";color:#d9ad55;margin-right:8px;font-size:10px}
 
@@ -290,8 +294,8 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <div class="promises"><span>Duties paid, no charges at the door</span><span>Signed by the artist</span><span>Insured courier delivery</span></div>
   </div>
   <div class="hero-art" aria-hidden="true">
-    <img id="heroA" alt="Original watercolour">
-    <img id="heroB" class="b" alt="Original ink sketch">
+    <img id="heroA" alt="Original artwork">
+    <img id="heroB" class="next" alt="">
   </div>
 </div></section>
 
@@ -565,7 +569,15 @@ function rng(s){return()=>{s=(s*9301+49297)%233280;return s/233280}}
 function mk(p){const im=document.createElement("img");im.src=p.img;im.alt=p.name+", "+(p.medium||"original artwork");im.decoding="async";return im}
 
 /* hero */
-document.getElementById("heroA").src=PRODUCTS[1].img;document.getElementById("heroB").src=PRODUCTS[8].img;
+/* home page picture: one artwork, a different one at random every N seconds (Order management → Settings) */
+(function(){const a=document.getElementById("heroA"),b=document.getElementById("heroB");let cur=PRODUCTS[1]&&PRODUCTS[1].img,t=null,sec=10;
+  a.src=cur;
+  const pick=()=>{const pool=PRODUCTS.filter(p=>p.img&&p.img!==cur);return pool.length?pool[Math.floor(Math.random()*pool.length)]:null};
+  const next=()=>{if(document.hidden)return;const p=pick();if(!p)return;const im=new Image();im.onload=()=>{b.src=p.img;b.alt="";b.classList.add("on");
+    setTimeout(()=>{a.src=p.img;a.alt=p.name||"Original artwork";b.classList.remove("on")},1300);cur=p.img};im.src=p.img};
+  const start=()=>{clearInterval(t);if(sec>0)t=setInterval(next,sec*1000)};
+  window.kalaiHeroEvery=s=>{s=Number(s);if(Number.isFinite(s)&&s>=0){sec=s;start()}};
+  start();})();
 
 /* grid */
 let filter="all";

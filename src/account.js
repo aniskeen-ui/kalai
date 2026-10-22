@@ -14,6 +14,17 @@ import { cleanTitle } from './title.js';
 autoPhones();
 
 const client = generateClient();
+// Website settings master (Order management → Settings): timings for the home page.
+let kuralSec = 10;
+(async () => {
+  try {
+    const r = await client.models.SiteSetting.get({ id: 'site' }, { authMode: 'apiKey' });
+    const st = r.data;
+    if (!st) return;
+    if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
+    if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
+  } catch { /* defaults stay */ }
+})();
 const state = { user: null, email: '' };
 
 export const STATUS = {
@@ -754,16 +765,16 @@ async function showDailyMessage() {
     // Starts in Tamil for the kural (else the visitor's language), then changes language every 10 seconds.
     let lang = kural && langs.includes('ta') ? 'ta' : (langs.includes((navigator.language || 'en').slice(0, 2)) ? (navigator.language || 'en').slice(0, 2) : (langs.includes('en') ? 'en' : langs[0]));
     document.head.insertAdjacentHTML('beforeend', `<style>
-.kmsg{position:fixed;right:12px;bottom:12px;z-index:30;width:min(220px,calc(100vw - 24px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:7px 9px;display:grid;gap:4px;animation:kmsgIn .35s ease-out}
+.kmsg{position:fixed;right:12px;bottom:12px;z-index:30;text-align:center;width:min(220px,calc(100vw - 24px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:7px 9px;display:grid;gap:4px;animation:kmsgIn .35s ease-out}
 @keyframes kmsgIn{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
 .kmsg-img{display:flex;justify-content:center;margin-top:-2px}
 .kmsg-img img{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:#f7e7c1}
-.kmsg-head{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.kmsg-head b{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);margin-right:auto}
+.kmsg-head{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap}
+.kmsg-head b{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);flex-basis:100%}
 .kmsg-langs{display:flex;gap:2px}
 .kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:0 5px;font:inherit;font-size:9px;line-height:16px;cursor:pointer}
 .kmsg-langs button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1b2b}
-.kmsg-x{background:none;border:0;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
+.kmsg-x{position:absolute;top:4px;right:5px;background:none;border:0;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
 .kmsg p{margin:0;font-size:11px;line-height:1.45;white-space:pre-line;min-height:4.4em;transition:opacity .4s}
 .kmsg p.fade{opacity:0}
 .kmsg-bar{height:2px;background:var(--line);border-radius:2px;overflow:hidden}.kmsg-bar i{display:block;height:100%;width:0;background:var(--gold)}
@@ -793,14 +804,15 @@ async function showDailyMessage() {
         box.querySelectorAll('[data-l]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.l === lang)));
         tab.textContent = `${kural ? '📜' : '📢'} ${title(lang)}`;
         p.classList.remove('fade');
-        if (bar) { bar.classList.remove('run'); void bar.offsetWidth; if (!paused) bar.classList.add('run'); }
+        if (bar) { bar.classList.remove('run'); bar.style.animationDuration = `${kuralSec || 10}s`; bar.parentElement.hidden = !kuralSec; void bar.offsetWidth; if (!paused && kuralSec) bar.classList.add('run'); }
       };
       if (fade) { p.classList.add('fade'); setTimeout(put, 400); } else put();
     };
     // Every 10 seconds the next language; paused while the visitor hovers over it or it is closed.
     let paused = false;
     let timer = null;
-    const restart = () => { clearInterval(timer); if (langs.length > 1) timer = setInterval(() => { if (!paused && !box.hidden) show(langs[(langs.indexOf(lang) + 1) % langs.length]); }, 10_000); };
+    const restart = () => { clearInterval(timer); if (langs.length > 1 && kuralSec > 0) timer = setInterval(() => { if (!paused && !box.hidden) show(langs[(langs.indexOf(lang) + 1) % langs.length]); }, kuralSec * 1000); };
+    window.kalaiKuralRestart = restart;
     box.addEventListener('mouseenter', () => { paused = true; bar?.classList.remove('run'); });
     box.addEventListener('mouseleave', () => { paused = false; restart(); if (bar) { void bar.offsetWidth; bar.classList.add('run'); } });
     box.querySelectorAll('[data-l]').forEach((b) => { b.onclick = () => { show(b.dataset.l); restart(); }; });
