@@ -43,7 +43,7 @@ async function load() {
   try {
     [sellers, listings] = await Promise.all([listAll('SellerProfile'), listAll('Listing')]);
     const n = sellers.filter((s) => s.status === 'APPLIED').length + listings.filter((l) => l.status === 'SUBMITTED').length;
-    $('tabSellers').textContent = n ? `Sellers (${n})` : 'Sellers';
+    $('tabSellers').textContent = n ? `Artists & sellers (${n})` : 'Artists & sellers';
     draw();
   } catch (ex) { $('mkBody').innerHTML = `<p class="err">Could not load: ${esc(ex.message)}</p>`; }
 }
@@ -67,11 +67,17 @@ function draw() {
   const queueL = listings.filter((l) => l.status === 'SUBMITTED');
   let html = '';
   if (view === 'queue') {
-    html = (queueS.length ? `<h2 style="font-size:17px;margin:4px 0">Seller applications</h2>${queueS.map(sellerCard).join('')}` : '')
+    const qa = queueS.filter((s) => s.type === 'ARTIST'), qs = queueS.filter((s) => s.type !== 'ARTIST');
+    html = (qa.length ? `<h2 style="font-size:17px;margin:4px 0">Artist applications</h2>${qa.map(sellerCard).join('')}` : '')
+      + (qs.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Seller applications</h2>${qs.map(sellerCard).join('')}` : '')
       + (queueL.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Listings to approve</h2>${queueL.map(listingCard).join('')}` : '')
       || '<p class="muted">Nothing waiting for approval.</p>';
-  } else if (view === 'sellers') {
-    html = sellers.length ? sellers.sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt))).map(sellerCard).join('') : '<p class="muted">No sellers yet. Share art.pranixtechno.com/seller.html with craftspeople who want to sell.</p>';
+  } else if (view === 'artists' || view === 'sellers') {
+    const wantArtist = view === 'artists';
+    const these = sellers.filter((s) => (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
+    html = these.length ? these.map(sellerCard).join('') : wantArtist
+      ? '<p class="muted">No artists yet. Share art.pranixtechno.com/seller.html?as=artist (or the “Become an artist” page) with artists.</p>'
+      : '<p class="muted">No sellers yet. Share art.pranixtechno.com/seller.html with craftspeople who want to sell.</p>';
   } else {
     html = listings.length ? listings.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map(listingCard).join('') : '<p class="muted">No listings yet.</p>';
   }
