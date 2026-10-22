@@ -8,6 +8,9 @@ import {
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
+import { autoPhones, countryRegionHtml, wireRegion, addressLine } from './phone.js';
+
+autoPhones();
 
 const client = generateClient();
 const state = { user: null, email: '' };
@@ -430,12 +433,11 @@ function replacementTracker(e) {
 }
 
 /* ---------- delivery address (from the price onwards, until it ships) ---------- */
-const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
 const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'FRAMING', 'REPLACEMENT'];
 function addressBlock(e) {
   if (!(ADDR_OPEN.includes(e.status) || (e.kind === 'MARKET' && (e.status || 'RECEIVED') === 'RECEIVED')) || e.cancelState === 'REQUESTED') return '';
   if (e.deliveryAddress) {
-    return `<div class="addr"><b>Deliver to</b> ${esc(e.deliveryName)} · ${esc(e.deliveryPhone)}<br>${esc(e.deliveryAddress)}${e.deliveryLandmark ? ` (near ${esc(e.deliveryLandmark)})` : ''}, ${esc(e.deliveryEmirate)}
+    return `<div class="addr"><b>Deliver to</b> ${esc(e.deliveryName)} · ${esc(e.deliveryPhone)}<br>${esc(addressLine(e))}
       <button type="button" class="req-open" data-addr="${esc(e.id)}">Change</button></div>`;
   }
   const urgent = e.status !== 'PRICE_SENT';
@@ -445,9 +447,9 @@ function addressBlock(e) {
 function addressForm(e) {
   return `<form class="req addr-form" novalidate>
     <b>Delivery address</b>
-    <div class="two"><div class="field"><label>Receiver's name</label><input name="name" value="${esc(e.deliveryName || e.customerName)}" autocomplete="name"></div>
-      <div class="field"><label>Receiver's mobile</label><input name="phone" value="${esc(e.deliveryPhone || e.phone)}" inputmode="tel" autocomplete="tel"></div></div>
-    <div class="field"><label>Emirate</label><select name="emirate"><option value="">Choose…</option>${EMIRATES.map((x) => `<option ${x === e.deliveryEmirate ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>Receiver's name</label><input name="name" value="${esc(e.deliveryName || e.customerName)}" autocomplete="name"></div>
+    <div class="field"><label>Receiver's mobile</label><input name="phone" value="${esc(e.deliveryPhone || e.phone)}" inputmode="tel" autocomplete="tel"></div>
+    <div class="two">${countryRegionHtml({ country: e.deliveryCountry || 'UAE', region: e.deliveryEmirate, pin: e.deliveryPin, prefix: 'ad' + esc(e.id).slice(0, 6) })}</div>
     <div class="field"><label>Address</label><textarea name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(e.deliveryAddress)}</textarea></div>
     <div class="field"><label>Landmark (optional)</label><input name="landmark" value="${esc(e.deliveryLandmark)}" placeholder="e.g. near Spinneys"></div>
     <div class="acct-err" role="alert"></div>
@@ -462,18 +464,20 @@ function wireAddress(root, items) {
       box.hidden = true;
       box.insertAdjacentHTML('afterend', addressForm(e));
       const f = box.nextElementSibling;
+      wireRegion(f);
       f.querySelector('[data-close]').onclick = () => { f.remove(); box.hidden = false; };
       f.onsubmit = async (ev) => {
         ev.preventDefault();
         const err = f.querySelector('.acct-err');
-        const v = { name: f.name.value.trim(), phone: f.phone.value.trim(), emirate: f.emirate.value, address: f.address.value.trim(), landmark: f.landmark.value.trim() };
-        const why = !v.name ? "Add the receiver's name." : v.phone.replace(/\D/g, '').length < 7 ? 'Add a mobile number the courier can call.' : !v.emirate ? 'Choose the emirate.' : v.address.length < 10 ? 'Add the full address: villa or flat, building, street and area.' : '';
+        const v = { name: f.name.value.trim(), phone: f.phone.value.trim(), country: f.country.value, emirate: f.emirate.value, pin: f.pin.value.trim(), address: f.address.value.trim(), landmark: f.landmark.value.trim() };
+        const india = v.country === 'India';
+        const why = !v.name ? "Add the receiver's name." : v.phone.replace(/\D/g, '').length < 9 ? 'Add a mobile number the courier can call.' : !v.emirate ? (india ? 'Choose the state.' : 'Choose the emirate.') : india && !/^\d{6}$/.test(v.pin) ? 'Add the 6-digit PIN code.' : v.address.length < 10 ? 'Add the full address: house or flat, building, street and area.' : '';
         if (why) { err.textContent = why; return; }
         const btn = f.querySelector('button[type=submit]'); btn.disabled = true; err.textContent = '';
         try {
-          const { errors } = await client.mutations.customerAddress({ id: e.id, ...v, landmark: v.landmark || null });
+          const { errors } = await client.mutations.customerAddress({ id: e.id, ...v, landmark: v.landmark || null, pin: india ? v.pin : null });
           if (errors?.length) throw new Error(errors[0].message);
-          Object.assign(e, { deliveryName: v.name, deliveryPhone: v.phone, deliveryEmirate: v.emirate, deliveryAddress: v.address, deliveryLandmark: v.landmark });
+          Object.assign(e, { deliveryName: v.name, deliveryPhone: v.phone, deliveryCountry: v.country, deliveryEmirate: v.emirate, deliveryPin: india ? v.pin : '', deliveryAddress: v.address, deliveryLandmark: v.landmark });
           showList();
         } catch (ex) { err.textContent = ex.message || 'Could not save the address.'; btn.disabled = false; }
       };
@@ -639,18 +643,19 @@ async function showOrder(p) {
     try {
       const r = await client.models.Enquiry.list({ limit: 100 });
       const withAddr = (r.data || []).filter((x) => x.deliveryAddress && (!x.email || !state.email || x.email === state.email)).sort((a, b) => String(b.addressAt || '').localeCompare(String(a.addressAt || '')))[0];
-      lastAddr = withAddr ? { name: withAddr.deliveryName, phone: withAddr.deliveryPhone, emirate: withAddr.deliveryEmirate, address: withAddr.deliveryAddress, landmark: withAddr.deliveryLandmark } : {};
+      lastAddr = withAddr ? { name: withAddr.deliveryName, phone: withAddr.deliveryPhone, country: withAddr.deliveryCountry || 'UAE', emirate: withAddr.deliveryEmirate, pin: withAddr.deliveryPin, address: withAddr.deliveryAddress, landmark: withAddr.deliveryLandmark } : {};
     } catch { lastAddr = {}; }
   }
   const a = lastAddr || {};
   const f = form(`
     <div style="display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:center">${p.img ? `<img src="${esc(p.img)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:4px">` : '<span></span>'}
-      <div><b>${esc(p.title)}</b><div class="acct-info">by ${esc(p.seller)} · AED ${Number(p.price).toLocaleString('en-US')} each, delivery in the UAE included</div></div></div>
+      <div><b>${esc(p.title)}</b><div class="acct-info">by ${esc(p.seller)} · AED ${Number(p.price).toLocaleString('en-US')} each, delivery within the UAE included</div></div></div>
     <form novalidate>
       <div class="field"><label for="moQty">Quantity</label><select id="moQty" name="qty">${Array.from({ length: max }, (_, i) => `<option>${i + 1}</option>`).join('')}</select></div>
       <div class="field"><label for="moName">Receiver's name</label><input id="moName" name="name" autocomplete="name" value="${esc(a.name)}"></div>
       <div class="field"><label for="moPhone">Receiver's mobile</label><input id="moPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(a.phone)}"></div>
-      <div class="field"><label for="moEmi">Emirate</label><select id="moEmi" name="emirate"><option value="">Choose…</option>${EMIRATES.map((x) => `<option ${x === a.emirate ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      ${countryRegionHtml({ country: a.country || 'UAE', region: a.emirate, pin: a.pin, prefix: 'mo' })}
+      <p class="acct-info" id="moIndia" style="margin:0;font-size:12px" hidden>Delivery to India: we confirm the shipping charge with your payment link, before you pay.</p>
       <div class="field"><label for="moAddr">Address</label><textarea id="moAddr" name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(a.address)}</textarea></div>
       <div class="field"><label for="moLand">Landmark (optional)</label><input id="moLand" name="landmark" value="${esc(a.landmark)}"></div>
       <div class="field"><label for="moNote">Note to the maker (optional)</label><input id="moNote" name="note" maxlength="300"></div>
@@ -661,17 +666,20 @@ async function showOrder(p) {
     </form>
     <button class="acct-link" id="moBack">Back to My enquiries &amp; orders</button>`,
   async (fd) => {
-    const data = Object.fromEntries(['qty', 'name', 'phone', 'emirate', 'address', 'landmark', 'note'].map((k) => [k, String(fd.get(k) || '').trim()]));
+    const data = Object.fromEntries(['qty', 'name', 'phone', 'country', 'emirate', 'pin', 'address', 'landmark', 'note'].map((k) => [k, String(fd.get(k) || '').trim()]));
     const r = await client.mutations.marketOrder({ data: JSON.stringify({ listingId: p.id, ...data }) });
     if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
     const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-    lastAddr = { name: data.name, phone: data.phone, emirate: data.emirate, address: data.address, landmark: data.landmark };
+    lastAddr = { name: data.name, phone: data.phone, country: data.country, emirate: data.emirate, pin: data.pin, address: data.address, landmark: data.landmark };
     currentTab = 'ENQ';
     await showList();
     body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Order <b>${esc(out.ref)}</b> placed: AED ${Number(out.total).toLocaleString('en-US')}. We'll email you a secure payment link shortly.</p>`);
   });
   const total = () => { body.querySelector('#moTotal').innerHTML = `Total: <b>AED ${(Number(p.price) * Number(f.qty.value)).toLocaleString('en-US')}</b>`; };
   f.qty.onchange = total; total();
+  wireRegion(f);
+  const india = () => { body.querySelector('#moIndia').hidden = f.country.value !== 'India'; };
+  f.country.addEventListener('change', india); india();
   body.querySelector('#moBack').onclick = showList;
   if (!a.name) f.name.focus();
 }

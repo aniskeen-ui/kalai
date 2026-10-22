@@ -30,7 +30,7 @@ type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImag
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
   identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { data?: string | null; text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
+  arguments: { data?: string | null; country?: string | null; pin?: string | null; text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -707,7 +707,7 @@ function challanNotes(img: Img) {
     `Kalai Art House order ${q.ref}${str(img, 'zohoInvoice') ? ` · invoice ${str(img, 'zohoInvoice')}` : ''}`,
     `Courier: ${str(img, 'courierName') || '-'} · AWB / tracking: ${str(img, 'trackingNo') || '-'}`,
     str(img, 'deliveryAddress')
-      ? `Deliver to: ${str(img, 'deliveryName') || str(img, 'customerName')} · ${str(img, 'deliveryPhone') || str(img, 'phone')}\n${str(img, 'deliveryAddress')}${str(img, 'deliveryLandmark') ? ` (near ${str(img, 'deliveryLandmark')})` : ''}, ${str(img, 'deliveryEmirate')}`
+      ? `Deliver to: ${str(img, 'deliveryName') || str(img, 'customerName')} · ${str(img, 'deliveryPhone') || str(img, 'phone')}\n${addressText(img)}`
       : `Deliver to: ${str(img, 'customerName')} · ${str(img, 'phone')}`,
   ].join('\n');
 }
@@ -1728,19 +1728,43 @@ async function sellerAction(ev: ApiEvent) {
   }
 
   if (action === 'apply') {
+    // Artists and sellers apply the same way; the type is fixed once approved.
+    const type = profile?.type && profile.status !== 'REJECTED' ? String(profile.type) : d.type === 'ARTIST' ? 'ARTIST' : 'SELLER';
+    const country = d.country === 'India' ? 'India' : 'UAE';
     const f = {
+      type, country,
       business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), tradeLicence: txt(d.tradeLicence, 60),
-      emirate: txt(d.emirate, 30), address: txt(d.address, 300), about: txt(d.about, 1000), categories: txt(d.categories, 200),
+      emirate: txt(d.emirate, 60), address: txt(d.address, 300), about: txt(d.about, 2000), categories: txt(d.categories, 200),
       bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
+      accountNumber: txt(d.accountNumber, 30).replace(/\s+/g, ''), ifsc: txt(d.ifsc, 20).toUpperCase().replace(/\s+/g, ''),
+      mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', portfolio: txt(d.portfolio, 300),
+      sampleKeys: '[]',
     };
-    if (!f.business || !f.contactName || f.phone.replace(/\D/g, '').length < 7) throw new Error('Add your business name, contact name and mobile.');
-    if (!f.about) throw new Error('Tell us what you sell.');
-    if (f.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(f.iban)) throw new Error('Check the IBAN (e.g. AE07 0331 2345 6789 0123 456).');
+    const artist = type === 'ARTIST';
+    if (!f.business || !f.contactName || f.phone.replace(/\D/g, '').length < 9) throw new Error(artist ? 'Add your artist name, full name and mobile.' : 'Add your business name, contact name and mobile.');
+    if (!f.about) throw new Error(artist ? 'Tell us about yourself and your art.' : 'Tell us what you sell.');
+    if (f.portfolio && !/^https?:\/\/\S+$/i.test(f.portfolio)) throw new Error('The portfolio link should start with https://');
+    if (country === 'UAE' && f.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(f.iban)) throw new Error('Check the IBAN (e.g. AE07 0331 2345 6789 0123 456).');
+    if (country === 'India' && f.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(f.ifsc)) throw new Error('Check the IFSC code (e.g. SBIN0001234).');
+    if (country === 'India' && f.accountNumber && !/^\d{9,18}$/.test(f.accountNumber)) throw new Error('Check the account number (9 to 18 digits).');
+    let samples: string[] = [];
+    try { samples = (JSON.parse(String(d.sampleKeys ?? '[]')) as unknown[]).filter((k): k is string => typeof k === 'string' && k.startsWith('market/')).slice(0, 8); } catch { samples = []; }
+    if (artist && !f.mediums) throw new Error('Tick the mediums you work in.');
+    if (artist && samples.length < 3) throw new Error('Upload at least 3 photos of your work.');
+    f.sampleKeys = JSON.stringify(samples);
     const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : 'APPLIED';
     const row = { ...(profile ?? {}), ...f, id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
     await putRow(S, row);
     if (!profile || profile.status === 'REJECTED') {
-      await sendMail({ to: STUDIO_EMAIL, subject: `New seller application: ${f.business}`, lines: [`<b>${h(f.business)}</b> · ${h(f.contactName)} · ${h(f.phone)} · ${h(me.email)}`, `Sells: ${h(f.about)}`, f.tradeLicence ? `Trade licence: ${h(f.tradeLicence)}` : 'No trade licence given.', 'Approve or reject under Sellers, and set the commission %.'], button: { label: 'Open Sellers', url: `${SITE}/admin.html#sellers` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+      await sendMail({
+        to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : 'seller'} application: ${f.business}`,
+        lines: [`<b>${h(f.business)}</b> · ${h(f.contactName)} · ${h(f.phone)} · ${h(me.email)} · ${h(f.emirate)}${country === 'India' ? ', India' : ''}`,
+          artist ? `Mediums: ${h(f.mediums)} · ${h(f.experience || 'experience not given')} · commissions: ${f.commissions === 'YES' ? 'yes' : 'no'} · ${samples.length} sample photos` : `Sells: ${h(f.about)}`,
+          artist ? `About: ${h(f.about)}` : f.tradeLicence ? `Trade licence: ${h(f.tradeLicence)}` : 'No trade licence given.',
+          f.portfolio ? `Portfolio: ${h(f.portfolio)}` : '',
+          'Approve or reject under Sellers, and set the commission %.'].filter(Boolean),
+        button: { label: 'Open Sellers', url: `${SITE}/admin.html#sellers` }, footer: 'Studio notification from art.pranixtechno.com',
+      }).catch(() => {});
     }
     return { profile: row };
   }
@@ -1817,7 +1841,7 @@ async function marketAdmin(ev: ApiEvent) {
       const pct = numIn(d.commissionPct, 90), fee = numIn(d.kalaiDeliveryFee, 1000);
       const row = { ...p, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
-      await sendMail({ to: String(p.email ?? ''), subject: 'Your Kalai Art House seller account is approved', lines: [`Hello ${h(p.contactName)},`, `Welcome to the Kalai Art House marketplace. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
+      await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'ARTIST' ? 'artist' : 'seller'} account is approved`, lines: [`Hello ${h(p.contactName)},`, `Welcome to Kalai Art House${p.type === 'ARTIST' ? ' as one of our artists' : ''}. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, p.type === 'ARTIST' ? 'You can now list your artworks with their price. Each one is checked by us before it goes live.' : 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
       return { profile: row };
     }
     if (action === 'rejectSeller' || action === 'suspendSeller') {
@@ -1878,20 +1902,16 @@ async function marketOrder(ev: ApiEvent) {
   if (seller?.status !== 'APPROVED') throw new Error('Sorry, this item is no longer available.');
   const qty = Math.max(1, Math.floor(numIn(d.qty, 99)));
   if (qty > Number(l.stock ?? 0)) throw new Error(Number(l.stock ?? 0) > 0 ? `Only ${l.stock} left in stock.` : 'Sorry, this item is out of stock.');
-  const name = txt(d.name, 80), phone = txt(d.phone, 30), emirate = txt(d.emirate, 30), address = txt(d.address, 400), landmark = txt(d.landmark, 120);
-  if (!name) throw new Error('Add the name of the person receiving it.');
-  if (phone.replace(/\D/g, '').length < 7) throw new Error('Add a mobile number the courier can call.');
-  if (!EMIRATES.includes(emirate)) throw new Error('Choose the emirate.');
-  if (address.length < 10) throw new Error('Add the full address: villa or flat number, building, street and area.');
+  const { name, phone, country, region: emirate, pin, address, landmark } = checkAddress(d);
   const unit = Number(l.customerPrice), total = r2(unit * qty), sellerAmount = r2(Number(l.sellerPrice) * qty);
   const ref = newRef();
   const now = new Date().toISOString();
-  const details = { Item: String(l.title), Maker: String(l.sellerName ?? seller.business), Quantity: String(qty), 'Unit price': `AED ${unit}`, Delivery: l.deliveryBy === 'KALAI' ? 'Kalai Art House delivers' : 'The maker delivers', Note: txt(d.note, 300) };
+  const details = { Item: String(l.title), Maker: String(l.sellerName ?? seller.business), Quantity: String(qty), 'Unit price': `AED ${unit}`, Delivery: l.deliveryBy === 'KALAI' ? 'Kalai Art House delivers' : 'The maker delivers', Country: country === 'India' ? 'India: add the shipping to India to the price before sending the payment link' : '', Note: txt(d.note, 300) };
   const row: Dict = {
     id: crypto.randomUUID(), __typename: 'Enquiry', createdAt: now, updatedAt: now, owner: me.owner,
     ref, kind: 'MARKET', title: String(l.title), details: JSON.stringify(details), status: 'RECEIVED',
     customerName: txt(d.customerName, 80) || name, phone, email: me.email, quotedPrice: total,
-    deliveryName: name, deliveryPhone: phone, deliveryEmirate: emirate, deliveryAddress: address, deliveryLandmark: landmark, addressAt: now, addressBy: 'Customer',
+    deliveryName: name, deliveryPhone: phone, deliveryCountry: country, deliveryEmirate: emirate, deliveryPin: pin, deliveryAddress: address, deliveryLandmark: landmark, addressAt: now, addressBy: 'Customer',
     listingId: String(l.id), sellerId: String(l.sellerId), sellerName: String(l.sellerName ?? seller.business), qty, unitPrice: unit, deliveryBy: String(l.deliveryBy),
     sellerAmount, commissionPct: Number(l.commissionPct ?? 0),
   };
@@ -1969,7 +1989,7 @@ async function marketSteps(img: Img) {
           to: String(p.email), subject: `New order: ${str(img, 'title')} × ${qty} (${ref})`,
           lines: [`Hello ${h(p.contactName)},`, `You have a paid order <b>${h(ref)}</b>: <b>${h(str(img, 'title'))}</b> × ${qty}. You receive <b>${aed(amountDue)}</b> after delivery.`,
             kalai ? `Kalai Art House collects it from you${p.address ? ` at ${h(p.address)}` : ''}. Please pack it well and mark it <b>Ready for pickup</b> in the seller portal.`
-              : `Please deliver it to <b>${h(str(img, 'deliveryName'))}</b>, ${h(str(img, 'deliveryPhone'))}, ${h(str(img, 'deliveryAddress'))}${str(img, 'deliveryLandmark') ? ` (near ${h(str(img, 'deliveryLandmark'))})` : ''}, ${h(str(img, 'deliveryEmirate'))} within 2 working days, then enter the courier and tracking number in the seller portal.`],
+              : `Please deliver it to <b>${h(str(img, 'deliveryName'))}</b>, ${h(str(img, 'deliveryPhone'))}, ${h(addressText(img))} within 2 working days, then enter the courier and tracking number in the seller portal.`],
           button: { label: 'Open the seller portal', url: `${SITE}/seller.html#orders` },
         }).catch((err) => console.warn('Seller email failed', err));
       }
@@ -2035,7 +2055,7 @@ async function sellerOrders(action: string, d: Dict, sellerId: string, profile: 
       readyAt: str(e, 'sellerReadyAt'), dispatchedAt: str(e, 'sellerDispatchedAt'), courier: str(e, 'courierName'), awb: str(e, 'trackingNo'), deliveredAt: str(e, 'deliveredAt'),
       onHold: str(e, 'cancelState') === 'REQUESTED', cancelled: str(e, 'purchaseState') === 'CANCELLED',
       bill: str(e, 'zohoSellerBill'), paidRef: str(e, 'zohoSellerPaymentId') ? str(e, 'sellerPaidRef') : '',
-      ...(own ? { to: { name: str(e, 'deliveryName'), phone: str(e, 'deliveryPhone'), address: str(e, 'deliveryAddress'), landmark: str(e, 'deliveryLandmark'), emirate: str(e, 'deliveryEmirate') } } : {}),
+      ...(own ? { to: { name: str(e, 'deliveryName'), phone: str(e, 'deliveryPhone'), address: str(e, 'deliveryAddress'), landmark: str(e, 'deliveryLandmark'), emirate: str(e, 'deliveryEmirate'), country: str(e, 'deliveryCountry') || 'UAE', pin: str(e, 'deliveryPin'), line: addressText(e) } } : {}),
     };
   };
   if (action === 'orders') {
@@ -2218,6 +2238,28 @@ async function guestEnquiry(a: ApiEvent['arguments']) {
 
 // ---------- Delivery address (customer, until it ships) ----------
 const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
+const IN_STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh', 'Chhattisgarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal'];
+/** Checks a delivery address for the UAE or India; returns the cleaned fields or throws a message for the customer. */
+function checkAddress(a: { name?: unknown; phone?: unknown; country?: unknown; emirate?: unknown; pin?: unknown; address?: unknown; landmark?: unknown }) {
+  const clip = (v: unknown, n: number) => String(v ?? '').trim().replace(/\s+\n/g, '\n').slice(0, n);
+  const country = clip(a.country, 20) === 'India' ? 'India' : 'UAE';
+  const name = clip(a.name, 80), phone = clip(a.phone, 30), region = clip(a.emirate, 60), pin = clip(a.pin, 10).replace(/\s/g, ''), address = clip(a.address, 400), landmark = clip(a.landmark, 120);
+  if (!name) throw new Error('Add the name of the person receiving it.');
+  if (phone.replace(/\D/g, '').length < 9) throw new Error('Add a mobile number the courier can call.');
+  if (country === 'UAE' && !EMIRATES.includes(region)) throw new Error('Choose the emirate.');
+  if (country === 'India' && !IN_STATES.includes(region)) throw new Error('Choose the state.');
+  if (country === 'India' && !/^[1-9]\d{5}$/.test(pin)) throw new Error('Add the 6-digit PIN code.');
+  if (address.length < 10) throw new Error('Add the full address: house or flat number, building, street and area.');
+  return { name, phone, country, region, pin: country === 'India' ? pin : '', address, landmark };
+}
+/** "Villa 12, Mirdif, Dubai" or "12 MG Road, Chennai, Tamil Nadu 600001, India". */
+function addressText(img: Img) {
+  const india = str(img, 'deliveryCountry') === 'India';
+  return [str(img, 'deliveryAddress'), str(img, 'deliveryLandmark') ? `near ${str(img, 'deliveryLandmark')}` : '', `${str(img, 'deliveryEmirate')}${india && str(img, 'deliveryPin') ? ` ${str(img, 'deliveryPin')}` : ''}`, india ? 'India' : ''].filter(Boolean).join(', ');
+}
 async function customerAddress(ev: ApiEvent) {
   const table = process.env.ENQUIRY_TABLE;
   if (!table) throw new Error('Not configured');
@@ -2229,19 +2271,15 @@ async function customerAddress(ev: ApiEvent) {
   const admin = groups.includes('ADMINS');
   if (!e || (!ownsEnquiry(e, ev) && !admin)) throw new Error('Order not found');
   if (['SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'].includes(str(e, 'status'))) throw new Error('It has already shipped or closed, so the address can no longer be changed here. Please contact us on WhatsApp.');
-  const clip = (v: unknown, n: number) => String(v ?? '').trim().replace(/\s+\n/g, '\n').slice(0, n);
-  const name = clip(a.name, 80), phone = clip(a.phone, 30), emirate = clip(a.emirate, 30), address = clip(a.address, 400), landmark = clip(a.landmark, 120);
-  if (!name) throw new Error('Add the name of the person receiving it.');
-  if (phone.replace(/\D/g, '').length < 7) throw new Error('Add a mobile number the courier can call.');
-  if (!EMIRATES.includes(emirate)) throw new Error('Choose the emirate.');
-  if (address.length < 10) throw new Error('Add the full address: villa or flat number, building, street and area.');
+  const { name, phone, country, region, pin, address, landmark } = checkAddress(a);
   const now = new Date().toISOString();
-  const set: Record<string, string> = { deliveryName: name, deliveryPhone: phone, deliveryEmirate: emirate, deliveryAddress: address, addressAt: now, addressBy: admin ? 'Kalai Art House' : 'Customer', updatedAt: now };
+  const set: Record<string, string> = { deliveryName: name, deliveryPhone: phone, deliveryCountry: country, deliveryEmirate: region, deliveryAddress: address, addressAt: now, addressBy: admin ? 'Kalai Art House' : 'Customer', updatedAt: now };
   if (landmark) set.deliveryLandmark = landmark;
+  if (pin) set.deliveryPin = pin;
   const names: Record<string, string> = {};
   const values: Record<string, AttributeValue> = {};
   const parts = Object.entries(set).map(([k, v], i) => { names[`#d${i}`] = k; values[`:d${i}`] = { S: v }; return `#d${i} = :d${i}`; });
-  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}${landmark ? '' : ' REMOVE deliveryLandmark'}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}${[landmark ? '' : 'deliveryLandmark', pin ? '' : 'deliveryPin'].filter(Boolean).length ? ` REMOVE ${[landmark ? '' : 'deliveryLandmark', pin ? '' : 'deliveryPin'].filter(Boolean).join(', ')}` : ''}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
   console.log(`Delivery address saved for ${str(e, 'ref')} (${set.addressBy})`);
   return { ok: true, ...set };
 }
@@ -2409,7 +2447,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
       `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries & orders on our website.`]);
     studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`,
-      kind === 'MARKET' ? `Maker: ${h(str(img, 'sellerName'))} · qty ${num(img, 'qty') ?? 1} · <b>${aed(price)}</b> · ${str(img, 'deliveryBy') === 'KALAI' ? 'Kalai collects and delivers' : 'maker delivers'}. Send the payment link (status Price sent); once Paid the maker is told automatically.` : '']);
+      kind === 'MARKET' ? `Maker: ${h(str(img, 'sellerName'))} · qty ${num(img, 'qty') ?? 1} · <b>${aed(price)}</b> · ${str(img, 'deliveryBy') === 'KALAI' ? 'Kalai collects and delivers' : 'maker delivers'}${str(img, 'deliveryCountry') === 'India' ? ' · <b>delivery to India: add the shipping to the price</b>' : ''}. Send the payment link (status Price sent); once Paid the maker is told automatically.` : '']);
     return out;
   }
   if (rec.eventName !== 'MODIFY' || !old) return out;
@@ -2436,7 +2474,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
     if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
-      str(img, 'deliveryAddress') ? `It will be delivered to: ${h(str(img, 'deliveryAddress'))}, ${h(str(img, 'deliveryEmirate'))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
+      str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
     // Being framed: shown on My enquiries & orders only (no email).
@@ -2487,7 +2525,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
   // Delivery address added or changed by the customer.
   if (str(img, 'addressAt') && str(img, 'addressAt') !== str(old, 'addressAt') && str(img, 'addressBy') === 'Customer') {
     studio(`Delivery address ${str(old, 'addressAt') ? 'changed' : 'added'}: ${ref}`, [`${h(str(img, 'deliveryName'))} · ${h(str(img, 'deliveryPhone'))}`,
-      `${h(str(img, 'deliveryAddress'))}${str(img, 'deliveryLandmark') ? ` (near ${h(str(img, 'deliveryLandmark'))})` : ''}, ${h(str(img, 'deliveryEmirate'))}`, `<b>${h(title)}</b> · status ${h(st)}`]);
+      `${h(addressText(img))}`, `<b>${h(title)}</b> · status ${h(st)}`]);
   }
 
   // A new message on the order without a status change.

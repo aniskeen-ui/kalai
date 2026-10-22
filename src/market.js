@@ -79,15 +79,19 @@ function draw() {
   wireCards();
 }
 
+const samplesOf = (s) => { try { return JSON.parse(s.sampleKeys || '[]'); } catch { return []; } };
 function sellerCard(s) {
   const n = listings.filter((l) => l.sellerId === s.id);
   const live = n.filter((l) => l.status === 'APPROVED').length;
   return `<article class="mk-card" data-seller="${esc(s.id)}">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge ${s.status === 'APPROVED' ? 'PUBLISHED' : s.status === 'APPLIED' ? 'SCHEDULED' : 'HIDDEN'}">${SST[s.status] || esc(s.status)}</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3>${s.type === 'ARTIST' ? '<span class="cg-badge SCHEDULED">Artist</span>' : ''}<span class="cg-badge ${s.status === 'APPROVED' ? 'PUBLISHED' : s.status === 'APPLIED' ? 'SCHEDULED' : 'HIDDEN'}">${SST[s.status] || esc(s.status)}</span>
       <span class="muted" style="margin-left:auto">Applied ${esc(day(s.appliedAt))}${s.status === 'APPROVED' ? ` · ${s.commissionPct ?? 0}% · Kalai delivery ${aed(s.kalaiDeliveryFee)} · ${live}/${n.length} listings live` : ''}</span></div>
-    <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
-    <div><b>Sells:</b> ${esc(s.categories)} — ${esc(s.about)}</div>
-    <div class="muted">Pickup: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
+    <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.country === 'India' ? ', India' : ''}${s.type === 'ARTIST' ? '' : s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
+    ${s.type === 'ARTIST' ? `<div><b>Mediums:</b> ${esc(s.mediums)} · ${esc(s.experience || 'experience not given')} · commissions: ${s.commissions === 'NO' ? 'no' : 'yes'}${s.portfolio ? ` · <a href="${esc(s.portfolio)}" target="_blank" rel="noopener noreferrer">portfolio</a>` : ''}</div>
+      <div style="white-space:pre-wrap"><b>About:</b> ${esc(s.about)}</div>
+      <div class="mk-imgs">${samplesOf(s).map((k) => `<a data-key="${esc(k)}" target="_blank" rel="noopener"><img alt="Sample work" data-key="${esc(k)}"></a>`).join('') || '<span class="muted">No samples</span>'}</div>`
+    : `<div><b>Sells:</b> ${esc(s.categories)} — ${esc(s.about)}</div>`}
+    <div class="muted">${s.type === 'ARTIST' ? 'Address' : 'Pickup'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.country === 'India' ? (s.accountNumber ? `· A/c ${esc(s.accountNumber)} · IFSC ${esc(s.ifsc)}` : '· <b>no bank account yet</b>') : s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     <div class="mk-act">
       ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? 15)}"></label>

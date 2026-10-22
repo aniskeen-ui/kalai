@@ -112,6 +112,8 @@ const schema = a.schema({
       deliveryName: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       deliveryPhone: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       deliveryEmirate: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryCountry: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]), // UAE (default) | India
+      deliveryPin: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]), // India PIN code
       deliveryAddress: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       deliveryLandmark: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       addressAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -248,6 +250,16 @@ const schema = a.schema({
       appliedAt: a.string(),
       approvedAt: a.string(),
       zohoVendorId: a.string(),
+      // Artists ("Become an artist") use the same profile: type ARTIST, their mediums and sample works.
+      type: a.string(), // SELLER | ARTIST
+      country: a.string(), // UAE | India
+      mediums: a.string(),
+      experience: a.string(),
+      commissions: a.string(), // YES | NO
+      portfolio: a.string(),
+      sampleKeys: a.string(), // JSON array of S3 keys under market/{identity}/samples/
+      accountNumber: a.string(), // India bank account
+      ifsc: a.string(),
       owner: a.string(),
     })
     .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -384,7 +396,7 @@ const schema = a.schema({
   // Customer, from My enquiries & orders: add or change the delivery address (until it ships).
   customerAddress: a
     .mutation()
-    .arguments({ id: a.id().required(), name: a.string().required(), phone: a.string().required(), emirate: a.string().required(), address: a.string().required(), landmark: a.string() })
+    .arguments({ id: a.id().required(), name: a.string().required(), phone: a.string().required(), emirate: a.string().required(), address: a.string().required(), landmark: a.string(), country: a.string(), pin: a.string() })
     .returns(a.string())
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(zohoQuoteSync)),

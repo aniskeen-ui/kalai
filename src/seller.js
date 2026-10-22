@@ -7,6 +7,23 @@ import {
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl, remove } from 'aws-amplify/storage';
+import { autoPhones, countryRegionHtml, wireRegion } from './phone.js';
+
+autoPhones();
+// Artists arrive from "Become an artist" on the website (seller.html?as=artist); after applying, their profile type decides.
+const wantArtist = new URLSearchParams(location.search).get('as') === 'artist';
+const MEDIUMS = ['Watercolour', 'Pencil / charcoal', 'Acrylic', 'Oil', 'Ink / pen', 'Digital', 'Mixed media', 'Sculpture / craft'];
+const isArtist = () => (profile?.type ? profile.type === 'ARTIST' : document.querySelector('input[name="pType"]:checked')?.value === 'ARTIST');
+function brand() {
+  const art = profile ? profile.type === 'ARTIST' : wantArtist;
+  $('brand').textContent = art ? 'KALAI · Artist portal' : 'KALAI · Seller portal';
+  document.title = art ? 'Kalai Artist Portal' : 'Kalai Seller Portal';
+  if (art) {
+    $('lTitle').textContent = 'Become a Kalai artist';
+    $('lNote').textContent = 'Show us your work. Create an account, tell us about your art and upload a few sample pieces. Once approved, you list your originals here; we sell them on our website, collect the payment, deliver in the UAE and India, and pay you.';
+  }
+}
+
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -43,6 +60,7 @@ function show(view) {
 }
 
 async function start() {
+  brand();
   try { await getCurrentUser(); } catch { show('loginView'); setMode('in'); return; }
   const attrs = await fetchUserAttributes().catch(() => ({}));
   $('who').textContent = attrs.email || '';
@@ -57,19 +75,20 @@ async function start() {
 }
 
 function route() {
+  brand();
   const s = profile?.status;
   if (!profile || s === 'REJECTED') {
     show('applyView');
     fillApply();
-    $('applyTitle').textContent = s === 'REJECTED' ? 'Apply again' : 'Seller application';
+    $('applyTitle').textContent = s === 'REJECTED' ? 'Apply again' : isArtist() ? 'Artist application' : 'Seller application';
     $('applyNote').innerHTML = s === 'REJECTED'
       ? `Your earlier application was not accepted.${profile.adminNote ? ` <b>Our note:</b> ${esc(profile.adminNote)}` : ''} You can update it and send it again.`
-      : 'Tell us about your business. We check every seller before they can list products.';
+      : isArtist() ? 'Tell us about yourself and your art, and show us some of your work. We review every artist before they can list artworks.' : 'Tell us about your business. We check every seller before they can list products.';
     return;
   }
   if (s === 'APPLIED') {
     show('statusView');
-    $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. We are checking <b>${esc(profile.business)}</b> and will email you when your account is approved. Then you can add your products here.</p><p><button class="linkbtn" id="editApp" type="button">Edit my application</button></p>`;
+    $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. ${profile.type === 'ARTIST' ? `We are looking at your work and will email you, usually within a few days. Once you are approved you can list your artworks here.` : `We are checking <b>${esc(profile.business)}</b> and will email you when your account is approved. Then you can add your products here.`}</p><p><button class="linkbtn" id="editApp" type="button">Edit my application</button></p>`;
     $('editApp').onclick = () => { show('applyView'); fillApply(); $('applyTitle').textContent = 'Edit my application'; };
     return;
   }
@@ -81,6 +100,7 @@ function route() {
   show('deskView');
   pane(location.hash === '#orders' ? 'orders' : 'products');
   $('dBiz').textContent = profile.business;
+  $('tabProducts').textContent = profile.type === 'ARTIST' ? 'My artworks' : 'My products';
   $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
   drawList();
 }
@@ -136,18 +156,77 @@ $('authForm').addEventListener('submit', async (e) => {
 });
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
 
-// ---------- application ----------
-const AF = { pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pEmi: 'emirate', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban' };
-function fillApply() { for (const [id, k] of Object.entries(AF)) $(id).value = profile?.[k] ?? ''; }
+// ---------- application (artists and sellers) ----------
+const AF = { pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pLink: 'portfolio' };
+let samples = [];
+const sampleKeys = (p) => { try { return JSON.parse(p?.sampleKeys || '[]'); } catch { return []; } };
+function applyKind() {
+  const art = isArtist();
+  document.querySelectorAll('#applyForm [data-l-artist]').forEach((l) => { l.textContent = art ? l.dataset.lArtist : l.dataset.lSeller; });
+  document.querySelectorAll('#applyForm [data-artist-only]').forEach((x) => { x.hidden = !art; });
+  document.querySelectorAll('#applyForm [data-seller-only]').forEach((x) => { x.hidden = art; });
+  if (!profile || profile.status === 'REJECTED') $('applyTitle').textContent = profile?.status === 'REJECTED' ? 'Apply again' : art ? 'Artist application' : 'Seller application';
+  $('pBtn').textContent = profile && profile.status !== 'REJECTED' ? 'Save' : 'Send application';
+}
+function bankKind() {
+  const india = $('pCountry').value === 'India';
+  $('pIbanBox').hidden = india; $('pInBank').hidden = !india;
+}
+function fillApply() {
+  $('pWhere').innerHTML = countryRegionHtml({ country: profile?.country || 'UAE', region: profile?.emirate, prefix: 'p', names: false }).replace(/<div class="field" data-pin-box[\s\S]*$/, '');
+  wireRegion($('pWhere'));
+  $('pCountry').addEventListener('change', bankKind);
+  for (const [id, k] of Object.entries(AF)) $(id).value = profile?.[k] ?? (id === 'pComm' ? 'YES' : '');
+  const typeNow = profile?.type || (wantArtist ? 'ARTIST' : 'SELLER');
+  document.querySelectorAll('input[name="pType"]').forEach((r) => { r.checked = r.value === typeNow; r.onchange = applyKind; });
+  $('pTypeBox').hidden = !!profile?.type && profile.status !== 'REJECTED';
+  const chosen = String(profile?.mediums || '').split(',').map((x) => x.trim());
+  $('pMediums').innerHTML = MEDIUMS.map((m) => `<label><input type="checkbox" value="${esc(m)}" ${chosen.includes(m) ? 'checked' : ''}> ${esc(m)}</label>`).join('');
+  samples = sampleKeys(profile);
+  drawSamples();
+  bankKind(); applyKind();
+}
+async function drawSamples() {
+  $('pSamples').innerHTML = samples.map((k, i) => `<figure data-i="${i}"><img alt="Sample ${i + 1}"><button type="button" aria-label="Remove photo">×</button></figure>`).join('') || '<span class="muted" style="font-size:12px">No samples yet.</span>';
+  $('pSamples').querySelectorAll('figure').forEach(async (f) => {
+    const k = samples[Number(f.dataset.i)];
+    f.querySelector('img').src = await imgUrl(k);
+    f.querySelector('button').onclick = () => { samples = samples.filter((x) => x !== k); drawSamples(); };
+  });
+}
+$('pSampleFiles').onchange = async (e) => {
+  const files = [...e.target.files].slice(0, 8 - samples.length);
+  if (!files.length) { $('pErr').textContent = 'Up to 8 sample photos.'; return; }
+  $('pErr').textContent = 'Uploading…';
+  try {
+    for (const f of files) {
+      if (f.size > 10 * 1024 * 1024) throw new Error(`${f.name} is larger than 10 MB.`);
+      const name = `${Date.now()}-${f.name.replace(/[^\w.-]+/g, '_')}`;
+      const r = await uploadData({ path: ({ identityId }) => `market/${identityId}/samples/${name}`, data: f, options: { contentType: f.type } }).result;
+      samples.push(r.path);
+    }
+    $('pErr').textContent = '';
+  } catch (ex) { $('pErr').textContent = 'Upload failed: ' + (ex.message || ex); }
+  e.target.value = '';
+  drawSamples();
+};
 $('applyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = {}; for (const [id, k] of Object.entries(AF)) data[k] = $(id).value.trim();
+  data.type = isArtist() ? 'ARTIST' : 'SELLER';
+  data.country = $('pCountry').value; data.emirate = $('pRegion').value;
+  if (data.type === 'ARTIST') {
+    data.mediums = [...$('pMediums').querySelectorAll('input:checked')].map((x) => x.value).join(', ');
+    data.sampleKeys = JSON.stringify(samples);
+    if (!data.mediums) { $('pErr').textContent = 'Tick the mediums you work in.'; return; }
+    if (samples.length < 3) { $('pErr').textContent = 'Upload at least 3 photos of your work.'; return; }
+  }
   const b = $('pBtn'); b.disabled = true; $('pErr').textContent = '';
   try { const r = await call('apply', data); profile = r.profile; route(); window.scrollTo(0, 0); } catch (ex) { $('pErr').textContent = ex.message; } finally { b.disabled = false; }
 });
 $('dProfile').onclick = () => {
   show('applyView'); fillApply(); $('applyTitle').textContent = 'My details';
-  $('applyNote').innerHTML = 'Update your contact, pickup address or bank details. <button class="linkbtn" type="button" id="backDesk">Back to my listings</button>';
+  $('applyNote').innerHTML = `Update your contact${profile.type === 'ARTIST' ? ', samples' : ''}, address or bank details. <button class="linkbtn" type="button" id="backDesk">Back to my listings</button>`;
   $('backDesk').onclick = () => route();
 };
 
@@ -160,7 +239,7 @@ async function imgUrl(key) {
 const keysOf = (l) => { try { return JSON.parse(l.imageKeys || '[]'); } catch { return []; } };
 
 async function drawList() {
-  if (!listings.length) { $('lList').innerHTML = '<p class="muted">No products yet. Click <b>New listing</b> to add your first one.</p>'; return; }
+  if (!listings.length) { $('lList').innerHTML = `<p class="muted">No ${profile?.type === 'ARTIST' ? 'artworks' : 'products'} yet. Click <b>New listing</b> to add your first one.</p>`; return; }
   listings.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   $('lList').innerHTML = listings.map((l) => `<article class="lrow" data-id="${esc(l.id)}">
     <img alt="" data-key="${esc(keysOf(l)[0] || '')}">
@@ -230,7 +309,7 @@ function drawOrders() {
       ${o.cancelled ? '<div class="err">The customer cancelled. Please do not send it; the stock was added back.</div>' : ''}
       ${o.onHold ? '<div class="err">On hold: the customer asked to cancel. Please wait for our email before sending.</div>' : ''}
       ${kalai ? `<div class="to">Kalai collects it from your pickup address and delivers it.${o.readyAt ? ` Marked ready ${esc(dd(o.readyAt))}.` : ''}</div>`
-        : o.to ? `<div class="to"><b>Deliver to</b> ${esc(o.to.name)} · <a href="tel:${esc(o.to.phone)}">${esc(o.to.phone)}</a><br>${esc(o.to.address)}${o.to.landmark ? ` (near ${esc(o.to.landmark)})` : ''}, ${esc(o.to.emirate)}</div>` : ''}
+        : o.to ? `<div class="to"><b>Deliver to</b> ${esc(o.to.name)} · <a href="tel:${esc(o.to.phone)}">${esc(o.to.phone)}</a><br>${esc(o.to.line || [o.to.address, o.to.emirate].join(', '))}</div>` : ''}
       ${o.courier ? `<div>Sent with <b>${esc(o.courier)}</b>${o.awb ? ` · tracking ${esc(o.awb)}` : ''}${o.dispatchedAt ? ` · ${esc(dd(o.dispatchedAt))}` : ''}</div>` : ''}
       ${live && o.status === 'PAID' && kalai && o.sellerStage !== 'READY' ? '<div class="acts"><button class="btn small" data-o="orderReady" type="button">Packed: ready for pickup</button><span class="err" data-m></span></div>' : ''}
       ${live && o.status === 'PAID' && !kalai ? '<div class="acts"><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" list="couriers" placeholder="Aramex / Own delivery"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Tracking no.</span><input data-f="awb"></label><button class="btn small" data-o="orderDispatched" type="button">Mark dispatched</button><span class="err" data-m></span></div>' : ''}
@@ -250,7 +329,7 @@ function drawOrders() {
 }
 
 function edit(l) {
-  const x = l || { title: '', description: '', category: '', stock: 1, costPrice: '', markupPct: 20, courierCharge: 0, otherCharges: 0, deliveryBy: 'SELLER' };
+  const x = l || { title: '', description: '', category: profile?.type === 'ARTIST' ? 'Artwork' : '', stock: 1, costPrice: '', markupPct: 20, courierCharge: 0, otherCharges: 0, deliveryBy: 'SELLER' };
   let keys = keysOf(x);
   const pct = Number(l?.commissionPct ?? profile.commissionPct ?? 0), fee = Number(profile.kalaiDeliveryFee ?? 0);
   const box = $('editBox'); box.hidden = false;

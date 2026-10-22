@@ -6,6 +6,7 @@ import { getUrl } from 'aws-amplify/storage';
 import { showCatalogue } from './catalogue.js';
 import { showMessages } from './messages.js';
 import { showMarket } from './market.js';
+import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -532,16 +533,18 @@ function addressSection(e) {
     <div class="three">
       <div class="field"><label for="dName">Receiver</label><input id="dName" value="${esc(e.deliveryName || e.customerName)}"></div>
       <div class="field"><label for="dPhone">Receiver mobile</label><input id="dPhone" value="${esc(e.deliveryPhone || e.phone)}"></div>
-      <div class="field"><label for="dEmirate">Emirate</label><select id="dEmirate"><option value="">Choose…</option>${EMIRATES.map((x) => `<option ${x === emi ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
     </div>
+    <div class="three">${countryRegionHtml({ country: e.deliveryCountry || 'UAE', region: emi, pin: e.deliveryPin, prefix: 'd', names: false })}</div>
     <div class="field"><label for="dAddr">Address (villa / flat, building, street, area)</label><textarea id="dAddr" rows="2">${esc(e.deliveryAddress || g?.address || '')}</textarea></div>
     <div class="field"><label for="dLand">Landmark (optional)</label><input id="dLand" value="${esc(e.deliveryLandmark)}"></div>
   </fieldset>`;
 }
 function readAddress(e) {
   if (!$('addrBox')) return {};
-  const v = { deliveryName: $('dName').value.trim() || null, deliveryPhone: $('dPhone').value.trim() || null, deliveryEmirate: $('dEmirate').value || null, deliveryAddress: $('dAddr').value.trim() || null, deliveryLandmark: $('dLand').value.trim() || null };
-  const changed = ['deliveryEmirate', 'deliveryAddress', 'deliveryLandmark'].some((k) => (v[k] || '') !== (e[k] || '')) || (v.deliveryAddress && ((v.deliveryName || '') !== (e.deliveryName || '') || (v.deliveryPhone || '') !== (e.deliveryPhone || '')));
+  const india = $('dCountry').value === 'India';
+  const v = { deliveryName: $('dName').value.trim() || null, deliveryPhone: $('dPhone').value.trim() || null, deliveryCountry: $('dCountry').value, deliveryEmirate: $('dRegion').value || null, deliveryPin: india ? $('dPin').value.trim() || null : null, deliveryAddress: $('dAddr').value.trim() || null, deliveryLandmark: $('dLand').value.trim() || null };
+  const was = { ...e, deliveryCountry: e.deliveryCountry || 'UAE' };
+  const changed = ['deliveryCountry', 'deliveryEmirate', 'deliveryPin', 'deliveryAddress', 'deliveryLandmark'].some((k) => (v[k] || '') !== (was[k] || '')) || (v.deliveryAddress && ((v.deliveryName || '') !== (e.deliveryName || '') || (v.deliveryPhone || '') !== (e.deliveryPhone || '')));
   if (!changed || !v.deliveryAddress) return {};
   return { ...v, addressAt: new Date().toISOString(), addressBy: 'Kalai Art House' };
 }
@@ -1011,6 +1014,7 @@ async function showDetail(e) {
     $('waLinks').innerHTML = `<a href="https://wa.me/${digits}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Send update on WhatsApp</a>`;
   };
   waLink();
+  if ($('addrBox')) wireRegion($('addrBox'));
   if ($('reviewBox')) wireReviews($('reviewBox'));
   ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
   $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); });
@@ -1149,7 +1153,7 @@ async function showDetail(e) {
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {
       const courier = $('eCourier').value.trim(), awb = $('eAwb').value.trim();
       const why = !e.zohoInvoiceId ? 'Mark it Paid first, so Zoho has the invoice before it ships.'
-        : !($('dAddr')?.value.trim()) || !$('dEmirate')?.value ? 'Add the delivery address (emirate and address) before it ships.'
+        : !($('dAddr')?.value.trim()) || !$('dRegion')?.value ? 'Add the delivery address (emirate or state, and address) before it ships.'
         : !courier ? 'Add the courier before marking it shipped.'
         : !awb && !/own/i.test(courier) ? 'Add the AWB / tracking number before marking it shipped.' : '';
       if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }

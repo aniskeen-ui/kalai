@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="description" content="Sell your products on Kalai Art House.">
-<title>Kalai Seller Portal</title>
+<title>Kalai Artist &amp; Seller Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <script>
@@ -178,12 +178,12 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
 </style>
 </head>
 <body>
-<header class="top"><div class="in"><b>KALAI · Seller portal</b><span id="who" class="muted" style="color:#cfc9e2"></span><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button id="signOutBtn" hidden>Sign out</button></div></header>
+<header class="top"><div class="in"><b id="brand">KALAI · Seller portal</b><span id="who" class="muted" style="color:#cfc9e2"></span><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button id="signOutBtn" hidden>Sign out</button></div></header>
 <main>
   <section id="loginView" class="wrapc" hidden>
     <div class="sbox" style="max-width:440px;margin:20px auto;width:100%">
-      <h1 style="font-size:26px">Sell on Kalai Art House</h1>
-      <p class="muted" style="margin:0">Craftspeople and artists: list your products on our website. We collect the payment, and you set your price.</p>
+      <h1 style="font-size:26px" id="lTitle">Sell on Kalai Art House</h1>
+      <p class="muted" style="margin:0" id="lNote">Craftspeople and artists: list your products on our website. We collect the payment, and you set your price.</p>
       <div class="authtabs"><button type="button" id="tSignIn" aria-pressed="true">Sign in</button><button type="button" id="tSignUp" aria-pressed="false">Create account</button></div>
       <form id="authForm" novalidate style="display:grid;gap:10px">
         <div class="field"><label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email"></div>
@@ -200,14 +200,29 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
     <div class="sbox">
       <h2 id="applyTitle">Seller application</h2>
       <p class="muted" id="applyNote" style="margin:0">Tell us about your business. We check every seller before they can list products.</p>
+      <div class="radio" id="pTypeBox"><span style="font-size:13px;font-weight:700">I am</span>
+        <label><input type="radio" name="pType" value="ARTIST"> an artist (paintings, sketches, art)</label>
+        <label><input type="radio" name="pType" value="SELLER" checked> a craftsperson / shop (handmade products)</label></div>
       <form id="applyForm" novalidate style="display:grid;gap:10px">
-        <div class="two"><div class="field"><label for="pBiz">Business / shop name</label><input id="pBiz"></div><div class="field"><label for="pName">Contact name</label><input id="pName" autocomplete="name"></div></div>
-        <div class="two"><div class="field"><label for="pPhone">Mobile / WhatsApp</label><input id="pPhone" inputmode="tel" autocomplete="tel"></div><div class="field"><label for="pLic">Trade licence no. (if any)</label><input id="pLic"></div></div>
-        <div class="two"><div class="field"><label for="pEmi">Emirate</label><select id="pEmi"><option value="">Choose…</option><option>Abu Dhabi</option><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Outside UAE</option></select></div><div class="field"><label for="pCat">What you sell (categories)</label><input id="pCat" placeholder="e.g. brass lamps, handloom, paintings"></div></div>
-        <div class="field"><label for="pAddr">Pickup address (where Kalai can collect from)</label><textarea id="pAddr" rows="2"></textarea></div>
-        <div class="field"><label for="pAbout">About your products</label><textarea id="pAbout" rows="3"></textarea></div>
+        <div class="two"><div class="field"><label for="pBiz" data-l-artist="Artist name (as shown on the website)" data-l-seller="Business / shop name">Business / shop name</label><input id="pBiz"></div><div class="field"><label for="pName" data-l-artist="Your full name" data-l-seller="Contact name">Contact name</label><input id="pName" autocomplete="name"></div></div>
+        <div class="two"><div class="field"><label for="pPhone">Mobile / WhatsApp</label><input id="pPhone" type="tel" inputmode="tel" autocomplete="tel"></div><div class="field" data-seller-only><label for="pLic">Trade licence no. (if any)</label><input id="pLic"></div></div>
+        <div class="three" id="pWhere"></div>
+        <div class="field" data-seller-only><label for="pCat">What you sell (categories)</label><input id="pCat" placeholder="e.g. brass lamps, handloom, pottery"></div>
+        <div class="field"><label for="pAddr" data-l-artist="Address (where your works can be collected from)" data-l-seller="Pickup address (where Kalai can collect from)">Pickup address (where Kalai can collect from)</label><textarea id="pAddr" rows="2"></textarea></div>
+        <fieldset class="sbox" style="padding:12px" data-artist-only hidden><legend style="font-size:13px;font-weight:700">About your art</legend>
+          <div class="field"><span style="font-size:13px;font-weight:700">Mediums you work in</span>
+            <div class="radio" id="pMediums"></div></div>
+          <div class="two"><div class="field"><label for="pExp">Experience</label><select id="pExp"><option value="">Choose…</option><option>Less than 2 years</option><option>2 to 5 years</option><option>5 to 10 years</option><option>More than 10 years</option></select></div>
+            <div class="field"><label for="pComm">Do you take commissions (paint from a customer's photo)?</label><select id="pComm"><option value="YES">Yes</option><option value="NO">No, only my own works</option></select></div></div>
+          <div class="field"><label for="pLink">Portfolio, Instagram or website (optional)</label><input id="pLink" type="url" placeholder="https://instagram.com/…"></div>
+          <div class="field"><label>Sample works: upload 3 to 8 photos of your best pieces</label><div class="thumbs" id="pSamples"></div><input id="pSampleFiles" type="file" accept="image/*" multiple><span class="muted" style="font-size:12px">Clear, straight photos in daylight work best. Up to 10 MB each.</span></div>
+        </fieldset>
+        <div class="field"><label for="pAbout" data-l-artist="About you and your art (shown to customers when approved)" data-l-seller="About your products">About your products</label><textarea id="pAbout" rows="4"></textarea></div>
         <fieldset class="sbox" style="padding:10px"><legend style="font-size:13px;font-weight:700">Where we pay you</legend>
-          <div class="three"><div class="field"><label for="pBank">Bank</label><input id="pBank"></div><div class="field"><label for="pAcc">Account name</label><input id="pAcc"></div><div class="field"><label for="pIban">IBAN</label><input id="pIban" placeholder="AE07 0331 2345 6789 0123 456"></div></div>
+          <div class="two"><div class="field"><label for="pBank">Bank</label><input id="pBank"></div><div class="field"><label for="pAcc">Account name</label><input id="pAcc"></div></div>
+          <div class="field" id="pIbanBox"><label for="pIban">IBAN</label><input id="pIban" placeholder="AE07 0331 2345 6789 0123 456"></div>
+          <div class="two" id="pInBank" hidden><div class="field"><label for="pAccNo">Account number</label><input id="pAccNo" inputmode="numeric"></div><div class="field"><label for="pIfsc">IFSC code</label><input id="pIfsc" placeholder="e.g. SBIN0001234" style="text-transform:uppercase"></div></div>
+          <span class="muted" style="font-size:12px">You can add these later, before your first payment.</span>
         </fieldset>
         <div class="err" id="pErr" role="alert"></div>
         <button class="btn" type="submit" id="pBtn" style="justify-self:start">Send application</button>

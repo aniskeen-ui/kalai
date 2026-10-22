@@ -178,6 +178,9 @@ footer p{margin:2px 0}
 
 /* little artists */
 .kids{background:var(--gold-soft)}
+.join-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:18px}
+.join-step{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:6px;align-content:start}
+.join-step b{font-size:15px}.join-step p{margin:0;font-size:14px;color:var(--muted);line-height:1.5}
 .kids .wrap{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:44px;align-items:start}
 .kids h2{font-size:clamp(28px,3.4vw,38px)}
 .kids .lead{font-size:16px;color:var(--fg);max-width:52ch;margin:10px 0 0}
@@ -254,7 +257,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
-  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
+  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
   <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
@@ -326,7 +329,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     </div>
     <div class="two">
       <div class="field"><label for="cName">Your name</label><input id="cName" placeholder="Priya Raman" autocomplete="name"></div>
-      <div class="field"><label for="cPhone">Mobile (UAE)</label><input id="cPhone" placeholder="+971 50 123 4567" inputmode="tel" autocomplete="tel"></div>
+      <div class="field"><label for="cPhone">Mobile / WhatsApp</label><input id="cPhone" placeholder="+971 50 123 4567" inputmode="tel" autocomplete="tel"></div>
     </div>
     <div class="field"><label for="cPhoto">Reference photo <span style="color:var(--kumkum)">*</span></label><input id="cPhoto" type="file" accept="image/*" required aria-required="true"><span class="note">Required: the artist paints from this photo. A clear, well-lit photo works best (JPG or PNG, up to 15 MB).</span></div>
     <div class="field"><label for="cNotes">Notes for the artist</label><textarea id="cNotes" placeholder="Our golden retriever Bruno, sitting on the balcony at sunset"></textarea></div>
@@ -410,6 +413,19 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
   <p class="note" style="font-size:15px">Painter, sketch artist and story illustrator. Every watercolour and pencil sketch in this gallery, and every commission, is drawn by hand in his studio and shipped to you.</p></div>
 </div></section>
 
+<section id="join" class="studio"><div class="wrap">
+  <div class="sec-head"><div><div class="kind" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">Become an artist</div>
+    <h2 style="margin-top:6px">Sell your art with Kalai Art House</h2>
+    <p>Are you a painter, sketch artist or illustrator in the UAE or India? Show us your work. Approved artists list their originals on this website; we take care of the customer, the payment and the delivery.</p></div></div>
+  <div class="join-grid">
+    <div class="join-step"><b>1. Apply</b><p>Create a free account and tell us about yourself: your mediums, your experience, whether you take commissions, and a link to your portfolio or Instagram.</p></div>
+    <div class="join-step"><b>2. Upload samples</b><p>Add 3 to 8 photos of your best work. We review every artist personally, usually within a few days.</p></div>
+    <div class="join-step"><b>3. List your works</b><p>Once approved, add each artwork with your price. Our price calculator shows what you receive and what the customer pays.</p></div>
+    <div class="join-step"><b>4. Get paid</b><p>We collect the payment, arrange delivery in the UAE and India, and pay you your price after delivery: by bank transfer to your UAE (IBAN) or Indian (IFSC) account.</p></div>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:22px"><a class="btn primary" href="/seller.html?as=artist" style="text-decoration:none">Become an artist</a><a class="btn ghost-dark" href="/seller.html" style="text-decoration:none">Sell handmade crafts instead</a></div>
+</div></section>
+
 <section id="reviews" hidden><div class="wrap">
   <div class="sec-head"><div><h2>What our customers say</h2><p id="revAvg"></p></div></div>
   <div class="rev-grid" id="revGrid"></div>
@@ -424,7 +440,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <details><summary>What if it arrives damaged?</summary><p>Every parcel is insured. Report it under My enquiries &amp; orders with photos within 48 hours of delivery and choose: a replacement or repair, or a full refund. Because each work is one of a kind, we can't accept change-of-mind returns.</p></details>
     <details><summary>Can I cancel my order?</summary><p>Yes, under My enquiries &amp; orders on this site, where you see the refund before you confirm. Before you pay, there's nothing to pay. After payment, if the artist hasn't started your work, you get a full refund. Once the artist has started (including the pencil sketch for commissions), we refund 50% to cover the artist's time. Once it has shipped it can't be cancelled.</p></details>
     <details><summary>What does Little Artists cost?</summary><p>For children aged 3 to 10, framing is free and you pay only delivery: AED 25 within Dubai, Sharjah and Ajman, AED 35 to the other emirates. One free framing per child each month. For ages 11 to 17, framing costs AED 79 plus delivery. Premium frames, A3 size, extra copies and gift wrap are optional extras at any age.</p></details>
-    <details><summary>Do you deliver outside the UAE?</summary><p>We currently deliver to all seven emirates. GCC delivery is planned.</p></details>
+    <details><summary>Do you deliver outside the UAE?</summary><p>Yes. We deliver to all seven emirates and to India. For India, the shipping charge is included in the price we quote you, before you pay. Other countries: ask us on WhatsApp.</p></details>
     <details><summary>Can I visit to see paintings?</summary><p>We are an online gallery and paintings ship directly from our artists' studios. For larger commissions we can arrange a video call with the artist.</p></details>
   </div>
 </div></section>
@@ -434,7 +450,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
   <div style="display:grid;gap:16px;color:var(--muted)">
     <div><b style="color:var(--fg)">Who you are buying from.</b> Kalai Art House is operated by Pranix Technologies FZCO, Dubai Silicon Oasis, Dubai, UAE (trade licence 92974). Prices are in UAE dirhams.</div>
     <div><b style="color:var(--fg)">Payment.</b> After we confirm your order by email or WhatsApp we send a secure card payment link. Full payment is taken upfront, for catalogue works and commissions alike. We never ask for card details by message or email.</div>
-    <div><b style="color:var(--fg)">Delivery.</b> We deliver to all seven emirates by insured courier. Customs duty and VAT on imported artworks are included in the price you are quoted.</div>
+    <div><b style="color:var(--fg)">Delivery.</b> We deliver to all seven emirates and to India by insured courier. Customs duty and VAT on imported artworks are included in the price you are quoted.</div>
     <div><b style="color:var(--fg)">Returns.</b> Each artwork, commission and Little Artists gift is one of a kind, so we can't accept change-of-mind returns.</div>
     <div><b style="color:var(--fg)">Damaged in transit.</b> Every parcel is insured. If an item arrives damaged, report it under My enquiries &amp; orders with photos within 48 hours of delivery and choose either a replacement or repair, or a full refund. Please keep the packaging until we've sorted it out.</div>
     <div><b style="color:var(--fg)">Cancellations.</b> Cancel under My enquiries &amp; orders. Before payment you can cancel at any time at no cost. After payment: if the artist hasn't started your work, we refund you in full; once the artist has started (including the pencil sketch for a commission), we refund 50% and the rest covers the artist's time. Shipped orders can't be cancelled. Refunds go back the way you paid, usually within 7 working days.</div>
@@ -454,7 +470,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <div><b style="color:var(--fg)">5. The artworks.</b> Every work is an original, made by hand, so small variations from the photos on screen (colour, texture, framing) are normal and are not a defect. Sizes are approximate.</div>
     <div><b style="color:var(--fg)">6. Commissions.</b> We share a pencil sketch for your approval before painting. You may ask for reasonable changes at the sketch stage; the finished work is the artist's interpretation of your brief. Timelines are estimates. You confirm you have the right to share any photo you send us, and that it can be used to make your commission.</div>
     <div><b style="color:var(--fg)">7. Little Artists.</b> Orders are placed by a parent or guardian, who confirms they may share the child's drawing, first name and age with us. We use them only to make and deliver the gift and never publish them. Free framing for ages 3 to 10 is limited to one framing per child each month.</div>
-    <div><b style="color:var(--fg)">8. Delivery.</b> We deliver to all seven emirates by courier. Please give a complete address and a reachable mobile number; if a delivery fails because of incorrect details or no one is available, redelivery may be charged. Responsibility for the artwork passes to you on delivery.</div>
+    <div><b style="color:var(--fg)">8. Delivery.</b> We deliver to all seven emirates and to India by courier; for India the shipping charge is confirmed in your quote before you pay. Please give a complete address and a reachable mobile number; if a delivery fails because of incorrect details or no one is available, redelivery may be charged. Responsibility for the artwork passes to you on delivery.</div>
     <div><b style="color:var(--fg)">9. Cancellations, returns and damage.</b> Each work is one of a kind, so there are no change-of-mind returns. You can cancel yourself under <b>My enquiries &amp; orders</b>: (a) before payment, at any time and at no cost; (b) after payment and before the work starts, with a full refund; (c) once the artist has started (including the pencil sketch for a commission), or for Little Artists once framing has started, with a 50% refund, the rest covering the work done. An order that has shipped can't be cancelled. If an item arrives damaged, report it under My enquiries &amp; orders with photos within 48 hours of delivery and choose a replacement or repair, or a full refund; please keep the packaging until it is resolved. My enquiries &amp; orders shows the refund that applies before you confirm. Refunds go back the way you paid, usually within 7 working days.</div>
     <div><b style="color:var(--fg)">10. Order updates.</b> We send order updates (price, payment, shipping, delivery, cancellations and refunds) by email to the address on your account, and may also message you on WhatsApp. Requests you make under My enquiries &amp; orders are recorded with the date and time and confirmed by email.</div>
     <div><b style="color:var(--fg)">11. Copyright.</b> You own the physical artwork you buy. The artist keeps the copyright, so the work may not be reproduced, printed or used commercially without written permission. We may show photos of commissioned works in our gallery only with your permission.</div>
@@ -462,14 +478,14 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
     <div><b style="color:var(--fg)">13. Liability.</b> We are responsible for delivering the artwork as described. Our total liability for an order is limited to the amount you paid for it, except where the law does not allow this limit.</div>
     <div><b style="color:var(--fg)">14. Law.</b> These terms are governed by the laws of the United Arab Emirates as applied in the Emirate of Dubai, and the courts of Dubai have jurisdiction.</div>
     <div><b style="color:var(--fg)">15. Changes.</b> We may update these terms; the version on this page at the time of your order applies to that order.</div>
-    <div><b style="color:var(--fg)">16. Crafts shop.</b> Items in the Crafts shop are made and sold by independent makers we have checked; the maker's name is shown on each item. You order and pay through Kalai Art House, which handles your payment, delivery updates, cancellations and refunds under these terms. Until an item is dispatched you can cancel it for a full refund; after delivery, report damage with photos within 48 hours. Prices include delivery within the UAE.</div>
+    <div><b style="color:var(--fg)">16. Crafts shop.</b> Items in the Crafts shop are made and sold by independent makers we have checked; the maker's name is shown on each item. You order and pay through Kalai Art House, which handles your payment, delivery updates, cancellations and refunds under these terms. Until an item is dispatched you can cancel it for a full refund; after delivery, report damage with photos within 48 hours. Prices include delivery within the UAE; delivery to India is confirmed before you pay.</div>
   </div>
 </div></section>
 
 <footer><div class="wrap">
   <div><b>Kalai Art House</b><p>An online gallery of Pranix Technologies FZCO.</p><p>Dubai Silicon Oasis, Dubai, UAE</p><p>Trade licence 92974 (DIEZA)</p></div>
   <div><b>Contact</b><p class="mono">+971 55 299 6626</p><p>kalaiarthouse@pranixtechno.com</p></div>
-  <div><b>Policies</b><p><a href="#policies" style="color:inherit">Delivery, returns and privacy</a></p><p><a href="#terms" style="color:inherit">Terms &amp; conditions</a></p><p>Payments by secure card link</p></div>
+  <div><b>Policies</b><p><a href="#policies" style="color:inherit">Delivery, returns and privacy</a></p><p><a href="#terms" style="color:inherit">Terms &amp; conditions</a></p><p><a href="/seller.html?as=artist" style="color:inherit">Become an artist</a> · <a href="/seller.html" style="color:inherit">Sell with us</a></p><p>Payments by secure card link</p></div>
 </div></footer>
 
 <div class="scrim" id="scrim" hidden></div>
