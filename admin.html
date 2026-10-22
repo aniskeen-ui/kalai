@@ -271,8 +271,8 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
     </div>
 
     <div id="messagesPane" hidden>
-      <div class="bar"><h1 style="font-size:28px;margin-right:auto">Daily message</h1><button class="btn small ghost" id="kuralNow" type="button">Publish today's Thirukkural now</button></div>
-      <p class="muted" style="font-size:12px;margin:0 0 8px">Every morning at 06:05 the website shows the <b>Thirukkural of the day</b> (Tamil, English, Arabic). A message you publish here takes its place for as long as it is on.</p>
+      <div class="bar"><h1 style="font-size:28px;margin-right:auto">Thirukkural of the day</h1><button class="btn small ghost" id="kuralNow" type="button">Publish today's Thirukkural now</button></div>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">Every morning at 06:05 the website shows the <b>Thirukkural of the day</b> (Tamil, English, Arabic). To show a different kural yourself, type it below (Tamil, then Translate) and publish: it takes the day's place while it is on.</p>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px"><img id="tvImg" alt="Thiruvalluvar picture" src="/valluvar.svg" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)">
         <span style="font-size:13px"><b>Thiruvalluvar picture</b> on the Thirukkural card<br><span class="muted" id="tvNote">Our emblem. Upload a picture you have the right to use (square works best).</span></span>
         <label class="btn small ghost" style="cursor:pointer">Upload picture<input id="tvFile" type="file" accept="image/*" hidden></label>
@@ -288,8 +288,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
             <div class="field"><label for="msgFrom">Show from</label><input id="msgFrom" type="datetime-local"></div>
             <div class="field"><label for="msgUntil">Until (optional)</label><input id="msgUntil" type="datetime-local"></div>
           </div>
-          <label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="msgKural" style="width:auto"> This is a Thirukkural: show the Thiruvalluvar picture and the "Thirukkural of the day" title</label>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" id="msgPublish" type="button">Publish</button><span class="muted" id="msgMsg" role="status" style="font-size:13px"></span></div>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" id="msgPublish" type="button">Publish</button><span class="muted" id="msgMsg" role="status" style="font-size:13px"></span></div>
           <p class="muted" style="font-size:12px;margin:0">One message is on the website at a time; publishing replaces the current one. Translation is automatic (Amazon Translate): read it before publishing, especially the Arabic.</p>
         </div>
         <div class="msg-prev"><div class="field"><label for="msgPrevLang">Preview</label><select id="msgPrevLang" style="width:auto"><option value="ta">Tamil</option><option value="en" selected>English</option><option value="ar">Arabic</option></select></div><div id="msgPreview"></div></div>

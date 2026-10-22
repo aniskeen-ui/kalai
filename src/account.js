@@ -720,7 +720,8 @@ async function showDailyMessage() {
     if (!m) return;
     const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
     if (!langs.length) return;
-    const kural = m.source === 'KURAL';
+    // The flash card is for the Thirukkural only: always the Thiruvalluvar picture and the Thirukkural title.
+    const kural = true;
     // Starts in Tamil for the kural (else the visitor's language), then changes language every 10 seconds.
     let lang = kural && langs.includes('ta') ? 'ta' : (langs.includes((navigator.language || 'en').slice(0, 2)) ? (navigator.language || 'en').slice(0, 2) : (langs.includes('en') ? 'en' : langs[0]));
     document.head.insertAdjacentHTML('beforeend', `<style>
