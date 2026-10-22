@@ -23,6 +23,13 @@ let kuralSec = 10;
     if (!st) return;
     if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
     if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
+    // Home page texts from Order Management → Settings (blank = keep the built-in text).
+    const tx = (v) => String(v ?? '').trim();
+    const put = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    if (tx(st.heroTitle) || tx(st.heroHighlight)) put('heroH1', `${esc(tx(st.heroTitle) || 'Original watercolours and pencil sketches,')} <em>${esc(tx(st.heroHighlight) || 'painted for your walls')}</em>`);
+    if (tx(st.heroText)) put('heroP', esc(tx(st.heroText)));
+    if (tx(st.kidsTitle)) put('kidsH2', esc(tx(st.kidsTitle)));
+    if (tx(st.kidsText)) put('kidsStory', tx(st.kidsText).split(/\n\s*\n/).map((x) => `<p class="story">${esc(x.trim()).replace(/\n/g, '<br>')}</p>`).join(''));
   } catch { /* defaults stay */ }
 })();
 const state = { user: null, email: '' };

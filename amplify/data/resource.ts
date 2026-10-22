@@ -365,6 +365,12 @@ const schema = a.schema({
     .model({
       heroSeconds: a.integer(), // home page picture changes every N seconds (default 10)
       kuralSeconds: a.integer(), // Thirukkural card switches language every N seconds (default 10)
+      // Home page texts (empty = the built-in text)
+      heroTitle: a.string(),
+      heroHighlight: a.string(),
+      heroText: a.string(),
+      kidsTitle: a.string(),
+      kidsText: a.string(), // paragraphs separated by a blank line
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 

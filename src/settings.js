@@ -1,11 +1,20 @@
-// Settings tab: website timings master (one SiteSetting row, id "site"). The home page reads it on every visit.
+// Settings tab: website master (one SiteSetting row, id "site"). The home page reads it on every visit.
 import { generateClient } from 'aws-amplify/data';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const FIELDS = [
   { k: 'heroSeconds', label: 'Home page picture', note: 'The big picture at the top of the home page changes to another artwork, picked at random, every this many seconds. 0 = never changes.', min: 0, max: 600 },
   { k: 'kuralSeconds', label: 'Thirukkural card language', note: 'The daily Thirukkural card switches Tamil → English → Arabic every this many seconds. 0 = stays in Tamil (visitors can still switch).', min: 0, max: 600 },
+];
+// Home page texts. Blank = the built-in text (shown as the grey example).
+const TEXTS = [
+  { k: 'heroTitle', group: 'Top of the home page', label: 'Headline', max: 120, def: 'Original watercolours and pencil sketches,' },
+  { k: 'heroHighlight', group: 'Top of the home page', label: 'Headline, gold part', max: 80, def: 'painted for your walls' },
+  { k: 'heroText', group: 'Top of the home page', label: 'Text under the headline', max: 400, rows: 3, def: 'Hand-painted originals and commissioned portraits of your pets, home and family, by artists in Kerala and Tamil Nadu. Priced in dirhams, delivered across the UAE with customs and duties already included.' },
+  { k: 'kidsTitle', group: 'Little Artists section', label: 'Heading', max: 120, def: 'You remember every first.' },
+  { k: 'kidsText', group: 'Little Artists section', label: 'Story (leave an empty line between paragraphs)', max: 1500, rows: 7, def: 'The first smile. The first time they crawled across the floor to reach you. The first wobbly step, the first word, the first time they waved goodbye. Every small new thing your child does stays with you for years.\n\nTheir drawings are the same kind of moment: a sun with a smiling face, a house with a crooked door, the whole family holding hands. Little Artists keeps those moments by turning them into a framed gift for someone who loves your child too.' },
 ];
 let wired = false;
 let row = null;
@@ -14,10 +23,21 @@ export async function showSettings() {
   const box = $('setBox');
   if (!wired) {
     wired = true;
-    box.innerHTML = `${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
+    let group = '';
+    const textHtml = TEXTS.map((t) => {
+      const head = t.group !== group ? `<h3 style="margin:10px 0 0;font-size:17px">${esc((group = t.group))}</h3>` : '';
+      const input = t.rows
+        ? `<textarea id="st-${t.k}" rows="${t.rows}" maxlength="${t.max}" placeholder="${esc(t.def)}"></textarea>`
+        : `<input id="st-${t.k}" maxlength="${t.max}" placeholder="${esc(t.def)}">`;
+      return `${head}<div class="field" style="max-width:720px"><label for="st-${t.k}">${esc(t.label)}</label>${input}
+        <div class="muted" style="font-size:12px">Blank = the current text (shown in grey). <button type="button" class="linkbtn" data-copy="${t.k}">Copy it in to edit</button></div></div>`;
+    }).join('');
+    box.innerHTML = `<h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
-      <div style="display:flex;gap:10px;align-items:center"><button class="btn" type="button" id="stSave">Save settings</button><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
+      ${textHtml}
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
     $('stSave').onclick = save;
+    box.querySelectorAll('[data-copy]').forEach((b) => { b.onclick = () => { const t = TEXTS.find((x) => x.k === b.dataset.copy); const el = $('st-' + t.k); if (!el.value.trim()) el.value = t.def; el.focus(); }; });
   }
   $('stMsg').textContent = 'Loading…';
   try {
@@ -25,7 +45,8 @@ export async function showSettings() {
     if (r.errors?.length) throw new Error(r.errors[0].message);
     row = r.data;
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? 10; });
-    $('stMsg').textContent = row?.updatedAt ? `Last changed ${new Date(row.updatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Defaults (10 seconds) until you save.';
+    TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
+    $('stMsg').textContent = row?.updatedAt ? `Last changed ${new Date(row.updatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Built-in texts and 10-second timings until you save.';
   } catch (ex) { $('stMsg').textContent = ex.message; }
 }
 
@@ -36,11 +57,12 @@ async function save() {
     if (!Number.isInteger(v) || v < f.min || v > f.max) { $('stMsg').textContent = `${f.label}: enter whole seconds from ${f.min} to ${f.max}.`; $('st-' + f.k).focus(); return; }
     rec[f.k] = v;
   }
+  for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   $('stSave').disabled = true; $('stMsg').textContent = 'Saving…';
   try {
     const r = row ? await client.models.SiteSetting.update(rec) : await client.models.SiteSetting.create(rec);
     if (r.errors?.length) throw new Error(r.errors[0].message);
     row = r.data;
-    $('stMsg').textContent = 'Saved. Visitors get the new timing the next time they open the website.';
+    $('stMsg').textContent = 'Saved. Visitors see it the next time they open the website.';
   } catch (ex) { $('stMsg').textContent = ex.message; } finally { $('stSave').disabled = false; }
 }
