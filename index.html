@@ -246,6 +246,10 @@ footer p{margin:2px 0}
 .fr::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 3px 3px 4px rgba(255,255,255,.18),inset -3px -3px 5px rgba(0,0,0,.35)}
 .fr .mt{background:#fbf8f1;padding:var(--mw,0px);box-shadow:inset 1px 1px 3px rgba(0,0,0,.25)}
 .fr img{display:block;max-width:100%;max-height:52vh;width:auto;height:auto}
+.fr2{position:relative;box-sizing:border-box;box-shadow:0 12px 26px rgba(0,0,0,.32),inset 0 0 0 1px rgba(0,0,0,.25);border-radius:2px;max-width:100%}
+.fr2::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 3px 3px 4px rgba(255,255,255,.18),inset -3px -3px 5px rgba(0,0,0,.35)}
+.fr2 .mt2{width:100%;height:100%;display:grid;place-items:center;box-shadow:inset 1px 1px 3px rgba(0,0,0,.25)}
+.fr2 img{display:block}
 .fr.none{padding:0;background:none;box-shadow:0 10px 26px rgba(0,0,0,.3)}.fr.none::after{display:none}
 .fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .fchips button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:4px 10px 4px 5px;font-size:12px;cursor:pointer}
@@ -879,10 +883,22 @@ function baseSize(p){return p.prices&&p.prices.v===2?p.prices.base:""}
 /** outside size of the chosen frame (cm), turned to match the artwork. */
 function frameDims(p){const f=FRAME_SIZES.find(x=>x[0]===(FSIZE||baseSize(p)));if(!f||FRAME.k==="none")return null;
   return p.wcm>=p.hcm?[f[2],f[1]]:[f[1],f[2]]}
+/** Framed preview drawn to scale (cm): the artwork keeps its size and a bigger frame really looks bigger.
+ *  One scale for all the frame sizes on offer, so switching sizes is a fair comparison. */
 function framedHtml(p){
-  const fd=frameDims(p),mwCm=fd?Math.max(2,(fd[0]-p.wcm)/2):7;
-  const fw=Math.round(400*(FRAME.w||0)),mw=MOUNT&&FRAME.k!=="none"?Math.min(140,Math.round(mwCm*400/Math.max(p.wcm,10))):0;
-  return `<div class="fr ${FRAME.k==="none"?"none":""}" style="--fbg:${FRAME.bg};--fw:${fw}px;--mw:${mw}px"><div class="mt"><img src="${p.img}" alt="${p.name} in a ${FRAME.n.toLowerCase()} frame"></div></div>`;
+  const W=p.wcm||40,H=p.hcm||30,fd=frameDims(p);
+  const sizes=p.prices&&p.prices.v===2?Object.keys(p.prices.sizes):[];
+  const big=sizes.length?FRAME_SIZES.find(f=>f[0]===sizes[sizes.length-1]):null;
+  const bigD=big?(W>=H?[big[2],big[1]]:[big[1],big[2]]):fd||[W+16,H+16];
+  const st=document.getElementById("vStage"),availW=Math.min(((st&&st.clientWidth)||560)-24,620),availH=Math.min(innerHeight*.58,560);
+  const k=Math.min(availW/bigD[0],availH/bigD[1]); // px per cm
+  const alt=`${p.name}${FRAME.k==="none"?"":` in a ${FRAME.n.toLowerCase()} frame`}`;
+  if(FRAME.k==="none")return `<div class="fr2" style="width:${W*k}px;height:${H*k}px"><img src="${p.img}" alt="${alt}" style="width:100%;height:100%;object-fit:contain;box-shadow:0 10px 26px rgba(0,0,0,.3)"></div>`;
+  const [FW,FH]=fd||[W+16,H+16],mould=Math.max(1.6,FW*(FRAME.w||.04)*.6); // moulding width in cm
+  const inW=FW-2*mould,inH=FH-2*mould;
+  const iw=MOUNT?Math.min(W,inW):inW,ih=MOUNT?Math.min(H,inH):inH;
+  return `<div class="fr2" style="width:${FW*k}px;height:${FH*k}px;padding:${mould*k}px;background:${FRAME.bg}">
+    <div class="mt2" style="background:${MOUNT?"#fbf8f1":"transparent"}"><img src="${p.img}" alt="${alt}" style="width:${iw*k}px;height:${ih*k}px;object-fit:${MOUNT?"contain":"cover"}"></div></div>`;
 }
 /* magnifying lens: move over the picture (or touch and drag) to look closer */
 let LENS=true;
