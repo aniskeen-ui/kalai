@@ -4,6 +4,7 @@ import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
+import { SUGGEST } from './suggest.js';
 
 const client = generateClient();
 // Shown inside the artist & seller portal (seller.html "Studio orders" tab): no own header there.
@@ -85,18 +86,25 @@ async function renderWorks(force = false) {
   $('cWorks').textContent = todo ? `(${todo})` : '';
   if (filter !== 'WORKS') return;
   if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
-  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>`
+  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>
+    ${works.some((w) => !w.named) ? '<div style="display:flex;gap:10px;align-items:center;margin:0 0 6px"><button type="button" class="btn small" id="saveAllW">Save all titles shown</button><span class="muted" id="saveAllMsg" style="font-size:12px">Saves every work below that has a title (and price, if given).</span></div>' : ''}`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
-        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title</label><input name="title" maxlength="80" value="${esc(w.title)}" placeholder="A short, meaningful title"></div>
+        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title${!w.named && SUGGEST[w.code] ? ' <span class="muted" style="font-weight:400">(suggested: change it if you like, then Save)</span>' : ''}</label><input name="title" maxlength="80" value="${esc(w.title || (!w.named && SUGGEST[w.code] ? SUGGEST[w.code][0] : ''))}" placeholder="A short, meaningful title"></div>
         <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
         <div class="field"><label>My price (₹, artwork only)</label><input name="price" type="number" min="100" step="50" inputmode="numeric" value="${w.artistPrice ?? ''}" placeholder="e.g. 3000"></div></div>
-        <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description)}</textarea></div>
+        <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description || (!w.named && SUGGEST[w.code] ? SUGGEST[w.code][2] : ''))}</textarea></div>
         <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? `<span class="wdone">✓ Named${w.artistPrice != null ? ' · priced' : ''}</span>` : ''}</span></div>
       </form></article>`).join('');
   document.querySelectorAll('.wcard img[data-key]').forEach(async (img) => {
     try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no picture */ }
   });
+  if ($('saveAllW')) $('saveAllW').onclick = async () => {
+    const forms = [...document.querySelectorAll('.wcard form')].filter((f) => f.title.value.trim().length >= 2 || f.price.value);
+    $('saveAllW').disabled = true; let n = 0;
+    for (const f of forms) { await f.onsubmit(new Event('submit')); n++; $('saveAllMsg').textContent = `Saving… ${n} of ${forms.length}`; }
+    $('saveAllMsg').textContent = `${n} works saved.`; $('saveAllW').disabled = false;
+  };
   document.querySelectorAll('.wcard form').forEach((f) => {
     f.onsubmit = async (e) => {
       e.preventDefault();
