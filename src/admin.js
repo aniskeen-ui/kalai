@@ -38,7 +38,25 @@ const DEFAULT_RATES = {
     L: { label: '50×70 cm', framing: 220, courier: 110 },
   },
   local: 30, customs: 0.05, fee: 0.03, ins: 0.01, reserve: 0.02, margin: 0.25, vat: 0, fx: 0.042, round9: true, saved: false,
+  // Market check: Kalai's target price band per size (simple frame included), and what similar originals list for on
+  // Saatchi Art (watercolour / ink by artists from India, AED, Oct 2026). Edit under Rates.
+  market: {
+    S: { sk: [390, 590], wc: [490, 790], saatchi: 'ink 20×15 cm ≈ AED 1,100 · watercolour 30×23 cm ≈ AED 4,300' },
+    M: { sk: [590, 890], wc: [790, 1190], saatchi: 'ink 29×22 cm ≈ AED 1,600–1,900 · watercolour 38×28 cm ≈ AED 3,800–4,300' },
+    L: { sk: [990, 1490], wc: [1290, 1990], saatchi: 'watercolour 51×38 to 56×76 cm ≈ AED 3,900–7,500' },
+  },
 };
+// Sketch (pencil, ink, charcoal) or watercolour/painting, from the order's title and details.
+const mediumOf = (e) => (/sketch|pencil|ink|charcoal|pen\b/i.test(`${e?.title || ''} ${typeof e?.details === 'string' ? e.details : JSON.stringify(e?.details || '')}`) ? 'sk' : 'wc');
+let curEnq = null;
+function marketLine(price, suggested) {
+  const tier = $('cTier')?.value; const m = rates.market?.[tier]; if (!m) return '';
+  const md = mediumOf(curEnq); const [lo, hi] = m[md] || [];
+  if (!lo) return '';
+  const p = price || suggested;
+  const verdict = !p ? '' : p < lo ? `<b class="warn-t">below the band</b>: consider at least ${aed(lo)}` : p > hi ? '<b class="warn-t">above the band</b>: fine for a special piece, else consider lowering' : '<b class="ok-t">inside the band</b>';
+  return `<div class="marketline">Market check (${tier}, ${md === 'sk' ? 'sketch' : 'watercolour'}): Kalai band <b>${aed(lo)}–${aed(hi)}</b>${p ? ` · ${aed(p)} is ${verdict}` : ''}<br><span class="muted">Saatchi Art, similar originals: ${esc(m.saatchi || '')}</span></div>`;
+}
 let rates = structuredClone(DEFAULT_RATES);
 const costings = new Map(); // enquiryId → Costing record
 const hasArtist = (e) => e.kind === 'PRICE' || e.kind === 'COMMISSION';
@@ -81,7 +99,7 @@ async function loadRates() {
   try {
     const { data } = await client.models.Rates.get({ key: 'default' });
     const d = data?.data ? (typeof data.data === 'string' ? JSON.parse(data.data) : data.data) : null;
-    if (d) rates = { ...structuredClone(DEFAULT_RATES), ...d, tiers: { ...DEFAULT_RATES.tiers, ...(d.tiers || {}) }, saved: true };
+    if (d) rates = { ...structuredClone(DEFAULT_RATES), ...d, tiers: { ...DEFAULT_RATES.tiers, ...(d.tiers || {}) }, market: { ...structuredClone(DEFAULT_RATES.market), ...(d.market || {}) }, saved: true };
   } catch { /* keep placeholders */ }
 }
 async function loadCostings() {
@@ -505,6 +523,7 @@ function costingSection(e) {
   const lockedPO = !!e.zohoPOId;
   const dis = lockedPO ? 'disabled' : '';
   curAed = !!e.artistId && e.artistCountry !== 'India';
+  curEnq = e;
   const who = e.artistName || 'Siva';
   const artistOpts = `<option value="">Siva Raja (Artist desk)</option>${artists.map((a) => `<option value="${esc(a.id)}" data-name="${esc(a.business)}" data-country="${esc(a.country || 'UAE')}" ${a.id === e.artistId ? 'selected' : ''}>${esc(a.business)} (${esc(a.country || 'UAE')}${a.mediums ? ` · ${esc(a.mediums)}` : ''})</option>`).join('')}${e.artistId && !artists.some((a) => a.id === e.artistId) ? `<option value="${esc(e.artistId)}" selected>${esc(e.artistName || 'Artist')}</option>` : ''}`;
   const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${c.sizeTier === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
@@ -887,9 +906,11 @@ function renderCost() {
       ${$('ePrice').readOnly ? '' : '<button type="button" class="btn small" id="useSug">Use this price</button>'}</div>`;
     if (r.price) {
       const low = r.marginPct < 0.1;
+      html += marketLine(r.price, r.suggested);
       html += `<div class="marginline ${low ? 'low' : ''}">At ${aed(r.price)}: ${r.vatRate ? `VAT ${aed(r.vatAmt, 2)} · ` : ''}Ziina fee ${aed(r.feeAmt, 2)}${r.insAmt ? ` · insurance ${aed(r.insAmt, 2)}` : ''}${r.resAmt ? ` · breakage reserve ${aed(r.resAmt, 2)}` : ''} · <b>margin ${aed(r.margin)} (${(r.marginPct * 100).toFixed(1)}%)</b>${low ? ' · below 10%' : ''}</div>`;
     }
   }
+  if (r.ready && !r.price) html += marketLine(null, r.suggested);
   $('costOut').innerHTML = html;
   const b = $('useSug');
   if (b) b.onclick = () => { $('ePrice').value = r.suggested; $('ePrice').dispatchEvent(new Event('input')); };
@@ -939,6 +960,12 @@ function showRates() {
         ${pct('rMar', 'Pranix margin (%)', rates.margin, 'markup on total cost')}
         ${pct('rVat', 'VAT (%)', rates.vat, '0 until registered, then 5')}
       </div>
+      <div class="tablewrap"><table class="costs"><thead><tr><th>Market check</th><th>Sketch band (AED)</th><th>Watercolour band (AED)</th><th>Saatchi Art reference</th></tr></thead>
+        <tbody>${Object.keys(t).map((k) => { const m = (rates.market || DEFAULT_RATES.market)[k] || DEFAULT_RATES.market[k]; return `<tr><th>${k}</th>
+          <td><input id="mSk1${k}" type="number" min="0" value="${m.sk[0]}" style="width:70px" aria-label="${k} sketch from"> – <input id="mSk2${k}" type="number" min="0" value="${m.sk[1]}" style="width:70px" aria-label="${k} sketch to"></td>
+          <td><input id="mWc1${k}" type="number" min="0" value="${m.wc[0]}" style="width:70px" aria-label="${k} watercolour from"> – <input id="mWc2${k}" type="number" min="0" value="${m.wc[1]}" style="width:70px" aria-label="${k} watercolour to"></td>
+          <td><input id="mSa${k}" value="${esc(m.saatchi || '')}" aria-label="${k} Saatchi reference"></td></tr>`; }).join('')}</tbody></table></div>
+      <div class="muted" style="font-size:12px;margin-top:-6px">Kalai's target price bands (simple frame included). Each order's price is checked against them, with Saatchi Art's prices for similar originals as the upper reference.</div>
       <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="rRound" style="width:auto" ${rates.round9 ? 'checked' : ''}> Round suggested prices up to end in 9</label>
       <div class="ok" id="ratesMsg" role="status"></div>
       <button class="btn" type="submit">Save rates</button>
@@ -955,7 +982,8 @@ function showRates() {
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
     const data = { tiers, local: n($('rLocal').value) ?? 0, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margin: (n($('rMar').value) ?? 0) / 100,
-      vat: (n($('rVat').value) ?? 0) / 100, round9: $('rRound').checked, updatedAt: new Date().toISOString() };
+      vat: (n($('rVat').value) ?? 0) / 100, round9: $('rRound').checked, updatedAt: new Date().toISOString(),
+      market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };
     try {
       const rec = { key: 'default', data: JSON.stringify(data) };
       let res = rates.saved ? await client.models.Rates.update(rec) : await client.models.Rates.create(rec);
