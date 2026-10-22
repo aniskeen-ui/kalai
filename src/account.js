@@ -755,8 +755,9 @@ async function showDailyMessage() {
     const r = await client.models.Announcement.list({ authMode: 'apiKey', limit: 50 });
     const nowIso = new Date().toISOString();
     const m = (r.data || []).filter((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso))
-      // The studio's own message comes first; otherwise the Thirukkural of the day.
-      .sort((a, b) => Number(a.source === 'KURAL') - Number(b.source === 'KURAL') || String(b.showFrom).localeCompare(String(a.showFrom)))[0];
+      // The card is for the Thirukkural of the day (published 06:05 Dubai each morning); an older hand-written
+      // message shows only on a day the kural is missing.
+      .sort((a, b) => Number(b.source === 'KURAL') - Number(a.source === 'KURAL') || String(b.showFrom).localeCompare(String(a.showFrom)))[0];
     if (!m) return;
     const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
     if (!langs.length) return;
