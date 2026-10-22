@@ -199,7 +199,7 @@ function fillApply() {
   $('pCountry').addEventListener('change', bankKind);
   for (const [id, k] of Object.entries(AF)) $(id).value = profile?.[k] ?? (id === 'pComm' ? 'YES' : '');
   const typeNow = profile?.type || (wantArtist ? 'ARTIST' : 'SELLER');
-  document.querySelectorAll('input[name="pType"]').forEach((r) => { r.checked = r.value === typeNow; r.onchange = applyKind; });
+  document.querySelectorAll('input[name="pType"]').forEach((r) => { r.checked = r.value === typeNow; r.onchange = () => { applyKind(); drawSamples(); }; });
   $('pTypeBox').hidden = !!profile?.type && profile.status !== 'REJECTED';
   const chosen = String(profile?.mediums || '').split(',').map((x) => x.trim());
   $('pMediums').innerHTML = MEDIUMS.map((m) => `<label><input type="checkbox" value="${esc(m)}" ${chosen.includes(m) ? 'checked' : ''}> ${esc(m)}</label>`).join('');
@@ -210,7 +210,12 @@ function fillApply() {
   bankKind(); applyKind();
 }
 async function drawSamples() {
-  $('pSamples').innerHTML = samples.map((k, i) => `<figure data-i="${i}"><img alt="Sample ${i + 1}"><button type="button" aria-label="Remove photo">×</button></figure>`).join('') || '<span class="muted" style="font-size:12px">No samples yet.</span>';
+  const need = isArtist() ? 3 : 1;
+  $('pSamples').innerHTML = samples.map((k, i) => `<figure data-i="${i}"><img alt="Sample ${i + 1}"><button type="button" aria-label="Remove photo">×</button></figure>`).join('')
+    + (samples.length < 8 ? '<button type="button" class="add" id="pSampleAdd">+ Add photo</button>' : '');
+  $('pSampleAdd')?.addEventListener('click', () => $('pSampleFiles').click());
+  $('pSampleCount').textContent = samples.length >= need ? `✓ ${samples.length} photo${samples.length > 1 ? 's' : ''} added${samples.length < 8 ? ` (up to ${8 - samples.length} more allowed)` : ''}` : `${samples.length} of ${need} needed — add ${need - samples.length} more`;
+  $('pSampleCount').style.color = samples.length >= need ? 'var(--ok)' : 'var(--kumkum)';
   $('pSamples').querySelectorAll('figure').forEach(async (f) => {
     const k = samples[Number(f.dataset.i)];
     f.querySelector('img').src = await imgUrl(k);
@@ -364,7 +369,7 @@ function edit(l) {
     <div class="two"><div class="field"><label for="eTitle">Title</label><input id="eTitle" maxlength="120" value="${esc(x.title)}"></div>
       <div class="two"><div class="field"><label for="eCat">Category</label><input id="eCat" maxlength="60" value="${esc(x.category)}"></div><div class="field"><label for="eStock">Stock</label><input id="eStock" type="number" min="0" step="1" value="${esc(x.stock)}"></div></div></div>
     <div class="field"><label for="eDesc">Description (size, material, care)</label><textarea id="eDesc" rows="3" maxlength="2000">${esc(x.description)}</textarea></div>
-    <div class="field"><label>Photos (up to 6; the first is the cover)</label><div class="thumbs" id="eThumbs"></div><input id="eFiles" type="file" accept="image/*" multiple></div>
+    <div class="field"><label>Photos (up to 6; the first is the cover)</label><div class="thumbs" id="eThumbs"></div><input id="eFiles" type="file" accept="image/*" multiple hidden><span class="muted" style="font-size:12px">Tap <b>+ Add photo</b> again to add more, or pick several at once.</span></div>
     <fieldset class="sbox" style="padding:12px"><legend style="font-size:13px;font-weight:700">Price calculator</legend>
       <div class="radio"><span style="font-size:13px;font-weight:700">Who delivers?</span>
         <label><input type="radio" name="eDel" value="SELLER" ${x.deliveryBy !== 'KALAI' ? 'checked' : ''}> I deliver to the customer</label>
@@ -404,7 +409,9 @@ function edit(l) {
       <tr class="t c"><td>Customer pays on the website</td><td class="n">${aed(p.customerPrice)}</td></tr>`;
   };
   const thumbs = async () => {
-    $('eThumbs').innerHTML = keys.map((k, i) => `<figure data-i="${i}"><img alt=""><button type="button" aria-label="Remove photo">×</button></figure>`).join('') || '<span class="muted" style="font-size:12px">No photos yet.</span>';
+    $('eThumbs').innerHTML = keys.map((k, i) => `<figure data-i="${i}"><img alt=""><button type="button" aria-label="Remove photo">×</button></figure>`).join('')
+      + (keys.length < 6 ? '<button type="button" class="add" id="eAdd">+ Add photo</button>' : '');
+    $('eAdd')?.addEventListener('click', () => $('eFiles').click());
     $('eThumbs').querySelectorAll('figure').forEach(async (f) => {
       const k = keys[Number(f.dataset.i)];
       f.querySelector('img').src = await imgUrl(k);
