@@ -31,7 +31,10 @@ export async function showSettings() {
       return `${head}<div class="field" style="max-width:720px"><label for="st-${t.k}">${esc(t.label)}</label>${input}
         <div class="muted" style="font-size:12px">Blank = the current text (shown in grey). <button type="button" class="linkbtn" data-copy="${t.k}">Copy it in to edit</button></div></div>`;
     }).join('');
-    box.innerHTML = `<h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
+    box.innerHTML = `<h3 style="margin:0;font-size:17px">Website look</h3>
+      <div class="field" style="max-width:520px"><label for="st-look">Look</label><select id="st-look" style="max-width:260px"><option value="classic">Classic (navy and gold)</option><option value="magazine">Magazine (white, bold black, red)</option></select>
+      <div class="muted" style="font-size:12px">Try before you switch: <a href="/?look=magazine" target="_blank" rel="noopener">preview Magazine</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview Classic</a> (a preview only changes your own browser).</div></div>
+      <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
@@ -45,6 +48,7 @@ export async function showSettings() {
     row = r.data;
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
+    $('st-look').value = row?.siteLook === 'magazine' ? 'magazine' : 'classic';
     // Headline saved before several headlines were possible: show it as the first line.
     if (!row?.heroLines && (row?.heroTitle || row?.heroHighlight)) $('st-heroLines').value = `${row.heroTitle || TEXTS[0].def.split('|')[0].trim()} | ${row.heroHighlight || TEXTS[0].def.split('|')[1].trim()}`;
     $('stMsg').textContent = row?.updatedAt ? `Last changed ${new Date(row.updatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Built-in texts and 10-second timings until you save.';
@@ -59,6 +63,7 @@ async function save() {
     rec[f.k] = v;
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
+  rec.siteLook = $('st-look').value;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
   [rec.heroTitle, rec.heroHighlight] = first ? [first.split('|')[0].trim() || null, (first.split('|')[1] || '').trim() || null] : [null, null];
   $('stSave').disabled = true; $('stMsg').textContent = 'Saving…';
