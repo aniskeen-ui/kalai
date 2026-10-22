@@ -37,7 +37,7 @@ export function enhancePhone(input) {
   const sel = document.createElement('select');
   sel.setAttribute('aria-label', 'Country code');
   sel.style.cssText = 'width:auto;flex:0 0 auto;padding-inline:6px';
-  sel.innerHTML = COUNTRIES.map((c) => `<option value="${c.key}">${c.flag} ${c.dial}</option>`).join('');
+  sel.innerHTML = COUNTRIES.map((c) => `<option value="${c.key}">${c.name} ${c.dial}</option>`).join('');
   const vis = document.createElement('input');
   vis.type = 'tel'; vis.inputMode = 'tel'; vis.autocomplete = 'tel-national';
   vis.dataset.cc = 'num'; // the number box itself is never enhanced again
@@ -85,7 +85,7 @@ export function autoPhones(root = document) {
 export function countryRegionHtml({ country = 'UAE', region = '', pin = '', prefix = 'ad', names = true } = {}) {
   const c = countryOf(country);
   const n = (x) => (names ? `name="${x}"` : '');
-  return `<div class="field"><label for="${prefix}Country">Country</label><select id="${prefix}Country" ${n('country')} data-country>${COUNTRIES.map((x) => `<option value="${x.key}" ${x.key === c.key ? 'selected' : ''}>${x.flag} ${x.name}</option>`).join('')}</select></div>
+  return `<div class="field"><label for="${prefix}Country">Country</label><select id="${prefix}Country" ${n('country')} data-country>${COUNTRIES.map((x) => `<option value="${x.key}" ${x.key === c.key ? 'selected' : ''}>${x.name}</option>`).join('')}</select></div>
     <div class="field"><label for="${prefix}Region" data-region-label>${c.region}</label><select id="${prefix}Region" ${n('emirate')} data-region><option value="">Choose…</option>${regionsOf(c.key).map((x) => `<option ${x === region ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
     <div class="field" data-pin-box ${c.key === 'India' ? '' : 'hidden'}><label for="${prefix}Pin">PIN code</label><input id="${prefix}Pin" ${n('pin')} inputmode="numeric" maxlength="6" value="${String(pin ?? '').replace(/"/g, '')}" placeholder="6 digits"></div>`;
 }
