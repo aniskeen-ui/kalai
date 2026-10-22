@@ -206,7 +206,8 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
       <button class="btn" id="reload" type="button">Refresh</button>
     </div>
     <div class="searchbar">
-      <input id="fSearch" type="search" placeholder="Search: order no., customer name, mobile, email, CUST- or ART- code" aria-label="Search orders">
+      <input id="fSearch" type="search" list="dlOrders" placeholder="Order no. or artwork (KA-…, ART-…, title)" aria-label="Find an order"><datalist id="dlOrders"></datalist>
+      <select id="fCust" aria-label="Customer" style="max-width:280px"><option value="">All customers</option></select>
       <label>From <input id="fFrom" type="date"></label><label>To <input id="fTo" type="date"></label>
       <button class="btn small ghost" id="fClear" type="button">Clear</button>
     </div>

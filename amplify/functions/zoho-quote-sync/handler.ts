@@ -2436,15 +2436,22 @@ async function assignCodes() {
   const table = process.env.ENQUIRY_TABLE;
   if (table) {
     const all = (await scanAll(table)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')));
+    // One customer = same account, or same email, or same mobile (a guest order and a signed-in one join up).
+    const keysOf = (e: Img) => {
+      const k: string[] = [];
+      const owner = str(e, 'owner').split('::')[0]; if (owner) k.push(`o:${owner}`);
+      const email = str(e, 'email').toLowerCase().trim(); if (email) k.push(`e:${email}`);
+      const phone = str(e, 'phone').replace(/\D/g, '').slice(-9); if (phone.length >= 7) k.push(`p:${phone}`);
+      return k.length ? k : [custKey(e)];
+    };
     const byKey = new Map<string, string>();
-    let max = 0;
-    all.forEach((e) => { const c = str(e, 'customerCode'); if (c) { byKey.set(custKey(e), c); max = Math.max(max, codeNum(c)); } });
-    for (const e of all.filter((x) => !str(x, 'customerCode'))) {
-      const k = custKey(e);
-      let code = byKey.get(k);
-      if (!code) { code = `CUST-${pad(++max)}`; byKey.set(k, code); }
-      await writeBack(str(e, 'id'), { customerCode: code });
-      out.customers++;
+    let max = all.reduce((m, e) => Math.max(m, codeNum(str(e, 'customerCode'))), 0);
+    for (const e of all) {
+      const ks = keysOf(e);
+      const have = str(e, 'customerCode');
+      const code = ks.map((k) => byKey.get(k)).find(Boolean) ?? (have || `CUST-${pad(++max)}`);
+      ks.forEach((k) => { if (!byKey.has(k)) byKey.set(k, code); });
+      if (code !== have) { await writeBack(str(e, 'id'), { customerCode: code }); out.customers++; }
     }
   }
   // Offer master numbers PRM-0001… (in order of creation).

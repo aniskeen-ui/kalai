@@ -383,9 +383,25 @@ $('fStatus').onchange = render;
 let searchT;
 $('fSearch').addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(render, 200); });
 ['fFrom', 'fTo'].forEach((id) => $(id).addEventListener('change', render));
-$('fClear').onclick = () => { $('fSearch').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
+$('fCust').addEventListener('change', render);
+$('fClear').onclick = () => { $('fSearch').value = ''; $('fCust').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
 // Click a customer code on an order: list all that customer's orders.
-document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-cust]'); if (!b) return; $('fSearch').value = b.dataset.cust; $('fStatus').value = ''; render(); });
+document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-cust]'); if (!b) return; fillFinders(); $('fCust').value = b.dataset.cust; $('fSearch').value = ''; $('fStatus').value = ''; render(); });
+// Dropdowns: order numbers (type to narrow) and customers (name · code · number of orders).
+const custOf = (e) => e.customerCode || `n:${String(e.customerName || e.email || e.phone || '').trim().toLowerCase()}`;
+let finderSig = '';
+function fillFinders() {
+  const sig = all.map((e) => e.id + (e.customerCode || '')).join();
+  if (sig === finderSig) return;
+  finderSig = sig;
+  $('dlOrders').innerHTML = all.filter((e) => e.ref).map((e) => `<option value="${esc(e.ref)}">${esc(`${e.customerName || ''} · ${e.title || ''}`.slice(0, 80))}</option>`).join('');
+  const cs = new Map();
+  all.forEach((e) => { const k = custOf(e); const c = cs.get(k) || { k, name: e.customerName || e.email || e.phone || 'No name', code: e.customerCode || '', n: 0 }; c.n++; cs.set(k, c); });
+  const cur = $('fCust').value;
+  $('fCust').innerHTML = '<option value="">All customers</option>' + [...cs.values()].sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => `<option value="${esc(c.k)}">${esc(c.name)}${c.code ? ` · ${esc(c.code)}` : ''} (${c.n})</option>`).join('');
+  $('fCust').value = cs.has(cur) ? cur : '';
+}
 $('fKind').onchange = render;
 
 // Approved portal artists, for allocating price enquiries / commissions (Siva is the default).
@@ -413,9 +429,10 @@ async function load() {
     await loadReviews().catch(() => {});
     await loadArtists().catch(() => {});
     // Older enquiries (before codes existed) get their customer code once, then the list reloads.
-    if (!codesAsked && items.some((e) => !e.customerCode)) {
+    // Once per visit: codes for new enquiries, and one code per customer (guest + signed-in orders joined up).
+    if (!codesAsked) {
       codesAsked = true;
-      client.mutations.assignCodes().then(() => load()).catch(() => {});
+      client.mutations.assignCodes().then((r) => { let o = r?.data; try { if (typeof o === 'string') o = JSON.parse(o); } catch { o = null; } if (!o || o.customers || o.artworks || items.some((e) => !e.customerCode)) load(); }).catch(() => {});
     }
     render();
     if (!$('reportsPane').hidden) renderReport();
@@ -446,10 +463,12 @@ function render() {
     };
   });
   // Search: order no., customer name, mobile, email, customer code, artwork code / title; dates in Dubai time.
-  const q = $('fSearch').value.trim().toLowerCase(), from = $('fFrom').value, to = $('fTo').value;
+  fillFinders();
+  const q = $('fSearch').value.trim().toLowerCase(), from = $('fFrom').value, to = $('fTo').value, fc = $('fCust').value;
   const dubaiDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
-  const hit = (e) => !q || [e.ref, e.customerName, e.phone, e.email, e.customerCode, e.title, e.deliveryName, e.deliveryPhone, typeof e.details === 'string' ? e.details : JSON.stringify(e.details || '')]
-    .some((v) => String(v || '').toLowerCase().includes(q) || (q.replace(/\D/g, '').length >= 5 && String(v || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))));
+  // Order box: order no., title, artwork code (in the details). Customer: the dropdown.
+  const hit = (e) => (!fc || custOf(e) === fc) && (!q || [e.ref, e.title, typeof e.details === 'string' ? e.details : JSON.stringify(e.details || '')]
+    .some((v) => String(v || '').toLowerCase().includes(q)));
   const list = all.filter((e) => (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk)
     && hit(e) && (!from || dubaiDay(e.createdAt) >= from) && (!to || dubaiDay(e.createdAt) <= to));
   $('rows').innerHTML = list.length ? list.map((e) => {
