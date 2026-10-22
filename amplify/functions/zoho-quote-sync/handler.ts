@@ -2300,6 +2300,37 @@ async function ziinaAdmin(ev: ApiEvent) {
   throw new Error('Unknown action');
 }
 
+// ---------- Artist desk: name the catalogue works ----------
+async function artistWorks(ev: ApiEvent) {
+  const table = process.env.PRODUCT_TABLE;
+  if (!table) throw new Error('Not configured');
+  const action = String(ev.arguments.action ?? '');
+  const d = parseData(ev.arguments.data);
+  if (action === 'list') {
+    const items = (await scanAll(table)).filter((x) => str(x, 'status') !== 'HIDDEN' && str(x, 'imageKey'));
+    return {
+      works: items.map((x) => ({ id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named') }))
+        .sort((a, b) => Number(!!a.named) - Number(!!b.named) || a.id.localeCompare(b.id)),
+    };
+  }
+  if (action === 'save') {
+    const id = txt(d.id, 80);
+    const title = txt(d.title, 80).replace(/\s+/g, ' ');
+    if (title.length < 2) throw new Error('Give the work a title (2 to 80 letters).');
+    const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+    if (!got.Item) throw new Error('Work not found');
+    const set: Record<string, string> = { title, named: `${actor(ev)} ${new Date().toISOString()}`, updatedAt: new Date().toISOString() };
+    const size = txt(d.size, 40), description = txt(d.description, 1000);
+    if (size) set.size = size;
+    if (description) set.description = description;
+    const names: Record<string, string> = {}; const values: Record<string, AttributeValue> = {};
+    const parts = Object.entries(set).map(([k, v], i) => { names[`#w${i}`] = k; values[`:w${i}`] = { S: v }; return `#w${i} = :w${i}`; });
+    await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+    return { ok: true, id, ...set };
+  }
+  throw new Error('Unknown action');
+}
+
 // ---------- Daily message translation ----------
 const translator = new TranslateClient({});
 async function translateMessage(a: { text?: string; source?: string | null }) {
@@ -2763,6 +2794,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
     if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
+    if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));

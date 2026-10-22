@@ -2,6 +2,7 @@
 import './amplify-config.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
+import { getUrl } from 'aws-amplify/storage';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -41,7 +42,7 @@ $('loginForm').addEventListener('submit', async (e) => {
   } finally { b.disabled = false; }
 });
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; show('loginView'); };
-$('reload').onclick = load;
+$('reload').onclick = () => (filter === 'WORKS' ? renderWorks(true) : load());
 document.querySelectorAll('.tabs [data-f]').forEach((b) => {
   b.onclick = () => {
     filter = b.dataset.f;
@@ -57,12 +58,56 @@ async function load() {
     if (errors?.length) throw new Error(errors[0].message);
     items = parse(data) || [];
     render();
+    if (filter !== 'WORKS') renderWorks().catch(() => {});
   } catch (ex) {
     $('list').innerHTML = `<p class="err">Could not load the list: ${esc(ex.message)}</p>`;
   }
 }
 
+// ---------- Name my works: give each catalogue picture a real title (shown on the website) ----------
+let works = null;
+async function renderWorks(force = false) {
+  if (!works || force) {
+    if (filter === 'WORKS') $('list').innerHTML = '<p class="muted">Loading your works…</p>';
+    try {
+      const r = await client.mutations.artistWorks({ action: 'list' });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      works = (parse(r.data) || {}).works || [];
+    } catch (ex) { if (filter === 'WORKS') $('list').innerHTML = `<p class="err">Could not load your works: ${esc(ex.message)}</p>`; return; }
+  }
+  const todo = works.filter((w) => !w.named).length;
+  $('cWorks').textContent = todo ? `(${todo})` : '';
+  if (filter !== 'WORKS') return;
+  if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
+  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then it shows as “Untitled”. ${todo ? `<b>${todo} still to name.</b>` : '<b class="wdone">All named. Thank you!</b>'}</p>`
+    + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}"><img alt="" data-key="${esc(w.imageKey)}">
+      <form novalidate>
+        <div class="field"><label>Title</label><input name="title" maxlength="80" value="${esc(w.title)}" placeholder="A short, meaningful title"></div>
+        <div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
+        <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description)}</textarea></div>
+        <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? '<span class="wdone">✓ Named</span>' : ''}</span></div>
+      </form></article>`).join('');
+  document.querySelectorAll('.wcard img[data-key]').forEach(async (img) => {
+    try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no picture */ }
+  });
+  document.querySelectorAll('.wcard form').forEach((f) => {
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const id = f.closest('.wcard').dataset.w;
+      const m = f.querySelector('[data-m]'); const b = f.querySelector('button'); b.disabled = true; m.textContent = 'Saving…';
+      try {
+        const r = await client.mutations.artistWorks({ action: 'save', data: JSON.stringify({ id, title: f.title.value, size: f.size.value, description: f.description.value }) });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        const w = works.find((x) => x.id === id); Object.assign(w, { title: f.title.value.trim(), size: f.size.value.trim(), description: f.description.value.trim(), named: 'yes' });
+        m.innerHTML = '<span class="wdone">✓ Saved: now on the website</span>';
+        const todo2 = works.filter((x) => !x.named).length; $('cWorks').textContent = todo2 ? `(${todo2})` : '';
+      } catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
+    };
+  });
+}
+
 function render() {
+  if (filter === 'WORKS') { renderWorks(); return; }
   const needed = items.filter((x) => x.stage === 'NEEDED' || reworkPriceNeeded(x));
   $('cNeeded').textContent = needed.length ? `(${needed.length})` : '';
   const list = filter === 'NEEDED' ? needed

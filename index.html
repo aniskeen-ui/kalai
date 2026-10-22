@@ -697,7 +697,7 @@ function openAsk(p,offer){
     const off=offer?document.getElementById("aOffer").value.replace(/[^\d.]/g,""):"";
     if(!n||!ph){ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can reply.";return}
     if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
-    const fields={"Artwork":p.name+" ("+p.medium+", "+p.size+")","Name":n,"Mobile":ph};
+    const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")"+(p.untitled?" · catalogue no. "+String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
     if(offer)fields["Offer"]="AED "+off;
     fields["Framing"]=document.getElementById("aFrame").value;fields["Message"]=document.getElementById("aMsg").value.trim();
     const url=sendEnquiry((offer?"Price enquiry (offer): ":"Price enquiry: ")+p.name,fields);

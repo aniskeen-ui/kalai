@@ -83,7 +83,8 @@ function row(p) {
     <div class="cg-img"><img alt=""></div>
     <div class="cg-fields">
       <div class="cg-top"><input data-f="title" value="${esc(p.title)}" aria-label="Title" class="cg-title">
-        <span class="cg-badge ${s}">${STATE_LABEL[s]}${s === 'SCHEDULED' || (s === 'PUBLISHED' && p.publishAt) ? ` · ${esc(day(p.publishAt))}` : ''}</span></div>
+        <span class="cg-badge ${s}">${STATE_LABEL[s]}${s === 'SCHEDULED' || (s === 'PUBLISHED' && p.publishAt) ? ` · ${esc(day(p.publishAt))}` : ''}</span>
+        <span class="muted" style="font-size:11px;white-space:nowrap" title="Shown in enquiries for untitled works">No. ${esc(String(p.id).slice(0, 8))}${p.named ? ` · named by ${esc(String(p.named).split(' 20')[0])}` : ' · <b style="color:var(--kumkum)">untitled on website</b>'}</span></div>
       <div class="cg-grid">
         <select data-f="kind" aria-label="Type">${opt(KINDS, p.kind || 'water')}</select>
         <select data-f="subject" aria-label="Subject">${opt(SUBJECTS, p.subject || 'land')}</select>
@@ -108,6 +109,7 @@ function wireRows(list) {
         if (f === 'title' && !v) { inp.value = p.title; return; }
         if (f === 'priceAed') v = v === '' ? null : Number(v);
         const patch = { id: p.id, [f]: v };
+        if (f === 'title') patch.named = `Studio ${new Date().toISOString()}`;
         if (f === 'kind' && (!p.medium || Object.values(MEDIUM).includes(p.medium))) patch.medium = MEDIUM[v];
         const msg = el.querySelector('.cg-saved'); msg.textContent = 'Saving…';
         const r = await client.models.Product.update(patch);

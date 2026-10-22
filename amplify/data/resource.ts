@@ -221,6 +221,9 @@ const schema = a.schema({
       imageKey: a.string(),
       sortOrder: a.integer(),
       source: a.string(),
+      // Set when a real title is given (by the artist on his desk, or the studio in Catalogue). Until then the
+      // website shows "Untitled" instead of the imported file name.
+      named: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
@@ -369,6 +372,14 @@ const schema = a.schema({
   artistPhoto: a
     .query()
     .arguments({ id: a.id().required() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Artist desk: list catalogue works and give them a title, size and description.
+  artistWorks: a
+    .mutation()
+    .arguments({ action: a.string().required(), data: a.string() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
