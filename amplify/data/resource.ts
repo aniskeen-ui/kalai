@@ -135,6 +135,10 @@ const schema = a.schema({
       zohoSellerBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       zohoSellerPaymentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       // Ziina online payments: payment link (intent) created at Price sent, paid by webhook, refunds back to the card.
+      // Discount code applied by the customer (applyCode): price before the discount and the amount taken off.
+      discountCode: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      discountAmount: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      listPrice: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Artist doing a price enquiry / commission: empty = Siva (Artist desk); else an approved portal artist.
       artistId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       artistName: a.string().authorization((allow) => [allow.group('ADMINS')]),
@@ -329,6 +333,28 @@ const schema = a.schema({
     .identifier(['listingId'])
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
+  // Promotions: website banner, the Offers page, and an optional discount code.
+  Promotion: a
+    .model({
+      title: a.string(),
+      bannerText: a.string(),
+      showBanner: a.boolean(),
+      details: a.string(), // text on the Offers page
+      imageKey: a.string(),
+      code: a.string(), // e.g. DIWALI10 (upper case), optional
+      discountType: a.string(), // PCT | AED
+      discountValue: a.float(),
+      minOrder: a.float(),
+      appliesTo: a.string(), // ALL | ART (catalogue + commissions) | CRAFTS (Crafts shop) | GIFT (Little Artists)
+      startAt: a.string(),
+      endAt: a.string(),
+      active: a.boolean(),
+      maxUses: a.integer(),
+      usedCount: a.integer(),
+      sortOrder: a.integer(),
+    })
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
   // Public profile of an approved artist (written by the function on approval; no contact or bank details).
   ArtistProfile: a
     .model({
@@ -381,6 +407,14 @@ const schema = a.schema({
     .arguments({ id: a.id().required() })
     .returns(a.string())
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Customer (or the studio for them): apply / remove a discount code on an order before paying.
+  applyCode: a
+    .mutation()
+    .arguments({ id: a.id().required(), code: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Studio: publish today's Thirukkural now (it is also published every morning automatically).

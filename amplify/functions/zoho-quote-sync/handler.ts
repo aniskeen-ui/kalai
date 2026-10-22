@@ -31,7 +31,7 @@ type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImag
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
   identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { data?: string | null; country?: string | null; pin?: string | null; text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
+  arguments: { data?: string | null; code?: string | null; country?: string | null; pin?: string | null; text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -1959,7 +1959,19 @@ async function marketOrder(ev: ApiEvent) {
   const qty = Math.max(1, Math.floor(numIn(d.qty, 99)));
   if (qty > Number(l.stock ?? 0)) throw new Error(Number(l.stock ?? 0) > 0 ? `Only ${l.stock} left in stock.` : 'Sorry, this item is out of stock.');
   const { name, phone, country, region: emirate, pin, address, landmark } = checkAddress(d);
-  const unit = Number(l.customerPrice), total = r2(unit * qty), sellerAmount = r2(Number(l.sellerPrice) * qty);
+  const unit = Number(l.customerPrice), listTotal = r2(unit * qty), sellerAmount = r2(Number(l.sellerPrice) * qty);
+  // Discount code (Kalai's commission absorbs it: the maker still receives their full price).
+  let total = listTotal;
+  let promo: { code: string; amount: number } | null = null;
+  const code = txt(d.code, 30).toUpperCase();
+  if (code) {
+    const f = await findPromo(code);
+    if (!f || 'error' in f) throw new Error(f?.error ?? 'This code is not valid.');
+    const dd = discountFor(f.p, 'MARKET', listTotal);
+    if (dd.error) throw new Error(dd.error);
+    promo = { code, amount: dd.amount };
+    total = r2(listTotal - dd.amount);
+  }
   const ref = newRef();
   const now = new Date().toISOString();
   // Artist names are not shown to customers: their order says "Artist" (the studio still sees the name in sellerName).
@@ -1971,9 +1983,11 @@ async function marketOrder(ev: ApiEvent) {
     deliveryName: name, deliveryPhone: phone, deliveryCountry: country, deliveryEmirate: emirate, deliveryPin: pin, deliveryAddress: address, deliveryLandmark: landmark, addressAt: now, addressBy: 'Customer',
     listingId: String(l.id), sellerId: String(l.sellerId), sellerName: String(l.sellerName ?? seller.business), qty, unitPrice: unit, deliveryBy: String(l.deliveryBy),
     sellerAmount, commissionPct: Number(l.commissionPct ?? 0),
+    ...(promo ? { listPrice: listTotal, discountAmount: promo.amount, discountCode: promo.code } : {}),
   };
   await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row), ConditionExpression: 'attribute_not_exists(id)' }));
-  console.log(`Crafts shop order ${ref}: ${l.title} × ${qty} = AED ${total}`);
+  if (promo) await bumpUses(promo.code, 1);
+  console.log(`Crafts shop order ${ref}: ${l.title} × ${qty} = AED ${total}${promo ? ` (code ${promo.code} −${promo.amount})` : ''}`);
   return { ok: true, ref, total };
 }
 
@@ -1983,10 +1997,14 @@ async function updateEnquiry(id: string, set: Dict) {
   if (!table) throw new Error('Not configured');
   const names: Record<string, string> = {};
   const values: Record<string, AttributeValue> = {};
-  const parts = Object.entries({ ...set, updatedAt: new Date().toISOString() }).map(([k, v], i) => {
-    names[`#u${i}`] = k; values[`:u${i}`] = typeof v === 'number' ? { N: String(v) } : { S: String(v) }; return `#u${i} = :u${i}`;
+  const parts: string[] = [];
+  const removes: string[] = [];
+  Object.entries({ ...set, updatedAt: new Date().toISOString() }).forEach(([k, v], i) => {
+    names[`#u${i}`] = k;
+    if (v === null || v === undefined) { removes.push(`#u${i}`); return; }
+    values[`:u${i}`] = typeof v === 'number' ? { N: String(v) } : { S: String(v) }; parts.push(`#u${i} = :u${i}`);
   });
-  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values, ConditionExpression: 'attribute_exists(id)' }));
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}${removes.length ? ` REMOVE ${removes.join(', ')}` : ''}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values, ConditionExpression: 'attribute_exists(id)' }));
 }
 
 async function changeStock(listingId: string, delta: number) {
@@ -2381,6 +2399,74 @@ async function artistWorks(ev: ApiEvent) {
     return { ok: true, id, ...set };
   }
   throw new Error('Unknown action');
+}
+
+// ---------- Discount codes (Offers tab) ----------
+// The customer types a code on an order that has a price and isn't paid. The function checks the offer (dates, active,
+// minimum order, what it applies to, uses left), lowers quotedPrice and keeps listPrice + discountAmount. The price
+// change flows on by itself: new Ziina link, Zoho quote updated, invoice at the discounted price.
+const AREA: Record<string, string[]> = { ALL: ['PRICE', 'COMMISSION', 'GIFT', 'MARKET'], ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
+async function findPromo(code: string) {
+  const table = process.env.PROMO_TABLE;
+  if (!table || !code) return null;
+  const now = new Date().toISOString();
+  const p = (await scanAll(table)).find((x) => str(x, 'code').toUpperCase() === code.toUpperCase());
+  if (!p) return { error: 'This code is not valid.' };
+  if (!p.active?.BOOL) return { error: 'This offer has ended.' };
+  if (str(p, 'startAt') && str(p, 'startAt') > now) return { error: 'This offer has not started yet.' };
+  if (str(p, 'endAt') && str(p, 'endAt') < now) return { error: 'This offer has ended.' };
+  const max = num(p, 'maxUses');
+  if (max && (num(p, 'usedCount') ?? 0) >= max) return { error: 'This code has been fully used.' };
+  return { p };
+}
+function discountFor(p: Img, kind: string, price: number): { amount: number; error?: string } {
+  const area = AREA[str(p, 'appliesTo') || 'ALL'] ?? AREA.ALL;
+  if (!area.includes(kind)) return { amount: 0, error: `This code doesn't apply to ${kind === 'MARKET' ? 'Crafts shop items' : kind === 'GIFT' ? 'Little Artists gifts' : 'artworks and commissions'}.` };
+  const min = num(p, 'minOrder') ?? 0;
+  if (min && price < min) return { amount: 0, error: `This code needs an order of at least AED ${min}.` };
+  const v = num(p, 'discountValue') ?? 0;
+  const amount = Math.min(price - 2, str(p, 'discountType') === 'AED' ? v : Math.round(price * v) / 100);
+  if (!(amount > 0)) return { amount: 0, error: 'This code gives no discount on this order.' };
+  return { amount: Math.round(amount * 100) / 100 };
+}
+async function bumpUses(code: string, delta: number) {
+  const table = process.env.PROMO_TABLE;
+  if (!table || !code) return;
+  const p = (await scanAll(table)).find((x) => str(x, 'code').toUpperCase() === code.toUpperCase());
+  if (!p) return;
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET usedCount = if_not_exists(usedCount, :z) + :d', ExpressionAttributeValues: { ':z': { N: '0' }, ':d': { N: String(delta) } } }));
+}
+async function applyCode(ev: ApiEvent) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const id = String(ev.arguments.id ?? '');
+  const code = String((ev.arguments as { code?: string }).code ?? '').trim().toUpperCase().slice(0, 30);
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+  const e = got.Item as Img | undefined;
+  const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+  if (!e || (!ownsEnquiry(e, ev) && !groups.includes('ADMINS'))) throw new Error('Order not found');
+  if (!['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') || str(e, 'zohoInvoiceId')) throw new Error('This order is already paid, so a code can no longer be added.');
+  const current = str(e, 'discountCode');
+  const list = num(e, 'listPrice') ?? num(e, 'quotedPrice') ?? 0;
+  if (!(list > 0)) throw new Error('Add the code once we have sent you the price.');
+  if (!code) {
+    // Remove the code: back to the full price.
+    if (!current) return { ok: true, price: list };
+    await updateEnquiry(id, { quotedPrice: list, discountAmount: null, discountCode: null, listPrice: null });
+    await bumpUses(current, -1);
+    return { ok: true, price: list, removed: current };
+  }
+  if (code === current) throw new Error('This code is already applied.');
+  const f = await findPromo(code);
+  if (!f || 'error' in f) throw new Error(f?.error ?? 'This code is not valid.');
+  const d = discountFor(f.p, str(e, 'kind'), list);
+  if (d.error) throw new Error(d.error);
+  const price = Math.round((list - d.amount) * 100) / 100;
+  await updateEnquiry(id, { listPrice: list, discountAmount: d.amount, discountCode: code, quotedPrice: price });
+  await bumpUses(code, 1);
+  if (current) await bumpUses(current, -1);
+  console.log(`Code ${code} on ${str(e, 'ref')}: AED ${list} - ${d.amount} = ${price}`);
+  return { ok: true, code, list, discount: d.amount, price };
 }
 
 // ---------- Thirukkural of the day (flash panel on the website) ----------
@@ -2890,6 +2976,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
     if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));
+    if (field === 'applyCode') return JSON.stringify(await applyCode(event));
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));

@@ -55,11 +55,12 @@ backend.zohoQuoteSync.addEnvironment('LISTING_TABLE', tableName('Listing'));
 backend.zohoQuoteSync.addEnvironment('MARKET_TABLE', tableName('MarketItem'));
 backend.zohoQuoteSync.addEnvironment('ARTIST_TABLE', tableName('ArtistProfile'));
 backend.zohoQuoteSync.addEnvironment('ANNOUNCE_TABLE', tableName('Announcement'));
+backend.zohoQuoteSync.addEnvironment('PROMO_TABLE', tableName('Promotion'));
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Scan', 'dynamodb:Query', 'dynamodb:BatchGetItem'],
-    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile'), tableArn('Announcement')],
+    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile'), tableArn('Announcement'), tableArn('Promotion')],
   }),
 );
 

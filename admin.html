@@ -188,6 +188,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
       <button type="button" role="tab" id="tabCatalogue" aria-selected="false">Catalogue</button>
       <button type="button" role="tab" id="tabMessages" aria-selected="false">Messages</button>
       <button type="button" role="tab" id="tabSellers" aria-selected="false">Sellers</button>
+      <button type="button" role="tab" id="tabOffers" aria-selected="false">Offers</button>
       <button type="button" role="tab" id="ratesBtn" aria-selected="false">Rates</button>
     </nav>
     <div id="ordersPane">
@@ -261,6 +262,13 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
       <div class="muted" id="cgBulkMsg" role="status" style="font-size:13px;min-height:1.2em;margin:6px 0"></div>
       <p class="muted" style="font-size:12px;margin:0 0 8px">Works go live on their date automatically (09:00 Dubai), newest first. Edits save as you type out of a field. Sold works stay on the website marked “Sold”; hidden ones don't show. The price here is for you only: the website always says “price on request”.</p>
       <div id="cgList" class="cg-list"></div>
+    </div>
+
+    <div id="offersPane" hidden>
+      <div class="bar"><h1 style="font-size:28px;margin-right:auto">Offers</h1><a class="btn small ghost" href="/offers.html" target="_blank" rel="noopener">Open Offers page</a><button class="btn small" id="prNew" type="button">New offer</button></div>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">Each offer can show a banner across the top of the website, appear on the Offers page (art.pranixtechno.com/offers.html, easy to share), and carry a discount code that customers type on their order.</p>
+      <div id="prEdit" hidden style="margin-bottom:12px"></div>
+      <div id="prList" style="display:grid;gap:8px"></div>
     </div>
 
     <div id="sellersPane" hidden>

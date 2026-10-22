@@ -6,6 +6,7 @@ import { getUrl } from 'aws-amplify/storage';
 import { showCatalogue } from './catalogue.js';
 import { showMessages } from './messages.js';
 import { showMarket } from './market.js';
+import { showPromotions } from './promotions.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import outputs from '../amplify_outputs.json';
 
@@ -140,6 +141,7 @@ async function start() {
   if (location.hash === '#catalogue') showPane('catalogue', 'tabCatalogue');
   if (location.hash === '#messages') showPane('messages', 'tabMessages');
   if (location.hash === '#sellers') showPane('sellers', 'tabSellers');
+  if (location.hash === '#offers') showPane('offers', 'tabOffers');
   await loadRates();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
@@ -168,6 +170,7 @@ $('tabFeedback').onclick = () => showPane('feedback', 'tabFeedback');
 $('tabCatalogue').onclick = () => showPane('catalogue', 'tabCatalogue');
 $('tabMessages').onclick = () => showPane('messages', 'tabMessages');
 $('tabSellers').onclick = () => showPane('sellers', 'tabSellers');
+$('tabOffers').onclick = () => showPane('offers', 'tabOffers');
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {
@@ -177,13 +180,15 @@ function showPane(pane, tabId) {
   $('cataloguePane').hidden = pane !== 'catalogue';
   $('messagesPane').hidden = pane !== 'messages';
   $('sellersPane').hidden = pane !== 'sellers';
-  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages', 'sellers'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
+  $('offersPane').hidden = pane !== 'offers';
+  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
   if (pane === 'catalogue') showCatalogue();
   if (pane === 'messages') showMessages();
   if (pane === 'sellers') showMarket();
+  if (pane === 'offers') showPromotions();
 }
 
 // ---------- Feedback: customer reviews, publish to the website ----------
@@ -1032,7 +1037,8 @@ async function showDetail(e) {
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once Siva marks it <b>Sent to frame shop</b> on his page (you can do it for him there).</span>` : ''}</div>
-        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}></div>
+        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
+          ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: AED ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}</div>
       </div>
       ${addressSection(e)}
       ${shippingSection(e)}

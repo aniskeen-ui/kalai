@@ -487,6 +487,30 @@ function wireAddress(root, items) {
 }
 
 const parseDet = (d) => { try { const v = typeof d === 'string' ? JSON.parse(d) : d; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
+// Discount code on an order that has a price and isn't paid yet.
+function codeBox(e) {
+  const st = e.status || 'RECEIVED';
+  if (!e.quotedPrice || !['RECEIVED', 'PRICE_SENT'].includes(st) || e.cancelState === 'REQUESTED') return '';
+  if (e.discountCode) return `<div class="code-box" data-code-id="${esc(e.id)}"><button type="button" class="req-open" data-code-remove>Remove code</button><span class="acct-err" data-code-msg></span></div>`;
+  return `<form class="code-box" data-code-id="${esc(e.id)}" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input name="code" placeholder="Discount code" maxlength="30" style="max-width:160px;text-transform:uppercase;padding:6px 8px;font-size:13px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Apply</button><a href="/offers.html" class="acct-info" style="font-size:12px">See offers</a><span class="acct-err" data-code-msg style="flex-basis:100%"></span></form>`;
+}
+function wireCodes(root) {
+  root.querySelectorAll('.code-box').forEach((box) => {
+    const id = box.dataset.codeId;
+    const msg = box.querySelector('[data-code-msg]');
+    const send = async (code) => {
+      msg.textContent = '';
+      box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      try {
+        const r = await client.mutations.applyCode({ id, code: code || null });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        await showList();
+      } catch (ex) { msg.textContent = ex.message || 'Could not apply the code.'; box.querySelectorAll('button').forEach((b) => { b.disabled = false; }); }
+    };
+    if (box.tagName === 'FORM') box.onsubmit = (ev) => { ev.preventDefault(); const c = box.code.value.trim(); if (c) send(c); };
+    box.querySelector('[data-code-remove]')?.addEventListener('click', () => send(''));
+  });
+}
 function card(e) {
   const st = e.status || 'RECEIVED';
   const steps = e.kind === 'MARKET' ? MARKET_STEPS : STEPS;
@@ -499,7 +523,8 @@ function card(e) {
     <div class="enq-top"><span class="enq-title">${esc(e.title)}</span><span class="${pillCls}">${esc(STATUS[st] || st)}</span></div>
     <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')} · ${esc(date)}</div>
     ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true" style="grid-template-columns:repeat(${steps.length},1fr)">${steps.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
-    ${e.quotedPrice ? `<div>Price: <span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span></div>` : ''}
+    ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">AED ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −AED ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
+    ${codeBox(e)}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
     ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
     ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(parseDet(e.details).Maker || e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
@@ -579,6 +604,7 @@ async function showList() {
       wireRate(list, items);
       wireRequests(list, items);
       wireAddress(list, items);
+      wireCodes(list);
     };
     draw();
   } catch (ex) {
@@ -673,6 +699,7 @@ async function showOrder(p) {
       <div class="field"><label for="moAddr">Address</label><textarea id="moAddr" name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(a.address)}</textarea></div>
       <div class="field"><label for="moLand">Landmark (optional)</label><input id="moLand" name="landmark" value="${esc(a.landmark)}"></div>
       <div class="field"><label for="moNote">Note to the maker (optional)</label><input id="moNote" name="note" maxlength="300"></div>
+      <div class="field"><label for="moCode">Discount code (optional)</label><input id="moCode" name="code" maxlength="30" style="text-transform:uppercase" placeholder="e.g. DIWALI10"></div>
       <div class="enq-msg" id="moTotal"></div>
       <p class="acct-info" style="margin:0;font-size:12px">You pay Kalai Art House by a secure link we send you; the order is confirmed once paid. Until it is dispatched you can cancel for a full refund. By ordering you agree to our <a href="#terms" class="acct-terms" style="color:var(--kumkum)">terms</a>.</p>
       <div class="acct-err" role="alert"></div>
@@ -680,14 +707,14 @@ async function showOrder(p) {
     </form>
     <button class="acct-link" id="moBack">Back to My enquiries &amp; orders</button>`,
   async (fd) => {
-    const data = Object.fromEntries(['qty', 'name', 'phone', 'country', 'emirate', 'pin', 'address', 'landmark', 'note'].map((k) => [k, String(fd.get(k) || '').trim()]));
+    const data = Object.fromEntries(['qty', 'name', 'phone', 'country', 'emirate', 'pin', 'address', 'landmark', 'note', 'code'].map((k) => [k, String(fd.get(k) || '').trim()]));
     const r = await client.mutations.marketOrder({ data: JSON.stringify({ listingId: p.id, ...data }) });
     if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
     const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
     lastAddr = { name: data.name, phone: data.phone, country: data.country, emirate: data.emirate, pin: data.pin, address: data.address, landmark: data.landmark };
     currentTab = 'ENQ';
     await showList();
-    body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Order <b>${esc(out.ref)}</b> placed: AED ${Number(out.total).toLocaleString('en-US')}. We'll email you a secure payment link shortly.</p>`);
+    body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Order <b>${esc(out.ref)}</b> placed: AED ${Number(out.total).toLocaleString('en-US')}${data.code ? ` (code ${esc(data.code.toUpperCase())} applied)` : ''}. We'll email you a secure payment link shortly.</p>`);
   });
   const total = () => { body.querySelector('#moTotal').innerHTML = `Total: <b>AED ${(Number(p.price) * Number(f.qty.value)).toLocaleString('en-US')}</b>`; };
   f.qty.onchange = total; total();
@@ -835,6 +862,34 @@ async function showMarket() {
     window.kalaiShowMarket(withImg.filter((x) => x.sellerType !== 'ARTIST'));
   } catch (ex) { console.warn('Crafts shop not loaded.', ex); }
 }
+
+/* ---------- Offer banner across the top (Order Management → Offers, "Show as banner") ---------- */
+async function showOfferBanner() {
+  try {
+    const r = await client.models.Promotion.list({ authMode: 'apiKey', limit: 100 });
+    const now = new Date().toISOString();
+    const p = (r.data || []).filter((x) => x.active && x.showBanner && x.bannerText && (!x.startAt || x.startAt <= now) && (!x.endAt || x.endAt >= now))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))[0];
+    if (!p || lsGet('kalai-banner-closed') === p.id) return;
+    document.head.insertAdjacentHTML('beforeend', `<style>
+.promo-bar{background:linear-gradient(90deg,#b0832b,#d9ad55);color:#1d1b2b;font-size:14px;font-weight:600;text-align:center;padding:8px 40px;position:relative;line-height:1.4}
+.promo-bar a{color:#1d1b2b;text-decoration:underline;margin-left:8px;white-space:nowrap}
+.promo-bar code{font-family:var(--mono);background:rgba(255,255,255,.45);border-radius:4px;padding:1px 6px;margin-left:6px}
+.promo-bar button{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;font-size:18px;line-height:1;cursor:pointer;color:#1d1b2b}
+@media (max-width:640px){.promo-bar{font-size:12.5px;padding:7px 34px}}
+</style>`);
+    const bar = document.createElement('div');
+    bar.className = 'promo-bar'; bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', 'Offer');
+    bar.innerHTML = `${esc(p.bannerText)}${p.code ? `<code>${esc(p.code)}</code>` : ''}<a href="/offers.html#o-${esc(p.id)}">See offers →</a><button type="button" aria-label="Close offer">×</button>`;
+    bar.querySelector('button').onclick = () => { bar.remove(); lsSet('kalai-banner-closed', p.id); };
+    const atTop = window.scrollY < 5 && !location.hash;
+    bar.style.overflowAnchor = 'none';
+    document.body.prepend(bar);
+    // The browser keeps the view where it was (scroll anchoring); at the top of the page, show the banner.
+    if (atTop) { window.scrollTo(0, 0); requestAnimationFrame(() => window.scrollTo(0, 0)); setTimeout(() => { if (window.scrollY <= 40) window.scrollTo(0, 0); }, 300); }
+  } catch { /* no banner */ }
+}
+showOfferBanner();
 
 /* ---------- Our artists: approved artists' public profiles ---------- */
 async function showArtists() {
