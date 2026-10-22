@@ -108,6 +108,14 @@ const schema = a.schema({
       reworkBackAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Zoho IDs of earlier delivery challans (the damaged delivery), so Check Zoho still lists them.
       prevChallans: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Delivery address: given by the customer under My enquiries & orders (customerAddress), or typed by the studio.
+      deliveryName: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryPhone: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryEmirate: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryAddress: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      deliveryLandmark: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      addressAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      addressBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       owner: a.string().authorization((allow) => [allow.owner().to(['read', 'delete']), allow.group('ADMINS').to(['read'])]),
     })
     .authorization((allow) => [allow.owner().to(['create', 'read']), allow.group('ADMINS')]),
@@ -189,6 +197,18 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
+  // Daily message shown as a small notice on the website, in Tamil, English and Arabic.
+  Announcement: a
+    .model({
+      ta: a.string(),
+      en: a.string(),
+      ar: a.string(),
+      active: a.boolean(),
+      showFrom: a.string(),
+      showUntil: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
+
   // Master rates (framing and India courier per size tier, local courier, customs, fee, margin, VAT, FX).
   Rates: a
     .model({
@@ -229,12 +249,36 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ARTISTS'), allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
 
+  // Daily message: translate the Tamil text to English and Arabic (Amazon Translate).
+  translateMessage: a
+    .mutation()
+    .arguments({ text: a.string().required(), source: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Catalogue: import works from links (ArtStation album / artwork pages, or image addresses) into drafts.
+  catalogueImport: a
+    .mutation()
+    .arguments({ mode: a.string().required(), links: a.string().required() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
   // Visitor NOT signed in: price enquiry saved for the studio (no account, so the visitor can't track it).
   guestEnquiry: a
     .mutation()
     .arguments({ ref: a.string().required(), title: a.string().required(), details: a.string(), customerName: a.string().required(), phone: a.string().required(), email: a.string() })
     .returns(a.string())
     .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Customer, from My enquiries & orders: add or change the delivery address (until it ships).
+  customerAddress: a
+    .mutation()
+    .arguments({ id: a.id().required(), name: a.string().required(), phone: a.string().required(), emirate: a.string().required(), address: a.string().required(), landmark: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Customer, from My enquiries: cancel an order or report damage on delivery. Checked against the policy in the function.

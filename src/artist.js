@@ -105,7 +105,7 @@ function progressBlock(x) {
   if (x.rework) return '';
   if (x.stopped) {
     const done = [x.startedAt && `started ${esc(day(x.startedAt))}`, x.finishedAt && `finished ${esc(day(x.finishedAt))}`, x.shippedAt && `sent ${esc(day(x.shippedAt))}`].filter(Boolean).join(', ');
-    return `<div class="progress"><div class="err" style="font-size:13px">The customer cancelled this order${done ? ` (you had ${done})` : ''}. Please stop work. Send your invoice for the work done; Kalai Art House will confirm the amount with you.</div></div>`;
+    return `<div class="progress"><div class="err" style="font-size:13px">The customer cancelled this order${done ? ` (you had ${done})` : ''}. Please stop work. You are paid <b>50% of your price${x.artistPriceInr ? `: INR ${(x.artistPriceInr / 2).toLocaleString('en-IN')}` : ''}</b>${x.shippedAt ? ', plus the courier' : ''}. Send your invoice for that amount.</div></div>`;
   }
   if (x.onHold) return `<div class="progress"><div class="err" style="font-size:14px">On hold: the customer has asked to cancel. Please don't continue with this work until Kalai Art House confirms.</div></div>`;
   const p = x.progress || '';

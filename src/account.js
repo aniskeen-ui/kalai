@@ -70,6 +70,10 @@ const css = `
 .req .row{display:flex;gap:8px;flex-wrap:wrap}
 .req .row .btn{flex:1}
 .enq-msg.warn{border-left-color:var(--kumkum)}
+.addr{display:grid;gap:6px;font-size:13px;line-height:1.45;background:var(--surface);border-left:3px solid var(--line);padding:7px 10px}
+.addr.need{border-left-color:var(--kumkum)}
+.addr .req-open{margin-top:2px}
+.addr-form .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .rtrack{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:3px;font-size:13px;line-height:1.4}
 .rtrack li{color:var(--muted)}
 .rtrack li.done,.rtrack li.now{color:var(--fg)}
@@ -424,6 +428,58 @@ function replacementTracker(e) {
     <ol class="rtrack">${steps.map((x, i) => `<li class="${x.done ? 'done' : i === current ? 'now' : ''}"><span>${x.done ? '✓' : i === current ? '●' : '○'}</span> ${esc(x.label)}${x.extra ? ` <small>${esc(x.extra)}</small>` : ''}${x.at ? ` <small>· ${esc(shortDay(x.at))}</small>` : ''}</li>`).join('')}</ol></div>`;
 }
 
+/* ---------- delivery address (from the price onwards, until it ships) ---------- */
+const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
+const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'FRAMING', 'REPLACEMENT'];
+function addressBlock(e) {
+  if (!ADDR_OPEN.includes(e.status) || e.cancelState === 'REQUESTED') return '';
+  if (e.deliveryAddress) {
+    return `<div class="addr"><b>Deliver to</b> ${esc(e.deliveryName)} · ${esc(e.deliveryPhone)}<br>${esc(e.deliveryAddress)}${e.deliveryLandmark ? ` (near ${esc(e.deliveryLandmark)})` : ''}, ${esc(e.deliveryEmirate)}
+      <button type="button" class="req-open" data-addr="${esc(e.id)}">Change</button></div>`;
+  }
+  const urgent = e.status !== 'PRICE_SENT';
+  return `<div class="addr ${urgent ? 'need' : ''}">${urgent ? '<b>Add your delivery address</b> so we can ship it as soon as it is ready.' : 'Where should we deliver it?'}
+    <button type="button" class="${urgent ? 'btn primary' : 'req-open'}" data-addr="${esc(e.id)}" style="${urgent ? 'justify-self:start;padding:6px 14px;font-size:13px' : ''}">Add delivery address</button></div>`;
+}
+function addressForm(e) {
+  return `<form class="req addr-form" novalidate>
+    <b>Delivery address</b>
+    <div class="two"><div class="field"><label>Receiver's name</label><input name="name" value="${esc(e.deliveryName || e.customerName)}" autocomplete="name"></div>
+      <div class="field"><label>Receiver's mobile</label><input name="phone" value="${esc(e.deliveryPhone || e.phone)}" inputmode="tel" autocomplete="tel"></div></div>
+    <div class="field"><label>Emirate</label><select name="emirate"><option value="">Choose…</option>${EMIRATES.map((x) => `<option ${x === e.deliveryEmirate ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>Address</label><textarea name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(e.deliveryAddress)}</textarea></div>
+    <div class="field"><label>Landmark (optional)</label><input name="landmark" value="${esc(e.deliveryLandmark)}" placeholder="e.g. near Spinneys"></div>
+    <div class="acct-err" role="alert"></div>
+    <div class="row"><button class="btn primary" type="submit">Save address</button><button class="btn" type="button" data-close>Cancel</button></div>
+  </form>`;
+}
+function wireAddress(root, items) {
+  root.querySelectorAll('[data-addr]').forEach((b) => {
+    b.onclick = () => {
+      const e = items.find((x) => x.id === b.dataset.addr);
+      const box = b.closest('.addr');
+      box.hidden = true;
+      box.insertAdjacentHTML('afterend', addressForm(e));
+      const f = box.nextElementSibling;
+      f.querySelector('[data-close]').onclick = () => { f.remove(); box.hidden = false; };
+      f.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const err = f.querySelector('.acct-err');
+        const v = { name: f.name.value.trim(), phone: f.phone.value.trim(), emirate: f.emirate.value, address: f.address.value.trim(), landmark: f.landmark.value.trim() };
+        const why = !v.name ? "Add the receiver's name." : v.phone.replace(/\D/g, '').length < 7 ? 'Add a mobile number the courier can call.' : !v.emirate ? 'Choose the emirate.' : v.address.length < 10 ? 'Add the full address: villa or flat, building, street and area.' : '';
+        if (why) { err.textContent = why; return; }
+        const btn = f.querySelector('button[type=submit]'); btn.disabled = true; err.textContent = '';
+        try {
+          const { errors } = await client.mutations.customerAddress({ id: e.id, ...v, landmark: v.landmark || null });
+          if (errors?.length) throw new Error(errors[0].message);
+          Object.assign(e, { deliveryName: v.name, deliveryPhone: v.phone, deliveryEmirate: v.emirate, deliveryAddress: v.address, deliveryLandmark: v.landmark });
+          showList();
+        } catch (ex) { err.textContent = ex.message || 'Could not save the address.'; btn.disabled = false; }
+      };
+    };
+  });
+}
+
 function card(e) {
   const st = e.status || 'RECEIVED';
   const idx = STEPS.indexOf(st);
@@ -442,6 +498,7 @@ function card(e) {
     ${replacementTracker(e)}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${pay}
+    ${addressBlock(e)}
     ${requestBlock(e)}
     ${rateBlock(e)}
   </article>`;
@@ -508,6 +565,7 @@ async function showList() {
       list.querySelectorAll('.acct-terms').forEach((a) => { a.onclick = () => close(); });
       wireRate(list, items);
       wireRequests(list, items);
+      wireAddress(list, items);
     };
     draw();
   } catch (ex) {
@@ -562,6 +620,56 @@ async function save({ ref, subject, fields, files }) {
   });
   if (errors?.length) throw new Error(errors[0].message);
 }
+
+/* ---------- daily message: small notice at the side of the page, Tamil / English / Arabic ---------- */
+const MSG_TITLE = { ta: 'இன்றைய செய்தி', en: "Today's message", ar: 'رسالة اليوم' };
+const LANG_LABEL = { ta: 'தமிழ்', en: 'English', ar: 'العربية' };
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+async function showDailyMessage() {
+  try {
+    const r = await client.models.Announcement.list({ authMode: 'apiKey', limit: 50 });
+    const nowIso = new Date().toISOString();
+    const m = (r.data || []).filter((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso))
+      .sort((a, b) => String(b.showFrom).localeCompare(String(a.showFrom)))[0];
+    if (!m) return;
+    const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
+    if (!langs.length) return;
+    const nav = (navigator.language || 'en').slice(0, 2);
+    let lang = lsGet('kalai-lang') || (langs.includes(nav) ? nav : 'en');
+    if (!langs.includes(lang)) lang = langs.includes('en') ? 'en' : langs[0];
+    document.head.insertAdjacentHTML('beforeend', `<style>
+.kmsg{position:fixed;right:16px;bottom:16px;z-index:30;width:min(320px,calc(100vw - 32px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;display:grid;gap:8px;animation:kmsgIn .35s ease-out}
+@keyframes kmsgIn{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+.kmsg-head{display:flex;align-items:center;gap:8px}
+.kmsg-head b{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-right:auto}
+.kmsg-langs{display:flex;gap:4px}
+.kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:2px 8px;font:inherit;font-size:11px;cursor:pointer}
+.kmsg-langs button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1b2b}
+.kmsg-x{background:none;border:0;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
+.kmsg p{margin:0;font-size:14px;line-height:1.55;white-space:pre-line}
+.kmsg-tab{position:fixed;right:16px;bottom:16px;z-index:30;border:1px solid var(--gold);background:var(--surface);color:var(--fg);border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+@media (prefers-reduced-motion:reduce){.kmsg{animation:none}}
+</style>`);
+    const box = document.createElement('aside');
+    box.className = 'kmsg'; box.setAttribute('aria-label', "Today's message");
+    const tab = document.createElement('button');
+    tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true;
+    document.body.append(box, tab);
+    const draw = () => {
+      box.setAttribute('lang', lang); box.dir = lang === 'ar' ? 'rtl' : 'ltr';
+      box.innerHTML = `<div class="kmsg-head"><b>${esc(MSG_TITLE[lang])}</b><span class="kmsg-langs">${langs.map((l) => `<button type="button" data-l="${l}" aria-pressed="${l === lang}">${LANG_LABEL[l]}</button>`).join('')}</span><button class="kmsg-x" type="button" aria-label="Close">×</button></div><p>${esc(m[lang])}</p>`;
+      tab.textContent = `📢 ${MSG_TITLE[lang]}`;
+      box.querySelectorAll('[data-l]').forEach((b) => { b.onclick = () => { lang = b.dataset.l; lsSet('kalai-lang', lang); draw(); }; });
+      box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; lsSet('kalai-msg-closed', m.id); };
+    };
+    tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); };
+    draw();
+    // Closed this same message before: keep it as the small tab.
+    if (lsGet('kalai-msg-closed') === m.id) { box.hidden = true; tab.hidden = false; }
+  } catch { /* no message */ }
+}
+showDailyMessage();
 
 /* ---------- website collection from the Catalogue (public, read-only) ---------- */
 async function showCatalogue() {

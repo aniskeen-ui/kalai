@@ -1,9 +1,10 @@
 import { env } from '$amplify/env/zoho-quote-sync';
 import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, PutItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
 
 /**
  * Kalai Art House ↔ Zoho Books.
@@ -29,7 +30,7 @@ type StreamRecord = { eventID?: string; eventName?: string; dynamodb?: { NewImag
 type StreamEvent = { Records: StreamRecord[] };
 type ApiEvent = {
   identity?: { sub?: string; username?: string; groups?: string[] | null; claims?: Record<string, unknown> };
-  arguments: { ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
+  arguments: { text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
 };
@@ -523,15 +524,17 @@ function fromAttr(a: AttributeValue): unknown {
 async function artistLines(img: Img) {
   const ref = str(img, 'ref');
   const { img: cimg, costs } = await getCosting(str(img, 'id'));
-  const artistAed = round2(Number(costs.artistAed ?? 0));
-  const courier = round2(Number(costs.indiaCourier ?? 0));
+  // Customer cancelled after Siva started (50% refund): Siva is paid 50% of his price, plus the India courier only if he had sent it.
+  const half = str(img, 'refundAction') === 'CANCEL_HALF';
+  const artistAed = round2(Number(costs.artistAed ?? 0) * (half ? 0.5 : 1));
+  const courier = half && !str(img, 'artistShippedAt') ? 0 : round2(Number(costs.indiaCourier ?? 0));
   const inr = Number(costs.artistInr ?? num(cimg ?? undefined, 'artistPriceInr') ?? 0);
   const q = quoteParts(img);
   const lines: LineItem[] = [];
   if (artistAed > 0) {
     lines.push({
       name: q.name,
-      description: `Artwork for ${ref}${inr ? ` · artist price INR ${inr.toLocaleString('en-IN')} @ ${costs.fx ?? ''} AED/INR` : ''}`,
+      description: `${half ? '50% for work done (customer cancelled) · ' : ''}Artwork for ${ref}${inr ? ` · artist price INR ${inr.toLocaleString('en-IN')} @ ${costs.fx ?? ''} AED/INR` : ''}`,
       rate: artistAed,
       quantity: 1,
     });
@@ -634,7 +637,7 @@ async function purchaseSteps(start: Img) {
   let img: Img = { ...start };
   const id = str(img, 'id');
   const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
-  if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT' || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction').startsWith('CANCEL')) return;
+  if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT' || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction') === 'CANCEL_FULL') return;
   try {
     if (!str(img, 'zohoPOId')) {
       const po = await recordArtistOrder(img);
@@ -702,7 +705,9 @@ function challanNotes(img: Img) {
   return [
     `Kalai Art House order ${q.ref}${str(img, 'zohoInvoice') ? ` · invoice ${str(img, 'zohoInvoice')}` : ''}`,
     `Courier: ${str(img, 'courierName') || '-'} · AWB / tracking: ${str(img, 'trackingNo') || '-'}`,
-    `Deliver to: ${str(img, 'customerName')} · ${str(img, 'phone')}`,
+    str(img, 'deliveryAddress')
+      ? `Deliver to: ${str(img, 'deliveryName') || str(img, 'customerName')} · ${str(img, 'deliveryPhone') || str(img, 'phone')}\n${str(img, 'deliveryAddress')}${str(img, 'deliveryLandmark') ? ` (near ${str(img, 'deliveryLandmark')})` : ''}, ${str(img, 'deliveryEmirate')}`
+      : `Deliver to: ${str(img, 'customerName')} · ${str(img, 'phone')}`,
   ].join('\n');
 }
 
@@ -946,7 +951,7 @@ async function afterSales(img: Img) {
     const sivaNote =
       action === 'CANCEL_FULL'
         ? sivaCancelled ? " Siva's order cancelled (nothing owed)." : " Siva's bill already exists: agree with him what is owed."
-        : str(img, 'kind') === 'GIFT' ? '' : ' Siva had started / finished: pay him as agreed.';
+        : str(img, 'kind') === 'GIFT' ? '' : action === 'CANCEL_HALF' ? " Siva's order stopped: he is paid 50% of his price (his invoice no. → bill)." : ' Siva had started / finished: pay him as agreed.';
 
     if (!(amount > 0)) throw new Error('Enter the refund amount.');
     if (testing) {
@@ -1032,7 +1037,10 @@ function artistStage(e: Img, c: Img | undefined) {
   if (str(e, 'purchaseState') === 'CANCELLED') return { stage: 'CLOSED', label: 'Order cancelled by the customer' };
   if (str(e, 'zohoVendorPaymentId')) return { stage: 'PAID', label: `Paid to you${str(e, 'artistPaidRef') ? ` · ref ${str(e, 'artistPaidRef')}` : ''}` };
   if (str(e, 'zohoBillId')) return { stage: 'INVOICED', label: `Your invoice ${str(e, 'artistInvoiceNo')} received · payment pending` };
-  if (sivaStopped(e)) return { stage: 'ORDERED', label: 'Customer cancelled · please stop · send your invoice for the work done' };
+  if (sivaStopped(e)) {
+    const inr = num(c, 'artistPriceInr');
+    return { stage: 'ORDERED', label: `Customer cancelled · please stop · invoice 50% of your price${inr ? ` (INR ${(inr / 2).toLocaleString('en-IN')})` : ''}` };
+  }
   const rw = str(e, 'reworkType').startsWith('SIVA') ? str(e, 'reworkStage') : null;
   if (rw !== null && rw !== 'READY' && str(e, 'reworkType') === 'SIVA_REPAIR' && !str(e, 'sivaReceivedAt')) {
     return { stage: 'ORDERED', label: str(e, 'toSivaSentAt') ? 'Damaged piece on its way to you · tap Received when it arrives' : 'Repair needed · the damaged piece will be sent to you' };
@@ -1643,6 +1651,125 @@ function reworkForArtist(e: Img, c: Img | undefined) {
   };
 }
 
+// ---------- Daily message translation ----------
+const translator = new TranslateClient({});
+async function translateMessage(a: { text?: string; source?: string | null }) {
+  const text = String(a.text ?? '').trim().slice(0, 3000);
+  if (!text) throw new Error('Type the message first.');
+  const src = ['ta', 'en', 'ar'].includes(String(a.source)) ? String(a.source) : 'ta';
+  const out: Record<string, string> = { [src]: text };
+  for (const target of ['ta', 'en', 'ar'].filter((l) => l !== src)) {
+    const r = await translator.send(new TranslateTextCommand({ Text: text, SourceLanguageCode: src, TargetLanguageCode: target }));
+    out[target] = r.TranslatedText ?? '';
+  }
+  return out;
+}
+
+// ---------- Catalogue import from links (ArtStation albums / artworks, or plain image addresses) ----------
+// Two steps so each call stays well inside AppSync's 30 s: "expand" turns album links into a list of artworks;
+// "import" downloads a few at a time into catalogue/ and creates Draft products.
+const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36', Accept: 'application/json, text/plain, */*' };
+type ImportItem = { url: string; title?: string; image?: string };
+
+async function getJson(url: string) {
+  const r = await fetch(url, { headers: UA });
+  if (r.status === 403 || r.status === 429) throw new Error(`ArtStation blocked the automatic download (${r.status}). Save the images from the page and use “Import photos” instead.`);
+  if (!r.ok) throw new Error(`${url} answered ${r.status}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await r.json()) as any;
+}
+
+async function expandLinks(links: string[]): Promise<{ items: ImportItem[]; errors: string[] }> {
+  const items: ImportItem[] = [];
+  const errors: string[] = [];
+  for (const link of links) {
+    try {
+      const u = new URL(link);
+      const album = u.pathname.match(/\/albums\/(\d+)/);
+      const user = u.hostname.endsWith('.artstation.com') && u.hostname !== 'www.artstation.com' ? u.hostname.split('.')[0] : (u.pathname.match(/^\/([\w-]+)\/albums\//)?.[1] ?? '');
+      const art = u.pathname.match(/\/artwork\/([\w-]+)/) || u.pathname.match(/\/projects\/([\w-]+)/);
+      if (album && user) {
+        for (let page = 1; page <= 20; page++) {
+          const j = await getJson(`https://www.artstation.com/users/${user}/projects.json?album_id=${album[1]}&page=${page}`);
+          const data = (j.data ?? []) as { hash_id: string; title?: string }[];
+          data.forEach((p) => items.push({ url: `https://www.artstation.com/artwork/${p.hash_id}`, title: p.title }));
+          if (data.length === 0 || items.length >= (j.total_count ?? Infinity)) break;
+        }
+      } else if (art) {
+        items.push({ url: `https://www.artstation.com/artwork/${art[1]}` });
+      } else if (/\.(jpe?g|png|webp)(\?|$)/i.test(u.pathname)) {
+        items.push({ url: link, image: link });
+      } else {
+        errors.push(`Not an ArtStation album, artwork or image link: ${link}`);
+      }
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  return { items, errors };
+}
+
+async function importOne(it: ImportItem, existing: Set<string>) {
+  const bucket = process.env.UPLOADS_BUCKET, table = process.env.PRODUCT_TABLE;
+  if (!bucket || !table) throw new Error('Not configured');
+  let title = it.title ?? '', image = it.image ?? '', source = it.image ? `image:${it.image}` : '';
+  const hash = it.url.match(/\/artwork\/([\w-]+)/)?.[1];
+  if (hash) {
+    source = `artstation:${hash}`;
+    if (existing.has(source)) return { skipped: true, title };
+    const j = await getJson(`https://www.artstation.com/projects/${hash}.json`);
+    title = title || j.title || 'Untitled';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const asset = (j.assets ?? []).find((a: any) => a.asset_type === 'image' && a.image_url) ?? (j.assets ?? [])[0];
+    image = asset?.image_url ?? j.cover_url ?? '';
+  }
+  if (existing.has(source)) return { skipped: true, title };
+  if (!image) throw new Error(`No picture found for ${title || it.url}`);
+  const r = await fetch(image, { headers: { 'User-Agent': UA['User-Agent'] } });
+  if (!r.ok) throw new Error(`Picture download failed (${r.status}) for ${title || image}`);
+  const type = r.headers.get('content-type') || 'image/jpeg';
+  if (!/^image\//.test(type)) throw new Error(`Not a picture: ${image}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.length > 15 * 1024 * 1024) throw new Error(`Picture larger than 15 MB: ${title}`);
+  const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+  const key = `catalogue/${crypto.randomUUID()}.${ext}`;
+  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: buf, ContentType: type }));
+  if (!title) title = decodeURIComponent(image.split('/').pop() ?? 'Untitled').replace(/\.[a-z0-9]+(\?.*)?$/i, '').replace(/[_-]+/g, ' ');
+  const kind = /sketch|pencil|charcoal|graphite|ink|chalk/i.test(title) ? 'sketch' : 'water';
+  const now = new Date().toISOString();
+  await ddb.send(new PutItemCommand({
+    TableName: table,
+    Item: {
+      id: { S: crypto.randomUUID() }, __typename: { S: 'Product' }, createdAt: { S: now }, updatedAt: { S: now },
+      title: { S: title.slice(0, 120) }, kind: { S: kind }, subject: { S: 'land' }, medium: { S: kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper' },
+      status: { S: 'DRAFT' }, imageKey: { S: key }, source: { S: source.slice(0, 300) },
+    },
+  }));
+  existing.add(source);
+  return { skipped: false, title };
+}
+
+async function catalogueImport(a: { mode?: string; links?: string }) {
+  const lines = String(a.links ?? '').split(/\s+/).map((x) => x.trim()).filter((x) => /^https?:\/\//.test(x)).slice(0, 200);
+  if (!lines.length) throw new Error('Paste at least one link.');
+  if (a.mode === 'expand') return expandLinks(lines);
+  // import: a few per call
+  const table = process.env.PRODUCT_TABLE;
+  const existing = new Set<string>();
+  if (table) (await scanAll(table)).forEach((p) => { const s = str(p, 'source'); if (s) existing.add(s); });
+  const done: string[] = [], skipped: string[] = [], errors: string[] = [];
+  for (const raw of lines.slice(0, 4)) {
+    const [url, title] = raw.split('|');
+    try {
+      const r = await importOne({ url, title: title ? decodeURIComponent(title) : undefined, image: /\.(jpe?g|png|webp)(\?|$)/i.test(url) ? url : undefined }, existing);
+      (r.skipped ? skipped : done).push(r.title || url);
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  return { done, skipped, errors };
+}
+
 // ---------- Guest price enquiry (visitor not signed in) ----------
 /** Saves a catalogue price enquiry from a visitor without an account. The usual stream then creates the quote and emails. */
 async function guestEnquiry(a: ApiEvent['arguments']) {
@@ -1668,6 +1795,36 @@ async function guestEnquiry(a: ApiEvent['arguments']) {
   await ddb.send(new PutItemCommand({ TableName: table, Item: item, ConditionExpression: 'attribute_not_exists(id)' }));
   console.log(`Guest enquiry ${ref} saved`);
   return { ok: true, ref };
+}
+
+// ---------- Delivery address (customer, until it ships) ----------
+const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
+async function customerAddress(ev: ApiEvent) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const a = ev.arguments;
+  const id = a.id ?? '';
+  const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
+  const e = got.Item as Img | undefined;
+  const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+  const admin = groups.includes('ADMINS');
+  if (!e || (!ownsEnquiry(e, ev) && !admin)) throw new Error('Order not found');
+  if (['SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'].includes(str(e, 'status'))) throw new Error('It has already shipped or closed, so the address can no longer be changed here. Please contact us on WhatsApp.');
+  const clip = (v: unknown, n: number) => String(v ?? '').trim().replace(/\s+\n/g, '\n').slice(0, n);
+  const name = clip(a.name, 80), phone = clip(a.phone, 30), emirate = clip(a.emirate, 30), address = clip(a.address, 400), landmark = clip(a.landmark, 120);
+  if (!name) throw new Error('Add the name of the person receiving it.');
+  if (phone.replace(/\D/g, '').length < 7) throw new Error('Add a mobile number the courier can call.');
+  if (!EMIRATES.includes(emirate)) throw new Error('Choose the emirate.');
+  if (address.length < 10) throw new Error('Add the full address: villa or flat number, building, street and area.');
+  const now = new Date().toISOString();
+  const set: Record<string, string> = { deliveryName: name, deliveryPhone: phone, deliveryEmirate: emirate, deliveryAddress: address, addressAt: now, addressBy: admin ? 'Kalai Art House' : 'Customer', updatedAt: now };
+  if (landmark) set.deliveryLandmark = landmark;
+  const names: Record<string, string> = {};
+  const values: Record<string, AttributeValue> = {};
+  const parts = Object.entries(set).map(([k, v], i) => { names[`#d${i}`] = k; values[`:d${i}`] = { S: v }; return `#d${i} = :d${i}`; });
+  await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}${landmark ? '' : ' REMOVE deliveryLandmark'}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+  console.log(`Delivery address saved for ${str(e, 'ref')} (${set.addressBy})`);
+  return { ok: true, ...set };
 }
 
 // ---------- Customer requests (My enquiries & orders): cancel, or report damage on delivery ----------
@@ -1852,10 +2009,12 @@ function mailsFor(rec: StreamRecord): Mail[] {
     if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
       price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>, including framing, delivery in the UAE and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
       msgLine, str(img, 'paymentLink') ? 'You can pay securely with the button below. The price is held for 7 days.' : 'The price is held for 7 days. Reply to this email or message us on WhatsApp to go ahead.',
+      str(img, 'deliveryAddress') ? '' : 'Please also add your <b>delivery address</b> under My enquiries & orders, so we can ship it as soon as it is ready.',
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>, including the cancellation policy.`],
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
     if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
+      str(img, 'deliveryAddress') ? `It will be delivered to: ${h(str(img, 'deliveryAddress'))}, ${h(str(img, 'deliveryEmirate'))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
     // Being framed: shown on My enquiries & orders only (no email).
@@ -1903,6 +2062,12 @@ function mailsFor(rec: StreamRecord): Mail[] {
   }
   // Received at the frame shop: shown on the customer's replacement tracker, no email.
 
+  // Delivery address added or changed by the customer.
+  if (str(img, 'addressAt') && str(img, 'addressAt') !== str(old, 'addressAt') && str(img, 'addressBy') === 'Customer') {
+    studio(`Delivery address ${str(old, 'addressAt') ? 'changed' : 'added'}: ${ref}`, [`${h(str(img, 'deliveryName'))} · ${h(str(img, 'deliveryPhone'))}`,
+      `${h(str(img, 'deliveryAddress'))}${str(img, 'deliveryLandmark') ? ` (near ${h(str(img, 'deliveryLandmark'))})` : ''}, ${h(str(img, 'deliveryEmirate'))}`, `<b>${h(title)}</b> · status ${h(st)}`]);
+  }
+
   // A new message on the order without a status change.
   if (!statusChanged && msg && msg !== str(old, 'adminMessage')) cust(`A message about your order ${ref}`, [`About <b>${h(title)}</b>:`, h(msg)]);
   return out;
@@ -1923,7 +2088,10 @@ async function notify(rec: StreamRecord) {
 export const handler = async (event: StreamEvent | ApiEvent) => {
   if ('arguments' in event) {
     const a = event.arguments ?? {};
-    const field = event.info?.fieldName ?? event.fieldName ?? (a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
+    if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
+    if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));
+    if (field === 'customerAddress') return JSON.stringify(await customerAddress(event));
     if (field === 'guestEnquiry') return JSON.stringify(await guestEnquiry(event.arguments));
     if (field === 'artistRework') return JSON.stringify(await artistRework(event.arguments, actor(event)));
     if (field === 'customerRequest') return JSON.stringify(await customerRequest(event));

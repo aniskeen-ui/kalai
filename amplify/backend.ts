@@ -47,17 +47,20 @@ const tableName = (model: string) => `${model}-${apiId}-NONE`;
 const tableArn = (model: string) => `arn:aws:dynamodb:${fnStack.region}:${fnStack.account}:table/${tableName(model)}`;
 backend.zohoQuoteSync.addEnvironment('ENQUIRY_TABLE', tableName('Enquiry'));
 backend.zohoQuoteSync.addEnvironment('COSTING_TABLE', tableName('Costing'));
+backend.zohoQuoteSync.addEnvironment('PRODUCT_TABLE', tableName('Product'));
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Scan', 'dynamodb:Query', 'dynamodb:BatchGetItem'],
-    resources: [tableArn('Enquiry'), tableArn('Costing')],
+    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product')],
   }),
 );
 
 // Commission photos for the Artist desk (signed links). The bucket is in the storage stack, which doesn't depend on data.
 backend.zohoQuoteSync.addEnvironment('UPLOADS_BUCKET', backend.storage.resources.bucket.bucketName);
 backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'uploads/*');
+// Catalogue import from links: the function saves the downloaded pictures here.
+backend.storage.resources.bucket.grantPut(backend.zohoQuoteSync.resources.lambda, 'catalogue/*');
 
 // VAT switch (/kalai/zoho/vat_tax_id).
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
@@ -69,6 +72,11 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
       `arn:aws:ssm:${fnStack.region}:${fnStack.account}:parameter/kalai/email/*`,
     ],
   }),
+);
+
+// Daily message translation (Tamil → English, Arabic).
+backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
+  new PolicyStatement({ effect: Effect.ALLOW, actions: ['translate:TranslateText'], resources: ['*'] }),
 );
 
 // Order emails to customers and the studio (Amazon SES, verified domain pranixtechno.com).

@@ -179,6 +179,9 @@ function wireToolbar() {
   };
   $('cgFiles').onchange = (e) => importPhotos([...e.target.files]).finally(() => { e.target.value = ''; });
   $('cgSite').onclick = importSite;
+  $('cgLinksBtn').onclick = () => { $('cgLinksBox').hidden = false; $('cgLinks').focus(); };
+  $('cgLinksClose').onclick = () => { $('cgLinksBox').hidden = true; };
+  $('cgLinksGo').onclick = importLinks;
 }
 
 /** Shrink to max 1600 px JPEG so the website stays fast. */
@@ -244,5 +247,41 @@ async function importSite() {
     await load();
   } catch (ex) {
     $('cgBulkMsg').textContent = `Could not copy the website works: ${ex.message}`;
+  }
+}
+
+/** Import from links: expand album links into artworks on the server, then download a few at a time. */
+const parse = (d) => (typeof d === 'string' ? JSON.parse(d) : d);
+async function importLinks() {
+  const text = $('cgLinks').value.trim();
+  const btn = $('cgLinksGo');
+  if (!text) { $('cgLinksMsg').textContent = 'Paste at least one link.'; return; }
+  btn.disabled = true; $('cgLinksErr').textContent = ''; $('cgLinksMsg').textContent = 'Reading the links…';
+  const errs = [];
+  try {
+    const ex = await client.mutations.catalogueImport({ mode: 'expand', links: text });
+    if (ex.errors?.length) throw new Error(ex.errors[0].message);
+    const { items = [], errors = [] } = parse(ex.data) || {};
+    errs.push(...errors);
+    if (!items.length) throw new Error(errors[0] || 'No artworks found in those links.');
+    let done = 0, skipped = 0;
+    for (let i = 0; i < items.length; i += 3) {
+      const batch = items.slice(i, i + 3).map((it) => (it.title ? `${it.url}|${encodeURIComponent(it.title)}` : it.url));
+      $('cgLinksMsg').textContent = `Importing ${Math.min(i + 3, items.length)} of ${items.length}…`;
+      const r = await client.mutations.catalogueImport({ mode: 'import', links: batch.join('\n') });
+      if (r.errors?.length) { errs.push(r.errors[0].message); continue; }
+      const out = parse(r.data) || {};
+      done += (out.done || []).length; skipped += (out.skipped || []).length; errs.push(...(out.errors || []));
+      if (errs.some((e) => /blocked/i.test(e)) && !done) break;
+    }
+    $('cgLinksMsg').textContent = `Imported ${done} as drafts${skipped ? `, ${skipped} already in the catalogue` : ''}${errs.length ? `, ${errs.length} problem(s)` : ''}.`;
+    $('cgFilter').value = 'DRAFT';
+    await load();
+  } catch (ex) {
+    $('cgLinksMsg').textContent = 'Import stopped.';
+    errs.unshift(ex.message || String(ex));
+  } finally {
+    btn.disabled = false;
+    $('cgLinksErr').textContent = [...new Set(errs)].slice(0, 8).join('\n');
   }
 }

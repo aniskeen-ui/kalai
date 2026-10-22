@@ -4,6 +4,7 @@ import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes 
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { showCatalogue } from './catalogue.js';
+import { showMessages } from './messages.js';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -132,6 +133,7 @@ async function start() {
   if (location.hash === '#reports') showPane('reports', 'tabReports');
   if (location.hash === '#feedback') showPane('feedback', 'tabFeedback');
   if (location.hash === '#catalogue') showPane('catalogue', 'tabCatalogue');
+  if (location.hash === '#messages') showPane('messages', 'tabMessages');
   await loadRates();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
@@ -158,6 +160,7 @@ $('tabOrders').onclick = () => showPane('orders', 'tabOrders');
 $('tabReports').onclick = () => showPane('reports', 'tabReports');
 $('tabFeedback').onclick = () => showPane('feedback', 'tabFeedback');
 $('tabCatalogue').onclick = () => showPane('catalogue', 'tabCatalogue');
+$('tabMessages').onclick = () => showPane('messages', 'tabMessages');
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {
@@ -165,11 +168,13 @@ function showPane(pane, tabId) {
   $('reportsPane').hidden = pane !== 'reports';
   $('feedbackPane').hidden = pane !== 'feedback';
   $('cataloguePane').hidden = pane !== 'catalogue';
-  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
+  $('messagesPane').hidden = pane !== 'messages';
+  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
   if (pane === 'catalogue') showCatalogue();
+  if (pane === 'messages') showMessages();
 }
 
 // ---------- Feedback: customer reviews, publish to the website ----------
@@ -286,6 +291,8 @@ function reportLine(e) {
   if (k) {
     if (e.purchaseState === 'CANCELLED') { k.artist = 0; k.india = 0; k.customs = 0; }
     if (String(e.refundAction || '').startsWith('CANCEL')) { k.framing = 0; k.local = 0; }
+    // 50% cancellation after Siva started: he is paid half; India courier and customs only if he had sent it.
+    if (e.refundAction === 'CANCEL_HALF' && e.purchaseState !== 'CANCELLED') { k.artist *= 0.5; if (!e.artistShippedAt) { k.india = 0; k.customs = 0; } }
   }
   const rc = reworkCost(e);
   if (k) k.rework = rc.net;
@@ -458,7 +465,7 @@ function statusBlock(e, k, s) {
 
 function sivaProgress(e) {
   const stopped = String(e.refundAction || '').startsWith('CANCEL') && ['REFUNDED', 'CANCELLED'].includes(e.status) && e.purchaseState !== 'CANCELLED' && e.zohoPOId;
-  if (stopped) return `Stopped: customer cancelled after he started${e.artistStartedAt ? ` (${day(e.artistStartedAt)})` : ''}. Pay him for the work done as agreed (his invoice no. → bill).`;
+  if (stopped) return `Stopped: customer cancelled after he started${e.artistStartedAt ? ` (${day(e.artistStartedAt)})` : ''}. He is paid 50% of his price${costings.get(e.id)?.artistPriceInr ? ` (INR ${(costings.get(e.id).artistPriceInr / 2).toLocaleString('en-IN')})` : ''}${e.artistShippedAt ? ' plus the India courier' : ''}: enter his invoice no. and the bill is made for that.`;
   if (!e.artistStage) return e.zohoPOId ? "Siva hasn't marked this as started yet." : '';
   return [`Started ${day(e.artistStartedAt)}`, e.artistFinishedAt ? `Finished ${day(e.artistFinishedAt)}` : '', e.artistShippedAt ? `Sent to frame shop ${day(e.artistShippedAt)}${e.artistAwb ? ` (${e.artistCourier} · AWB ${e.artistAwb})` : ''}` : '',
     e.artistBy ? `last update by ${e.artistBy === 'Siva' ? 'Siva' : 'you, on his behalf'}` : ''].filter(Boolean).join(' · ');
@@ -478,6 +485,37 @@ function purchaseSection(e) {
     </div>
     <div class="muted" style="font-size:12px">Save with his invoice number to create the bill in Zoho; save with your bank reference to record the payment made to him.</div>
   </fieldset>`;
+}
+
+// ---------- delivery address (customer adds it under My enquiries & orders; the studio can type or correct it) ----------
+const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
+function giftAddress(e) {
+  const d = parseDetails(e.details);
+  return e.kind === 'GIFT' && d['Address'] ? { address: d['Address'], emirate: String(d['Emirate'] || '').split(' (')[0] } : null;
+}
+function addressSection(e) {
+  const g = giftAddress(e);
+  const has = !!e.deliveryAddress;
+  const need = !has && !g && ['PAID', 'FRAMING', 'REPLACEMENT'].includes(e.status);
+  const emi = e.deliveryEmirate || (g && EMIRATES.find((x) => g.emirate.includes(x))) || '';
+  return `<fieldset class="cost" id="addrBox" ${need ? 'style="border-color:var(--kumkum)"' : ''}>
+    <legend>Delivery address ${has ? `<span class="muted">· ${esc(e.addressBy === 'Customer' ? 'from the customer' : 'entered by you')} ${esc(when(e.addressAt))}</span>` : ''}</legend>
+    ${need ? '<div class="err" style="font-size:13px">No delivery address yet. The customer was asked to add it under My enquiries & orders; you can also type it here.</div>' : ''}
+    <div class="three">
+      <div class="field"><label for="dName">Receiver</label><input id="dName" value="${esc(e.deliveryName || e.customerName)}"></div>
+      <div class="field"><label for="dPhone">Receiver mobile</label><input id="dPhone" value="${esc(e.deliveryPhone || e.phone)}"></div>
+      <div class="field"><label for="dEmirate">Emirate</label><select id="dEmirate"><option value="">Choose…</option>${EMIRATES.map((x) => `<option ${x === emi ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label for="dAddr">Address (villa / flat, building, street, area)</label><textarea id="dAddr" rows="2">${esc(e.deliveryAddress || g?.address || '')}</textarea></div>
+    <div class="field"><label for="dLand">Landmark (optional)</label><input id="dLand" value="${esc(e.deliveryLandmark)}"></div>
+  </fieldset>`;
+}
+function readAddress(e) {
+  if (!$('addrBox')) return {};
+  const v = { deliveryName: $('dName').value.trim() || null, deliveryPhone: $('dPhone').value.trim() || null, deliveryEmirate: $('dEmirate').value || null, deliveryAddress: $('dAddr').value.trim() || null, deliveryLandmark: $('dLand').value.trim() || null };
+  const changed = ['deliveryEmirate', 'deliveryAddress', 'deliveryLandmark'].some((k) => (v[k] || '') !== (e[k] || '')) || (v.deliveryAddress && ((v.deliveryName || '') !== (e.deliveryName || '') || (v.deliveryPhone || '') !== (e.deliveryPhone || '')));
+  if (!changed || !v.deliveryAddress) return {};
+  return { ...v, addressAt: new Date().toISOString(), addressBy: 'Kalai Art House' };
 }
 
 const COURIERS = ['Aramex', 'DHL', 'Jeebly', 'Quiqup', 'Emirates Post', 'SMSA', 'Own delivery'];
@@ -912,6 +950,7 @@ async function showDetail(e) {
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once Siva marks it <b>Sent to frame shop</b> on his page (you can do it for him there).</span>` : ''}</div>
         <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? ''}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}></div>
       </div>
+      ${addressSection(e)}
       ${shippingSection(e)}
       ${costingSection(e)}
       <div class="two">
@@ -1081,6 +1120,7 @@ async function showDetail(e) {
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {
       const courier = $('eCourier').value.trim(), awb = $('eAwb').value.trim();
       const why = !e.zohoInvoiceId ? 'Mark it Paid first, so Zoho has the invoice before it ships.'
+        : !($('dAddr')?.value.trim()) || !$('dEmirate')?.value ? 'Add the delivery address (emirate and address) before it ships.'
         : !courier ? 'Add the courier before marking it shipped.'
         : !awb && !/own/i.test(courier) ? 'Add the AWB / tracking number before marking it shipped.' : '';
       if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }
@@ -1116,6 +1156,7 @@ async function showDetail(e) {
         trackingNo: $('eAwb').value.trim() || null,
         ...(paidRef != null ? { artistPaidRef: paidRef || null } : {}),
         ...(rw ? rw.enq : {}),
+        ...readAddress(e),
         id: e.id,
         phone: $('ePhone').value.trim() || null,
         status: $('eStatus').value,
