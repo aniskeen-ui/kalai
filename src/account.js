@@ -22,6 +22,7 @@ let kuralSec = 10;
     const st = r.data;
     if (!st) return;
     if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
+    if (st.inrPerAed) { window.kalaiInrPerAed = Number(st.inrPerAed); window.kalaiRedrawPrices?.(); }
     if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
     // Home page texts from Order Management → Settings (blank = keep the built-in text).
     // Website look from Settings (a ?look= preview in this browser wins).

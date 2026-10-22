@@ -45,6 +45,9 @@ export async function showSettings() {
         <div id="rmStep" class="muted" style="font-size:13px"></div>
         <div id="rmWrap" style="position:relative;max-width:640px;display:none;cursor:crosshair"><img id="rmImg" alt="Room photo" style="width:100%;display:block;border-radius:6px"><div id="rmDots"></div></div>
       </div>
+      <h3 style="margin:0;font-size:17px">Currency</h3>
+      <div class="field" style="max-width:560px"><label for="st-inr">Rupees per dirham (for prices shown in ₹)</label><input id="st-inr" type="number" min="1" max="100" step="0.01" style="max-width:140px">
+        <div class="muted" style="font-size:12px">Visitors can show prices in Dhs, US$ or ₹ (header). Dollars use the fixed peg of 3.6725 Dhs. Customers always pay in dirhams.</div></div>
       <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
@@ -61,6 +64,7 @@ export async function showSettings() {
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
+    $('st-inr').value = row?.inrPerAed ?? 24;
     try { marks = row?.roomMarks ? JSON.parse(row.roomMarks) : null; } catch { marks = null; }
     if (marks?.cm) $('rmCm').value = marks.cm;
     roomShow();
@@ -79,6 +83,9 @@ async function save() {
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
+  const inr = Number($('st-inr').value);
+  if (!(inr >= 1 && inr <= 100)) { $('stMsg').textContent = 'Rupees per dirham: enter a number like 24.'; return; }
+  rec.inrPerAed = inr;
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';

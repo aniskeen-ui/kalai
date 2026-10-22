@@ -388,6 +388,7 @@ const schema = a.schema({
       heroHighlight: a.string(),
       heroText: a.string(),
       siteLook: a.string(), // classic | green
+      inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
       roomMarks: a.string(), // JSON {l,r,top,ratio,cm}: the sofa in the room photo used by "On a wall"
       heroLines: a.string(), // several headlines, one per line, "plain part | gold part"; they take turns
       kidsTitle: a.string(),

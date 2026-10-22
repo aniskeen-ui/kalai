@@ -83,7 +83,7 @@ function calc(c, price) {
   // Ziina fee, courier insurance and the breakage reserve are all a % of what the customer pays.
   const pctOfPrice = rates.fee + (rates.ins || 0) + (rates.reserve || 0);
   const raw = (total * (1 + rates.margin)) / (1 / (1 + vat) - pctOfPrice);
-  const suggested = rates.round9 ? Math.ceil((raw + 1) / 10) * 10 - 1 : Math.round(raw);
+  const suggested = rates.round25 !== false ? Math.ceil(raw / 25) * 25 : rates.round9 ? Math.ceil((raw + 1) / 10) * 10 - 1 : Math.round(raw);
   const out = { artistAed, framing, indiaCourier, localCourier, customs, total, suggested, vatRate: vat, ready: true };
   if (price > 0) {
     out.price = price;
@@ -974,7 +974,7 @@ function showRates() {
           <td><input id="mWc1${k}" type="number" min="0" value="${m.wc[0]}" style="width:70px" aria-label="${k} watercolour from"> – <input id="mWc2${k}" type="number" min="0" value="${m.wc[1]}" style="width:70px" aria-label="${k} watercolour to"></td>
           <td><input id="mSa${k}" value="${esc(m.saatchi || '')}" aria-label="${k} Saatchi reference"></td></tr>`; }).join('')}</tbody></table></div>
       <div class="muted" style="font-size:12px;margin-top:-6px">Kalai's target price bands (simple frame included). Each order's price is checked against them, with Saatchi Art's prices for similar originals as the upper reference.</div>
-      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="rRound" style="width:auto" ${rates.round9 ? 'checked' : ''}> Round suggested prices up to end in 9</label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="rRound" style="width:auto" ${rates.round25 !== false ? 'checked' : ''}> Round suggested prices up to the nearest Dhs 25</label>
       <div class="ok" id="ratesMsg" role="status"></div>
       <button class="btn" type="submit">Save rates</button>
     </form>
@@ -990,7 +990,7 @@ function showRates() {
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
     const data = { tiers, local: n($('rLocal').value) ?? 0, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margin: (n($('rMar').value) ?? 0) / 100,
-      vat: (n($('rVat').value) ?? 0) / 100, round9: $('rRound').checked, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
+      vat: (n($('rVat').value) ?? 0) / 100, round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
       market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };
     try {
       const rec = { key: 'default', data: JSON.stringify(data) };

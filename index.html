@@ -258,7 +258,8 @@ footer p{margin:2px 0}
 .room svg{position:absolute;inset:0;width:100%;height:100%}
 .room-cap{font-size:12px;color:var(--muted);margin:0}
 .byline{font-size:14px;color:var(--muted);margin:-4px 0 0}
-.pprice{font-size:26px;font-family:var(--display)}.pprice .note{font-family:var(--body);font-size:13px}
+.pprice{font-size:26px;font-family:var(--display)}
+.cur-sel{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-sel option{color:#111}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 .badge b{display:block;font-size:13px}
@@ -329,7 +330,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
   <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
-  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
+  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><select id="curSel" class="cur-sel" aria-label="Currency"><option value="AED">Dhs</option><option value="USD">$ USD</option><option value="INR">₹ INR</option></select><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
 <section class="hero" style="padding-block:0"><div class="wrap">
@@ -678,12 +679,12 @@ function drawGrid(){
       card.insertAdjacentHTML("beforeend",`<div class="kind">${esc2(p.category||"Original artwork")}</div>
       <h3>${esc2(p.name)}</h3><div class="meta">${SHOW_ARTIST_NAMES?"by "+esc2(p.artist):"Original artwork"}${p.stock>0?"":' · <b style="color:var(--kumkum)">Sold</b>'}</div>
       ${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
-      <div class="row"><span class="price">AED ${Number(p.price).toLocaleString("en-GB")}</span>${p.stock>0?`<button class="add" type="button" data-order-art="${esc2(p.id)}">Order</button>`:""}</div>`);
+      <div class="row"><span class="price">${money(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-order-art="${esc2(p.id)}">Order</button>`:""}</div>`);
       g.appendChild(card);return;
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
       <h3>${cleanName(p.name)}</h3>${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).length?`<div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")}</div>`:""}<div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span></div>
-      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`${p.prices?`<span class="price">AED ${Number(p.prices.black).toLocaleString("en-GB")}<small style="display:block;font-size:11px;font-weight:400;color:var(--muted)">framed · unframed AED ${Number(p.prices.none).toLocaleString("en-GB")}</small></span>`:`<span class="note">Price on request</span>`}<button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
+      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`${p.prices?`<span class="price">${money(priceOf(p,"black",baseSize(p)))}<small style="display:block;font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">framed · unframed ${money(priceOf(p,"none"))}</small></span>`:`<span class="note">Price on request</span>`}<button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
@@ -698,7 +699,7 @@ window.kalaiShowMarket=function(list){
   g.innerHTML=list.map((p,i)=>`<article class="card"><button class="frame" type="button" data-mi="${i}" aria-label="View ${e(p.title)}"><img src="${e(p.img)}" alt="${e(p.title)}" loading="lazy"></button>
     <div class="kind">${e(p.category||"Handmade")}</div><h3>${e(p.title)}</h3><div class="meta">by ${e(p.seller)}${p.stock>0?"":" · <b style=\"color:var(--kumkum)\">Out of stock</b>"}</div>
     ${p.description?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${e(p.description)}</div>`:""}
-    <div class="row"><span class="price">AED ${Number(p.price).toLocaleString("en-GB")}</span>${p.stock>0?`<button class="add" type="button" data-mbuy="${i}">Order</button>`:""}</div></article>`).join("");
+    <div class="row"><span class="price">${money(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-mbuy="${i}">Order</button>`:""}</div></article>`).join("");
   g.querySelectorAll("[data-mbuy]").forEach(b=>b.onclick=()=>{const p=list[+b.dataset.mbuy];
     if(window.kalaiMarketOrder){window.kalaiMarketOrder(p);return;}sendEnquiry("Crafts shop order: "+p.title,{"Item":p.title,"Maker":p.seller,"Price":"AED "+p.price+" (incl. delivery in the UAE)","Listing":p.id,"Link":location.origin+"/#market"});});
   g.querySelectorAll("[data-mi]").forEach(b=>b.onclick=()=>window.open(list[+b.dataset.mi].img,"_blank","noopener"));
@@ -767,7 +768,7 @@ function openAsk(p,offer){
      <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
      ${offer?`<div class="field"><label for="aOffer">Your offer (AED)</label><input id="aOffer" inputmode="numeric" placeholder="e.g. 350"></div>`:""}
-     ${p.prices&&!offer?`<div class="field"><label for="aFrame">Frame</label><select id="aFrame">${FRAMES.map(f=>`<option value="${f.k}" ${f.k===(window.kalaiPriceStyle||"black")?"selected":""}>${f.n} · AED ${Number(p.prices[f.k]).toLocaleString("en-GB")}</option>`).join("")}</select><span class="note" style="font-size:12px">Price includes the white mount and glass, and delivery in the UAE.</span></div>`
+     ${p.prices&&!offer?`<div class="field"><label for="aFrame">Frame</label><select id="aFrame">${FRAMES.map(f=>`<option value="${f.k}" ${f.k===(window.kalaiPriceStyle||"black")?"selected":""}>${f.n}${f.k!=="none"&&(window.kalaiPriceSize||baseSize(p))?` ${window.kalaiPriceSize||baseSize(p)} cm`:""} · ${money(priceOf(p,f.k,window.kalaiPriceSize||baseSize(p)))}</option>`).join("")}</select><span class="note" style="font-size:12px">Price includes the white mount and glass, and delivery in the UAE.</span></div>`
      :`<div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>`}
      <div class="field"><label for="aMsg">Anything else? (optional)</label><textarea id="aMsg" placeholder="Is it available? Can it be delivered before the 28th?"></textarea></div>
      <button class="btn primary" type="submit">${offer?"Send my offer":p.prices?"Send my order":"Ask for price"}</button>
@@ -781,7 +782,7 @@ function openAsk(p,offer){
     if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
     const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")","Artwork no.":p.code||(p.untitled?String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
     if(offer)fields["Offer"]="AED "+off;
-    if(p.prices&&!offer){const k=document.getElementById("aFrame").value,f=FRAMES.find(x=>x.k===k);fields["Framing"]=k==="none"?"Unframed":f.n+" frame, white mount";fields["Price"]="AED "+p.prices[k]+" (website price)";}
+    if(p.prices&&!offer){const k=document.getElementById("aFrame").value,f=FRAMES.find(x=>x.k===k);const fs=window.kalaiPriceSize||baseSize(p);fields["Framing"]=k==="none"?"Unframed":f.n+" frame"+(fs?" "+fs+" cm":"")+", white mount";fields["Price"]="AED "+priceOf(p,k,fs)+" (website price)";}
     else fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();
     const url=sendEnquiry((offer?"Price enquiry (offer): ":p.prices?"Artwork order: ":"Price enquiry: ")+p.name,fields);
     ok.style.color="var(--fg)";ok.textContent=offer
@@ -792,27 +793,27 @@ function openAsk(p,offer){
   document.getElementById("aName").focus();
 }
 function roomView(p){
-  const R=window.kalaiRoom;
+  const R=window.kalaiRoom,FD=frameDims(p);
   if(R&&R.url){
     // Real room photo marked in Order management → Settings: the sofa is R.cm wide between R.l and R.r (% of width).
-    const fw=(p.wcm||40)+(FRAME.k==="none"?0:16),fh=(p.hcm||30)+(FRAME.k==="none"?0:16);
+    const fw=FD?FD[0]:(p.wcm||40)+(FRAME.k==="none"?0:16),fh=FD?FD[1]:(p.hcm||30)+(FRAME.k==="none"?0:16);
     const k=(R.r-R.l)/(R.cm||200); // % of photo width per cm
     const w=fw*k,hPct=fh*k*R.ratio,top=R.top-(18*k*R.ratio)-hPct,left=(R.l+R.r)/2-w/2;
-    const mountPad=(MOUNT&&FRAME.k!=="none"?5*k:0).toFixed(3),mould=FRAME.k==="none"?0:(3*k).toFixed(3);
+    const mcm=FD?Math.max(1,(FD[0]-(p.wcm||40))/2-3):5,mountPad=(MOUNT&&FRAME.k!=="none"?mcm*k:0).toFixed(3),mould=FRAME.k==="none"?0:(3*k).toFixed(3);
     return `<div class="room photo" role="img" aria-label="${p.name} shown to scale on a living-room wall above a sofa" style="aspect-ratio:${R.ratio};background:url('${R.url}') center/cover">
       <div class="hang" style="left:${left}%;top:${top}%;width:${w}%;padding:${mould}%;${FRAME.k==='none'?'background:none;box-shadow:0 4px 10px rgba(0,0,0,.25)':`background:${FRAME.bg}`}"><div class="mount" style="padding:${mountPad}%"><img src="${p.img}" alt=""></div></div>
     </div>`;
   }
   // A living room drawn to scale in cm: 2 m sofa (85 cm high back), art hung 20 cm above it, frame + mount
   // about 8 cm each side. The view is as tight as the art allows, so the work looks the size it really is.
-  const fw=(p.wcm||40)+(FRAME.k==="none"?0:16),fh=(p.hcm||30)+(FRAME.k==="none"?0:16);
+  const fw=FD?FD[0]:(p.wcm||40)+(FRAME.k==="none"?0:16),fh=FD?FD[1]:(p.hcm||30)+(FRAME.k==="none"?0:16);
   // A close-up: the view starts 25 cm above the floor (sofa seat and back, like an interior photo), so the art is big.
   const base=25,hangBottom=85+18;
   const H=Math.max(125,hangBottom+fh+12-base),W=H*4/3,fy=H+base,cx=W/2,floor=0;
   const y=h=>fy-h; // height above the floor → drawing y
   const art={l:(cx-fw/2)/W*100,t:(y(hangBottom)-fh)/H*100,w:fw/W*100};
   // padding % is of the room width (CSS), so cm convert through W
-  const mountPad=(MOUNT&&FRAME.k!=="none"?5/W*100:0).toFixed(2),mould=FRAME.k==="none"?0:(3/W*100).toFixed(2);
+  const mcm=FD?Math.max(1,(FD[0]-(p.wcm||40))/2-3):5,mountPad=(MOUNT&&FRAME.k!=="none"?mcm/W*100:0).toFixed(2),mould=FRAME.k==="none"?0:(3/W*100).toFixed(2);
   const sx=cx-100; // sofa left
   return `<div class="room" role="img" aria-label="${p.name} shown to scale on a living-room wall above a two-metre sofa">
     <svg viewBox="0 0 ${W.toFixed(1)} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -853,8 +854,27 @@ const FRAMES=[{k:"none",n:"No frame",bg:"transparent",sw:"repeating-linear-gradi
   {k:"gold",n:"Gold",bg:"linear-gradient(135deg,#f2d98a,#b88a2e 30%,#f6e3a2 55%,#a77a22 80%,#e3c46e)",w:.06}];
 FRAMES.forEach(f=>{f.sw=f.sw||f.bg});
 let FRAME=FRAMES[1],MOUNT=true;
+/* ---------- money: Dhs, or the visitor's currency (approximate; payment is always in dirhams) ---------- */
+let CUR="AED";try{CUR=localStorage.getItem("kalaiCur")||"AED"}catch(e){}
+const FX={USD:3.6725}; // the dirham is pegged to the dollar
+function money(a){a=Number(a)||0;
+  if(CUR==="USD")return "$"+Math.round(a/FX.USD).toLocaleString("en-US");
+  if(CUR==="INR")return "₹"+(Math.round(a*(window.kalaiInrPerAed||24)/50)*50).toLocaleString("en-IN");
+  return "Dhs "+a.toLocaleString("en-GB")}
+function moneyNote(a){return CUR==="AED"?"":` <small class="note" style="font-size:12px">(Dhs ${Number(a).toLocaleString("en-GB")}; you pay in dirhams)</small>`}
+/* fixed prices: v2 = by frame size and style; older = by style only */
+let FSIZE="";
+const FRAME_SIZES=[["30×40",30,40],["40×50",40,50],["50×70",50,70],["60×80",60,80],["70×100",70,100]];
+function priceOf(p,style,fsize){const m=p.prices;if(!m)return null;
+  if(m.v===2){if(style==="none")return m.none;const row=m.sizes[fsize]||m.sizes[m.base];return row?row[style]:null}
+  return m[style]}
+function baseSize(p){return p.prices&&p.prices.v===2?p.prices.base:""}
+/** outside size of the chosen frame (cm), turned to match the artwork. */
+function frameDims(p){const f=FRAME_SIZES.find(x=>x[0]===(FSIZE||baseSize(p)));if(!f||FRAME.k==="none")return null;
+  return p.wcm>=p.hcm?[f[2],f[1]]:[f[1],f[2]]}
 function framedHtml(p){
-  const fw=Math.round(400*(FRAME.w||0)),mw=MOUNT&&FRAME.k!=="none"?Math.round(400*.07):0;
+  const fd=frameDims(p),mwCm=fd?Math.max(2,(fd[0]-p.wcm)/2):7;
+  const fw=Math.round(400*(FRAME.w||0)),mw=MOUNT&&FRAME.k!=="none"?Math.min(140,Math.round(mwCm*400/Math.max(p.wcm,10))):0;
   return `<div class="fr ${FRAME.k==="none"?"none":""}" style="--fbg:${FRAME.bg};--fw:${fw}px;--mw:${mw}px"><div class="mt"><img src="${p.img}" alt="${p.name} in a ${FRAME.n.toLowerCase()} frame"></div></div>`;
 }
 /* magnifying lens: move over the picture (or touch and drag) to look closer */
@@ -884,6 +904,7 @@ function openModal(p){
       <div class="vtools"><div class="vtabs" role="group" aria-label="Choose view"><button type="button" data-v="art" aria-pressed="true"><img src="${p.img}" alt="">Artwork</button><button type="button" data-v="frame" aria-pressed="false"><img src="${p.img}" alt="" style="border:6px solid #3b2a1d;box-sizing:border-box">Try a frame</button><button type="button" data-v="room" aria-pressed="false"><img src="${p.img}" alt="" style="padding:14px 18px 24px;background:#e3dccd;object-fit:contain;box-sizing:border-box">On a wall</button></div>
         <div class="vtabs"><button type="button" id="vLens" aria-pressed="${LENS}" title="Move over the picture to look closer">🔍 Lens</button></div></div>
       <div class="fchips" id="vFrames" hidden role="group" aria-label="Frame">${FRAMES.map(f=>`<button type="button" data-fr="${f.k}" aria-pressed="${f.k===FRAME.k}"><i style="--sw:${f.sw}"></i>${f.n}</button>`).join("")}<label><input type="checkbox" id="vMount" ${MOUNT?"checked":""}> White mount</label></div>
+      ${p.prices&&p.prices.v===2&&Object.keys(p.prices.sizes).length>1?`<div class="fchips" id="vSizes" hidden role="group" aria-label="Frame size"><span class="note" style="font-size:12px">Frame size</span>${Object.keys(p.prices.sizes).map(f=>`<button type="button" data-fs="${f}" aria-pressed="${f===p.prices.base}">${f} cm</button>`).join("")}</div>`:""}
       <div class="stage" id="vStage"></div>
       <p class="room-cap" id="vCap">Photo of the original by the artist.</p>
     </div>
@@ -912,19 +933,22 @@ function openModal(p){
   let cur="art";
   const lensTip=()=>LENS?" Move over the picture to look closer.":"";
   const show=v=>{cur=v;box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
-    box.querySelector("#vFrames").hidden=v==="art";box.querySelector(".viewer").classList.toggle("lens-on",LENS&&v!=="room");
+    box.querySelector("#vFrames").hidden=v==="art";if(box.querySelector("#vSizes"))box.querySelector("#vSizes").hidden=v==="art"||FRAME.k==="none";box.querySelector(".viewer").classList.toggle("lens-on",LENS&&v!=="room");
     if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent="Photo of the original by the artist."+lensTip();}
     else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+(p.prices?" A preview of the look; the price above is for this frame.":" A preview of the look: we confirm the exact frame and its price with you.")+lensTip();}
-    else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (about ${p.wcm+16} × ${p.hcm+16} cm framed)`}. Pick a frame above to see it on the wall.`;}
+    else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (${frameDims(p)?`${frameDims(p)[0]} × ${frameDims(p)[1]}`:`about ${p.wcm+16} × ${p.hcm+16}`} cm framed)`}. Pick a frame above to see it on the wall.`;}
     window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));
     if(p.prices&&document.getElementById("mPrice")){const k=v==="art"&&!window.kalaiPriceStyle?"black":FRAME.k;if(v!=="art")window.kalaiPriceStyle=k;const st=window.kalaiPriceStyle||k;
-      document.getElementById("mPrice").textContent="AED "+Number(p.prices[st]).toLocaleString("en-GB");
-      document.getElementById("mPriceNote").textContent=st==="none"?"unframed":(FRAMES.find(f=>f.k===st)||{}).n.toLowerCase()+" frame"+(MOUNT?", white mount":"")+" · delivered in the UAE";}};
+      const fs=FSIZE||baseSize(p),pr=priceOf(p,st,fs);window.kalaiPriceSize=st==="none"?"":fs;
+      document.getElementById("mPrice").innerHTML=money(pr)+moneyNote(pr);
+      document.getElementById("mPriceNote").textContent=st==="none"?"unframed":(FRAMES.find(f=>f.k===st)||{}).n.toLowerCase()+" frame"+(fs?` ${fs} cm`:"")+(MOUNT?", white mount":"")+" · delivered in the UAE";}};
+  window.kalaiRefreshPrice=()=>show(cur);
   box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.onclick=()=>show(b.dataset.v));
   box.querySelectorAll("[data-fr]").forEach(b=>b.onclick=()=>{FRAME=FRAMES.find(f=>f.k===b.dataset.fr);box.querySelectorAll("[data-fr]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vMount").onchange=e=>{MOUNT=e.target.checked;show(cur)};
+  box.querySelectorAll("[data-fs]").forEach(b=>b.onclick=()=>{FSIZE=b.dataset.fs;box.querySelectorAll("[data-fs]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vLens").onclick=e=>{LENS=!LENS;e.currentTarget.setAttribute("aria-pressed",LENS);lensEl.style.display="none";show(cur)};
-  window.kalaiFrameChoice="";window.kalaiPriceStyle="";wireLens(stage);show("art");
+  window.kalaiFrameChoice="";window.kalaiPriceStyle="";FSIZE="";wireLens(stage);show("art");
   modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("mClose").focus();
   // Each artwork has its own link (…/#art-ID): shareable, and the phone's Back button closes it.
   try{if(location.hash!=="#art-"+p.id)history.pushState({art:p.id},"","#art-"+p.id)}catch(e){}
@@ -1025,6 +1049,10 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   g.innerHTML=KIDS.map(k=>`<figure class="kid">${kid(k)}<figcaption><b>${k.n}, ${k.a}</b> · ${k.c}</figcaption></figure>`).join("");
 })();
 drawChips();drawGrid();updateCount();
+/* currency picker (header): prices shown in Dhs, $ or ₹; payment is always in dirhams */
+(function(){const c=document.getElementById("curSel");if(!c)return;c.value=CUR;
+  window.kalaiRedrawPrices=()=>{drawGrid();if(typeof drawMarket==="function")try{drawMarket()}catch(e){}if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
+  c.onchange=()=>{CUR=c.value;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}window.kalaiRedrawPrices()}})();
 </script>
 <script type="module" src="/src/account.js"></script>
 </body>
