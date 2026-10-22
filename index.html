@@ -261,6 +261,7 @@ footer p{margin:2px 0}
 .pprice{font-size:26px;font-family:var(--display)}
 .ai-tag{background:#e8eefc!important;color:#2a4a9a!important}
 .ai-note{font-size:13px;background:#eef2fc;border-left:3px solid #4a6fd1;padding:6px 10px;border-radius:4px;color:var(--fg)}
+.dhs{width:.95em;height:.86em;vertical-align:-.06em;margin-right:.18em}
 .cur-sel{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-sel option{color:#111}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
@@ -332,7 +333,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
   <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
-  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><select id="curSel" class="cur-sel" aria-label="Currency"><option value="AED">Dhs</option><option value="USD">$ USD</option><option value="INR">₹ INR</option></select><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
+  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><select id="curSel" class="cur-sel" aria-label="Currency"><option value="AED">AED Dhs</option><option value="USD">$ USD</option><option value="INR">₹ INR</option></select><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
 <section class="hero" style="padding-block:0"><div class="wrap">
@@ -681,12 +682,12 @@ function drawGrid(){
       card.insertAdjacentHTML("beforeend",`<div class="kind">${esc2(p.category||"Original artwork")}</div>
       <h3>${esc2(p.name)}</h3><div class="meta">${SHOW_ARTIST_NAMES?"by "+esc2(p.artist):"Original artwork"}${p.stock>0?"":' · <b style="color:var(--kumkum)">Sold</b>'}</div>
       ${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
-      <div class="row"><span class="price">${money(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-order-art="${esc2(p.id)}">Order</button>`:""}</div>`);
+      <div class="row"><span class="price">${moneyH(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-order-art="${esc2(p.id)}">Order</button>`:""}</div>`);
       g.appendChild(card);return;
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
       <h3>${cleanName(p.name)}</h3>${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).length?`<div class="meta">${[SHOW_ARTIST_NAMES?(p.artist||"Siva Raja"):"",p.size].filter(Boolean).join(" · ")}</div>`:""}<div class="meta"><span class="tag">${SUBJECTS[p.subject]}</span>${p.ai?` <span class="tag ai-tag" title="The picture is an AI-made preview of the design. Your artwork is painted by hand.">AI preview · hand-painted to order</span>`:""}</div>
-      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`${p.prices?`<span class="price">${money(priceOf(p,"black",baseSize(p)))}<small style="display:block;font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">framed · unframed ${money(priceOf(p,"none"))}</small></span>`:`<span class="note">Price on request</span>`}<button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
+      <div class="row">${p.sold?`<span class="note" style="color:var(--kumkum);font-weight:600">Sold</span><button class="add" data-jump="commission">Commission similar</button>`:p.price?`${p.prices?`<span class="price">${moneyH(priceOf(p,"black",baseSize(p)))}<small style="display:block;font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">framed · unframed ${moneyH(priceOf(p,"none"))}</small></span>`:`<span class="note">Price on request</span>`}<button class="add" data-view="${p.id}">View details</button>`:`<span class="note">Commission this style</span><button class="add" data-jump="commission">Request a quote</button>`}</div>`);
     g.appendChild(card);
   });
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
@@ -701,7 +702,7 @@ window.kalaiShowMarket=function(list){
   g.innerHTML=list.map((p,i)=>`<article class="card"><button class="frame" type="button" data-mi="${i}" aria-label="View ${e(p.title)}"><img src="${e(p.img)}" alt="${e(p.title)}" loading="lazy"></button>
     <div class="kind">${e(p.category||"Handmade")}</div><h3>${e(p.title)}</h3><div class="meta">by ${e(p.seller)}${p.stock>0?"":" · <b style=\"color:var(--kumkum)\">Out of stock</b>"}</div>
     ${p.description?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${e(p.description)}</div>`:""}
-    <div class="row"><span class="price">${money(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-mbuy="${i}">Order</button>`:""}</div></article>`).join("");
+    <div class="row"><span class="price">${moneyH(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-mbuy="${i}">Order</button>`:""}</div></article>`).join("");
   g.querySelectorAll("[data-mbuy]").forEach(b=>b.onclick=()=>{const p=list[+b.dataset.mbuy];
     if(window.kalaiMarketOrder){window.kalaiMarketOrder(p);return;}sendEnquiry("Crafts shop order: "+p.title,{"Item":p.title,"Maker":p.seller,"Price":"AED "+p.price+" (incl. delivery in the UAE)","Listing":p.id,"Link":location.origin+"/#market"});});
   g.querySelectorAll("[data-mi]").forEach(b=>b.onclick=()=>window.open(list[+b.dataset.mi].img,"_blank","noopener"));
@@ -863,7 +864,10 @@ function money(a){a=Number(a)||0;
   if(CUR==="USD")return "$"+Math.round(a/FX.USD).toLocaleString("en-US");
   if(CUR==="INR")return "₹"+(Math.round(a*(window.kalaiInrPerAed||24)/50)*50).toLocaleString("en-IN");
   return "Dhs "+a.toLocaleString("en-GB")}
-function moneyNote(a){return CUR==="AED"?"":` <small class="note" style="font-size:12px">(Dhs ${Number(a).toLocaleString("en-GB")}; you pay in dirhams)</small>`}
+/* the UAE dirham sign (Central Bank of the UAE, 2025): a D crossed by two lines. Drawn as SVG, as most fonts don't have it yet */
+const DHS_SIGN=`<svg class="dhs" viewBox="0 0 22 20" role="img" aria-label="Dhs"><path d="M6 3h4.2a7 7 0 0 1 0 14H6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 8.4h17M2 11.6h17" stroke="currentColor" stroke-width="1.6"/></svg>`;
+function moneyH(a){return CUR==="AED"?`${DHS_SIGN}${(Number(a)||0).toLocaleString("en-GB")}`:money(a)}
+function moneyNote(a){return CUR==="AED"?"":` <small class="note" style="font-size:12px">(${DHS_SIGN}${Number(a).toLocaleString("en-GB")}; you pay in dirhams)</small>`}
 /* fixed prices: v2 = by frame size and style; older = by style only */
 let FSIZE="";
 const FRAME_SIZES=[["30×40",30,40],["40×50",40,50],["50×70",50,70],["60×80",60,80],["70×100",70,100]];
@@ -943,7 +947,7 @@ function openModal(p){
     window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));
     if(p.prices&&document.getElementById("mPrice")){const k=v==="art"&&!window.kalaiPriceStyle?"black":FRAME.k;if(v!=="art")window.kalaiPriceStyle=k;const st=window.kalaiPriceStyle||k;
       const fs=FSIZE||baseSize(p),pr=priceOf(p,st,fs);window.kalaiPriceSize=st==="none"?"":fs;
-      document.getElementById("mPrice").innerHTML=money(pr)+moneyNote(pr);
+      document.getElementById("mPrice").innerHTML=moneyH(pr)+moneyNote(pr);
       document.getElementById("mPriceNote").textContent=st==="none"?"unframed":(FRAMES.find(f=>f.k===st)||{}).n.toLowerCase()+" frame"+(fs?` ${fs} cm`:"")+(MOUNT?", white mount":"")+" · delivered in the UAE";}};
   window.kalaiRefreshPrice=()=>show(cur);
   box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.onclick=()=>show(b.dataset.v));
