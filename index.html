@@ -259,6 +259,7 @@ footer p{margin:2px 0}
 .room-cap{font-size:12px;color:var(--muted);margin:0}
 .byline{font-size:14px;color:var(--muted);margin:-4px 0 0}
 .pprice{font-size:26px;font-family:var(--display)}
+.pick-row{display:flex;gap:10px;flex-wrap:wrap}.pick-row label{display:grid;gap:3px;font-size:12px;font-weight:600;color:var(--muted);flex:1;min-width:140px}.pick-row select{font:inherit;font-size:14px;font-weight:400;color:var(--fg);padding:9px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .ai-tag{background:#e8eefc!important;color:#2a4a9a!important}
 .ai-note{font-size:13px;background:#eef2fc;border-left:3px solid #4a6fd1;padding:6px 10px;border-radius:4px;color:var(--fg)}
 .dhs{width:1.05em;height:.9em;vertical-align:-.08em;margin-right:.15em}
@@ -919,7 +920,9 @@ function openModal(p){
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
      ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; allow about 2–3 weeks before dispatch.</div>`:""}
-     ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>`:""}
+     ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>
+     <div class="pick-row"><label>Frame<select id="pkStyle">${FRAMES.map(f=>`<option value="${f.k}">${f.n}</option>`).join("")}</select></label>
+       ${p.prices.v===2&&Object.keys(p.prices.sizes).length>1?`<label id="pkSizeL">Frame size<select id="pkSize">${Object.keys(p.prices.sizes).map(f=>`<option value="${f}">${f} cm</option>`).join("")}</select></label>`:""}</div>`:""}
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
      <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size?p.size+" (artwork)":"Ask us"}</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
@@ -931,7 +934,7 @@ function openModal(p){
        <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
      </div>
      <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">${p.prices?"Order this work":"Ask for price"}</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
-     <p class="note" style="margin:0">${p.prices?"The price changes with the frame you pick under “Try a frame”. It includes the mount, glass and insured delivery in the UAE.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
+     <p class="note" style="margin:0">${p.prices?"The price changes with the frame and size you choose. It includes the mount, glass and insured delivery in the UAE.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
      <details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>
      <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
      ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
@@ -946,6 +949,9 @@ function openModal(p){
     else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (${frameDims(p)?`${frameDims(p)[0]} × ${frameDims(p)[1]}`:`about ${p.wcm+16} × ${p.hcm+16}`} cm framed)`}. Pick a frame above to see it on the wall.`;}
     window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));
     if(p.prices&&document.getElementById("mPrice")){const k=v==="art"&&!window.kalaiPriceStyle?"black":FRAME.k;if(v!=="art")window.kalaiPriceStyle=k;const st=window.kalaiPriceStyle||k;
+      const ps=document.getElementById("pkStyle"),pz=document.getElementById("pkSize");if(ps)ps.value=st;if(pz){pz.value=FSIZE||baseSize(p);document.getElementById("pkSizeL").style.display=st==="none"?"none":""}
+      [...(ps?ps.options:[])].forEach(o=>{o.textContent=`${(FRAMES.find(f=>f.k===o.value)||{}).n} · ${money(priceOf(p,o.value,FSIZE||baseSize(p)))}`});
+      if(pz)[...pz.options].forEach(o=>{o.textContent=`${o.value} cm · ${money(priceOf(p,st==="none"?"black":st,o.value))}`});
       const fs=FSIZE||baseSize(p),pr=priceOf(p,st,fs);window.kalaiPriceSize=st==="none"?"":fs;
       document.getElementById("mPrice").innerHTML=moneyH(pr)+moneyNote(pr);
       document.getElementById("mPriceNote").textContent=st==="none"?"unframed":(FRAMES.find(f=>f.k===st)||{}).n.toLowerCase()+" frame"+(fs?` ${fs} cm`:"")+(MOUNT?", white mount":"")+" · delivered in the UAE";}};
@@ -953,6 +959,9 @@ function openModal(p){
   box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.onclick=()=>show(b.dataset.v));
   box.querySelectorAll("[data-fr]").forEach(b=>b.onclick=()=>{FRAME=FRAMES.find(f=>f.k===b.dataset.fr);box.querySelectorAll("[data-fr]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vMount").onchange=e=>{MOUNT=e.target.checked;show(cur)};
+  const pkS=box.querySelector("#pkStyle"),pkZ=box.querySelector("#pkSize");
+  if(pkS)pkS.onchange=()=>{FRAME=FRAMES.find(f=>f.k===pkS.value);window.kalaiPriceStyle=FRAME.k;box.querySelectorAll("[data-fr]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.fr===FRAME.k));show(cur==="art"?"frame":cur)};
+  if(pkZ)pkZ.onchange=()=>{FSIZE=pkZ.value;box.querySelectorAll("[data-fs]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.fs===FSIZE));show(cur==="art"?"frame":cur)};
   box.querySelectorAll("[data-fs]").forEach(b=>b.onclick=()=>{FSIZE=b.dataset.fs;box.querySelectorAll("[data-fs]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vLens").onclick=e=>{LENS=!LENS;e.currentTarget.setAttribute("aria-pressed",LENS);lensEl.style.display="none";show(cur)};
   window.kalaiFrameChoice="";window.kalaiPriceStyle="";FSIZE="";wireLens(stage);show("art");

@@ -277,12 +277,35 @@ function drawCalc(w) {
   render();
 }
 
+/** Prices approved before frame sizes existed (style only): add the frame sizes, keeping the approved prices
+ *  (rounded up to Dhs 25) for the base size. Runs when the Pricing tab opens. */
+async function upgradeOld() {
+  let n = 0;
+  for (const w of works) {
+    const m = matrixOf(w);
+    if (!m || m.v === 2) continue;
+    const b = build(w);
+    if (b.artistAed == null) continue;
+    const pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0), up = (x) => Math.ceil(x / 25) * 25;
+    const sizes = {};
+    for (const fs of sizesFrom(b.fsize)) {
+      const bb = build(w, { fsize: fs });
+      sizes[fs] = Object.fromEntries(STYLES.filter((s) => s.k !== 'none').map((s) => [s.k, up(m[s.k] ?? b.styles[s.k].price) + (fs === b.fsize ? 0 : up((bb.styles[s.k].cost - b.styles[s.k].cost) * (1 + b.margin) / (1 - pct)))]));
+    }
+    const matrix = { v: 2, base: b.fsize, none: up(m.none ?? b.styles.none.price), sizes };
+    const r = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix) }).catch(() => null);
+    if (r && !r.errors?.length) { w.priceMatrix = JSON.stringify(matrix); n++; }
+  }
+  return n;
+}
+
 export async function showPricing() {
   if (!wired) {
     wired = true;
     $('pcReload').onclick = () => showPricing();
   }
   try { await loadAll(); } catch (ex) { $('pcList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; return; }
+  upgradeOld().then((n) => { if (n) { $('pcMasterMsg') && ($('pcMasterMsg').textContent = `${n} earlier price list(s) now have frame sizes and Dhs 25 rounding.`); drawList(); } });
   $('pcMaster').innerHTML = masterHtml();
   $('pcMaster').querySelectorAll('input').forEach((i) => i.addEventListener('change', () => { readMaster(); drawList(); }));
   $('pcSaveMaster').onclick = async () => {
