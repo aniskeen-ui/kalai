@@ -261,7 +261,7 @@ footer p{margin:2px 0}
 .pprice{font-size:26px;font-family:var(--display)}
 .ai-tag{background:#e8eefc!important;color:#2a4a9a!important}
 .ai-note{font-size:13px;background:#eef2fc;border-left:3px solid #4a6fd1;padding:6px 10px;border-radius:4px;color:var(--fg)}
-.dhs{width:.95em;height:.86em;vertical-align:-.06em;margin-right:.18em}
+.dhs{width:1.05em;height:.9em;vertical-align:-.08em;margin-right:.15em}
 .cur-sel{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-sel option{color:#111}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
@@ -865,7 +865,7 @@ function money(a){a=Number(a)||0;
   if(CUR==="INR")return "₹"+(Math.round(a*(window.kalaiInrPerAed||24)/50)*50).toLocaleString("en-IN");
   return "Dhs "+a.toLocaleString("en-GB")}
 /* the UAE dirham sign (Central Bank of the UAE, 2025): a D crossed by two lines. Drawn as SVG, as most fonts don't have it yet */
-const DHS_SIGN=`<svg class="dhs" viewBox="0 0 22 20" role="img" aria-label="Dhs"><path d="M6 3h4.2a7 7 0 0 1 0 14H6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 8.4h17M2 11.6h17" stroke="currentColor" stroke-width="1.6"/></svg>`;
+const DHS_SIGN=`<svg class="dhs" viewBox="0 0 24 20" role="img" aria-label="Dhs"><g fill="currentColor"><rect x="5.2" y="2" width="2.8" height="16"/><rect x="3.4" y="2" width="5" height="1.3"/><rect x="3.4" y="16.7" width="5" height="1.3"/><path d="M7.6 2h3.2a8 8 0 0 1 0 16H7.6v-1.3h3.2a6.6 6.6 0 0 0 0-13.4H7.6z"/><path d="M1.2 7.7q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/><path d="M1.2 11.1q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/></g></svg>`;
 function moneyH(a){return CUR==="AED"?`${DHS_SIGN}${(Number(a)||0).toLocaleString("en-GB")}`:money(a)}
 function moneyNote(a){return CUR==="AED"?"":` <small class="note" style="font-size:12px">(${DHS_SIGN}${Number(a).toLocaleString("en-GB")}; you pay in dirhams)</small>`}
 /* fixed prices: v2 = by frame size and style; older = by style only */
