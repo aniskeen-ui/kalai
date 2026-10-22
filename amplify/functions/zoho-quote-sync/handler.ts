@@ -2143,9 +2143,16 @@ const fils = (aed: number) => Math.round(aed * 100);
 async function ziinaPriceLink(rec: StreamRecord, img: Img) {
   if (str(img, 'status') !== 'PRICE_SENT') return;
   const price = num(img, 'quotedPrice') ?? 0;
-  if (!(price >= 2)) return;
   const link = str(img, 'paymentLink');
   const mine = !!str(img, 'ziinaIntentId');
+  if (!(price >= 2)) {
+    // Ziina takes AED 2 or more. Never leave a link for an old price on the order.
+    if (mine && link && num(img, 'ziinaAmount') !== price) {
+      await writeBack(str(img, 'id'), { paymentLink: null, ziinaIntentId: null, ziinaAmount: null, ziinaMessage: 'No Ziina link: the price is under AED 2 (Ziina minimum). The old link was removed.' });
+      if (rec.dynamodb?.NewImage) delete rec.dynamodb.NewImage.paymentLink;
+    }
+    return;
+  }
   if (link && !mine) return; // the studio's own link
   if (mine && num(img, 'ziinaAmount') === price && link) return; // link already matches the price
   if (!(await secureParam('/kalai/ziina/token'))) return;
