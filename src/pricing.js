@@ -94,7 +94,7 @@ async function loadAll() {
   try { ratesRow = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : null; } catch { ratesRow = null; }
   // Start from the order calculator's figures where the pricing master hasn't been saved yet.
   const base = ratesRow || {};
-  P = { ...structuredClone(DEFAULT_P), fx: base.fx ?? DEFAULT_P.fx, customs: base.customs ?? DEFAULT_P.customs, local: base.local ?? DEFAULT_P.local, margin: base.margin ?? DEFAULT_P.margin,
+  P = { ...structuredClone(DEFAULT_P), fx: base.fx ?? DEFAULT_P.fx, customs: base.customs ?? DEFAULT_P.customs, local: base.local ?? DEFAULT_P.local, margin: base.margins?.collection ?? base.margin ?? DEFAULT_P.margin,
     fee: base.fee ?? DEFAULT_P.fee, ins: base.ins ?? DEFAULT_P.ins, reserve: base.reserve ?? DEFAULT_P.reserve, round9: base.round9 ?? false, round25: base.round25 ?? true,
     courier: Object.fromEntries(TIERS.map((t) => [t, base.tiers?.[t]?.courier ?? DEFAULT_P.courier[t]])), ...(base.pricing || {}) };
   for (const k of ['courier', 'frameWork', 'moulding', 'extra']) {
@@ -132,7 +132,7 @@ function masterHtml() {
       <label>₹ → AED <input data-p="fx" type="number" step="0.0001" min="0" value="${P.fx}" style="width:90px"></label>
       ${pct('customs', 'Customs')}
       <label>Courier Dubai → customer <input data-p="local" type="number" min="0" step="1" value="${P.local}" style="width:70px"> AED</label>
-      ${pct('margin', 'Margin')}${pct('fee', 'Card charges (Ziina)')}${pct('ins', 'Courier insurance')}${pct('reserve', 'Breakage reserve')}
+      ${pct('margin', 'Margin (Collection)')}${pct('fee', 'Card charges (Ziina)')}${pct('ins', 'Courier insurance')}${pct('reserve', 'Breakage reserve')}
       <label><input type="checkbox" data-p="round25" ${P.round25 !== false ? 'checked' : ''} style="width:auto"> Round up to the nearest Dhs 25</label>
     </div>
     <table class="costs" style="max-width:420px"><thead><tr><th>AED by artwork size</th>${TIERS.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
@@ -393,7 +393,7 @@ export async function showPricing() {
     $('pcMasterMsg').textContent = 'Saving…';
     try {
       const data = { ...(ratesRow || {}), pricing: { courier: P.courier, frameWork: P.frameWork, moulding: P.moulding, extra: P.extra },
-        fx: P.fx, customs: P.customs, local: P.local, margin: P.margin, fee: P.fee, ins: P.ins, reserve: P.reserve, round9: P.round9, round25: P.round25,
+        fx: P.fx, customs: P.customs, local: P.local, margin: P.margin, margins: { ...(ratesRow?.margins || {}), collection: P.margin }, fee: P.fee, ins: P.ins, reserve: P.reserve, round9: P.round9, round25: P.round25,
         tiers: Object.fromEntries(TIERS.map((t) => { const f = { S: '30×40', M: '40×50', L: '50×70' }[t]; return [t, { ...(ratesRow?.tiers?.[t] || {}), courier: P.courier[t], framing: Math.round((P.frameWork[f] || 0) + (P.moulding[f] || 0)) }]; })),
         updatedAt: new Date().toISOString() };
       const rec = { key: 'default', data: JSON.stringify(data) };

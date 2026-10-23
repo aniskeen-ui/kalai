@@ -62,6 +62,12 @@ function marketLine(price, suggested) {
 let rates = structuredClone(DEFAULT_RATES);
 const costings = new Map(); // enquiryId → Costing record
 const hasArtist = (e) => e.kind === 'PRICE' || e.kind === 'COMMISSION';
+// Kalai margin master by category (Rates). Collection = artwork price enquiries and the Pricing tab; Crafts shop = the
+// default commission % when approving a seller. Each category's margin is also its target in Reports.
+const CATS = [['collection', 'Collection (artworks on the website)', 'markup on cost: Pricing tab and artwork price enquiries'], ['commission', 'Commissions (paintings and sketches to order)', 'markup on cost: commission price calculator'],
+  ['gift', 'Little Artists', 'target margin, checked in Reports'], ['market', 'Crafts shop', 'default commission % for a new seller']];
+const CAT_OF = { PRICE: 'collection', COMMISSION: 'commission', GIFT: 'gift', MARKET: 'market' };
+const marginFor = (kind) => { const m = rates.margins?.[CAT_OF[kind] || 'collection']; return m != null ? m : rates.margin; };
 const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 const aed = (v, d = 0) => (v == null ? '–' : 'AED ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 
@@ -82,9 +88,10 @@ function calc(c, price) {
   const total = artistAed + framing + indiaCourier + customs + localCourier;
   // Ziina fee, courier insurance and the breakage reserve are all a % of what the customer pays.
   const pctOfPrice = rates.fee + (rates.ins || 0) + (rates.reserve || 0);
-  const raw = (total * (1 + rates.margin)) / (1 / (1 + vat) - pctOfPrice);
+  const mg = marginFor(curEnq?.kind);
+  const raw = (total * (1 + mg)) / (1 / (1 + vat) - pctOfPrice);
   const suggested = rates.round25 !== false ? Math.ceil(raw / 25) * 25 : rates.round9 ? Math.ceil((raw + 1) / 10) * 10 - 1 : Math.round(raw);
-  const out = { artistAed, framing, indiaCourier, localCourier, customs, total, suggested, vatRate: vat, ready: true };
+  const out = { artistAed, framing, indiaCourier, localCourier, customs, total, suggested, vatRate: vat, ready: true, mg };
   if (price > 0) {
     out.price = price;
     out.vatAmt = price - price / (1 + vat);
@@ -387,7 +394,7 @@ function renderReport() {
       <td style="white-space:normal;min-width:160px">${esc(l.e.title)}${l.note ? `<br><span class="flag">${esc(l.note)}</span>` : ''}</td><td>${esc(l.e.customerName)}</td>
       <td><span class="pill ${esc(l.e.status)}">${esc(STATUS[l.e.status] || l.e.status)}</span></td>
       ${td(l.price)}${td(l.refund || null)}${td(l.net)}${td(l.k?.artist)}${td(l.k?.framing)}${td(l.k?.india)}${td(l.k?.customs)}${td(l.k?.local)}${td(l.k?.rework || null, l.k?.rework > 0 ? 'neg' : '')}${td(l.fee)}${td(l.total)}
-      ${td(l.margin, l.margin != null && l.margin < 0 ? 'neg' : '')}<td class="num ${l.pct != null && l.pct < 0.1 ? 'neg' : ''}">${l.pct == null ? '–' : (l.pct * 100).toFixed(1) + '%'}</td></tr>`;
+      ${td(l.margin, l.margin != null && l.margin < 0 ? 'neg' : '')}<td class="num ${l.pct != null && l.pct < Math.min(0.1, marginFor(l.e.kind)) ? 'neg' : ''}" title="Target ${Math.round(marginFor(l.e.kind) * 100)}%">${l.pct == null ? '–' : (l.pct * 100).toFixed(1) + '%'}</td></tr>`;
   }).join('') : '<tr><td colspan="18" class="muted">No paid orders in this period.</td></tr>';
   const k = (f) => costed.reduce((a, l) => a + (f(l.k) || 0), 0);
   $('rFoot').innerHTML = lines.length ? `<tr><td colspan="5">Total (${lines.length} orders)</td>${td(T.sales)}${td(T.refund || null)}${td(T.net)}${td(k((x) => x.artist))}${td(k((x) => x.framing))}${td(k((x) => x.india))}${td(k((x) => x.customs))}${td(k((x) => x.local))}${td(k((x) => x.rework) || null)}${td(T.fee)}${td(T.cost)}${td(T.margin, T.margin < 0 ? 'neg' : '')}<td class="num">${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}</td></tr>` : '';
@@ -913,10 +920,10 @@ function renderCost() {
     ${r.ready ? `<tr class="tot"><td>Total cost</td><td class="mono num">${aed(r.total)}</td><td></td></tr>` : ''}
   </tbody></table>`;
   if (r.ready) {
-    html += `<div class="suggest"><span>Suggested price <b class="mono">${aed(r.suggested)}</b> <span class="muted">(${(rates.margin * 100).toFixed(0)}% margin${r.vatRate ? ', VAT incl.' : ''}${rates.fee ? ', after Ziina fee' : ''}${rates.ins ? ', insurance' : ''}${rates.reserve ? ', breakage reserve' : ''})</span></span>
+    html += `<div class="suggest"><span>Suggested price <b class="mono">${aed(r.suggested)}</b> <span class="muted">(${(r.mg * 100).toFixed(0)}% ${CAT_OF[curEnq?.kind] === 'commission' ? 'commission' : 'collection'} margin${r.vatRate ? ', VAT incl.' : ''}${rates.fee ? ', after Ziina fee' : ''}${rates.ins ? ', insurance' : ''}${rates.reserve ? ', breakage reserve' : ''})</span></span>
       ${$('ePrice').readOnly ? '' : '<button type="button" class="btn small" id="useSug">Use this price</button>'}</div>`;
     if (r.price) {
-      const low = r.marginPct < 0.1;
+      const low = r.marginPct < Math.min(0.1, r.mg);
       html += marketLine(r.price, r.suggested);
       html += `<div class="marginline ${low ? 'low' : ''}">At ${aed(r.price)}: ${r.vatRate ? `VAT ${aed(r.vatAmt, 2)} · ` : ''}Ziina fee ${aed(r.feeAmt, 2)}${r.insAmt ? ` · insurance ${aed(r.insAmt, 2)}` : ''}${r.resAmt ? ` · breakage reserve ${aed(r.resAmt, 2)}` : ''} · <b>margin ${aed(r.margin)} (${(r.marginPct * 100).toFixed(1)}%)</b>${low ? ' · below 10%' : ''}</div>`;
     }
@@ -968,7 +975,7 @@ function showRates() {
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
         ${pct('rIns', 'Courier insurance (%)', rates.ins || 0, 'declared-value cover bought with each shipment, % of price')}
         ${pct('rRes', 'Breakage reserve (%)', rates.reserve || 0, 'set aside per order for damage the insurer won\'t pay')}
-        ${pct('rMar', 'Pranix margin (%)', rates.margin, 'markup on total cost')}
+        <div class="field" style="grid-column:1/-1"><label>Kalai margin by category (%)</label><div class="tablewrap"><table class="costs"><tbody>${CATS.map(([k, label, note]) => `<tr><td>${label}</td><td><input id="rMg_${k}" type="number" min="0" max="300" step="0.5" value="${+(((rates.margins?.[k] ?? (k === 'market' ? 0.15 : rates.margin)) || 0) * 100).toFixed(2)}" style="width:80px"></td><td class="muted" style="font-size:12px">${note}</td></tr>`).join('')}</tbody></table></div></div>
         ${pct('rVat', 'VAT (%)', rates.vat, '0 until registered, then 5')}
       </div>
       <div class="tablewrap"><table class="costs"><thead><tr><th>Market check</th><th>Sketch band (AED)</th><th>Watercolour band (AED)</th><th>Saatchi Art reference</th></tr></thead>
@@ -992,7 +999,7 @@ function showRates() {
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
     const data = { tiers, local: n($('rLocal').value) ?? 0, fx: n($('rFx').value) ?? 0,
-      customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margin: (n($('rMar').value) ?? 0) / 100,
+      customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
       market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };
     try {

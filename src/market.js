@@ -17,7 +17,13 @@ let sellers = [];
 let listings = [];
 const urls = new Map();
 
+// Default commission % for a seller not yet approved: Rates → Kalai margin by category → Crafts shop.
+let DEF_PCT = 15;
+async function loadDefPct() {
+  try { const r = await client.models.Rates.get({ key: 'default' }); const d = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : null; if (d?.margins?.market != null) DEF_PCT = Math.round(d.margins.market * 1000) / 10; } catch { /* keep 15 */ }
+}
 export async function showMarket() {
+  await loadDefPct();
   if (!wired) {
     wired = true;
     $('mkReload').onclick = load;
@@ -101,7 +107,7 @@ function sellerCard(s) {
     <div class="muted">${s.type === 'ARTIST' ? 'Address' : 'Pickup'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.country === 'India' ? (s.accountNumber ? `· A/c ${esc(s.accountNumber)} · IFSC ${esc(s.ifsc)}` : '· <b>no bank account yet</b>') : s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     <div class="mk-act">
-      ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? 15)}"></label>
+      ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? DEF_PCT)}"></label>
       <label>Kalai delivery fee (AED)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>` : ''}
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small" data-a="approveSeller" type="button">Save rates</button><button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
