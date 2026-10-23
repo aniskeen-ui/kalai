@@ -2232,7 +2232,7 @@ async function marketAdmin(ev: ApiEvent) {
     const fr = p.type === 'FRAMER';
     await sendMail({ to: String(p.email), subject: `Kalai Art House: your ${fr ? 'frame shop' : 'delivery partner'} portal`,
       lines: [`Hello ${h(p.contactName || p.business)},`,
-        `Kalai Art House (art.pranixtechno.com, Dubai) would like to work with <b>${h(p.business)}</b> as a ${fr ? 'framing' : 'delivery'} partner.`,
+        `Kalai Art House (art.pranixtechno.com, Dubai) is launching shortly, and we would like to work with <b>${h(p.business)}</b> as a ${fr ? 'framing' : 'delivery'} partner.`,
         `Please open our supplier portal and <b>create an account with this email address</b> (${h(p.email)}): your business is already set up there.`,
         fr ? 'Then add your <b>price list</b>: frame price per style and size, the fixing charge (or included), and your delivery charge if you also deliver.' : 'Then add your <b>delivery charges</b> to each emirate, for a small and a large parcel.',
         'Every job we give you appears there with the photo, size, address and agreed price; you update each step and enter your invoice, and we pay against it.',
