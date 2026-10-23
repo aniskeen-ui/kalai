@@ -1226,7 +1226,7 @@ async function artistPhoto(id: string) {
 // ---------- all Zoho documents for one order (shown on the Studio desk) ----------
 
 const BOOKS_APP = `https://books.zoho.com/app/${env.ZOHO_ORG_ID}#`;
-type Doc = { group: 'SALES' | 'PURCHASE' | 'DELIVERY'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string };
+type Doc = { group: 'SALES' | 'PURCHASE' | 'DELIVERY'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string; vendor?: string; amount?: number; shared?: boolean };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function zget(path: string): Promise<any> {
@@ -1238,14 +1238,18 @@ async function zget(path: string): Promise<any> {
 async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Doc[]> {
   const q = encodeURIComponent(ref);
   const rw = encodeURIComponent(`${ref}-RW`);
-  const [est, inv, bill, rwBill, dcs, cns] = await Promise.all([
+  const [est, inv, bill, rwBill, dcs, cns, shared] = await Promise.all([
     zget(`/estimates?reference_number=${q}`),
     zget(`/invoices?reference_number=${q}&filter_by=Status.All`),
     zget(`/bills?reference_number=${q}`),
     zget(`/bills?reference_number=${rw}`),
     zget(`/deliverychallans?reference_number=${q}&filter_by=Status.All`),
     zget(`/creditnotes?reference_number=${q}`),
+    // Vendor bills (frame shop, courier, customs) whose Reference# mentions this order, also bills for several orders.
+    zget(`/bills?reference_number_contains=${q}`),
   ]);
+  const seen = new Set((bill.bills ?? []).map((b: { bill_id: string }) => b.bill_id));
+  const extra = (shared.bills ?? []).filter((b: { bill_id: string; reference_number?: string }) => !seen.has(b.bill_id) && String(b.reference_number ?? '').includes(ref) && !String(b.reference_number ?? '').includes(`${ref}-RW`));
   // Siva's rework bill carries "<ref>-RW".
   bill.bills = [...(bill.bills ?? []), ...(rwBill.bills ?? []).map((b: { reference_number?: string }) => ({ ...b, reference_number: ref, rework: true }))];
   // Challans of earlier deliveries (a damaged one before a replacement) are read by id, in case the list leaves them out.
@@ -1272,13 +1276,27 @@ async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Do
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const b of (bill.bills ?? []).filter(same) as any[]) {
-    docs.push({ group: 'PURCHASE', type: b.rework ? 'Bill (rework)' : 'Bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}` });
+    docs.push({ group: 'PURCHASE', type: b.rework ? 'Bill (rework)' : 'Bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}`, vendor: b.vendor_name, amount: b.total });
     if (['draft', 'void'].includes(b.status)) continue;
     const pays = await zget(`/bills/${b.bill_id}/payments`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const p of (pays.payments ?? []) as any[]) {
       docs.push({ group: 'PURCHASE', type: 'Payment made', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsmade/${p.payment_id}` });
     }
+  }
+  // A bill for several orders ("KA-…, KA-…" in Reference#): this order's lines (description mentions the ref),
+  // else the bill split equally between the orders named.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const b of extra as any[]) {
+    let amount = Number(b.total || 0);
+    const refs = String(b.reference_number ?? '').match(/KA-\d{6}-[A-Z0-9]{3,6}/g) ?? [ref];
+    try {
+      const one = await zget(`/bills/${b.bill_id}`);
+      const lines = (one.bill?.line_items ?? []) as { description?: string; name?: string; item_total?: number }[];
+      const mine = lines.filter((l) => `${l.description ?? ''} ${l.name ?? ''}`.includes(ref));
+      amount = mine.length ? mine.reduce((t, l) => t + Number(l.item_total || 0), 0) : Number(b.total || 0) / Math.max(1, new Set(refs).size);
+    } catch { amount = Number(b.total || 0) / Math.max(1, new Set(refs).size); }
+    docs.push({ group: 'PURCHASE', type: 'Vendor bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}`, vendor: b.vendor_name, amount: Math.round(amount * 100) / 100, shared: true });
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (cns.creditnotes ?? []).filter(same) as any[]) {
@@ -1317,7 +1335,10 @@ async function checkZoho(id: string) {
     const docs = await collectDocs(str(img, 'ref'), str(img, 'prevChallans').split(',').map((x) => x.trim()).filter(Boolean));
     await saveDocs(id, docs);
     // Backfill the purchase links if the documents exist in Zoho but the enquiry doesn't know them yet.
-    const bill = docs.find((d) => d.type === 'Bill' && d.status !== 'void');
+    // The artist's bill (vendor bills for the frame shop or courier can carry the same Reference#).
+    const who = (str(img, 'artistName') || 'Siva').split(/\s+/)[0].toLowerCase();
+    const bills = docs.filter((d) => d.type === 'Bill' && d.status !== 'void');
+    const bill = bills.find((d) => String(d.vendor ?? '').toLowerCase().includes(who)) ?? (bills.length === 1 ? bills[0] : undefined);
     const fill: Record<string, string | null> = {};
     if (bill && !str(img, 'zohoBillId')) Object.assign(fill, { zohoBill: bill.number, zohoBillId: bill.id });
     const dc = docs.find((d) => d.type === 'Delivery challan');

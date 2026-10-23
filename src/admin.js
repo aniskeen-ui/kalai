@@ -321,10 +321,40 @@ function parseCosts(c) {
 
 // Actual costs (AED) from the vendors' bills, entered per paid order.
 const ACT_FIELDS = [['artist', 'Artist (paid, AED)'], ['framing', 'Frame shop'], ['india', 'Courier India → Dubai'], ['customs', 'Customs / duty'], ['local', 'Courier to the customer'], ['other', 'Other (packing, etc.)']];
-function actualOf(c) {
+function typedOf(c) {
   let v = c?.actual;
   try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
   return v && typeof v === 'object' ? v : null;
+}
+// Which cost a Zoho vendor's bill is: Rates → "Zoho vendors" ("Al Warda = frame shop", one per line).
+const VENDOR_TYPES = { frame: 'framing', framing: 'framing', 'frame shop': 'framing', india: 'india', 'india courier': 'india', 'courier india': 'india', customs: 'customs', duty: 'customs', local: 'local', 'local courier': 'local', courier: 'local', delivery: 'local', other: 'other', packing: 'other' };
+function vendorRules() {
+  return String(rates.vendors || '').split('\n').map((l) => l.split('=')).filter((x) => x.length === 2 && x[0].trim())
+    .map(([m, t]) => [m.trim().toLowerCase(), VENDOR_TYPES[t.trim().toLowerCase()] || 'other']);
+}
+/** Actual costs found in Zoho Books for this order: the artist's bill and the vendor bills that name the order. */
+function zohoActual(e) {
+  const raw = costings.get(e.id)?.zohoDocs;
+  let d = null;
+  try { d = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; if (typeof d === 'string') d = JSON.parse(d); } catch { d = null; }
+  const out = {}, ref = {}, unmapped = [];
+  const who = (e.artistName || 'Siva').split(/\s+/)[0].toLowerCase(), rules = vendorRules();
+  for (const b of (d?.docs || []).filter((x) => x.group === 'PURCHASE' && (x.type === 'Bill' || x.type === 'Vendor bill') && x.status !== 'void')) {
+    const v = String(b.vendor || '').toLowerCase(), amt = Number(b.amount ?? b.total ?? 0);
+    const f = b.id === e.zohoBillId || (b.type === 'Bill' && v.includes(who)) ? 'artist' : (rules.find(([m]) => v.includes(m)) || [])[1];
+    if (!f) { unmapped.push(`${b.vendor || 'vendor?'} ${b.number}`); continue; }
+    out[f] = Math.round(((out[f] || 0) + amt) * 100) / 100;
+    ref[f] = [ref[f], `${b.vendor || ''} · ${b.number}${b.status === 'draft' ? ' (draft)' : ''}`].filter(Boolean).join('; ');
+  }
+  return { out, ref, unmapped, checkedAt: d?.checkedAt || null };
+}
+/** Actual costs: what you typed wins; otherwise the figure from Zoho. */
+function actualOf(c, e) {
+  const t = typedOf(c) || {};
+  const z = e ? zohoActual(e).out : {};
+  const m = { ...z };
+  for (const [f] of ACT_FIELDS) if (t[f] != null && t[f] !== '') m[f] = t[f];
+  return Object.keys(m).some((k) => ACT_FIELDS.some(([f]) => f === k)) ? m : null;
 }
 /** One report line: sales, refund, net sales, each cost (planned from the Costing box, actual from bills) and margin. */
 function reportLine(e) {
@@ -366,7 +396,7 @@ function reportLine(e) {
   const total = k ? sumK(k) : null;
   const margin = k ? net - fees - total : null;
   // Actual: each cost from its bill where entered (Actual costs box), else the planned figure (marked as estimated).
-  const act = actualOf(c);
+  const act = actualOf(c, e);
   let ka = null, est = new Set(), haveAct = false;
   if (k) {
     ka = { ...k };
@@ -432,13 +462,26 @@ function renderReport() {
 }
 
 ['rFrom', 'rTo', 'rKind', 'rBasis'].forEach((id) => $(id).addEventListener('change', renderReport));
+// Read the bills in Zoho for every order in the report (Check Zoho for each), then redraw with the actual costs.
+$('rZoho').onclick = async () => {
+  const lines = reportLines().filter((l) => l.e.kind !== 'MARKET'), b = $('rZoho');
+  b.disabled = true;
+  let done = 0;
+  for (const l of lines) {
+    b.textContent = `Reading Zoho… ${++done}/${lines.length}`;
+    try { await client.mutations.checkZoho({ id: l.e.id }); } catch { /* next */ }
+  }
+  await loadCostings();
+  b.textContent = 'Get actual costs from Zoho'; b.disabled = false;
+  renderReport();
+};
 $('rCsv').onclick = () => {
   const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Planned total cost', 'Planned margin', 'Planned margin %', 'Actual artist', 'Actual framing', 'Actual India courier', 'Actual customs', 'Actual local courier', 'Actual other', 'Actual total cost (planned where no bill)', 'Actual margin', 'Actual margin %', 'Variance', 'Note'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = reportLines().map((l) => [String(l.e.createdAt || '').slice(0, 10), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
     l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '', l.k ? r2(l.k.rework) : '',
     l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%',
-    ...['artist', 'framing', 'india', 'customs', 'local', 'other'].map((f) => { const a = actualOf(costings.get(l.e.id)); return a && a[f] != null && a[f] !== '' ? r2(Number(a[f])) : ''; }),
+    ...['artist', 'framing', 'india', 'customs', 'local', 'other'].map((f) => { const a = actualOf(costings.get(l.e.id), l.e); return a && a[f] != null && a[f] !== '' ? r2(Number(a[f])) : ''; }),
     l.haveAct ? l.totalA : '', l.marginA ?? '', l.pctA == null ? '' : (l.pctA * 100).toFixed(1) + '%', l.marginA == null ? '' : r2(l.marginA - l.margin), l.note]);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
@@ -566,14 +609,16 @@ const waDigits = (p) => String(p || '').replace(/[^\d]/g, '').replace(/^00/, '')
 /** Actual costs from the bills (paid orders): plan vs actual for this order; Reports adds them up. */
 function actualSection(e) {
   if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
-  const l = reportLine(e), a = actualOf(costings.get(e.id)) || {}, ref = a.ref || {};
+  const l = reportLine(e), a = typedOf(costings.get(e.id)) || {}, ref = a.ref || {}, z = zohoActual(e);
   const plan = (f) => (l.k && f !== 'other' ? r2(l.k[f] || 0) : null);
   const rows = ACT_FIELDS.map(([f, label]) => `<tr><td>${label}</td><td class="num mono">${plan(f) == null ? '–' : money(plan(f))}</td>
-    <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="bill amount" style="width:110px"></td>
+    <td class="num mono" title="${esc(z.ref[f] || '')}">${z.out[f] != null ? money(z.out[f]) : '–'}${z.ref[f] ? `<div class="muted" style="font-size:10px;font-family:inherit;white-space:normal">${esc(z.ref[f])}</div>` : ''}</td>
+    <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses Zoho' : 'bill amount'}" style="width:110px"></td>
     <td><input data-actref="${f}" maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
   const mv = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : `Planned margin <b>${l.margin == null ? '–' : money(l.margin)}</b>. Enter the bills as they come; costs without a bill stay at the planned figure.`;
   return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, AED)</legend>
-    <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th>Actual</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th class="num">From Zoho</th><th>Your figure</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="muted" style="font-size:12px">From Zoho: the artist's bill and vendor bills whose Reference# contains ${esc(e.ref)} (press Check Zoho to refresh${z.checkedAt ? `; checked ${esc(when(z.checkedAt))}` : ''}). Your figure, if typed, is used instead.${z.unmapped.length ? ` <b class="warn-t">Not matched to a cost: ${esc(z.unmapped.join(', '))}</b>: add the vendor under Rates → Zoho vendors.` : ''}</div>
     <div class="marginline" id="actSum">${mv}</div>
     <div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn small" onclick="window.kalaiSaveActual('${esc(e.id)}')">Save actual costs</button><span class="muted" id="actMsg" style="font-size:12px">${a.at ? `Last saved ${esc(when(a.at))}` : ''}</span></div></fieldset>`;
 }
@@ -1042,6 +1087,8 @@ function showRates() {
         <div class="field" style="grid-column:1/-1"><label>Kalai margin by category (%)</label><div class="tablewrap"><table class="costs"><tbody>${CATS.map(([k, label, note]) => `<tr><td>${label}</td><td><input id="rMg_${k}" type="number" min="0" max="300" step="0.5" value="${+(((rates.margins?.[k] ?? (k === 'market' ? 0.15 : rates.margin)) || 0) * 100).toFixed(2)}" style="width:80px"></td><td class="muted" style="font-size:12px">${note}</td></tr>`).join('')}</tbody></table></div></div>
         ${pct('rVat', 'VAT (%)', rates.vat, '0 until registered, then 5')}
       </div>
+      <div class="field"><label for="rVendors">Zoho vendors → cost (one per line, "part of the vendor name = cost")</label><textarea id="rVendors" rows="4" placeholder="Al Warda = frame shop&#10;Pickframes = frame shop&#10;Aramex = courier&#10;DHL = india courier&#10;Customs broker = customs">${esc(rates.vendors || '')}</textarea>
+        <span class="muted" style="font-size:12px">Costs: frame shop, india courier, customs, courier (to the customer), other. Enter each vendor bill in Zoho Books with the order number (KA-…) in Reference#; a bill for several orders lists all their numbers, with the number in each line's description. The order's Actual costs box and Reports then take the amount from Zoho.</span></div>
       <div class="tablewrap"><table class="costs"><thead><tr><th>Market check</th><th>Sketch band (AED)</th><th>Watercolour band (AED)</th><th>Saatchi Art reference</th></tr></thead>
         <tbody>${Object.keys(t).map((k) => { const m = (rates.market || DEFAULT_RATES.market)[k] || DEFAULT_RATES.market[k]; return `<tr><th>${k}</th>
           <td><input id="mSk1${k}" type="number" min="0" value="${m.sk[0]}" style="width:70px" aria-label="${k} sketch from"> – <input id="mSk2${k}" type="number" min="0" value="${m.sk[1]}" style="width:70px" aria-label="${k} sketch to"></td>
@@ -1064,7 +1111,7 @@ function showRates() {
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
     const data = { tiers, local: n($('rLocal').value) ?? 0, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
-      vat: (n($('rVat').value) ?? 0) / 100, round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
+      vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
       market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };
     try {
       const rec = { key: 'default', data: JSON.stringify(data) };
