@@ -83,6 +83,8 @@ nav.links a:hover{opacity:1;color:#e8c77f}
 
 /* collection */
 section{padding-block:56px}
+/* menu links (#artist, #commission…) land below the sticky header, not under it */
+section[id],[id]{scroll-margin-top:calc(var(--hdr,120px) + 8px)}
 .sec-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px;margin-bottom:26px}
 .sec-head h2{font-size:clamp(28px,3.4vw,38px)}
 .sec-head p{color:var(--muted);margin:6px 0 0;max-width:60ch}
@@ -1163,5 +1165,6 @@ drawChips();drawGrid();updateCount();
   menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();
 </script>
 <script type="module" src="/src/account.js"></script>
+<script>(function(){function h(){var e=document.querySelector("header.top");if(e)document.documentElement.style.setProperty("--hdr",e.offsetHeight+"px")}h();addEventListener("resize",h);addEventListener("load",function(){h();try{if(location.hash){var t=document.getElementById(location.hash.slice(1));if(t&&t.tagName==="SECTION")t.scrollIntoView()}}catch(e){}});})();</script>
 </body>
 </html>
