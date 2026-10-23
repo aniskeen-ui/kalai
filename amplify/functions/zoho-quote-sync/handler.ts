@@ -1445,7 +1445,11 @@ async function onStreamRecord(rec: StreamRecord) {
     // Customer code for the new enquiry (same code as the customer's earlier orders).
     if (!str(img, 'customerCode')) await assignCodes().catch((err) => console.warn('Customer code not assigned', err));
     const quote = await createQuote(img);
-    await writeBack(id, { zohoState: 'QUOTED', zohoQuote: quote.number, zohoMessage: `Quote ${quote.number} created in Zoho` });
+    // Little Artists: the form already priced it (framing by age + delivery + extras), so the order starts with that
+    // price (the studio checks it before "Price sent"). Not when overseas shipping is still to be quoted.
+    const det = parseDetails(str(img, 'details'));
+    const kidsTotal = str(img, 'kind') === 'GIFT' && !/\+/.test(String(det['Total'] ?? '')) ? amount(det['Total']) : 0;
+    await writeBack(id, { zohoState: 'QUOTED', zohoQuote: quote.number, zohoMessage: `Quote ${quote.number} created in Zoho${kidsTotal ? ` (AED ${kidsTotal})` : ''}`, ...(kidsTotal > 0 && num(img, 'quotedPrice') == null ? { quotedPrice: kidsTotal } : {}) });
     return;
   }
   if (rec.eventName !== 'MODIFY') return;
