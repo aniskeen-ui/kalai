@@ -84,18 +84,24 @@ export function tierOf(size) {
 const mediumOf = (w) => (w.kind === 'sketch' || /pencil|ink|charcoal|graphite|chalk|sketch/i.test(`${w.medium} ${w.title}`) ? 'sk' : 'wc');
 
 /** One price build-up per frame style. o = per-work overrides {artist, tier, fsize, courier, margin}. */
+// Works by portal artists in the UAE: priced in AED, no India courier and no customs.
+const isLocalArt = (w) => !!w.artistId && w.artistCountry !== 'India';
+const curOf = (w) => (prices.get(w.id)?.currency === 'AED' || isLocalArt(w) ? 'AED' : 'INR');
+const artistPrice = (w, v) => (v == null ? '–' : curOf(w) === 'AED' ? `AED ${Number(v).toLocaleString('en-US')}` : '₹' + Number(v).toLocaleString('en-IN'));
+// Website products made from an artist's listing stay hidden (DRAFT) until their prices are approved here.
+const goLive = (w) => (w.status === 'DRAFT' ? { status: 'PUBLISHED' } : {});
 function build(w, o = {}) {
   const tier = o.tier || tierOf(w.size);
   const fsize = o.fsize || fitFrame(w.size);
   const ap = prices.get(w.id);
   const inr = o.artist ?? ap?.artistPrice ?? null;
-  const artistAed = inr == null ? null : (ap?.currency === 'AED' ? inr : inr * P.fx);
-  const courier = o.courier ?? P.courier[tier] ?? 0;
+  const artistAed = inr == null ? null : (curOf(w) === 'AED' ? inr : inr * P.fx);
+  const courier = o.courier ?? (isLocalArt(w) ? 0 : P.courier[tier] ?? 0);
   const margin = o.margin ?? P.margin;
   const pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0);
   const out = { tier, fsize, inr, artistAed, courier, margin, local: P.local, styles: {} };
   if (artistAed == null) return out;
-  out.customs = (artistAed + courier) * P.customs;
+  out.customs = isLocalArt(w) ? 0 : (artistAed + courier) * P.customs;
   out.from = {};
   for (const s of STYLES) {
     const sf = supplierFrame(s.k, fsize);
@@ -226,7 +232,7 @@ function drawList() {
       return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><input type="checkbox" data-pick="${esc(w.id)}" ${picked.has(w.id) ? 'checked' : ''} ${b.artistAed == null ? 'disabled title="No artist price yet"' : ''}></td><td><img data-key="${esc(w.imageKey)}" alt=""></td>
         <td><b>${esc(w.named ? w.title : 'Untitled')}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
         <td>${esc(w.size || '–')}<br><span class="muted" style="font-size:11px">${b.tier} · ${mediumOf(w) === 'sk' ? 'sketch' : 'watercolour'}</span></td>
-        <td class="mono">${b.inr != null ? '₹' + Number(b.inr).toLocaleString('en-IN') : '–'}</td>
+        <td class="mono">${artistPrice(w, b.inr)}${w.artist ? `<br><span class="muted" style="font-size:11px;font-family:inherit">${esc(w.artist)}</span>` : ''}</td>
         <td style="font-size:12px">${w.leadDays != null ? (w.leadDays === 0 && !w.leadMax ? 'ready now' : `${w.leadDays}${w.leadMax && w.leadMax !== w.leadDays ? `–${w.leadMax}` : ''} days`) : '<span class="muted">–</span>'}</td>
         <td class="mono">${aed(b.styles.black?.price)}</td>
         <td style="font-size:12px">${mc.cost == null ? '–' : `${aed(mc.band[0])}–${aed(mc.band[1])}<br><span class="pc-st ${mc.verdict === 'inside' ? 'LIVE' : 'TODO'}">${mc.verdict === 'below' ? 'below the band' : mc.verdict === 'above' ? 'above the band' : 'inside the band'}</span>`}</td>
@@ -255,11 +261,11 @@ function drawList() {
       const fin = Object.fromEntries(STYLES.map((x) => [x.k, Math.ceil((b.styles[x.k].price + diff) / 25) * 25]));
       const matrix = matrixFor(w, o, fin), now = new Date().toISOString();
       try {
-        const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
+        const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
         if (r1.errors?.length) throw new Error(r1.errors[0].message);
-        Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
+        Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
         const rec = { productId: w.id, calc: JSON.stringify({ ...o, artistUsed: ap?.artistPrice ?? null, master: P, at: now, bulk: useMarket ? 'market' : 'cost' }), approvedAt: now };
-        const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: 'INR', ...rec });
+        const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: curOf(w), ...rec });
         if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });
         ok++; picked.delete(w.id);
       } catch { bad.push(w.code); }
@@ -287,18 +293,18 @@ function drawCalc(w) {
     const cell = (fn) => STYLES.map((s) => `<td class="num mono">${b.styles[s.k] ? fn(b.styles[s.k], s) : '–'}</td>`).join('');
     box.innerHTML = `<div class="pc-calc">
       <div class="pc-grid">
-        <label>Artist price ₹ <input id="pcA" type="number" min="0" step="50" value="${o.artist ?? ''}" style="width:100px"></label>
+        <label>Artist price ${curOf(w) === 'AED' ? 'AED' : '₹'} <input id="pcA" type="number" min="0" step="${curOf(w) === 'AED' ? 1 : 50}" value="${o.artist ?? ''}" style="width:100px"></label>
         <label>Artwork size <select id="pcT">${TIERS.map((t) => `<option ${t === b.tier ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Base frame size <select id="pcF">${FRAME_SIZES.map(([f]) => `<option ${f === b.fsize ? 'selected' : ''}>${f}</option>`).join('')}</select> cm</label>
-        <label>Courier India → Dubai <input id="pcC" type="number" min="0" step="1" value="${o.courier ?? ''}" placeholder="${P.courier[b.tier]}" style="width:80px"> AED</label>
+        <label>${isLocalArt(w) ? 'Pickup from the artist' : 'Courier India → Dubai'} <input id="pcC" type="number" min="0" step="1" value="${o.courier ?? ''}" placeholder="${isLocalArt(w) ? 0 : P.courier[b.tier]}" style="width:80px"> AED</label>
         <label>Margin <input id="pcM" type="number" min="0" step="1" value="${o.margin != null ? Math.round(o.margin * 100) : ''}" placeholder="${Math.round(P.margin * 100)}" style="width:60px">%</label>
         <span class="muted" style="font-size:12px">${ap?.artistPriceAt ? `Artist's price given ${new Date(ap.artistPriceAt).toLocaleDateString('en-GB')}` : 'No price from the artist yet: type one to simulate.'}</span>
       </div>
       ${b.artistAed == null ? '<p class="muted">Enter the artist\'s price to see the calculation.</p>' : `
       <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>${DHS} · frame ${esc(b.fsize)} cm</th>${STYLES.map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody>
-        <tr><td>Artist (₹${Number(b.inr).toLocaleString('en-IN')} × ${P.fx})</td>${cell(() => Math.round(b.artistAed))}</tr>
-        <tr><td>Courier India → Dubai</td>${cell(() => Math.round(b.courier))}</tr>
-        <tr><td>Customs ${(P.customs * 100).toFixed(1)}%</td>${cell(() => Math.round(b.customs))}</tr>
+        <tr><td>${curOf(w) === 'AED' ? `Artist${w.artist ? ` (${esc(w.artist)})` : ''}` : `Artist (₹${Number(b.inr).toLocaleString('en-IN')} × ${P.fx})`}</td>${cell(() => Math.round(b.artistAed))}</tr>
+        <tr><td>${isLocalArt(w) ? 'Pickup from the artist' : 'Courier India → Dubai'}</td>${cell(() => Math.round(b.courier))}</tr>
+        <tr><td>Customs ${isLocalArt(w) ? '(none: made in the UAE)' : `${(P.customs * 100).toFixed(1)}%`}</td>${cell(() => Math.round(b.customs))}</tr>
         <tr><td>${P.frameSource ? 'Fixing (mount, glass, fitting)' : 'Frame work (mount, glass, labour)'}</td>${cell((x) => Math.round(x.frameWork))}</tr>
         <tr><td>Frame</td>${cell((x) => Math.round(x.frame))}</tr>
         ${P.frameSource ? `<tr><td class="muted" style="font-size:12px">Frame price from</td>${STYLES.map((s) => `<td class="num muted" style="font-size:11px">${esc(b.from?.[s.k] === 'master' ? 'master table' : b.from?.[s.k] || '–')}</td>`).join('')}</tr>` : ''}
@@ -368,12 +374,12 @@ function drawCalc(w) {
       $('pcApprove').disabled = true; $('pcMsg').textContent = 'Saving…';
       try {
         const now = new Date().toISOString();
-        const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
+        const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
         if (r1.errors?.length) throw new Error(r1.errors[0].message);
-        Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
+        Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
         const rec = { productId: w.id, calc: JSON.stringify({ artistUsed: o.artist ?? ap?.artistPrice ?? null, tier: o.tier, fsize: o.fsize, courier: o.courier, margin: o.margin, master: P, at: now }), approvedAt: now,
-          ...(o.artist != null && o.artist !== ap?.artistPrice ? { artistPrice: o.artist, currency: 'INR', artistNote: 'Entered by the studio' } : {}) };
-        const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: 'INR', ...rec });
+          ...(o.artist != null && o.artist !== ap?.artistPrice ? { artistPrice: o.artist, currency: curOf(w), artistNote: 'Entered by the studio' } : {}) };
+        const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: curOf(w), ...rec });
         if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });
         $('pcMsg').textContent = 'Saved: the website now shows these prices.';
         setTimeout(() => { openId = null; drawList(); }, 900);

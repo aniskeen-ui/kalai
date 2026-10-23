@@ -247,6 +247,11 @@ const schema = a.schema({
       leadDays: a.integer(), // the artist's days to have the work ready to send (his desk), from…
       leadMax: a.integer(), // …to (when he gives a range like 10-15)
       priceApprovedAt: a.string(),
+      // Works by portal artists (artist portal → listing approved): priced and framed like Siva's. Empty = Siva.
+      artist: a.string(), // public name, as on the website
+      artistId: a.string(), // their SellerProfile id: orders for this work go to them
+      artistCountry: a.string(), // UAE: no India courier or customs in the price
+      listingId: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 

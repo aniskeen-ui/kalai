@@ -1447,6 +1447,18 @@ async function onStreamRecord(rec: StreamRecord) {
   if (rec.eventName === 'INSERT') {
     // Customer code for the new enquiry (same code as the customer's earlier orders).
     if (!str(img, 'customerCode')) await assignCodes().catch((err) => console.warn('Customer code not assigned', err));
+    // An order for a portal artist's collection work goes to that artist (their portal → Commissions).
+    if (str(img, 'kind') === 'PRICE' && !str(img, 'artistId') && process.env.PRODUCT_TABLE) {
+      const d0 = parseDetails(str(img, 'details')), no = String(d0['Artwork no.'] ?? '').trim();
+      const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no && str(x, 'artistId')) : undefined;
+      if (pr) {
+        await writeBack(id, { artistId: str(pr, 'artistId'), artistName: str(pr, 'artist'), artistCountry: str(pr, 'artistCountry') || 'UAE' }).catch(() => {});
+        // Their price is already known (what they receive for this work).
+        const ap = process.env.ARTPRICE_TABLE ? await getRow(process.env.ARTPRICE_TABLE, { productId: { S: str(pr, 'id') } }) : undefined;
+        const ae = num(ap, 'artistPrice');
+        if (ae) await artistQuote({ id, priceInr: ae, note: 'Catalogue price from the artist portal' } as ApiEvent['arguments'], str(pr, 'artist') || 'Artist', 'AED').catch(() => {});
+      }
+    }
     const quote = await createQuote(img);
     // Little Artists: the form already priced it (framing by age + delivery + extras), so the order starts with that
     // price (the studio checks it before "Price sent"). Not when overseas shipping is still to be quoted.
@@ -1796,6 +1808,41 @@ async function unpublishArtist(sub: string) {
   if (!A) return;
   try { await delRow(A, { id: { S: artistKey(sub) } }); } catch { /* not published */ }
 }
+// ---------- Portal artists' works join the collection like Siva's ----------
+// Approving an artist's listing makes a catalogue work (Product, "Waiting for price" in Pricing) with the artist's
+// price (what they receive, AED). The studio sets framed prices in Pricing; approving there puts it on the website
+// with frames and sizes. Orders for it go to that artist (artist portal → Commissions).
+const artProductId = (listingId: string) => `lst-${listingId}`;
+async function upsertArtistProduct(l: Dict, seller: Dict, codes = true) {
+  const P = process.env.PRODUCT_TABLE, AP = process.env.ARTPRICE_TABLE;
+  if (!P) return;
+  const id = artProductId(String(l.id)), now = new Date().toISOString();
+  const old = plain(await getRow(P, { id: { S: id } })) || {};
+  let keys: string[] = []; try { keys = JSON.parse(String(l.imageKeys || '[]')); } catch { keys = []; }
+  const cat = String(l.category || '');
+  const kind = /sketch|pencil|charcoal|graphite|ink|pen/i.test(cat) ? 'sketch' : 'water';
+  const sz = String(l.description || '').match(/(\d{1,3}(?:\.\d)?)\s*[x×]\s*(\d{1,3}(?:\.\d)?)\s*cm/i);
+  await putRow(P, {
+    ...old, id, __typename: 'Product', createdAt: old.createdAt ?? now, updatedAt: now,
+    title: l.title, named: 'yes', kind: old.kind ?? kind, subject: old.subject ?? 'nature', medium: old.medium ?? cat,
+    size: old.size ?? (sz ? `${sz[1]} × ${sz[2]} cm` : ''), description: l.description, imageKey: keys[0] ?? old.imageKey,
+    status: ['PUBLISHED', 'SOLD'].includes(String(old.status)) ? old.status : 'DRAFT', source: 'artist-portal',
+    artist: seller.business, artistId: seller.id, artistCountry: seller.country || 'UAE', listingId: l.id,
+  });
+  if (AP) {
+    const ap = plain(await getRow(AP, { productId: { S: id } })) || {};
+    await putRow(AP, { ...ap, productId: id, __typename: 'ArtworkPrice', createdAt: ap.createdAt ?? now, updatedAt: now,
+      artistPrice: Number(l.sellerPrice ?? l.costPrice ?? 0) || undefined, currency: 'AED', artistPriceAt: now, artistNote: 'From the artist portal (what the artist receives)' });
+  }
+  if (codes) await assignCodes().catch(() => {});
+}
+async function hideArtistProduct(listingId: string) {
+  const P = process.env.PRODUCT_TABLE; if (!P) return;
+  const id = artProductId(listingId);
+  const old = plain(await getRow(P, { id: { S: id } }));
+  if (old && old.status !== 'SOLD') await putRow(P, { ...old, status: 'HIDDEN', updatedAt: new Date().toISOString() });
+}
+
 async function unpublishItem(id: string) {
   const { M } = mtables();
   try { await delRow(M, { listingId: { S: id } }); } catch { /* not published */ }
@@ -2147,7 +2194,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (!key.startsWith('uploads/') && str(e, 'kind') === 'PRICE' && process.env.PRODUCT_TABLE) {
       const det = parseDetails(str(e, 'details'));
       const name = String(det['Artwork'] || str(e, 'title')).split(' (')[0].trim().toLowerCase();
-      const pr = (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'title').trim().toLowerCase() === name || (str(x, 'code') && String(det['Code'] ?? '').includes(str(x, 'code'))));
+      const pr = (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'title').trim().toLowerCase() === name || (str(x, 'code') && String(det['Code'] ?? det['Artwork no.'] ?? '').includes(str(x, 'code'))));
       key = str(pr, 'imageKey');
     }
     if (!key) throw new Error('No photo for this order yet: ask Kalai Art House.');
@@ -2290,7 +2337,7 @@ async function marketAdmin(ev: ApiEvent) {
       const row = { ...p, status: action === 'rejectSeller' ? 'REJECTED' : 'SUSPENDED', adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
       await unpublishArtist(id);
-      if (action === 'suspendSeller') for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) { await putRow(L, { ...plain(x), status: 'PAUSED', updatedAt: now }); await unpublishItem(str(x, 'id')); }
+      if (action === 'suspendSeller') for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) { await putRow(L, { ...plain(x), status: 'PAUSED', updatedAt: now }); await unpublishItem(str(x, 'id')); await hideArtistProduct(str(x, 'id')); }
       await sendMail({ to: String(p.email ?? ''), subject: action === 'rejectSeller' ? 'About your Kalai Art House seller application' : 'Your Kalai Art House seller account is paused', lines: [`Hello ${h(p.contactName)},`, action === 'rejectSeller' ? 'Thank you for applying. We are not able to accept your application at the moment.' : 'Your listings are paused for now.', txt(d.note, 500) ? h(txt(d.note, 500)) : ''], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
       return { profile: row };
     }
@@ -2305,6 +2352,13 @@ async function marketAdmin(ev: ApiEvent) {
     const p = priceOf({ costPrice: Number(l.costPrice), markupPct: Number(l.markupPct), courierCharge: Number(l.courierCharge), otherCharges: Number(l.otherCharges), deliveryBy: String(l.deliveryBy), commissionPct, kalaiDeliveryFee });
     const row = { ...l, commissionPct, kalaiDeliveryFee, sellerPrice: p.sellerPrice, customerPrice: p.customerPrice, status: 'APPROVED', approvedAt: now, adminNote: txt(d.note, 500), updatedAt: now };
     await putRow(L, row);
+    if (seller.type === 'ARTIST') {
+      // Artists: into the collection through Pricing (frames and sizes), not as a fixed-price item.
+      await unpublishItem(id);
+      await upsertArtistProduct(row, seller);
+      await sendMail({ to: String(seller.email ?? ''), subject: `Approved: ${l.title}`, lines: [`Hello ${h(seller.contactName)},`, `<b>${h(l.title)}</b> is approved. We are setting its framed prices and it will be on the website shortly, in our collection.`, `You receive AED ${p.sellerPrice} when it sells. We frame and deliver it.`] }).catch(() => {});
+      return { listing: row, price: p };
+    }
     await publishItem(row);
     await sendMail({ to: String(seller.email ?? ''), subject: `Live on Kalai Art House: ${l.title}`, lines: [`Hello ${h(seller.contactName)},`, `<b>${h(l.title)}</b> is now on the website at AED ${p.customerPrice}. You receive AED ${p.sellerPrice} for each sale.`], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
     return { listing: row, price: p };
@@ -2313,6 +2367,7 @@ async function marketAdmin(ev: ApiEvent) {
     const row = { ...l, status: action === 'rejectListing' ? 'REJECTED' : 'PAUSED', adminNote: txt(d.note, 500), updatedAt: now };
     await putRow(L, row);
     await unpublishItem(id);
+    await hideArtistProduct(id);
     if (action === 'rejectListing') await sendMail({ to: String(seller?.email ?? ''), subject: `Changes needed: ${l.title}`, lines: [`Hello ${h(seller?.contactName ?? '')},`, `We could not publish <b>${h(l.title)}</b> yet.`, txt(d.note, 500) ? `<b>Our note:</b> ${h(txt(d.note, 500))}` : '', 'Edit it in the seller portal and submit it again.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
     return { listing: row };
   }
@@ -2861,6 +2916,16 @@ async function assignCodes() {
       await ddb.send(new UpdateItemCommand({ TableName: prtable, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET #n = :n', ConditionExpression: 'attribute_not_exists(#n)', ExpressionAttributeNames: { '#n': 'number' }, ExpressionAttributeValues: { ':n': { S: `PR-${pad(++max)}` } } })).catch(() => {});
     }
   }
+  // Artists' works approved before they joined the collection: move them across (fixed-price item → priced work).
+  try {
+    const { S, L, M } = mtables();
+    for (const it of (await scanAll(M)).map(plain).filter((x): x is Dict => !!x && x.sellerType === 'ARTIST')) {
+      const l = plain(await getRow(L, { id: { S: String(it.listingId) } }));
+      const seller = l ? plain(await getRow(S, { id: { S: String(l.sellerId) } })) : null;
+      if (l && seller?.type === 'ARTIST' && l.status === 'APPROVED') await upsertArtistProduct(l, seller, false);
+      if (l && seller?.type === 'ARTIST') await delRow(M, { listingId: { S: String(it.listingId) } });
+    }
+  } catch (err) { console.warn('Artist works not moved', err); }
   const ptable = process.env.PRODUCT_TABLE;
   if (ptable) {
     const prods = (await scanAll(ptable)).sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')) || str(a, 'id').localeCompare(str(b, 'id')));
