@@ -345,6 +345,12 @@ function zohoActual(e) {
   const sj = jobsOf(e), seen = new Set();
   for (const [role, f] of [['framer', 'framing'], ['delivery', 'local']]) {
     const jb = sj[role];
+    // No invoice yet: the price agreed on the job stands in until their invoice (Zoho bill) comes.
+    if (jb && jb.invoiceAmt == null && jb.price != null && jb.price !== '') {
+      out[f] = Math.round(((out[f] || 0) + Number(jb.price)) * 100) / 100;
+      ref[f] = [ref[f], `${jb.name} · job price, no invoice yet`].filter(Boolean).join('; ');
+      continue;
+    }
     if (jb?.invoiceAmt == null) continue;
     out[f] = Math.round(((out[f] || 0) + Number(jb.invoiceAmt)) * 100) / 100;
     ref[f] = [ref[f], `${jb.name} · ${jb.invoiceNo}${jb.billState && jb.billState !== 'open' ? ` (${jb.billState})` : ''}`].filter(Boolean).join('; ');
@@ -722,12 +728,12 @@ function actualSection(e) {
   const plan = (f) => (l.k && f !== 'other' ? r2(l.k[f] || 0) : null);
   const rows = ACT_FIELDS.map(([f, label]) => `<tr><td>${label}</td><td class="num mono">${plan(f) == null ? '–' : money(plan(f))}</td>
     <td class="num mono" title="${esc(z.ref[f] || '')}">${z.out[f] != null ? money(z.out[f]) : '–'}${z.ref[f] ? `<div class="muted" style="font-size:10px;font-family:inherit;white-space:normal">${esc(z.ref[f])}</div>` : ''}</td>
-    <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses Zoho' : 'bill amount'}" style="width:110px"></td>
+    <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses that' : 'bill amount'}" style="width:110px"></td>
     <td><input data-actref="${f}" maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
   const mv = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : `Planned margin <b>${l.margin == null ? '–' : money(l.margin)}</b>. Enter the bills as they come; costs without a bill stay at the planned figure.`;
   return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, AED)</legend>
-    <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th class="num">From Zoho</th><th>Your figure</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="muted" style="font-size:12px">From Zoho: the artist's bill and vendor bills whose Reference# contains ${esc(e.ref)} (press Check Zoho to refresh${z.checkedAt ? `; checked ${esc(when(z.checkedAt))}` : ''}). Your figure, if typed, is used instead.${z.unmapped.length ? ` <b class="warn-t">Not matched to a cost: ${esc(z.unmapped.join(', '))}</b>: add the vendor under Rates → Zoho vendors.` : ''}</div>
+    <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th class="num">From Zoho / job</th><th>Your figure</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="muted" style="font-size:12px">From Zoho: the artist's bill and vendor bills whose Reference# contains ${esc(e.ref)} (press Check Zoho to refresh${z.checkedAt ? `; checked ${esc(when(z.checkedAt))}` : ''}); until the frame shop or courier invoices, the price on their job. Your figure, if typed, is used instead.${z.unmapped.length ? ` <b class="warn-t">Not matched to a cost: ${esc(z.unmapped.join(', '))}</b>: add the vendor under Rates → Zoho vendors.` : ''}</div>
     <div class="marginline" id="actSum">${mv}</div>
     <div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn small" onclick="window.kalaiSaveActual('${esc(e.id)}')">Save actual costs</button><span class="muted" id="actMsg" style="font-size:12px">${a.at ? `Last saved ${esc(when(a.at))}` : ''}</span></div></fieldset>`;
 }
