@@ -826,89 +826,83 @@ async function showDailyMessage() {
     const kurals = (r.data || []).filter((x) => x.source === 'KURAL').sort((a, b) => String(b.showFrom || b.createdAt).localeCompare(String(a.showFrom || a.createdAt)));
     const m = kurals.find((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso)) || kurals[0];
     if (!m) return;
-    // Tamil, the visitor's own language (if not Tamil, English or Arabic), English, Arabic.
+    // Tamil and English always shown; below them the other languages take turns (the visitor's own one first, then Arabic,
+    // then the rest). A language picked under "Other languages" stays put instead of turning (remembered on this device).
     let extra = {}; try { extra = JSON.parse(m.more || '{}') || {}; } catch { extra = {}; }
-    let own = visitorLang(extra);
-    if (own) m[own] = extra[own];
-    const langs = ['ta', own, 'en', 'ar'].filter((l) => l && (m[l] || '').trim());
-    // "Other languages": every language today's kural has, each named in its own language.
+    if ((m.ar || '').trim()) extra.ar = m.ar;
+    const own = visitorLang(extra);
+    const strip = (t) => String(t || '').replace(/\n—[^\n]*$/, '').trim();
     const native = (l) => { try { return new Intl.DisplayNames([l], { type: 'language' }).of(l) || l; } catch { return l; } };
     const others = Object.keys(extra).filter((l) => l !== '_h' && extra[l]).map((l) => [l, native(l)]).sort((a, b) => a[1].localeCompare(b[1]));
-    if (!langs.length) return;
-    // The flash card is for the Thirukkural only: always the Thiruvalluvar picture and the Thirukkural title.
-    const kural = true;
-    // Starts in Tamil for the kural (else the visitor's language), then changes language every 10 seconds.
-    let lang = kural && langs.includes('ta') ? 'ta' : (langs.includes((navigator.language || 'en').slice(0, 2)) ? (navigator.language || 'en').slice(0, 2) : (langs.includes('en') ? 'en' : langs[0]));
+    const turn = [...new Set([own, 'ar', ...others.map((x) => x[0])].filter((l) => l && extra[l]))];
+    let fixed = ''; try { fixed = localStorage.getItem('kalai-klang') || ''; } catch { fixed = ''; }
+    if (!extra[fixed]) fixed = '';
+    if (!(m.ta || '').trim() && !(m.en || '').trim()) return;
     document.head.insertAdjacentHTML('beforeend', `<style>
-.kmsg{position:fixed;right:12px;bottom:12px;z-index:30;text-align:center;width:min(220px,calc(100vw - 24px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:7px 9px;display:grid;gap:4px;animation:kmsgIn .35s ease-out}
+.kmsg{position:fixed;right:12px;bottom:12px;z-index:30;text-align:center;width:min(250px,calc(100vw - 24px));background:var(--surface);color:var(--fg);border:1px solid var(--gold);border-left:4px solid var(--gold);border-radius:var(--r);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:7px 9px;display:grid;gap:4px;animation:kmsgIn .35s ease-out}
 @keyframes kmsgIn{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
 .kmsg-img{display:flex;justify-content:center;margin-top:-2px}
 .kmsg-img img{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:#f7e7c1}
-.kmsg-head{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap}
-.kmsg-head b{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);flex-basis:100%}
-.kmsg-more{background:none;border:0;color:var(--muted);font:inherit;font-size:10px;cursor:pointer;padding:0;text-decoration:underline}
-.kmsg-pick{font:inherit;font-size:11px;padding:2px 4px;width:100%}
-.kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:0 5px;font:inherit;font-size:9px;line-height:16px;cursor:pointer}
-.kmsg-langs button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1b2b}
+.kmsg-head b{display:block;font-size:10px;letter-spacing:.04em;color:var(--gold)}.kmsg-head small{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .kmsg-x{position:absolute;top:4px;right:5px;background:none;border:0;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
-.kmsg p{margin:0;font-size:11px;line-height:1.45;white-space:pre-line;min-height:4.4em;transition:opacity .4s}
-.kmsg p.fade{opacity:0}
+.kmsg p{margin:0;font-size:11px;line-height:1.45;white-space:pre-line}
+.kmsg .k-en{font-size:10.5px;color:var(--muted);font-style:italic}
+.kmsg-rot{border-top:1px solid var(--line);padding-top:4px;display:grid;gap:2px;transition:opacity .4s}.kmsg-rot.fade{opacity:0}
+.kmsg-rot span{font-size:9px;color:var(--gold);letter-spacing:.04em}.kmsg-rot p{font-size:10.5px;min-height:3em}
 .kmsg-bar{height:2px;background:var(--line);border-radius:2px;overflow:hidden}.kmsg-bar i{display:block;height:100%;width:0;background:var(--gold)}
 .kmsg-bar i.run{animation:kmsgBar 10s linear forwards}@keyframes kmsgBar{to{width:100%}}
+.kmsg-more{background:none;border:0;color:var(--muted);font:inherit;font-size:10px;cursor:pointer;padding:0;text-decoration:underline}
+.kmsg-pick{font:inherit;font-size:11px;padding:2px 4px;width:100%}
 .kmsg-tab{position:fixed;right:12px;bottom:12px;z-index:30;border:1px solid var(--gold);background:var(--surface);color:var(--fg);border-radius:999px;padding:4px 9px;font:inherit;font-size:11px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
-@media (prefers-reduced-motion:reduce){.kmsg{animation:none}.kmsg p{transition:none}}
+@media (prefers-reduced-motion:reduce){.kmsg{animation:none}.kmsg-rot{transition:none}}
 </style>`);
     const box = document.createElement('aside');
-    box.className = 'kmsg'; box.setAttribute('aria-label', kural ? 'Thirukkural of the day' : "Today's message");
+    box.className = 'kmsg'; box.setAttribute('aria-label', 'Thirukkural of the day'); box.lang = 'ta';
     const tab = document.createElement('button');
-    tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true;
+    tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true; tab.textContent = `📜 ${KURAL_TITLE.ta}`;
     document.body.append(box, tab);
-    let heads = {}; try { heads = JSON.parse(extra._h || '{}') || {}; } catch { heads = {}; }
-    const title = (l) => (kural ? KURAL_TITLE[l] || heads[l] || KURAL_TITLE.en : MSG_TITLE[l]);
     // Thiruvalluvar picture: the one uploaded in Order Management → Messages, else our emblem.
     let picture = '/valluvar.svg';
-    if (kural) { try { picture = (await getUrl({ path: 'catalogue/site/thiruvalluvar.jpg', options: { expiresIn: 3600, validateObjectExistence: true } })).url.toString(); } catch { picture = '/valluvar.svg'; } }
-    box.innerHTML = `${kural ? `<div class="kmsg-img"><img alt="Thiruvalluvar" src="${esc(picture)}" onerror="this.onerror=null;this.src='/valluvar.svg'"></div>` : ''}
-      <div class="kmsg-head"><b></b><button class="kmsg-x" type="button" aria-label="Close">×</button></div>
-      <p></p>${langs.length > 1 ? '<div class="kmsg-bar" aria-hidden="true"><i></i></div>' : ''}
-      ${others.length ? `<button type="button" class="kmsg-more">🌐 Other languages</button><select class="kmsg-pick" aria-label="Choose your language" hidden><option value="">🌐 Choose your language…</option><option value="none">Only Tamil, English, Arabic</option>${others.map(([l, n]) => `<option value="${esc(l)}" ${l === own ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : ''}`;
-    const p = box.querySelector('p'), bar = box.querySelector('.kmsg-bar i');
+    try { picture = (await getUrl({ path: 'catalogue/site/thiruvalluvar.jpg', options: { expiresIn: 3600, validateObjectExistence: true } })).url.toString(); } catch { picture = '/valluvar.svg'; }
+    box.innerHTML = `<div class="kmsg-img"><img alt="Thiruvalluvar" src="${esc(picture)}" onerror="this.onerror=null;this.src='/valluvar.svg'"></div>
+      <div class="kmsg-head"><b>${esc(KURAL_TITLE.ta)}</b><small lang="en">${esc(KURAL_TITLE.en)}</small><button class="kmsg-x" type="button" aria-label="Close">×</button></div>
+      ${(m.ta || '').trim() ? `<p class="k-ta">${esc(m.ta)}</p>` : ''}
+      ${(m.en || '').trim() ? `<p class="k-en" lang="en">${esc(strip(m.en))}</p>` : ''}
+      ${turn.length ? `<div class="kmsg-rot"><span></span><p></p></div><div class="kmsg-bar" aria-hidden="true"><i></i></div>` : ''}
+      ${others.length ? `<button type="button" class="kmsg-more">🌐 Other languages</button><select class="kmsg-pick" aria-label="Choose your language" hidden><option value="">🌐 All languages, taking turns</option>${others.map(([l, n]) => `<option value="${esc(l)}" ${l === fixed ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : ''}`;
+    const rot = box.querySelector('.kmsg-rot'), bar = box.querySelector('.kmsg-bar i');
+    let lang = fixed || turn[0] || '';
+    let paused = false, timer = null;
     const show = (l, fade = true) => {
+      if (!rot || !l) return;
       lang = l;
       const put = () => {
-        box.setAttribute('lang', lang); p.dir = RTL.includes(lang) ? 'rtl' : 'ltr'; p.style.textAlign = RTL.includes(lang) ? 'right' : '';
-        const hb = box.querySelector('.kmsg-head b'); hb.textContent = title(lang); hb.dir = p.dir;
-        p.textContent = m[lang];
-        box.querySelectorAll('[data-l]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.l === lang)));
-        tab.textContent = `${kural ? '📜' : '📢'} ${title(lang)}`;
-        p.classList.remove('fade');
-        if (bar) { bar.classList.remove('run'); bar.style.animationDuration = `${kuralSec || 10}s`; bar.parentElement.hidden = !kuralSec; void bar.offsetWidth; if (!paused && kuralSec) bar.classList.add('run'); }
+        const rp = rot.querySelector('p'), rtl = RTL.includes(l);
+        rot.lang = l; rp.dir = rtl ? 'rtl' : 'ltr'; rp.style.textAlign = rtl ? 'right' : '';
+        rot.querySelector('span').textContent = native(l);
+        rp.textContent = strip(extra[l]);
+        rot.classList.remove('fade');
+        const moving = !fixed && turn.length > 1 && kuralSec > 0;
+        if (bar) { bar.classList.remove('run'); bar.style.animationDuration = `${kuralSec || 10}s`; bar.parentElement.hidden = !moving; void bar.offsetWidth; if (!paused && moving) bar.classList.add('run'); }
       };
-      if (fade) { p.classList.add('fade'); setTimeout(put, 400); } else put();
+      if (fade) { rot.classList.add('fade'); setTimeout(put, 400); } else put();
     };
-    // Every 10 seconds the next language; paused while the visitor hovers over it or it is closed.
-    let paused = false;
-    let timer = null;
-    const restart = () => { clearInterval(timer); if (langs.length > 1 && kuralSec > 0) timer = setInterval(() => { if (!paused && !box.hidden) show(langs[(langs.indexOf(lang) + 1) % langs.length]); }, kuralSec * 1000); };
+    const next = () => show(turn[(turn.indexOf(lang) + 1) % turn.length]);
+    // Every few seconds (Settings → kural seconds) the next language; paused while hovered, closed or a language is picked.
+    const restart = () => { clearInterval(timer); if (!fixed && turn.length > 1 && kuralSec > 0) timer = setInterval(() => { if (!paused && !box.hidden) next(); }, kuralSec * 1000); };
     window.kalaiKuralRestart = restart;
     box.addEventListener('mouseenter', () => { paused = true; bar?.classList.remove('run'); });
-    box.addEventListener('mouseleave', () => { paused = false; restart(); if (bar) { void bar.offsetWidth; bar.classList.add('run'); } });
-    // Tap the card to go to the next language now.
-    p.style.cursor = langs.length > 1 ? 'pointer' : ''; p.title = langs.length > 1 ? 'Next language' : ''; p.onclick = () => { if (langs.length > 1) { show(langs[(langs.indexOf(lang) + 1) % langs.length]); restart(); } };
+    box.addEventListener('mouseleave', () => { paused = false; restart(); if (bar && !fixed) { void bar.offsetWidth; bar.classList.add('run'); } });
+    if (rot) { rot.style.cursor = 'pointer'; rot.title = 'Next language'; rot.onclick = () => { if (!fixed) { next(); restart(); } }; }
     box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); };
     tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); show(lang, false); restart(); };
-    // The visitor picks a language: it joins the card after Tamil and is remembered on this device.
     const more = box.querySelector('.kmsg-more'), pick = box.querySelector('.kmsg-pick');
     if (more) {
       more.onclick = () => { more.hidden = true; pick.hidden = false; pick.focus(); };
       pick.onchange = () => {
-        const v = pick.value; if (!v) return;
-        try { localStorage.setItem('kalai-klang', v); } catch { /* private window */ }
-        if (own) langs.splice(langs.indexOf(own), 1);
-        own = v === 'none' ? '' : v;
-        if (own) { m[own] = extra[own]; langs.splice(langs.includes('ta') ? 1 : 0, 0, own); }
-        if (bar) bar.parentElement.hidden = langs.length < 2 || !kuralSec;
-        show(own || 'ta'); restart();
+        fixed = pick.value;
+        try { localStorage.setItem('kalai-klang', fixed); } catch { /* private window */ }
+        show(fixed || turn[0]); restart();
       };
     }
     show(lang, false);
