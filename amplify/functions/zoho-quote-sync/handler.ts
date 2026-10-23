@@ -1113,6 +1113,8 @@ async function artistRows(enquiries: Img[], admin = false) {
         artistCourier: str(e, 'artistCourier'),
         artistAwb: str(e, 'artistAwb'),
         progressBy: str(e, 'artistBy'),
+        invoiceNo: str(e, 'artistInvoiceNo'),
+        invoiceAt: str(e, 'artistInvoiceAt'),
         onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
         rework: reworkForArtist(e, c),
         priceBy: str(c, 'artistBy'),
@@ -2805,6 +2807,22 @@ async function artistCommissions(action: string, d: Dict, sub: string, profile: 
   if (action === 'commissionQuote') return artistQuote({ id, priceInr: Number(d.price), readyBy: txt(d.readyBy, 10), note: txt(d.note, 1000) }, by, currency);
   if (action === 'commissionProgress') return artistProgress({ id, step: txt(d.step, 20), courier: txt(d.courier, 60), awb: txt(d.awb, 60) }, by);
   if (action === 'commissionPhoto') return artistPhoto(id);
+  // The artist's invoice for an order placed with them: its number creates their bill in Zoho (for the fixed price),
+  // the same as the studio typing it on the order.
+  if (action === 'commissionInvoice') {
+    const e = got.Item as Img;
+    const no = txt(d.invoiceNo, 40);
+    if (!no) throw new Error('Enter your invoice number.');
+    if (!str(e, 'zohoPOId') || str(e, 'purchaseState') === 'CANCELLED') throw new Error('No order placed with you for this yet.');
+    if (str(e, 'zohoBillId') || str(e, 'artistInvoiceNo')) throw new Error('Your invoice is already recorded. To correct it, contact Kalai Art House.');
+    if (!sivaStopped(e) && str(e, 'artistStage') !== 'SHIPPED') throw new Error('Send your invoice once the work is sent to the frame shop.');
+    const now = new Date().toISOString();
+    await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, ConditionExpression: 'attribute_not_exists(artistInvoiceNo)',
+      UpdateExpression: 'SET artistInvoiceNo = :n, artistInvoiceAt = :a, updatedAt = :a', ExpressionAttributeValues: { ':n': { S: no }, ':a': { S: now } } }));
+    await sendMail({ to: STUDIO_EMAIL, subject: `Invoice from ${by}: ${str(e, 'ref')}`, lines: [`${h(by)} sent invoice <b>${h(no)}</b> for ${h(str(e, 'ref'))} (${h(str(e, 'title'))}).`, 'The bill is created in Zoho for the agreed price. Pay it, then enter your bank reference on the order.'],
+      button: { label: 'Open the order', url: `${SITE}/admin.html#order=${id}` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+    return { ok: true, invoiceNo: no };
+  }
   throw new Error('Unknown action');
 }
 

@@ -418,6 +418,10 @@ function drawComms() {
       ${x.ordered ? `<div class="muted" style="font-size:12px">${['STARTED', 'FINISHED', 'SHIPPED'].map((s) => `${x.progress && ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(x.progress) >= ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(s) ? '✓' : '○'} ${STEP_LABEL[s]}`).join(' · ')}${x.artistAwb ? ` · ${esc(x.artistCourier)} AWB ${esc(x.artistAwb)}` : ''}</div>` : ''}
       ${canWork ? `<div class="acts">${!x.progress ? '<button class="btn small" type="button" data-step="STARTED">I have started</button>' : ''}${['', 'STARTED'].includes(x.progress || '') ? '<button class="btn small ghost" type="button" data-step="FINISHED">Finished</button>' : ''}
         <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" placeholder="${profile?.country === 'India' ? 'e.g. DHL' : 'optional (e.g. handed over)'}"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">AWB</span><input data-f="awb"></label><button class="btn small ghost" type="button" data-step="SHIPPED">Sent to frame shop</button></div>` : ''}
+      ${x.ordered && (x.progress === 'SHIPPED' || x.stopped) && !x.invoiceNo ? `<form class="acts" data-inv novalidate style="margin-top:6px;padding:10px;border:1px dashed var(--line);border-radius:10px">
+        <div style="flex-basis:100%;font-size:13px"><b>Send your invoice</b> for ${commCur} ${Number(x.stopped ? (p ?? 0) / 2 : p ?? 0).toLocaleString('en-IN')}${x.stopped ? ' (50% of your price: customer cancelled)' : ''}. Kalai Art House pays it by bank transfer.</div>
+        <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Your invoice no.</span><input name="no" maxlength="40" placeholder="e.g. INV-001"></label>
+        <button class="btn small" type="submit">Send invoice</button></form>` : x.invoiceNo ? `<div class="muted" style="font-size:12px">Invoice ${esc(x.invoiceNo)} sent${x.invoiceAt ? ` ${esc(new Date(x.invoiceAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}` : ''}.</div>` : ''}
       <span class="err" data-m></span>
     </article>`;
   }).join('');
@@ -429,6 +433,14 @@ function drawComms() {
       try { const r = await call('commissionPhoto', { id }); window.open(r.url, '_blank', 'noopener'); card.querySelector('[data-pm]').textContent = 'Opened in a new tab (link works 15 minutes).'; }
       catch (ex) { card.querySelector('[data-pm]').textContent = ex.message; }
     });
+    const fi = card.querySelector('[data-inv]');
+    if (fi) fi.onsubmit = async (e) => {
+      e.preventDefault(); msg.textContent = '';
+      if (!fi.no.value.trim()) { msg.textContent = 'Enter your invoice number.'; return; }
+      const b = fi.querySelector('button'); b.disabled = true;
+      try { await call('commissionInvoice', { id, invoiceNo: fi.no.value.trim() }); await loadComms(); }
+      catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+    };
     const f = card.querySelector('[data-price]');
     if (f) f.onsubmit = async (e) => {
       e.preventDefault(); msg.textContent = '';

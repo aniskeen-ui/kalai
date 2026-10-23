@@ -182,7 +182,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .deskL>.tablewrap::-webkit-scrollbar-track{background:#e6eedc;border-radius:8px}
 .deskL>.tablewrap thead th{position:sticky;top:0;z-index:1;background:var(--surface)}
 /* Document flow (below the order list): dark card */
-.flowcard{border-radius:16px;padding:16px 18px;background:radial-gradient(120% 140% at 0% 0%,#2a1b4d 0%,#141a33 45%,#0d2a26 100%);border:1px solid #3b2f63;box-shadow:0 10px 30px rgba(20,10,50,.35);color:#eef0ff}
+.flowcard{container-type:inline-size;border-radius:16px;padding:16px 18px;background:radial-gradient(120% 140% at 0% 0%,#2a1b4d 0%,#141a33 45%,#0d2a26 100%);border:1px solid #3b2f63;box-shadow:0 10px 30px rgba(20,10,50,.35);color:#eef0ff}
 .flowhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .flowhead h3{margin:0;font-size:18px;background:linear-gradient(90deg,#c4b5fd,#5eead4);-webkit-background-clip:text;background-clip:text;color:transparent}
 .flowcard .muted{color:#a9b0d6}
@@ -203,6 +203,7 @@ a.df[href]:hover{transform:translateY(-2px)}
 .df.todo{border-style:dashed;background:transparent;opacity:.7}
 .df.void{border-color:#f87171;text-decoration:line-through}
 @media (max-width:640px){.dfl{grid-template-columns:1fr}}
+@container (max-width:720px){.dfl{grid-template-columns:1fr;gap:6px}.dft i{display:inline;margin-right:6px}.df{min-width:96px}}
 </style>
 </head>
 <body>

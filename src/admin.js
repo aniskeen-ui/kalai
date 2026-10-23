@@ -1704,7 +1704,7 @@ async function showDetail(e) {
       if (rw) await saveRework(e, rw);
       const { data, errors } = await client.models.Enquiry.update({
         ...(costingChanged ? { costingAt: savedAt } : {}),
-        ...(invNo != null ? { artistInvoiceNo: invNo || null } : {}),
+        ...(invNo ? { artistInvoiceNo: invNo } : {}), // never cleared here: the artist may have sent it from their portal meanwhile
         ...(newAction ? {
           refundAction: newAction,
           refundAmount: AFTER[newAction].pct > 0 ? Number($('aAmount').value) : null,
@@ -1753,7 +1753,7 @@ start();
 // Drag the bar between the order list and the order to resize them (remembered on this computer).
 (() => {
   const bar = $('dSplit'), desk = $('desk'); if (!bar || !desk) return;
-  const set = (px) => { const w = desk.getBoundingClientRect().width; const v = Math.max(320, Math.min(w - 480, px)); desk.style.setProperty('--lw', `${v}px`); return v; };
+  const set = (px) => { const w = desk.getBoundingClientRect().width; const v = Math.max(Math.min(620, w - 480), Math.min(w - 480, px)); desk.style.setProperty('--lw', `${v}px`); return v; };
   try { const v = Number(localStorage.getItem('kalaiDeskW')); if (v > 0) set(v); } catch { /* storage blocked */ }
   let on = false;
   bar.addEventListener('pointerdown', (ev) => { on = true; bar.classList.add('drag'); bar.setPointerCapture(ev.pointerId); ev.preventDefault(); });
