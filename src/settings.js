@@ -53,7 +53,7 @@ export async function showSettings() {
         <div class="muted" id="stInrAt" style="font-size:12px"></div>
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px">
           <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px">Round US$ to <select id="st-usdRound" style="width:auto"><option value="1">1</option><option value="5">5</option><option value="10">10</option><option value="25">25</option></select></label>
-          <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px">Round ₹ to <select id="st-inrRound" style="width:auto"><option value="1">1</option><option value="10">10</option><option value="50">50</option><option value="100">100</option><option value="500">500</option></select></label>
+          <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px">Round ₹ to <select id="st-inrRound" style="width:auto"><option value="1">1</option><option value="10">10</option><option value="50">50</option><option value="100">100</option><option value="250">250</option><option value="500">500</option><option value="1000">1,000</option></select></label>
           <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px"><select id="st-roundUp" style="width:auto"><option value="near">to the nearest</option><option value="up">always up</option></select></label>
           <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-approx" style="width:auto"> Show ≈ before converted prices</label></div>
         <div class="muted" id="stRoundEg" style="font-size:12px"></div>
