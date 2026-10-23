@@ -30,6 +30,8 @@ let kuralSec = 10;
     try { window.kalaiShipZones = JSON.parse(st.shipZones || '{}') || {}; } catch { window.kalaiShipZones = {}; }
     window.kalaiLeadDefault = st.leadDefault || '';
     window.kalaiRedrawPrices?.();
+    // Pre-launch notice (Settings): a quiet bar above the header while the shop is not fully open.
+    { const lb = document.getElementById('launchBar'); if (lb) { lb.textContent = st.launchNote || ''; lb.hidden = !st.launchNote; } }
     if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
     // Home page texts from Order Management → Settings (blank = keep the built-in text).
     // Website look from Settings (a ?look= preview in this browser wins).

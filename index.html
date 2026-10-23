@@ -312,6 +312,7 @@ html[data-skin="green"][data-theme="light"]{--bg:#ffffff;--surface:#ffffff;--sun
 html[data-skin="green"][data-theme="dark"]{--ink:#0f2418;--gold:#9cc24a;--kumkum:#9cc24a;--gold-soft:#24301a}
 @media (prefers-color-scheme:dark){html[data-skin="green"]:not([data-theme="light"]){--ink:#0f2418;--gold:#9cc24a;--kumkum:#9cc24a;--gold-soft:#24301a}}
 html[data-skin="green"] header.top{border-top:30px solid #5f8a1e}
+.launch-bar{background:var(--gold-soft);color:var(--fg);text-align:center;font-size:14px;padding:8px 16px;border-bottom:1px solid var(--line)}.launch-bar b{font-weight:700}
 html[data-skin="green"] header.top::before{content:"Customer service: +971 55 299 6626";position:absolute;top:-30px;left:0;right:0;height:30px;display:grid;place-items:center;font-size:13px;color:#fff;font-weight:600}
 html[data-skin="green"] .brand span{color:#c9dca4}
 html[data-skin="green"] nav.links a:hover{color:#c9dca4}
@@ -358,6 +359,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <body>
 
 
+<div id="launchBar" class="launch-bar" role="status" hidden></div>
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
   <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>

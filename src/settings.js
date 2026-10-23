@@ -14,6 +14,7 @@ const MAILS = [['RECEIVED', 'Enquiry or order received'], ['PRICE_SENT', 'Price 
   ['FRAMING', 'Being framed'], ['SHIPPED', 'Shipped (courier and tracking number)'], ['DELIVERED', 'Delivered (with the rating link)'], ['CANCELLED', 'Cancelled'],
   ['REQUEST', 'Cancellation or damage request received'], ['DECLINED', 'Request declined'], ['PICKUP', 'Return pickup booked'], ['REPLACEMENT', 'Replacement under way'],
   ['REFUND', 'Refund sent'], ['REFUNDED', 'Order closed as refunded (when no refund email went)'], ['RECEIVED_AGAIN', 'Enquiry reopened']];
+const LAUNCH_DEF = 'Opening soon: explore the collection and send us your enquiries now. Orders and online payment open shortly.';
 const FIELDS = [
   { k: 'heroSeconds', label: 'Home page picture', note: 'The big picture at the top of the home page changes to another artwork, picked at random, every this many seconds. 0 = never changes.', min: 0, max: 600 },
   { k: 'kuralHour', label: 'Thirukkural of the day: publish at (hour, Dubai time, 0–23)', unit: '', note: 'The new kural goes up every day at this hour, e.g. 6 = 6 am, 0 = midnight. Until then the website shows yesterday\'s.', min: 0, max: 23, def: 6 },
@@ -42,7 +43,11 @@ export async function showSettings() {
       return `${head}<div class="field" style="max-width:720px"><label for="st-${t.k}">${esc(t.label)}</label>${input}
         <div class="muted" style="font-size:12px">Blank = the current text (shown in grey). <button type="button" class="linkbtn" data-copy="${t.k}">Copy it in to edit</button></div></div>`;
     }).join('');
-    box.innerHTML = `<h3 style="margin:0;font-size:17px">Website theme</h3>
+    box.innerHTML = `<h3 style="margin:0;font-size:17px">Pre-launch notice</h3>
+      <div class="field" style="max-width:720px"><label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-launchOn" style="width:auto"> Show a notice at the top of the website</label>
+        <input id="st-launchNote" maxlength="200" placeholder="${LAUNCH_DEF}">
+        <div class="muted" style="font-size:12px">Blank text = the suggested one. Untick on launch day (when Zoho and Ziina test modes are off).</div></div>
+      <h3 style="margin:0;font-size:17px">Website theme</h3>
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=green" target="_blank" rel="noopener">preview 2. Monda theme</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview 1. Original theme</a> · <a href="/?look=auto" target="_blank" rel="noopener">end preview</a>. A preview changes only your own browser.</div></div>
       <h3 style="margin:0;font-size:17px">Room photo for "On a wall"</h3>
@@ -118,6 +123,8 @@ export async function showSettings() {
     window.kalaiRoundEg?.();
     $('st-showArtists').checked = row?.showArtists !== false;
     $('st-leadDefault').value = row?.leadDefault || '';
+    $('st-launchOn').checked = !!row?.launchNote;
+    $('st-launchNote').value = row?.launchNote && row.launchNote !== LAUNCH_DEF ? row.launchNote : '';
     const off = String(row?.mailOff || '').split(',');
     document.querySelectorAll('[data-mail]').forEach((c) => { c.checked = !off.includes(c.dataset.mail); });
     let zones = {}; try { zones = JSON.parse(row?.shipZones || '{}') || {}; } catch { zones = {}; }
@@ -150,6 +157,7 @@ async function save() {
   rec.roundUp = $('st-roundUp').value === 'up';
   rec.approxSign = $('st-approx').checked;
   rec.showArtists = $('st-showArtists').checked;
+  rec.launchNote = $('st-launchOn').checked ? ($('st-launchNote').value.trim() || LAUNCH_DEF) : null;
   const ld = $('st-leadDefault').value.trim();
   const lm = ld.match(/^(\d{1,3})\s*(?:[-–to]+\s*(\d{1,3}))?$/i);
   if (ld && (!lm || Number(lm[1]) > 120 || (lm[2] && Number(lm[2]) < Number(lm[1])))) { $('stMsg').textContent = 'Ready to send in: type days, e.g. 7 or 10-15.'; $('st-leadDefault').focus(); return; }
