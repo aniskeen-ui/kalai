@@ -2607,7 +2607,8 @@ async function dailyKural(force: boolean) {
   if (!force && (await optionalParam('/kalai/kural/enabled'))?.toLowerCase() === 'off') return { skipped: 'off' };
   const dubai = new Date(Date.now() + 4 * 3600_000);
   const day = dubai.toISOString().slice(0, 10);
-  const n = (Math.floor(Date.UTC(dubai.getUTCFullYear(), dubai.getUTCMonth(), dubai.getUTCDate()) / 86_400_000) % 1330) + 1;
+  // Only Aram and Porul (kurals 1–1080); Kamattupal (1081–1330, love poetry) is never published.
+  const n = (Math.floor(Date.UTC(dubai.getUTCFullYear(), dubai.getUTCMonth(), dubai.getUTCDate()) / 86_400_000) % 1080) + 1;
   const id = `kural-${day}`;
   if (!force) {
     const have = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
