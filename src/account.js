@@ -1,5 +1,6 @@
 // Customer accounts: sign up / sign in, save enquiries, "My enquiries & orders" panel
 // (tabs: Orders · Enquiries · Cancellations & refunds).
+import { openPdf } from './pdf.js';
 import './amplify-config.js';
 import {
   signUp, confirmSignUp, resendSignUpCode, signIn, signOut, autoSignIn,
@@ -421,6 +422,13 @@ function requestForm(e, which) {
   </form>`;
 }
 function wireRequests(root, items) {
+  root.querySelectorAll('[data-pdf]').forEach((b) => {
+    b.onclick = () => openPdf(async () => {
+      const { data, errors } = await client.mutations.customerRequest({ id: b.dataset.id, action: b.dataset.pdf });
+      if (errors?.length) throw new Error(errors[0].message);
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    });
+  });
   root.querySelectorAll('[data-req]').forEach((b) => {
     b.onclick = () => {
       const e = items.find((x) => x.id === b.dataset.id);
@@ -590,6 +598,7 @@ function card(e) {
     ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
     ${replacementTracker(e)}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
+    ${e.zohoInvoiceId || e.zohoChallanId ? `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">${e.zohoInvoiceId ? `<button type="button" class="linkbtn" data-pdf="INVOICE_PDF" data-id="${esc(e.id)}">📄 Invoice${e.zohoInvoice ? ` ${esc(e.zohoInvoice)}` : ''} (PDF)</button>` : ''}${e.zohoChallanId ? `<button type="button" class="linkbtn" data-pdf="CHALLAN_PDF" data-id="${esc(e.id)}">🚚 Delivery note (PDF)</button>` : ''}</div>` : ''}
     ${pay}
     ${addressBlock(e)}
     ${requestBlock(e)}

@@ -1,3 +1,4 @@
+import { openPdf } from './pdf.js';
 // Supplier portal: frame shops (FRAMER) and delivery partners (COURIER).
 // They apply, and once approved see the jobs Kalai Art House gives them: the work's photo, frame spec and size,
 // the agreed price, pickup and delivery addresses. They update each step and enter their invoice (a Zoho bill).
@@ -229,7 +230,7 @@ function jobCard(j) {
         ${fr && j.delivering ? '<dt>Delivery</dt><dd>You deliver this one too (see the delivery job)</dd>' : ''}
         ${j.specs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
         ${j.awb ? `<dt>Tracking</dt><dd>${esc(j.awb)}</dd>` : ''}
-        ${j.invoiceNo ? `<dt>Your invoice</dt><dd>${esc(j.invoiceNo)} · ${aed(j.invoiceAmt)}${j.bill ? ' · received' : ''}</dd>` : ''}
+        ${j.invoiceNo ? `<dt>Your invoice</dt><dd>${esc(j.invoiceNo)} · ${aed(j.invoiceAmt)}${j.bill ? ' · received' : ''}${j.hasBill ? ' · <button type="button" class="linkbtn" data-invpdf>📄 Open invoice</button>' : ''}</dd>` : ''}
       </dl>
       <dl>
         ${!fr ? `<dt>Pick up from</dt><dd>${addr(j.from)}</dd>` : ''}
@@ -247,6 +248,7 @@ function drawJobs() {
   $('jList').querySelectorAll('.job').forEach((card) => {
     const [id, role] = card.dataset.key.split(':');
     const msg = card.querySelector('[data-msg]');
+    card.querySelector('[data-invpdf]')?.addEventListener('click', () => openPdf(() => call('jobInvoicePdf', { id, role }), (ex) => { msg.textContent = ex.message; }));
     const ph = card.querySelector('[data-photo]');
     if (ph) ph.onclick = async () => {
       ph.disabled = true;

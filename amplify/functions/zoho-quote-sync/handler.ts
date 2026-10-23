@@ -121,6 +121,17 @@ async function zoho(path: string, init: RequestInit = {}) {
   return { ok: res.ok && body.code === 0, status: res.status, body };
 }
 
+/** A Zoho document as a PDF (base64), for the invoice links in the portals: e.g. /invoices/{id}, /bills/{id}. */
+async function zohoPdf(path: string, name: string) {
+  const token = await accessToken();
+  const sep = path.includes('?') ? '&' : '?';
+  const res = await fetch(`${env.ZOHO_API_URL}${path}${sep}accept=pdf&organization_id=${env.ZOHO_ORG_ID}`, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
+  if (!res.ok) throw new Error(`The document could not be opened (${res.status}). Please try again later.`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 4_000_000) throw new Error('The document is too large to open here.');
+  return { pdf: buf.toString('base64'), name: `${name.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf` };
+}
+
 /** Zoho 5% VAT tax ID, or null while VAT is off. Re-read every 10 minutes. */
 async function vatTaxId(): Promise<string | null> {
   if (cachedVat && Date.now() - cachedVat.at < 600_000) return cachedVat.id;
@@ -1115,6 +1126,8 @@ async function artistRows(enquiries: Img[], admin = false) {
         progressBy: str(e, 'artistBy'),
         invoiceNo: str(e, 'artistInvoiceNo'),
         invoiceAt: str(e, 'artistInvoiceAt'),
+        hasBill: !!str(e, 'zohoBillId'),
+        hasPO: !!str(e, 'zohoPOId'),
         onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
         rework: reworkForArtist(e, c),
         priceBy: str(c, 'artistBy'),
@@ -2143,7 +2156,7 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
   return {
     id: str(e, 'id'), role, ref: str(e, 'ref'), kind: KIND[str(e, 'kind')] ?? str(e, 'kind'), title: str(e, 'title'), orderStatus: str(e, 'status'),
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
-    stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null,
+    stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null, hasBill: !!j.billId,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
     specs: role === 'framer' ? FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)]) : [['Parcel', parcelOf(det)]],
     hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || str(e, 'kind') === 'PRICE'),
@@ -2190,6 +2203,11 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   if (!e || !j || j.supplierId !== sub) throw new Error('Job not found');
   const ref = str(e, 'ref'), now = new Date().toISOString(), by = String(profile.business || profile.contactName);
   const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const fp = role === 'delivery' && js.framer ? plain(await getRow(S, { id: { S: js.framer.supplierId } })) : null; return { job: jobView(fresh!, js, role, fp) }; };
+  // Their invoice as recorded with us (our Zoho bill), as a PDF.
+  if (action === 'jobInvoicePdf') {
+    if (!j.billId) throw new Error('Your invoice is not recorded yet.');
+    return zohoPdf(`/bills/${j.billId}`, `invoice-${j.invoiceNo || ref}`);
+  }
   if (action === 'jobPhoto') {
     if (role !== 'framer') throw new Error('The artwork photo is for the frame shop.');
     const bucket = process.env.UPLOADS_BUCKET;
@@ -2807,6 +2825,13 @@ async function artistCommissions(action: string, d: Dict, sub: string, profile: 
   if (action === 'commissionQuote') return artistQuote({ id, priceInr: Number(d.price), readyBy: txt(d.readyBy, 10), note: txt(d.note, 1000) }, by, currency);
   if (action === 'commissionProgress') return artistProgress({ id, step: txt(d.step, 20), courier: txt(d.courier, 60), awb: txt(d.awb, 60) }, by);
   if (action === 'commissionPhoto') return artistPhoto(id);
+  // Their documents as PDFs: our purchase order to them, and their invoice as recorded (our bill).
+  if (action === 'commissionDocPdf') {
+    const e = got.Item as Img;
+    if (d.doc === 'po') { if (!str(e, 'zohoPOId')) throw new Error('No order placed with you yet.'); return zohoPdf(`/purchaseorders/${str(e, 'zohoPOId')}`, str(e, 'zohoPO') || `order-${str(e, 'ref')}`); }
+    if (!str(e, 'zohoBillId')) throw new Error('Your invoice is not recorded yet.');
+    return zohoPdf(`/bills/${str(e, 'zohoBillId')}`, `invoice-${str(e, 'artistInvoiceNo') || str(e, 'ref')}`);
+  }
   // The artist's invoice for an order placed with them: its number creates their bill in Zoho (for the fixed price),
   // the same as the studio typing it on the order.
   if (action === 'commissionInvoice') {
@@ -3382,6 +3407,15 @@ async function customerRequest(ev: ApiEvent) {
   if (!ownsEnquiry(e, ev) && !groups.includes('ADMINS')) {
     console.warn(`customerRequest refused for ${str(e, 'ref')}: owner ${str(e, 'owner')} vs caller ${ev.identity?.sub ?? ev.identity?.username ?? '?'}`);
     throw new Error('Order not found');
+  }
+  // Invoice / delivery note PDF for the customer (My enquiries & orders).
+  if (action === 'INVOICE_PDF') {
+    if (!str(e, 'zohoInvoiceId')) throw new Error('No invoice yet: it is made when you pay.');
+    return zohoPdf(`/invoices/${str(e, 'zohoInvoiceId')}`, str(e, 'zohoInvoice') || `invoice-${str(e, 'ref')}`);
+  }
+  if (action === 'CHALLAN_PDF') {
+    if (!str(e, 'zohoChallanId')) throw new Error('No delivery note yet.');
+    return zohoPdf(`/deliverychallans/${str(e, 'zohoChallanId')}`, str(e, 'zohoChallan') || `delivery-${str(e, 'ref')}`);
   }
   const terms = cancelTerms(e, action);
   if (!terms.allowed) throw new Error(terms.note);

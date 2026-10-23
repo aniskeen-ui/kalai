@@ -1,5 +1,6 @@
 // Seller portal: sign up, apply, and (once approved) list products with a price calculator.
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
+import { openPdf } from './pdf.js';
 import './amplify-config.js';
 import './skin.js';
 import {
@@ -422,6 +423,7 @@ function drawComms() {
         <div style="flex-basis:100%;font-size:13px"><b>Send your invoice</b> for ${commCur} ${Number(x.stopped ? (p ?? 0) / 2 : p ?? 0).toLocaleString('en-IN')}${x.stopped ? ' (50% of your price: customer cancelled)' : ''}. Kalai Art House pays it by bank transfer.</div>
         <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Your invoice no.</span><input name="no" maxlength="40" placeholder="e.g. INV-001"></label>
         <button class="btn small" type="submit">Send invoice</button></form>` : x.invoiceNo ? `<div class="muted" style="font-size:12px">Invoice ${esc(x.invoiceNo)} sent${x.invoiceAt ? ` ${esc(new Date(x.invoiceAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}` : ''}.</div>` : ''}
+      ${x.hasPO || x.hasBill ? `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">${x.hasPO ? '<button type="button" class="linkbtn" data-doc="po">📄 Our order to you (PDF)</button>' : ''}${x.hasBill ? '<button type="button" class="linkbtn" data-doc="bill">📄 Your invoice (PDF)</button>' : ''}</div>` : ''}
       <span class="err" data-m></span>
     </article>`;
   }).join('');
@@ -433,6 +435,7 @@ function drawComms() {
       try { const r = await call('commissionPhoto', { id }); window.open(r.url, '_blank', 'noopener'); card.querySelector('[data-pm]').textContent = 'Opened in a new tab (link works 15 minutes).'; }
       catch (ex) { card.querySelector('[data-pm]').textContent = ex.message; }
     });
+    card.querySelectorAll('[data-doc]').forEach((b) => { b.onclick = () => openPdf(() => call('commissionDocPdf', { id, doc: b.dataset.doc }), (ex) => { msg.textContent = ex.message; }); });
     const fi = card.querySelector('[data-inv]');
     if (fi) fi.onsubmit = async (e) => {
       e.preventDefault(); msg.textContent = '';
