@@ -965,14 +965,17 @@ async function showMarket() {
       let keys = []; try { keys = JSON.parse(m.imageKeys || '[]'); } catch { /* none */ }
       let img = '';
       try { if (keys[0]) img = (await getUrl({ path: keys[0], options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
-      return { id: m.listingId, title: m.title, seller: m.sellerName, sellerType: m.sellerType, category: m.category, description: m.description, price: m.price, stock: Number(m.stock ?? 0), img };
+      // Artists' works get a detail page with all their photos.
+      let imgs = [img];
+      if (m.sellerType === 'ARTIST' && keys.length > 1) imgs = [img, ...(await Promise.all(keys.slice(1, 8).map((k) => getUrl({ path: k, options: { expiresIn: 3600 } }).then((u) => u.url.toString()).catch(() => ''))))].filter(Boolean);
+      return { id: m.listingId, title: m.title, seller: m.sellerName, sellerType: m.sellerType, category: m.category, description: m.description, price: m.price, stock: Number(m.stock ?? 0), img, imgs };
     }));
     const withImg = list.filter((x) => x.img);
     // Artists' works join the collection (with the artist dropdown); sellers' products stay in the Crafts shop.
     const kindOf = (c) => (/sketch|pencil|charcoal|graphite|ink|pen/i.test(c || '') ? 'sketch' : /water/i.test(c || '') ? 'water' : 'other');
     const art = withImg.filter((x) => x.sellerType === 'ARTIST');
     if (typeof window.kalaiShowArtistWorks === 'function' && art.length) {
-      window.kalaiShowArtistWorks(art.map((x) => ({ id: x.id, market: true, name: x.title, artist: x.seller, category: x.category, kind: kindOf(x.category), desc: x.description, price: x.price, stock: x.stock, img: x.img })));
+      window.kalaiShowArtistWorks(art.map((x) => ({ id: x.id, market: true, name: x.title, artist: x.seller, category: x.category, kind: kindOf(x.category), desc: x.description, price: x.price, stock: x.stock, img: x.img, imgs: x.imgs })));
     }
     window.kalaiShowMarket(withImg.filter((x) => x.sellerType !== 'ARTIST'));
   } catch (ex) { console.warn('Crafts shop not loaded.', ex); }

@@ -728,13 +728,13 @@ function drawGrid(){
   list.forEach(p=>{
     const card=document.createElement("article");card.className="card";
     const fb=document.createElement("button");fb.className="frame";fb.setAttribute("aria-label","View "+p.name);
-    fb.appendChild(mk(p));fb.onclick=()=>p.market?window.open(p.img,"_blank","noopener"):openModal(p);
+    fb.appendChild(mk(p));fb.onclick=()=>p.market?openWork(p):openModal(p);
     card.appendChild(fb);
     if(p.market){
       card.insertAdjacentHTML("beforeend",`<div class="kind">${esc2(p.category||"Original artwork")}</div>
       <h3>${esc2(p.name)}</h3><div class="meta">${SHOW_ARTIST_NAMES?"by "+esc2(p.artist):"Original artwork"}${p.stock>0?"":' · <b style="color:var(--kumkum)">Sold</b>'}</div>
       ${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
-      <div class="row"><span class="price">${moneyH(p.price)}</span>${p.stock>0?`<button class="add" type="button" data-order-art="${esc2(p.id)}">Order</button>`:""}</div>`);
+      <div class="row"><span class="price">${moneyH(p.price)}</span><button class="add" type="button" data-view-art="${esc2(p.id)}">View details</button></div>`);
       g.appendChild(card);return;
     }
     card.insertAdjacentHTML("beforeend",`<div class="kind">${p.kind==="sketch"?"Original sketch":"Original watercolour"}</div>
@@ -743,9 +743,40 @@ function drawGrid(){
     g.appendChild(card);
   });
   if(!list.length)g.innerHTML='<p class="note">No artworks match these filters yet. Try another subject, or commission one.</p>';
-  g.querySelectorAll("[data-order-art]").forEach(b=>b.onclick=()=>{const p=ARTWORKS.find(x=>x.id===b.dataset.orderArt);if(!p)return;
-    const item={id:p.id,title:p.name,seller:SHOW_ARTIST_NAMES?p.artist:"our artist",price:p.price,stock:p.stock,img:p.img};
-    if(window.kalaiMarketOrder){window.kalaiMarketOrder(item);return}sendEnquiry("Artwork order: "+p.name,{"Item":p.name,"Artist":p.artist,"Price":"AED "+p.price,"Listing":p.id});});
+  g.querySelectorAll("[data-view-art]").forEach(b=>b.onclick=()=>{const p=ARTWORKS.find(x=>x.id===b.dataset.viewArt);if(p)openWork(p)});
+}
+function orderWork(p){const item={id:p.id,title:p.name,seller:SHOW_ARTIST_NAMES?p.artist:"our artist",price:p.price,stock:p.stock,img:p.img};
+  if(window.kalaiMarketOrder){window.kalaiMarketOrder(item);return}sendEnquiry("Artwork order: "+p.name,{"Item":p.name,"Artist":p.artist,"Price":"AED "+p.price,"Listing":p.id});}
+/* Detail page for a work listed by an artist from the artist portal: all photos, description, price and Order. */
+function openWork(p){
+  const box=document.getElementById("modalBox");box.className="box wide";
+  const imgs=(p.imgs&&p.imgs.length?p.imgs:[p.img]).filter(Boolean);
+  const sim=ARTWORKS.filter(x=>x.id!==p.id&&x.stock>0).sort((a,b)=>(b.artist===p.artist)-(a.artist===p.artist)).slice(0,6);
+  document.documentElement.style.setProperty("--hdr",(document.querySelector("header.top")?.offsetHeight||70)+"px");
+  box.innerHTML=`<button class="x xtop" id="mClose" aria-label="Close">×</button><button type="button" class="ap-back" id="mBack">← Back to the collection</button><div class="viewer">
+      <div class="stage" id="vStage"><img src="${esc2(imgs[0])}" alt="${esc2(p.name)}" style="max-width:100%;max-height:70vh;object-fit:contain;display:block;margin:auto"></div>
+      ${imgs.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">${imgs.map((u,i)=>`<button type="button" data-wimg="${i}" style="padding:0;border:1px solid var(--line);background:none;cursor:pointer"><img src="${esc2(u)}" alt="Photo ${i+1}" style="width:64px;height:64px;object-fit:cover;display:block"></button>`).join("")}</div>`:""}
+      <p class="room-cap">Photo${imgs.length>1?"s":""} of the original by the artist.</p></div>
+    <div class="info">
+     <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${esc2(p.category||"Original artwork")} · One of a kind</div>
+     <h2 style="font-size:30px">${esc2(p.name)}</h2>
+     <p class="byline">${SHOW_ARTIST_NAMES?"by "+esc2(p.artist):"Hand-made by our artist"}</p>
+     <div class="pprice"><b>${moneyH(p.price)}</b> <span class="note">${p.stock>0?"delivered in the UAE":"Sold"}</span></div>
+     ${p.desc?`<p class="note" style="font-size:15px;margin:0;white-space:pre-wrap">${esc2(p.desc)}</p>`:""}
+     <div class="badges">
+       <div class="badge"><i>✦</i><div><b>Original &amp; signed</b>Hand-made by the artist, not a print</div></div>
+       <div class="badge"><i>⛟</i><div><b>Delivered worldwide</b>UAE: insured courier · abroad: shipping quoted before you pay</div></div>
+       <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
+     </div>
+     <div class="acts">${p.stock>0?`<button class="btn primary" type="button" id="wOrder">Order this work</button>`:`<button class="btn primary" data-jump="commission">Commission similar</button>`}<button class="btn ghost-dark" type="button" id="wBack">See the collection</button></div>
+     ${sim.length?`<div id="mSimilar"><div style="font-weight:600;font-size:15px;margin:6px 0 10px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view-art="${esc2(x.id)}"><img src="${esc2(x.img)}" alt=""><span>${esc2(x.name)}</span></button>`).join("")}</div></div>`:""}
+    </div>`;
+  box.querySelectorAll("[data-wimg]").forEach(b=>b.onclick=()=>{box.querySelector("#vStage img").src=imgs[+b.dataset.wimg]});
+  box.querySelectorAll("#mSimilar [data-view-art]").forEach(b=>b.onclick=()=>{const q=ARTWORKS.find(x=>x.id===b.dataset.viewArt);if(q)openWork(q)});
+  const o=box.querySelector("#wOrder");if(o)o.onclick=()=>{closeAll();orderWork(p)};
+  {const ms=box.querySelector('#mSimilar');if(ms&&ms.parentElement!==box)box.appendChild(ms);}
+  modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("wBack").onclick=closeAll;document.getElementById("mClose").focus();
+  try{if(location.hash!=="#art-"+p.id)history.pushState({art:p.id},"","#art-"+p.id)}catch(e){}
 }
 /* Catalogue from Order Management (replaces the built-in list once it has published works). */
 window.kalaiShowMarket=function(list){
@@ -806,7 +837,7 @@ function closeAll(){if(typeof lensEl!=="undefined")lensEl.style.display="none";d
 window.addEventListener("popstate",()=>{if(!location.hash.startsWith("#art-")&&!modal.hidden)closeAll()});
 /* opening a shared artwork link: wait for the collection (website works load a moment later) */
 (function(){const m=location.hash.match(/^#art-(.+)$/);if(!m)return;const id=decodeURIComponent(m[1]);let n=0;
-  const t=setInterval(()=>{const p=typeof PRODUCTS!=="undefined"&&PRODUCTS.find(x=>String(x.id)===id);if(p){clearInterval(t);openModal(p)}else if(++n>40)clearInterval(t)},250)})();
+  const t=setInterval(()=>{const p=typeof PRODUCTS!=="undefined"&&PRODUCTS.find(x=>String(x.id)===id);const w=!p&&typeof ARTWORKS!=="undefined"&&ARTWORKS.find(x=>String(x.id)===id);if(p){clearInterval(t);openModal(p)}else if(w){clearInterval(t);openWork(w)}else if(++n>40)clearInterval(t)},250)})();
 document.getElementById("openCart").onclick=()=>{drawCart();drawer.hidden=false;scrim.hidden=false;document.getElementById("closeCart").focus()};
 document.getElementById("closeCart").onclick=closeAll;scrim.onclick=closeAll;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAll()});
