@@ -1265,6 +1265,30 @@ function showRates() {
 }
 
 const DOC_STATUS_OK = ['delivered', 'paid', 'accepted', 'closed', 'billed', 'issued', 'invoiced', 'sent', 'open', 'creditcard', 'banktransfer', 'cash', 'recorded'];
+/** The order's documents as a flow: customer side, the artist, and each supplier, step by step.
+ *  Green = done in Zoho, amber = draft (test mode or not yet sent), grey dashed = still to come. */
+function docFlow(e, d) {
+  const docs = d?.docs || [];
+  const st = (x) => (!x ? 'todo' : ['void', 'cancelled'].includes(x.status) ? 'void' : x.status === 'draft' ? 'draft' : 'done');
+  const box = (label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : '–'))}</span>${x?.total != null ? `<span class="mono">${aed(x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
+  const arrow = '<span class="dfa" aria-hidden="true">→</span>';
+  const lane = (title, boxes) => `<div class="dfl"><div class="dft">${esc(title)}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
+  const one = (type, f = () => true) => docs.filter((x) => x.type === type && f(x)).slice(-1)[0];
+  const cust = [box('Quote', one('Quote')), box('Invoice', one('Invoice')), box('Payment', one('Payment received'), e.paymentMethod || ''), box('Delivery challan', one('Delivery challan'), e.status === 'DELIVERED' ? 'delivered' : '')];
+  const cn = one('Credit note'); if (cn) cust.push(box('Credit note (refund)', cn));
+  const lanes = [lane(`Customer · ${e.customerName || ''}`, cust)];
+  const bills = docs.filter((x) => x.group === 'PURCHASE' && /bill/i.test(x.type));
+  const who = artistOf(e).split(/\s+/)[0].toLowerCase();
+  const isArtist = (b) => (!!e.zohoBillId && b.id === e.zohoBillId) || (!!who && String(b.vendor || '').toLowerCase().includes(who));
+  const paidFor = (b) => docs.find((x) => x.type === 'Payment made' && b && x.date >= (b.date || '') && x.total === b.total) || (b?.status === 'paid' ? { ...b, type: 'Payment made', number: 'paid' } : null);
+  if (hasArtist(e)) {
+    const ab = bills.find(isArtist);
+    const po = e.zohoPOId ? { type: 'Purchase order', number: e.zohoPO || 'PO', status: e.zohoState === 'TEST' ? 'draft' : 'open' } : null;
+    lanes.push(lane(`Artist · ${artistOf(e)}`, [box('Purchase order', po), box('Bill', ab), box('Payment', paidFor(ab), e.artistPaidRef ? 'paid' : '')]));
+  }
+  for (const b of bills.filter((x) => !hasArtist(e) || !isArtist(x))) lanes.push(lane(`Supplier · ${b.vendor || 'vendor'}`, [box('Bill', b), box('Payment', paidFor(b))]));
+  return `<div class="dflow">${lanes.join('')}<div class="muted" style="font-size:11px">Green: done in Zoho · amber: draft · grey: still to come. Click a box to open it in Zoho Books.</div></div>`;
+}
 function docsList(e) {
   const raw = costings.get(e.id)?.zohoDocs;
   let d = null;
@@ -1281,7 +1305,7 @@ function docsList(e) {
       <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
       <td class="num mono">${x.total != null ? aed(x.total, 2) : ''}${x.balance ? `<br><span class="muted">due ${aed(x.balance, 2)}</span>` : ''}</td></tr>`).join('');
   };
-  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', `Purchase (${esc(artistOf(e))})`)}</tbody></table>
+  return `${docFlow(e, d)}<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', hasArtist(e) ? `Purchase (${esc(artistOf(e))}, frame shop, courier)` : 'Purchase (frame shop, courier)')}</tbody></table>
     <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
 }
 
