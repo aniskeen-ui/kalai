@@ -79,6 +79,8 @@ async function adminBar() {
 
 function route() {
   const s = profile?.status;
+  // The studio login itself: pick a supplier above (its own account may be an artist/seller test account).
+  if (isAdmin() && !viewAs) { show('statusView'); $('statusBox').innerHTML = '<h2>Studio view</h2><p>Choose a frame shop or delivery partner above to see and work in their portal, exactly as they see it.</p>'; return; }
   if (profile && !['FRAMER', 'COURIER'].includes(profile.type)) {
     show('statusView');
     $('statusBox').innerHTML = `<h2>This is the supplier portal</h2><p>Your account is an ${profile.type === 'ARTIST' ? 'artist' : 'seller'} account. <a href="/seller.html">Open the artist &amp; seller portal</a>.</p>`;
