@@ -7,6 +7,8 @@ const ROOM_KEY = 'catalogue/site/room.jpg'; // the room photo for "On a wall" (p
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Little Artists shipping zones outside the UAE (the website maps each country to one).
+const SHIP_ZONES = [['A', 'GCC (Saudi Arabia, Oman, Qatar, Bahrain, Kuwait)'], ['B', 'South Asia (India, Sri Lanka, Pakistan, Bangladesh, Nepal, Maldives, Bhutan)'], ['C', 'UK and Europe'], ['D', 'USA, Canada, Australia, New Zealand'], ['E', 'Rest of the world']];
 const FIELDS = [
   { k: 'heroSeconds', label: 'Home page picture', note: 'The big picture at the top of the home page changes to another artwork, picked at random, every this many seconds. 0 = never changes.', min: 0, max: 600 },
   { k: 'kuralHour', label: 'Thirukkural of the day: publish at (hour, Dubai time, 0–23)', unit: '', note: 'The new kural goes up every day at this hour, e.g. 6 = 6 am, 0 = midnight. Until then the website shows yesterday\'s.', min: 0, max: 23, def: 6 },
@@ -59,6 +61,9 @@ export async function showSettings() {
           <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-approx" style="width:auto"> Show ≈ before converted prices</label></div>
         <div class="muted" id="stRoundEg" style="font-size:12px"></div>
         <div class="muted" style="font-size:12px">Visitors can show prices in Dhs, US$ or ₹ (header). Dollars use the fixed peg of 3.6725 Dhs. Customers always pay in dirhams.</div></div>
+      <h3 style="margin:0;font-size:17px">Little Artists: shipping outside the UAE</h3>
+      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">Dhs per parcel, added to the customer's total on the form (framing stays free for ages 3 to 10). Leave a zone blank to show "we quote before you pay". UAE delivery stays Dhs 25 / 35.</div>
+        <div style="display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;margin-top:6px">${SHIP_ZONES.map(([z, n]) => `<label for="st-zone${z}" style="font-weight:400;font-size:13px">${z}. ${n}</label><input id="st-zone${z}" type="number" min="0" max="2000" step="5" placeholder="quote">`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label}${f.unit === '' ? '' : ' (seconds)'}</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
@@ -103,6 +108,8 @@ export async function showSettings() {
     $('st-approx').checked = row?.approxSign !== false;
     window.kalaiRoundEg?.();
     $('st-showArtists').checked = row?.showArtists !== false;
+    let zones = {}; try { zones = JSON.parse(row?.shipZones || '{}') || {}; } catch { zones = {}; }
+    SHIP_ZONES.forEach(([z]) => { $('st-zone' + z).value = zones[z] ?? ''; });
     $('stInrAt').textContent = row?.inrRateAt ? `Rate from the European Central Bank (via Frankfurter), updated ${new Date(row.inrRateAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Updated automatically each morning at 06:05 Dubai time, from the European Central Bank rate.';
     try { marks = row?.roomMarks ? JSON.parse(row.roomMarks) : null; } catch { marks = null; }
     if (marks?.cm) $('rmCm').value = marks.cm;
@@ -131,6 +138,15 @@ async function save() {
   rec.roundUp = $('st-roundUp').value === 'up';
   rec.approxSign = $('st-approx').checked;
   rec.showArtists = $('st-showArtists').checked;
+  const zones = {};
+  for (const [z, n] of SHIP_ZONES) {
+    const raw = $('st-zone' + z).value.trim();
+    if (!raw) continue;
+    const v = Number(raw);
+    if (!(v >= 0 && v <= 2000)) { $('stMsg').textContent = `Shipping ${n}: enter dirhams from 0 to 2,000, or leave it blank.`; $('st-zone' + z).focus(); return; }
+    zones[z] = v;
+  }
+  rec.shipZones = JSON.stringify(zones);
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';

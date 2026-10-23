@@ -195,6 +195,7 @@ footer p{margin:2px 0}
 }
 @media (max-width:760px){#artist .wrap{grid-template-columns:1fr!important}}
 @media (max-width:480px){.two{grid-template-columns:1fr}.brand span{display:none}}
+@media (max-width:560px){header.top .wrap{gap:6px}.brand{flex-shrink:0;margin-right:auto}.brand b{font-size:20px}header.top [data-jump="commission"]{display:none}header.top .cart-btn{padding:6px 10px;font-size:13px}.theme-btn{padding:5px 8px;font-size:14px}}
 
 /* little artists */
 .kids{background:var(--gold-soft)}
@@ -478,17 +479,20 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
       </div></div>
     <div class="two">
       <div class="field"><label for="kTo">Gift for</label><input id="kTo" placeholder="Ammachi"></div>
-      <div class="field"><label for="kEmirate">Delivery emirate</label>
-        <select id="kEmirate"><option value="25">Dubai</option><option value="25">Sharjah</option><option value="25">Ajman</option><option value="35">Abu Dhabi</option><option value="35">Ras Al Khaimah</option><option value="35">Umm Al Quwain</option><option value="35">Fujairah</option></select></div>
+      <div class="field"><label for="kCountry">Delivery country</label>
+        <select id="kCountry"><option value="UAE">UAE</option></select></div>
     </div>
+    <div class="field" id="kEmBox"><label for="kEmirate">Emirate</label>
+        <select id="kEmirate"><option value="25">Dubai</option><option value="25">Sharjah</option><option value="25">Ajman</option><option value="35">Abu Dhabi</option><option value="35">Ras Al Khaimah</option><option value="35">Umm Al Quwain</option><option value="35">Fujairah</option></select></div>
+    <div class="field" id="kRegBox" hidden><label for="kRegion">State, province or city</label><input id="kRegion" maxlength="60" placeholder="e.g. Kerala, Ontario, London"></div>
     <fieldset class="field" style="border:0;padding:0;margin:0"><legend style="font-size:13px;font-weight:600;margin-bottom:6px">Optional extras</legend>
-      <label class="check"><input type="checkbox" id="kx-premium" data-price="45"><span>Premium frame with glass and double mount <b class="mono">+ AED 45</b></span></label>
-      <label class="check"><input type="checkbox" id="kx-large" data-price="35"><span>Large size, A3 instead of A4 <b class="mono">+ AED 35</b></span></label>
-      <label class="check"><input type="checkbox" id="kx-copy" data-price="59"><span>A second framed copy for another relative <b class="mono">+ AED 59</b></span></label>
-      <label class="check"><input type="checkbox" id="kx-wrap" data-price="15"><span>Gift wrap with a handwritten card <b class="mono">+ AED 15</b></span></label>
+      <label class="check"><input type="checkbox" id="kx-premium" data-price="45"><span>Premium frame with glass and double mount <b class="mono" data-kp="45">+ AED 45</b></span></label>
+      <label class="check"><input type="checkbox" id="kx-large" data-price="35"><span>Large size, A3 instead of A4 <b class="mono" data-kp="35">+ AED 35</b></span></label>
+      <label class="check"><input type="checkbox" id="kx-copy" data-price="59"><span>A second framed copy for another relative <b class="mono" data-kp="59">+ AED 59</b></span></label>
+      <label class="check"><input type="checkbox" id="kx-wrap" data-price="15"><span>Gift wrap with a handwritten card <b class="mono" data-kp="15">+ AED 15</b></span></label>
     </fieldset>
     <div class="field"><label for="kMsg">Message on the card</label><textarea id="kMsg" maxlength="140" placeholder="For Ammachi, with love"></textarea></div>
-    <div class="field"><label for="kAddr">Recipient's delivery address</label><input id="kAddr" placeholder="Villa or flat, street, area"></div>
+    <div class="field"><label for="kAddr">Recipient's delivery address</label><input id="kAddr" placeholder="House or flat, street, area, postal code"></div>
     <div class="two">
       <div class="field"><label for="kParent">Parent's name</label><input id="kParent" autocomplete="name" placeholder="Priya Raman"></div>
       <div class="field"><label for="kPhone">Parent's mobile</label><input id="kPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div>
@@ -535,7 +539,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
     <details><summary>What materials do you use?</summary><p>Watercolours are painted on 300 gsm cotton paper with artist-grade paints. Pencil sketches use graphite on heavy acid-free drawing paper, sealed with fixative so they don't smudge.</p></details>
     <details><summary>What if it arrives damaged?</summary><p>Every parcel is insured. Report it under My enquiries &amp; orders with photos within 48 hours of delivery and choose: a replacement or repair, or a full refund. Because each work is one of a kind, we can't accept change-of-mind returns.</p></details>
     <details><summary>Can I cancel my order?</summary><p>Yes, under My enquiries &amp; orders on this site, where you see the refund before you confirm. Before you pay, there's nothing to pay. After payment, if the artist hasn't started your work, you get a full refund. Once the artist has started (including the pencil sketch for commissions), we refund 50% to cover the artist's time. Once it has shipped it can't be cancelled.</p></details>
-    <details><summary>What does Little Artists cost?</summary><p>For children aged 3 to 10, framing is free and you pay only delivery: AED 25 within Dubai, Sharjah and Ajman, AED 35 to the other emirates. One free framing per child each month. For ages 11 to 17, framing costs AED 79 plus delivery. Premium frames, A3 size, extra copies and gift wrap are optional extras at any age.</p></details>
+    <details><summary>What does Little Artists cost?</summary><p>For children aged 3 to 10, framing is free and you pay only delivery: AED 25 within Dubai, Sharjah and Ajman, AED 35 to the other emirates, or the overseas shipping charge for your country (shown on the form; confirmed with your payment link). One free framing per child each month. For ages 11 to 17, framing costs AED 79 plus delivery. Premium frames, A3 size, extra copies and gift wrap are optional extras at any age.</p></details>
     <details><summary>Do you deliver outside the UAE?</summary><p>Yes, we deliver worldwide. Within the UAE, delivery is included in the price. For any other country, we confirm the shipping charge with your payment link, before you pay. Import duty or taxes charged by your country, if any, are paid on arrival.</p></details>
     <details><summary>Can I visit to see paintings?</summary><p>We are an online gallery and paintings ship directly from our artists' studios. For larger commissions we can arrange a video call with the artist.</p></details>
   </div>
@@ -1045,25 +1049,42 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   const plate=()=>{const n=$("kName").value.trim()||"Aarav",a=$("kAge").value,m=$("kMsg").value.trim()||("For "+($("kTo").value.trim()||"Ammachi")+", with love");
     $("kPlate").innerHTML="";const t=document.createTextNode("By "+n+", age "+a);const sm=document.createElement("small");sm.textContent=m;$("kPlate").append(t,sm)};
   const FRAME_FEE=79;
-  const fee=()=>{const age=+$("kAge").value,del=+$("kEmirate").value,rows=[["Framing",age<=10?0:FRAME_FEE],["Delivery",del]];
+  // Delivery: emirate fee in the UAE; elsewhere the zone fee from Order management → Settings (blank = quoted).
+  const ZONE={A:["Saudi Arabia","Oman","Qatar","Bahrain","Kuwait"],B:["India","Sri Lanka","Pakistan","Bangladesh","Nepal","Maldives","Bhutan"],
+    C:["United Kingdom","Ireland","France","Germany","Italy","Spain","Portugal","Netherlands","Belgium","Luxembourg","Switzerland","Austria","Denmark","Sweden","Norway","Finland","Iceland","Poland","Czechia","Slovakia","Hungary","Slovenia","Croatia","Romania","Bulgaria","Greece","Cyprus","Malta","Estonia","Latvia","Lithuania","Monaco","Liechtenstein","Andorra","San Marino","Vatican City","Jersey","Guernsey","Isle of Man","Gibraltar","Serbia","Bosnia and Herzegovina","Montenegro","North Macedonia","Albania","Kosovo","Moldova","Ukraine"],
+    D:["United States","Canada","Australia","New Zealand"]};
+  const zoneOf=c=>Object.keys(ZONE).find(z=>ZONE[z].includes(c))||"E";
+  const ZNAME={A:"GCC",B:"South Asia",C:"UK and Europe",D:"USA, Canada, Australia, New Zealand",E:"rest of the world"};
+  const uae=()=>$("kCountry").value==="UAE";
+  const delivery=()=>{if(uae())return +$("kEmirate").value;const f=(window.kalaiShipZones||{})[zoneOf($("kCountry").value)];return f>0?+f:null};
+  // Small amounts: whole dollars and tens of rupees (the Settings rounding is meant for artwork prices).
+  const pm=a=>{if(typeof moneyH!=="function")return fmt(a);const r=window.kalaiRound;window.kalaiRound={...r,usd:1,inr:10};try{return moneyH(a)}finally{window.kalaiRound=r}};
+  const fee=()=>{const age=+$("kAge").value,del=delivery(),rows=[["Framing",age<=10?0:FRAME_FEE],[uae()?"Delivery":"Shipping to "+$("kCountry").value,del]];
     document.querySelectorAll('[id^="kx-"]:checked').forEach(x=>rows.push([x.parentElement.querySelector("span").firstChild.textContent.trim(),+x.dataset.price]));
-    const tot=rows.reduce((a,r)=>a+r[1],0);
-    $("kBreak").innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:12px"><span>${r[0]}</span><span class="mono">${r[1]?fmt(r[1]):(r[0]==="Framing"?"Free (age 10 and under)":"")}</span></div>`).join("");
-    $("kFee").textContent=fmt(tot)};
+    const tot=rows.reduce((a,r)=>a+(r[1]||0),0);
+    $("kBreak").innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:12px"><span>${r[0]}</span><span class="mono">${r[1]?pm(r[1]):(r[0]==="Framing"?"Free (age 10 and under)":r[1]===null?"we quote before you pay":"")}</span></div>`).join("")
+      +(uae()?"":`<div style="font-size:12px">Outside the UAE: the shipping charge is confirmed with your payment link; any import duty in your country is paid on arrival.</div>`);
+    document.querySelectorAll("[data-kp]").forEach(b=>b.innerHTML="+ "+pm(+b.dataset.kp));
+    $("kFee").innerHTML=pm(tot)+(del===null?" + shipping":"");$("kFee").dataset.aed="AED "+tot.toLocaleString("en-US")+(del===null?" + shipping":"")};
+  window.kalaiKidsFee=fee;
+  // Every country once the list has loaded (account.js); UAE and India first.
+  window.kalaiKidsCountries=list=>{const s=$("kCountry"),v=s.value;s.innerHTML=list.map((c,i)=>`${i===2?"<option disabled>──────────</option>":""}<option value="${c.key.replace(/"/g,"&quot;")}">${c.name}</option>`).join("");s.value=v||"UAE";fee()};
+  if(window.kalaiCountries)window.kalaiKidsCountries(window.kalaiCountries);
+  $("kCountry").addEventListener("change",()=>{$("kEmBox").hidden=!uae();$("kRegBox").hidden=uae();fee()});
   $("kDraw").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Uploaded drawing";$("kMount").replaceChildren(im)};r.readAsDataURL(f)});
   document.querySelectorAll('input[name="kf"]').forEach(x=>x.addEventListener("change",()=>{$("kFrame").className="kframe "+(x.value==="wood"?"":x.value)}));
   ["kName","kAge","kMsg","kTo"].forEach(id=>$(id).addEventListener("input",plate));
   ["kEmirate","kAge"].forEach(id=>$(id).addEventListener("change",fee));document.querySelectorAll('[id^="kx-"]').forEach(x=>x.addEventListener("change",fee));fee();
   $("kidsForm").addEventListener("submit",e=>{e.preventDefault();const ok=$("kOk");ok.hidden=false;
-    const need=[["kDraw","the drawing"],["kName","your child's first name"],["kTo","who the gift is for"],["kAddr","the delivery address"],["kParent","your name"],["kPhone","your mobile"]].filter(([id])=>id==="kDraw"?!$(id).files.length:!$(id).value.trim()).map(x=>x[1]);
+    const need=[...(uae()?[]:[["kRegion","the state, province or city"]]),["kDraw","the drawing"],["kName","your child's first name"],["kTo","who the gift is for"],["kAddr","the delivery address"],["kParent","your name"],["kPhone","your mobile"]].filter(([id])=>id==="kDraw"?!$(id).files.length:!$(id).value.trim()).map(x=>x[1]);
     if(need.length){ok.style.color="var(--kumkum)";ok.textContent="Please add "+need.join(", ")+".";return}
     if(!$("kConsent").checked){ok.style.color="var(--kumkum)";ok.textContent="Please confirm you are the parent or guardian before sending.";return}
     const df=$("kDraw").files[0];if(!/^image\//.test(df.type||"image/")||df.size>15*1024*1024){ok.style.color="var(--kumkum)";ok.textContent="The drawing must be a photo (JPG or PNG) up to 15 MB.";return}
     if(needSignIn(ok))return;
     const extras=[...document.querySelectorAll('[id^="kx-"]:checked')].map(x=>x.parentElement.querySelector("span").firstChild.textContent.trim()).join(", ");
-    const url=sendEnquiry("Little Artists gift",{"Child":$("kName").value.trim()+", age "+$("kAge").value,"Gift for":$("kTo").value.trim(),"Emirate":$("kEmirate").selectedOptions[0].text,"Address":$("kAddr").value.trim(),"Frame":document.querySelector('input[name="kf"]:checked').value,"Extras":extras,"Card message":$("kMsg").value.trim(),"Parent":$("kParent").value.trim(),"Mobile":$("kPhone").value.trim(),"Total":$("kFee").textContent,"Consent":"Parent/guardian confirmed"},[["Drawing",$("kDraw").files[0]]]);
-    ok.style.color="var(--fg)";ok.textContent="Thank you. We've received the drawing, and you can follow this under My enquiries & orders. We'll WhatsApp you a secure payment link for "+$("kFee").textContent+", and the framed drawing reaches "+$("kTo").value.trim()+" 5 to 7 days after payment. If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
+    const url=sendEnquiry("Little Artists gift",{"Child":$("kName").value.trim()+", age "+$("kAge").value,"Gift for":$("kTo").value.trim(),"Country":$("kCountry").value,[uae()?"Emirate":"State / city"]:uae()?$("kEmirate").selectedOptions[0].text:$("kRegion").value.trim(),"Delivery charge":delivery()===null?"to quote ("+ZNAME[zoneOf($("kCountry").value)]+")":"AED "+delivery(),"Address":$("kAddr").value.trim(),"Frame":document.querySelector('input[name="kf"]:checked').value,"Extras":extras,"Card message":$("kMsg").value.trim(),"Parent":$("kParent").value.trim(),"Mobile":$("kPhone").value.trim(),"Total":$("kFee").dataset.aed,"Consent":"Parent/guardian confirmed"},[["Drawing",$("kDraw").files[0]]]);
+    ok.style.color="var(--fg)";ok.textContent="Thank you. We've received the drawing, and you can follow this under My enquiries & orders. We'll WhatsApp you a secure payment link for "+$("kFee").dataset.aed+(uae()?", and the framed drawing reaches "+$("kTo").value.trim()+" 5 to 7 days after payment.":", and we'll confirm the shipping and delivery time to "+$("kCountry").value+" with it.")+" If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
 })();
 
 /* little artists around the world (illustrations) */
@@ -1120,7 +1141,7 @@ drawChips();drawGrid();updateCount();
 (function(){const btn=document.getElementById("curBtn"),menu=document.getElementById("curMenu");if(!btn)return;
   const label=k=>k==="USD"?"$ USD":k==="INR"?"₹ INR":DHS_SIGN+" AED";
   const paint=()=>{btn.innerHTML=label(CUR)+" ▾";menu.querySelector('[data-cur="AED"]').innerHTML=DHS_SIGN+" AED";};paint();
-  window.kalaiRedrawPrices=()=>{drawGrid();if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
+  window.kalaiRedrawPrices=()=>{drawGrid();window.kalaiKidsFee?.();if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
   btn.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden;btn.setAttribute("aria-expanded",String(!menu.hidden))};
   document.addEventListener("click",()=>{menu.hidden=true;btn.setAttribute("aria-expanded","false")});
   menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();

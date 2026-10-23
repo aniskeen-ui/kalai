@@ -8,7 +8,10 @@ import {
 import { Hub } from 'aws-amplify/utils';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
-import { autoPhones, countryRegionHtml, wireRegion, addressLine } from './phone.js';
+import { autoPhones, countryRegionHtml, wireRegion, addressLine, COUNTRIES } from './phone.js';
+// Every country for the Little Artists form (index.html).
+window.kalaiCountries = COUNTRIES;
+window.kalaiKidsCountries?.(COUNTRIES);
 import { cleanTitle } from './title.js';
 
 autoPhones();
@@ -24,6 +27,7 @@ let kuralSec = 10;
     if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
     if (st.inrPerAed) window.kalaiInrPerAed = Number(st.inrPerAed);
     window.kalaiRound = { usd: Number(st.usdRound) || 5, inr: Number(st.inrRound) || 50, up: st.roundUp === true, approx: st.approxSign !== false };
+    try { window.kalaiShipZones = JSON.parse(st.shipZones || '{}') || {}; } catch { window.kalaiShipZones = {}; }
     window.kalaiRedrawPrices?.();
     if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
     // Home page texts from Order Management → Settings (blank = keep the built-in text).
