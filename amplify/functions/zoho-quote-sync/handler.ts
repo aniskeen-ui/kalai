@@ -2074,7 +2074,15 @@ async function assignJob(action: string, d: Dict) {
   return { jobs };
 }
 
-const PRIVATE_KEYS = ['Name', 'Mobile', 'Email', 'Parent', 'Consent', 'Address', 'Reference', 'Estimate', 'Total', 'Price', 'Delivery charge', 'Message'];
+// What each supplier may see of the customer's order. Frame shops: the frame spec only (never the customer's price or
+// offer). Delivery partners: just the parcel (framed work and its size), never frame or price details.
+const FRAMER_KEYS = ['Artwork', 'Size', 'Framing', 'Frame', 'Frame tried on the website', 'Style', 'Extras', 'Card message', 'Child', 'Gift for'];
+function parcelOf(det: Record<string, string>) {
+  const m = String(det['Framing'] || '').match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/);
+  if (m) return `Framed work, ${m[1]}×${m[2]} cm`;
+  if (det['Child']) return /A3|Large size/i.test(String(det['Extras'] || '')) ? 'Framed drawing, A3' : 'Framed drawing, A4';
+  return /unframed/i.test(String(det['Framing'] || '')) ? 'Unframed artwork (flat or rolled)' : 'Framed work';
+}
 /** What a supplier sees of one order. */
 function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile: Dict | null) {
   const j = jobs[role]!;
@@ -2085,8 +2093,8 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
     stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
-    specs: Object.entries(det).filter(([k, v]) => v && !PRIVATE_KEYS.includes(k)).map(([k, v]) => [k, String(v).slice(0, 300)]),
-    hasPhoto: !!str(e, 'fileKey') || str(e, 'kind') === 'PRICE',
+    specs: role === 'framer' ? FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)]) : [['Parcel', parcelOf(det)]],
+    hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || str(e, 'kind') === 'PRICE'),
     to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
     from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
       : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'Studio, Dubai (we confirm the pickup point)', ready: true }) : null,
@@ -2131,6 +2139,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   const ref = str(e, 'ref'), now = new Date().toISOString(), by = String(profile.business || profile.contactName);
   const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const fp = role === 'delivery' && js.framer ? plain(await getRow(S, { id: { S: js.framer.supplierId } })) : null; return { job: jobView(fresh!, js, role, fp) }; };
   if (action === 'jobPhoto') {
+    if (role !== 'framer') throw new Error('The artwork photo is for the frame shop.');
     const bucket = process.env.UPLOADS_BUCKET;
     if (!bucket) throw new Error('Not configured');
     let key = str(e, 'fileKey');
