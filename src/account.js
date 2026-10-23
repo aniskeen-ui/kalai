@@ -838,14 +838,14 @@ async function showDailyMessage() {
     let picture = '/valluvar.svg';
     if (kural) { try { picture = (await getUrl({ path: 'catalogue/site/thiruvalluvar.jpg', options: { expiresIn: 3600, validateObjectExistence: true } })).url.toString(); } catch { picture = '/valluvar.svg'; } }
     box.innerHTML = `${kural ? `<div class="kmsg-img"><img alt="Thiruvalluvar" src="${esc(picture)}" onerror="this.onerror=null;this.src='/valluvar.svg'"></div>` : ''}
-      <div class="kmsg-head"><b></b><span class="kmsg-langs">${langs.map((l) => `<button type="button" data-l="${l}">${LANG_LABEL[l]}</button>`).join('')}</span><button class="kmsg-x" type="button" aria-label="Close">×</button></div>
+      <div class="kmsg-head"><b></b><button class="kmsg-x" type="button" aria-label="Close">×</button></div>
       <p></p>${langs.length > 1 ? '<div class="kmsg-bar" aria-hidden="true"><i></i></div>' : ''}`;
     const p = box.querySelector('p'), bar = box.querySelector('.kmsg-bar i');
     const show = (l, fade = true) => {
       lang = l;
       const put = () => {
         box.setAttribute('lang', lang); p.dir = lang === 'ar' ? 'rtl' : 'ltr'; p.style.textAlign = lang === 'ar' ? 'right' : '';
-        box.querySelector('.kmsg-head b').textContent = title(lang);
+        const hb = box.querySelector('.kmsg-head b'); hb.textContent = title(lang); hb.dir = p.dir;
         p.textContent = m[lang];
         box.querySelectorAll('[data-l]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.l === lang)));
         tab.textContent = `${kural ? '📜' : '📢'} ${title(lang)}`;
@@ -861,7 +861,8 @@ async function showDailyMessage() {
     window.kalaiKuralRestart = restart;
     box.addEventListener('mouseenter', () => { paused = true; bar?.classList.remove('run'); });
     box.addEventListener('mouseleave', () => { paused = false; restart(); if (bar) { void bar.offsetWidth; bar.classList.add('run'); } });
-    box.querySelectorAll('[data-l]').forEach((b) => { b.onclick = () => { show(b.dataset.l); restart(); }; });
+    // Tap the card to go to the next language now.
+    p.style.cursor = langs.length > 1 ? 'pointer' : ''; p.title = langs.length > 1 ? 'Next language' : ''; p.onclick = () => { if (langs.length > 1) { show(langs[(langs.indexOf(lang) + 1) % langs.length]); restart(); } };
     box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); };
     tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); show(lang, false); restart(); };
     show(lang, false);
