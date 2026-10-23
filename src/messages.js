@@ -28,7 +28,25 @@ const localInput = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).
 
 export async function showMessages() {
   if (!wired) { wire(); wired = true; }
+  kuralStatus();
   await load();
+}
+
+// Today's Thirukkural: published or not, and what it says. Publishing is automatic (Settings → Timings).
+async function kuralStatus() {
+  const box = $('kuralStatus');
+  const day = new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10);
+  try {
+    const [k, st] = await Promise.all([client.models.Announcement.get({ id: `kural-${day}` }), client.models.SiteSetting.get({ id: 'site' }).catch(() => null)]);
+    const hour = st?.data?.kuralHour ?? 6, at = `${String(hour).padStart(2, '0')}:05`;
+    const a = k.data;
+    box.innerHTML = a
+      ? `<b style="color:var(--ok)">✓ Today's Thirukkural is on the website</b> <span class="muted">${esc(a.ref || '')}</span>
+         <div class="kt" lang="ta">${esc(a.ta || '')}</div><div class="kt">${esc(a.en || '')}</div>
+         <span class="muted" style="font-size:12px">Nothing to do: tomorrow's goes up by itself at ${at} Dubai time.</span>`
+      : `<b>Today's Thirukkural is not on the website yet.</b>
+         <span>It goes up by itself at <b>${at}</b> Dubai time (change it in Settings → Timings). To put it up now, press <b>Publish today's Thirukkural now</b> above.</span>`;
+  } catch (ex) { box.innerHTML = `<span class="err">${esc(ex.message)}</span>`; }
 }
 
 async function load() {
@@ -86,14 +104,14 @@ function wire() {
   };
   $('tvReset').onclick = async () => { try { await remove({ path: TV_KEY }); } catch { /* already gone */ } await tvShow(); };
   $('kuralNow').onclick = async () => {
-    const b = $('kuralNow'); b.disabled = true; $('msgMsg').textContent = 'Fetching today\'s Thirukkural…';
+    const b = $('kuralNow'); b.disabled = true; $('kuralStatus').innerHTML = '<span class="muted">Publishing today\'s Thirukkural…</span>';
     try {
       const r = await client.mutations.dailyKural({ action: 'now' });
       if (r.errors?.length) throw new Error(r.errors[0].message);
       const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-      $('msgMsg').textContent = `Thirukkural ${out.n} is on the website now.`;
+      await kuralStatus();
       await load();
-    } catch (ex) { $('msgMsg').textContent = 'Could not publish: ' + (ex.message || ex); } finally { b.disabled = false; }
+    } catch (ex) { $('kuralStatus').innerHTML = `<span class="err">Could not publish: ${esc(ex.message || String(ex))}</span>`; } finally { b.disabled = false; }
   };
   ['msgTa', 'msgEn', 'msgAr'].forEach((id) => $(id).addEventListener('input', preview));
   $('msgPrevLang').onchange = preview;

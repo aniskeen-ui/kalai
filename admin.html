@@ -156,6 +156,8 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .dtop{display:flex;gap:16px;align-items:flex-start}.dtop-main{flex:1;min-width:0;display:grid;gap:12px}.dthumb{flex:0 0 auto;width:170px;display:grid;gap:4px;text-decoration:none;color:var(--muted);font-size:11px;text-align:center}.dthumb img{width:170px;height:170px;object-fit:contain;background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:4px}@media (max-width:700px){.dtop{flex-direction:column-reverse}.dthumb,.dthumb img{width:100%}.dthumb img{height:220px}}
 .dhs{width:1.05em;height:.9em;vertical-align:-.1em;margin-right:.12em}
 .cg-webprice{font-size:12px;align-self:center;white-space:nowrap}
+.kstat{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:8px;padding:12px 14px;margin:0 0 14px;display:grid;gap:6px;font-size:14px}.kstat .kt{white-space:pre-line;font-size:15px}
+.old-msgs{margin-top:10px}.old-msgs>summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:10px}
 .marketline{font-size:12.5px;background:var(--sunk);border-left:3px solid var(--gold);padding:6px 9px;border-radius:4px;line-height:1.5}.warn-t{color:var(--kumkum)}.ok-t{color:var(--ok)}
 .warnline{font-size:12px;border-left:3px solid var(--gold);padding-left:8px}
 @media (max-width:480px){.three{grid-template-columns:1fr}}
@@ -319,11 +321,13 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 
     <div id="messagesPane" hidden>
       <div class="bar"><h1 style="font-size:28px;margin-right:auto">Thirukkural of the day</h1><button class="btn small ghost" id="kuralNow" type="button">Publish today's Thirukkural now</button></div>
-      <p class="muted" style="font-size:12px;margin:0 0 8px">Automatic: every day, at the hour set in <b>Settings → Timings</b> (6 am unless you change it), the website publishes the <b>Thirukkural of the day</b> (Aram and Porul only) in Tamil, English and Arabic. Nothing to type. If today's card is missing, press <b>Publish today's Thirukkural now</b> (top right). The form below is for your own notes only: the card on the website shows the daily Thirukkural, not these messages.</p>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">Fully automatic: every day the website puts up the next Thirukkural (Aram and Porul) in Tamil, English and Arabic, at the hour set in <b>Settings → Timings</b>. You don't need to type anything here.</p>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px"><img id="tvImg" alt="Thiruvalluvar picture" src="/valluvar.svg" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)">
         <span style="font-size:13px"><b>Thiruvalluvar picture</b> on the Thirukkural card<br><span class="muted" id="tvNote">Our emblem. Upload a picture you have the right to use (square works best).</span></span>
         <label class="btn small ghost" style="cursor:pointer">Upload picture<input id="tvFile" type="file" accept="image/*" hidden></label>
         <button class="btn small ghost" id="tvReset" type="button" hidden>Use the emblem</button></div>
+      <div id="kuralStatus" class="kstat"><span class="muted">Checking today's Thirukkural…</span></div>
+      <details class="old-msgs"><summary>Old hand-written messages (not shown on the website)</summary>
       <div class="msg-edit">
         <div class="msg-form">
           <div class="field"><label for="msgSrc">I'm writing in</label><select id="msgSrc" style="width:auto"><option value="ta">Tamil</option><option value="en">English</option></select></div>
@@ -342,6 +346,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
       </div>
       <h2 style="font-size:20px;margin:18px 0 8px">Messages</h2>
       <div id="msgList" style="display:grid;gap:8px"></div>
+      </details>
     </div>
 
     <div id="feedbackPane" hidden>
