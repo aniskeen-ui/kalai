@@ -175,30 +175,33 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .dstat.bad{background:var(--kumkum);color:#fff}
 /* Read-only fields (closed orders, locked sections): clearly greyed out. */
 #editForm input:disabled,#editForm select:disabled,#editForm textarea:disabled{background:var(--sunk);color:var(--muted);cursor:not-allowed;opacity:1}
-/* Document flow (below the order list) */
-.flowcard{border-radius:16px;padding:16px 18px;background:linear-gradient(135deg,#fdf6ff 0%,#eef7ff 50%,#f2fbf3 100%);border:1px solid #e3dcf3;box-shadow:0 6px 22px rgba(60,40,120,.08)}
-:root[data-theme="dark"] .flowcard{background:linear-gradient(135deg,#231c33,#1a2433 50%,#1b2a20);border-color:#3a3352}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .flowcard{background:linear-gradient(135deg,#231c33,#1a2433 50%,#1b2a20);border-color:#3a3352}}
-.flowhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.flowhead h3{margin:0;font-size:17px;background:linear-gradient(90deg,#7c3aed,#0f766e);-webkit-background-clip:text;background-clip:text;color:transparent}
+/* Order list: its own scroll bar (drag it down), and the bottom edge drags to make the list taller or shorter */
+.deskL>.tablewrap{max-height:min(68vh,760px);overflow:auto;resize:vertical;min-height:220px;scrollbar-width:auto;scrollbar-color:#3f8f2e #e6eedc}
+.deskL>.tablewrap::-webkit-scrollbar{width:14px;height:14px}
+.deskL>.tablewrap::-webkit-scrollbar-thumb{background:linear-gradient(#7fbf3f,#2f7d32);border-radius:8px;border:3px solid #e6eedc}
+.deskL>.tablewrap::-webkit-scrollbar-track{background:#e6eedc;border-radius:8px}
+.deskL>.tablewrap thead th{position:sticky;top:0;z-index:1;background:var(--surface)}
+/* Document flow (below the order list): dark card */
+.flowcard{border-radius:16px;padding:16px 18px;background:radial-gradient(120% 140% at 0% 0%,#2a1b4d 0%,#141a33 45%,#0d2a26 100%);border:1px solid #3b2f63;box-shadow:0 10px 30px rgba(20,10,50,.35);color:#eef0ff}
+.flowhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.flowhead h3{margin:0;font-size:18px;background:linear-gradient(90deg,#c4b5fd,#5eead4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.flowcard .muted{color:#a9b0d6}
 .dflow{display:grid;gap:10px}
-.dfl{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.55);border-left:5px solid var(--lc)}
-:root[data-theme="dark"] .dfl{background:rgba(255,255,255,.04)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .dfl{background:rgba(255,255,255,.04)}}
-.dfl.cust{--lc:#0ea5a4}.dfl.art{--lc:#8b5cf6}.dfl.sup{--lc:#f59e0b}
+.dfl{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;padding:9px 11px;border-radius:12px;background:rgba(255,255,255,.05);border-left:5px solid var(--lc)}
+.dfl.cust{--lc:#2dd4bf}.dfl.art{--lc:#a78bfa}.dfl.sup{--lc:#fbbf24}
 .dft{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--lc)}
-.dft i{font-style:normal;font-size:16px;display:block;margin-bottom:2px}
+.dft i{font-style:normal;font-size:18px;display:block;margin-bottom:2px}
 .dfr{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .dfa{color:var(--lc);font-size:16px;font-weight:700}
-.df{position:relative;display:grid;gap:1px;min-width:108px;padding:7px 20px 7px 34px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);font-size:11px;color:var(--fg);text-decoration:none;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .12s}
+.df{position:relative;display:grid;gap:1px;min-width:108px;padding:7px 20px 7px 34px;border-radius:10px;border:1.5px solid #4a4f7a;background:#1d2244;font-size:11px;color:#eef0ff;text-decoration:none;line-height:1.3;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:transform .12s}
 a.df[href]:hover{transform:translateY(-2px)}
 .df .ic{position:absolute;left:8px;top:7px;font-size:16px}
-.df b{font-size:12px}.df span{color:var(--muted)}
+.df b{font-size:12px;color:#fff}.df span{color:#b9bfe6}
 .df .tag{position:absolute;right:6px;top:5px;font-size:10px;font-weight:800}
-.df.done{border-color:#16a34a;background:color-mix(in srgb,#16a34a 9%,var(--surface))}.df.done .tag{color:#16a34a}
-.df.draft{border-color:#eab308;background:color-mix(in srgb,#eab308 10%,var(--surface))}.df.draft .tag{color:#b8860b}
-.df.todo{border-style:dashed;opacity:.65}
-.df.void{border-color:var(--kumkum);text-decoration:line-through}
+.df.done{border-color:#22c55e;background:linear-gradient(180deg,#123b29,#0f2e22)}.df.done .tag{color:#4ade80}
+.df.draft{border-color:#facc15;background:linear-gradient(180deg,#3a3212,#2c260f)}.df.draft .tag{color:#fde047}
+.df.todo{border-style:dashed;background:transparent;opacity:.7}
+.df.void{border-color:#f87171;text-decoration:line-through}
 @media (max-width:640px){.dfl{grid-template-columns:1fr}}
 </style>
 </head>
