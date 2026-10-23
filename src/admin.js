@@ -198,6 +198,7 @@ $('tabSellers').onclick = () => showPane('sellers', 'tabSellers');
 $('tabOffers').onclick = () => showPane('offers', 'tabOffers');
 $('tabSettings').onclick = () => showPane('settings', 'tabSettings');
 $('tabPricing').onclick = () => showPane('pricing', 'tabPricing');
+document.addEventListener('click', (ev) => { if (ev.target.closest?.('[data-goprice]')) { ev.preventDefault(); showPane('pricing', 'tabPricing'); } });
 
 // ---------- tabs: Orders · Reports · Rates ----------
 function showPane(pane, tabId) {

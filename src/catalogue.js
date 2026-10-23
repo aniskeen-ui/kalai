@@ -94,7 +94,7 @@ function row(p) {
         <select data-f="subject" aria-label="Subject">${opt(SUBJECTS, p.subject || 'land')}</select>
         <input data-f="size" value="${esc(p.size)}" placeholder="Size, e.g. 38 × 28 cm" aria-label="Size">
         <input data-f="medium" value="${esc(p.medium)}" placeholder="Medium" aria-label="Medium">
-        <input data-f="priceAed" type="number" min="0" step="1" value="${p.priceAed ?? ''}" placeholder="Your price AED (internal)" aria-label="Price AED">
+        <span class="cg-webprice" title="Prices are set and changed only in the Pricing tab">${webPrice(p)}</span>
         <label style="display:inline-flex;gap:5px;align-items:center;font-size:12px;font-weight:400;white-space:nowrap" title="The picture is an AI-made preview; the artist paints the order by hand"><input data-f="aiPreview" type="checkbox" ${p.aiPreview ? 'checked' : ''} style="width:auto"> AI preview</label>
       </div>
       <textarea data-f="description" rows="1" placeholder="Short description shown on the website" aria-label="Description">${esc(p.description)}</textarea>
@@ -160,6 +160,12 @@ function slot(startDate, n) {
 function titlesText(all) {
   return items.filter((p) => p.status !== 'HIDDEN' && (all || !p.named)).sort((a, b) => String(a.code).localeCompare(String(b.code)))
     .map((p) => { const s = SUGGEST[p.code]; return [p.code || p.id, s ? s[0] : p.named ? p.title : '', s ? s[1] : p.subject || '', s ? s[2] : p.description || '', p.aiPreview || AI_LOOK.has(p.code) ? 'ai' : ''].join(' | ').replace(/ \| $/, ''); }).join('\n');
+}
+// The price the website shows now (black frame, base size), read-only here: prices change only in the Pricing tab.
+function webPrice(p) {
+  let m = null; try { m = p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { m = null; }
+  const v = !m ? null : m.v === 2 ? m.sizes?.[m.base]?.black : m.black;
+  return v ? `Website: <b>Dhs ${Number(v).toLocaleString('en-GB')}</b>${m.v === 2 ? ` · black frame ${esc(m.base)}` : ''} · <a href="#pricing" data-goprice>change in Pricing</a>` : 'Website: price on request · <a href="#pricing" data-goprice>set in Pricing</a>';
 }
 function wireTitles() {
   $('cgTitlesBtn').onclick = () => { $('cgTitlesBox').hidden = false; $('cgTitles').value = titlesText(false) || titlesText(true); $('cgTitlesMsg').textContent = ''; };

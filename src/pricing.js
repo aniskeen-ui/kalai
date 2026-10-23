@@ -247,8 +247,10 @@ function drawCalc(w) {
   const m = matrixOf(w);
   const o = { tier: saved.tier || tierOf(w.size), fsize: (m?.v === 2 && m.base) || saved.fsize || fitFrame(w.size), artist: ap?.artistPrice ?? null, courier: saved.courier ?? null, margin: saved.margin ?? null };
   const box = $('pcCalc');
+  let fresh = stateOf(w)[0] !== 'CHANGED'; // first view: show the prices now on the website; after any change: the recalculated ones
   const render = () => {
     const b = build(w, o);
+    const lift = b.artistAed == null ? 0 : marketOf(w, b).proposed - b.styles.black.price; // market lift on every style
     const md = mediumOf(w), mk = market[b.tier] || DEFAULT_MARKET[b.tier], band = mk?.[md] || [0, 0];
     const cell = (fn) => STYLES.map((s) => `<td class="num mono">${b.styles[s.k] ? fn(b.styles[s.k], s) : '–'}</td>`).join('');
     box.innerHTML = `<div class="pc-calc">
@@ -271,8 +273,10 @@ function drawCalc(w) {
         <tr class="tot"><td>Total cost</td>${cell((x) => Math.round(x.cost))}</tr>
         <tr><td>Margin ${Math.round(b.margin * 100)}%</td>${cell((x) => Math.round(x.marginAmt))}</tr>
         <tr><td>Card charges, insurance, reserve ${(((P.fee || 0) + (P.ins || 0) + (P.reserve || 0)) * 100).toFixed(1)}%</td>${cell((x) => Math.round(x.cardAmt))}</tr>
-        <tr class="tot"><td>Suggested price</td>${cell((x) => x.price)}</tr>
-        <tr class="pc-final"><td><b>Final price on website</b></td>${STYLES.map((s) => `<td><input data-final="${s.k}" type="number" min="0" step="1" value="${basePrice(m, s.k) ?? b.styles[s.k].price}" style="width:84px"></td>`).join('')}</tr>
+        <tr class="tot"><td>Cost-based price</td>${cell((x) => x.price)}</tr>
+        <tr><td>Proposed price (after market check)</td>${cell((x) => x.price + lift)}</tr>
+        ${m ? `<tr><td>Now on the website${m.v === 2 ? ` (${esc(m.base)})` : ''}</td>${STYLES.map((s) => `<td class="num mono">${basePrice(m, s.k) ?? '–'}</td>`).join('')}</tr>` : ''}
+        <tr class="pc-final"><td><b>New price for the website</b><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn small ghost" id="pcUseProp">= proposed</button><button type="button" class="btn small ghost" id="pcUseCost">= cost-based</button>${m ? '<button type="button" class="btn small ghost" id="pcUseNow">= now on website</button>' : ''}</div></td>${STYLES.map((s) => `<td><input data-final="${s.k}" type="number" min="0" step="1" value="${fresh && m ? basePrice(m, s.k) ?? b.styles[s.k].price + lift : b.styles[s.k].price + lift}" style="width:84px"></td>`).join('')}</tr>
         <tr><td>Your margin at that price</td>${STYLES.map((s) => `<td class="num mono" data-mg="${s.k}"></td>`).join('')}</tr>
       </tbody></table></div>
       <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>Bigger frames (customer's choice), ${DHS}</th>${STYLES.filter((s) => s.k !== 'none').map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody id="pcSizes"></tbody></table></div>
@@ -285,7 +289,7 @@ function drawCalc(w) {
         ${m ? '<button class="btn ghost small" type="button" id="pcRemove">Remove price (back to "Ask for price")</button>' : ''}
         <span class="muted" id="pcMsg" style="font-size:13px"></span></div>`}
     </div>`;
-    const re = () => { o.artist = num($('pcA').value); o.tier = $('pcT').value; o.fsize = $('pcF').value; o.courier = num($('pcC').value); o.margin = num($('pcM').value) != null ? num($('pcM').value) / 100 : null; render(); };
+    const re = () => { fresh = false; o.artist = num($('pcA').value); o.tier = $('pcT').value; o.fsize = $('pcF').value; o.courier = num($('pcC').value); o.margin = num($('pcM').value) != null ? num($('pcM').value) / 100 : null; render(); };
     ['pcA', 'pcC', 'pcM'].forEach((id) => $(id).addEventListener('change', re)); $('pcT').addEventListener('change', re); $('pcF').addEventListener('change', re);
     if (b.artistAed == null) return;
     // Prices for every frame size from the base one: base final price + (extra frame cost × margin ÷ card share), to Dhs 25.
@@ -314,6 +318,10 @@ function drawCalc(w) {
       $('pcVerdict').innerHTML = bp < band[0] ? `black-frame price ${aed(bp)} is <b class="warn-t">below the band</b>` : bp > band[1] ? `black-frame price ${aed(bp)} is <b class="warn-t">above the band</b>` : `black-frame price ${aed(bp)} is <b class="ok-t">inside the band</b>`;
     };
     box.querySelectorAll('[data-final]').forEach((i) => i.addEventListener('input', check)); check();
+    const setFinals = (fn) => { STYLES.forEach((s) => { box.querySelector(`[data-final="${s.k}"]`).value = fn(s); }); check(); };
+    $('pcUseProp').onclick = () => setFinals((s) => b.styles[s.k].price + lift);
+    $('pcUseCost').onclick = () => setFinals((s) => b.styles[s.k].price);
+    if ($('pcUseNow')) $('pcUseNow').onclick = () => setFinals((s) => basePrice(m, s.k) ?? b.styles[s.k].price);
     $('pcBand').onclick = () => {
       // Lift every frame style by the same amount, so the black frame sits mid-band.
       const target = Math.ceil((band[0] + band[1]) / 2 / 25) * 25, diff = target - b.styles.black.price;
