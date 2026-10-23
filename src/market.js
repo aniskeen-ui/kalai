@@ -82,7 +82,7 @@ function draw() {
       || '<p class="muted">Nothing waiting for approval.</p>';
   } else if (view === 'suppliers') {
     const these = sellers.filter(SUP).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
-    html = these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>';
+    html = addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
   } else if (view === 'artists' || view === 'sellers') {
     const wantArtist = view === 'artists';
     const these = sellers.filter((s) => !SUP(s) && (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
@@ -97,10 +97,26 @@ function draw() {
 }
 
 const samplesOf = (s) => { try { return JSON.parse(s.sampleKeys || '[]'); } catch { return []; } };
+// WhatsApp link with the message typed in (opens WhatsApp on this device; you press Send).
+const waLink = (phone, text) => { const n = String(phone || '').replace(/[^\d]/g, '').replace(/^00/, '').replace(/^0(?=5)/, '971'); return n.length >= 9 ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : ''; };
+const inviteText = (s) => `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We'd like to work with ${s.business} as our ${s.type === 'FRAMER' ? 'framing' : 'delivery'} partner. Please create an account on our supplier portal with ${s.email ? `your email ${s.email}` : 'your email'}: art.pranixtechno.com/supplier.html. Your business is already set up there; please add your ${s.type === 'FRAMER' ? 'price list (frame price per style and size, fixing charge, and delivery charge if you deliver)' : 'delivery charges to each emirate'}. Thank you!`;
+function addSupplierForm() {
+  const f = (id, label, attrs = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" ${attrs}></div>`;
+  return `<details class="mk-card" id="addSup"><summary style="cursor:pointer;font-weight:600">+ Add a frame shop or delivery partner yourself</summary>
+    <form id="addSupForm" novalidate style="display:grid;gap:8px;margin-top:10px">
+      <div class="field"><label for="asType">Type</label><select id="asType"><option value="FRAMER">Frame shop</option><option value="COURIER">Delivery partner / courier</option></select></div>
+      ${f('asBiz', 'Business name', 'maxlength="120"')}${f('asName', 'Contact person', 'maxlength="80"')}${f('asPhone', 'Mobile / WhatsApp', 'maxlength="30" placeholder="+971 50 123 4567"')}
+      ${f('asEmail', 'Email (they sign up with it to use the portal; optional)', 'type="email" maxlength="120"')}
+      <div class="field"><label for="asEm">Emirate</label><select id="asEm">${['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'].map((x) => `<option>${x}</option>`).join('')}</select></div>
+      ${f('asAddr', 'Workshop / pickup address', 'maxlength="300"')}${f('asAbout', 'Services and notes', 'maxlength="2000"')}${f('asLic', 'Trade licence no. (optional)', 'maxlength="60"')}${f('asIban', 'IBAN (optional)', 'maxlength="40"')}
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn small" type="submit">Add (approved)</button><span class="muted" id="asMsg"></span></div>
+      <div class="muted" style="font-size:12px">Then use “Open their portal” to enter their price list, and send them the WhatsApp or email invite so they can sign in themselves.</div>
+    </form></details>`;
+}
 function supplierCard(s) {
   const fr = s.type === 'FRAMER';
   return `<article class="mk-card" data-seller="${esc(s.id)}">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge SCHEDULED">${fr ? 'Frame shop' : 'Delivery partner'}</span><span class="cg-badge ${esc(s.status)}">${esc(SST[s.status] || s.status)}</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge SCHEDULED">${fr ? 'Frame shop' : 'Delivery partner'}</span>${!s.owner ? '<span class="cg-badge DRAFT" title="Added by you; they have not signed in yet">No login yet</span>' : ''}<span class="cg-badge ${esc(s.status)}">${esc(SST[s.status] || s.status)}</span>
       <span class="muted" style="margin-left:auto">Applied ${esc(day(s.appliedAt))}</span></div>
     <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
     <div style="white-space:pre-wrap"><b>Services:</b> ${esc(s.about)}</div>
@@ -111,7 +127,9 @@ function supplierCard(s) {
       ${s.status === 'APPROVED' ? '<button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
         : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`}
-      <a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open their portal</a>
+      <a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open their portal${!s.owner ? ' (price list, jobs)' : ''}</a>
+      ${waLink(s.phone, inviteText(s)) ? `<a class="btn small ghost" href="${waLink(s.phone, inviteText(s))}" target="_blank" rel="noopener">WhatsApp invite</a>` : ''}
+      ${s.email ? '<button class="btn small ghost" data-a="inviteSupplier" type="button">Email invite</button>' : ''}
       <span class="muted" data-msg></span>
     </div></article>`;
 }
@@ -181,6 +199,19 @@ function listingCard(l) {
 }
 
 function wireCards() {
+  const form = $('addSupForm');
+  if (form) form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const v = (id) => $(id).value.trim();
+    const data = { type: $('asType').value, business: v('asBiz'), contactName: v('asName'), phone: v('asPhone'), email: v('asEmail'), emirate: $('asEm').value, address: v('asAddr'), about: v('asAbout'), tradeLicence: v('asLic'), iban: v('asIban') };
+    const b = form.querySelector('button'); b.disabled = true; $('asMsg').textContent = 'Adding…';
+    try {
+      const r = await act('addSupplier', data);
+      sellers = [r.profile, ...sellers];
+      draw();
+      $('asMsg') && ($('asMsg').textContent = '');
+    } catch (ex) { $('asMsg').textContent = ex.message; b.disabled = false; }
+  };
   document.querySelectorAll('#mkBody img[data-key]').forEach(async (img) => {
     const k = img.dataset.key;
     if (!urls.has(k)) urls.set(k, getUrl({ path: k, options: { expiresIn: 3600 } }).then((r) => r.url.toString()).catch(() => ''));
@@ -203,6 +234,7 @@ function wireCards() {
         const r = await act(a, data);
         if (r.profile) sellers = sellers.map((s) => (s.id === id ? { ...s, ...r.profile } : s));
         if (r.listing) listings = listings.map((l) => (l.id === id ? { ...l, ...r.listing } : l));
+        if (a === 'inviteSupplier') { msg.textContent = 'Invite emailed.'; card.querySelectorAll('button').forEach((x) => { x.disabled = false; }); return; }
         if (a === 'suspendSeller') await load(); else draw();
       } catch (ex) { msg.textContent = ex.message; card.querySelectorAll('button').forEach((x) => { x.disabled = false; }); }
     };

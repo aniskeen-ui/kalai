@@ -1822,7 +1822,25 @@ async function sellerAction(ev: ApiEvent) {
     if (!p) throw new Error('Portal not found');
     me = { sub: viewAs, owner: String(p.owner ?? ''), email: String(p.email ?? '') };
   }
-  const profile = plain(await getRow(S, { id: { S: me.sub } }));
+  let profile = plain(await getRow(S, { id: { S: me.sub } }));
+  // A frame shop / delivery partner the studio added by hand: the first time it signs in with that email, the
+  // profile (and its jobs) becomes this login's.
+  if (!profile && action === 'me' && me.email && !viewAs) {
+    const added = (await scanAll(S)).map(plain).find((p) => p && !p.owner && String(p.id).startsWith('sup-') && String(p.email ?? '').toLowerCase() === me.email.toLowerCase());
+    if (added) {
+      const row = { ...added, id: me.sub, owner: me.owner, updatedAt: new Date().toISOString() };
+      await putRow(S, row);
+      const ct = process.env.COSTING_TABLE;
+      if (ct) for (const c of await scanAll(ct)) {
+        const js = parseJobs(c.supplierJobs?.S);
+        let changed = false;
+        for (const r of ['framer', 'delivery'] as const) if (js[r]?.supplierId === added.id) { js[r]!.supplierId = me.sub; changed = true; }
+        if (changed) await saveJobs(str(c, 'enquiryId'), js);
+      }
+      await delRow(S, { id: { S: String(added.id) } });
+      profile = row;
+    }
+  }
 
   if (action === 'me') {
     const listings = profile ? (await scanAll(L)).filter((x) => str(x, 'sellerId') === me.sub).map(plain) : [];
@@ -2190,6 +2208,36 @@ async function marketAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  // The studio adds a frame shop or delivery partner by hand (approved straight away). It works through the studio
+  // view of the supplier portal until the shop signs up with the same email and takes the account over.
+  if (action === 'inviteSupplier') {
+    const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
+    if (!p || !ROLE_OF[String(p.type)]) throw new Error('Supplier not found');
+    if (!p.email) throw new Error('Add their email first.');
+    const fr = p.type === 'FRAMER';
+    await sendMail({ to: String(p.email), subject: `Kalai Art House: your ${fr ? 'frame shop' : 'delivery partner'} portal`,
+      lines: [`Hello ${h(p.contactName || p.business)},`,
+        `Kalai Art House (art.pranixtechno.com, Dubai) would like to work with <b>${h(p.business)}</b> as a ${fr ? 'framing' : 'delivery'} partner.`,
+        `Please open our supplier portal and <b>create an account with this email address</b> (${h(p.email)}): your business is already set up there.`,
+        fr ? 'Then add your <b>price list</b>: frame price per style and size, the fixing charge (or included), and your delivery charge if you also deliver.' : 'Then add your <b>delivery charges</b> to each emirate, for a small and a large parcel.',
+        'Every job we give you appears there with the photo, size, address and agreed price; you update each step and enter your invoice, and we pay against it.',
+        txt(d.note, 500) ? h(txt(d.note, 500)) : ''].filter(Boolean),
+      button: { label: 'Open the supplier portal', url: `${SITE}/supplier.html` } });
+    return { sent: true };
+  }
+  if (action === 'addSupplier') {
+    const type = d.type === 'COURIER' ? 'COURIER' : 'FRAMER';
+    const f = { business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), email: txt(d.email, 120).toLowerCase(), emirate: txt(d.emirate, 60) || 'Dubai',
+      address: txt(d.address, 300), about: txt(d.about, 2000), tradeLicence: txt(d.tradeLicence, 60), bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, '') };
+    if (!f.business) throw new Error('Add the business name.');
+    if (f.phone.replace(/\D/g, '').length < 9) throw new Error('Add their mobile or phone number.');
+    if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) throw new Error('Check the email address.');
+    if (f.email && (await scanAll(S)).some((x) => str(x, 'email').toLowerCase() === f.email)) throw new Error('A supplier, artist or seller with this email already exists.');
+    const now = new Date().toISOString();
+    const row = { ...f, id: `sup-${crypto.randomUUID()}`, type, country: 'UAE', status: 'APPROVED', appliedAt: now, approvedAt: now, adminNote: 'Added by the studio', commissionPct: 0, __typename: 'SellerProfile', createdAt: now, updatedAt: now };
+    await putRow(S, row);
+    return { profile: row };
+  }
   const now = new Date().toISOString();
   const id = txt(d.id, 80);
   if (action.endsWith('Seller')) {

@@ -536,6 +536,23 @@ let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COUR
 const jobsOf = (e) => { let v = costings.get(e.id)?.supplierJobs; try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; } return v && typeof v === 'object' ? v : {}; };
 const JOB_STAGE = { ASSIGNED: 'sent, waiting to accept', ACCEPTED: 'accepted', READY: 'framed, ready for pickup', COLLECTED: 'collected', PICKED: 'picked up (Shipped)', DELIVERED: 'delivered' };
 /** Frame shop & delivery partner for a paid order (supplier portal). */
+// WhatsApp the job to the supplier (message typed in; you press Send): handy for shops that don't use the portal yet.
+function jobWa(e, cur, role, spec) {
+  const sp = suppliers.find((x) => x.id === cur.supplierId);
+  const n = String(sp?.phone || '').replace(/[^\d]/g, '').replace(/^00/, '').replace(/^0(?=5)/, '971');
+  if (n.length < 9) return '';
+  const det = parseDetails(e.details);
+  const to = [e.deliveryName || e.customerName, e.deliveryPhone || e.phone, [e.deliveryAddress, e.deliveryEmirate, e.deliveryCountry && e.deliveryCountry !== 'UAE' ? e.deliveryCountry : ''].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+  const lines = role === 'framer'
+    ? [`Kalai Art House framing job ${e.ref}: ${e.title}`, `Frame: ${(RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style])[1]}, ${spec.size}${det.Framing ? ` (${det.Framing})` : ''}`, det['Card message'] ? `Card message: ${det['Card message']}` : '',
+      cur.price != null ? `Agreed price: AED ${cur.price}` : '', cur.due ? `Please finish by ${cur.due}` : '', cur.note ? `Note: ${cur.note}` : '', cur.canDeliver ? `Please also deliver to: ${to}${cur.deliveryPrice != null ? ` (AED ${cur.deliveryPrice})` : ''}` : '',
+      sp?.owner ? 'Details and photo: art.pranixtechno.com/supplier.html' : 'I will send you the photo here.']
+    : [`Kalai Art House delivery job ${e.ref}: ${e.title}`, j0(e) ? `Pick up from: ${j0(e)}` : 'Pick up from: Kalai Art House (we confirm the point)', `Deliver to: ${to}`, cur.price != null ? `Agreed price: AED ${cur.price}` : '', cur.due ? `By ${cur.due}` : '', cur.note ? `Note: ${cur.note}` : '',
+      sp?.owner ? 'Details: art.pranixtechno.com/supplier.html' : ''];
+  return `<a class="btn small ghost" style="padding:2px 8px;font-size:12px" target="_blank" rel="noopener" href="https://wa.me/${n}?text=${encodeURIComponent(lines.filter(Boolean).join('\n'))}">WhatsApp</a>`;
+}
+// The frame shop's name, phone and address, as the delivery pickup point.
+function j0(e) { const fj = jobsOf(e).framer; const sp = fj && suppliers.find((x) => x.id === fj.supplierId); return sp ? [sp.business, sp.phone, sp.address].filter(Boolean).join(', ') : ''; }
 function supplierSection(e) {
   if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
   const j = jobsOf(e);
@@ -551,7 +568,7 @@ function supplierSection(e) {
     const locked = cur && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage);
     const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
         <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
           <span class="muted" style="font-size:12px">${role === 'framer' ? `${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${spec.small ? 'small' : 'large'} parcel`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
