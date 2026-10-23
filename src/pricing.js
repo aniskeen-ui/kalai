@@ -5,6 +5,7 @@
 // on the website.
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
+import { parseCard } from './ratecard.js';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -46,6 +47,24 @@ const DEFAULT_MARKET = {
   L: { sk: [990, 1490], wc: [1290, 1990], saatchi: 'watercolour 51×38 to 56×76 cm ≈ AED 3,900–7,500' },
 };
 
+// Frame costs can come from a frame shop's own price list (supplier portal → My price list), per size and style:
+// frame price + fixing charge (or included). P.frameSource = '' (the master table), a frame shop's id, or 'cheapest'.
+let framers = [];
+/** {frame, fixing, from} for a style and frame size from the chosen frame shop(s), or null → master table. */
+function supplierFrame(style, fsize) {
+  const src = P.frameSource || '';
+  if (!src || style === 'none') return null;
+  const list = src === 'cheapest' ? framers : framers.filter((f) => f.id === src);
+  let best = null;
+  for (const f of list) {
+    const card = parseCard(f);
+    const fr = card.frames?.[style]?.[fsize];
+    if (fr == null || fr === '') continue;
+    const fix = card.fixingIncluded ? 0 : Number(card.fixing?.[fsize] || 0);
+    if (!best || Number(fr) + fix < best.frame + best.fixing) best = { frame: Number(fr), fixing: fix, from: f.business };
+  }
+  return best;
+}
 let ratesRow = null; // the whole Rates JSON (other tabs' fields kept as they are)
 let P = structuredClone(DEFAULT_P);
 let market = structuredClone(DEFAULT_MARKET);
@@ -77,9 +96,12 @@ function build(w, o = {}) {
   const out = { tier, fsize, inr, artistAed, courier, margin, local: P.local, styles: {} };
   if (artistAed == null) return out;
   out.customs = (artistAed + courier) * P.customs;
+  out.from = {};
   for (const s of STYLES) {
-    const frameWork = s.k === 'none' ? 0 : P.frameWork[fsize] ?? 0;
-    const frame = s.k === 'none' ? 0 : (P.moulding[fsize] ?? 0) * (1 + (P.extra[s.k] ?? 0));
+    const sf = supplierFrame(s.k, fsize);
+    out.from[s.k] = sf ? sf.from : s.k === 'none' ? '' : 'master';
+    const frameWork = s.k === 'none' ? 0 : sf ? sf.fixing : P.frameWork[fsize] ?? 0;
+    const frame = s.k === 'none' ? 0 : sf ? sf.frame : (P.moulding[fsize] ?? 0) * (1 + (P.extra[s.k] ?? 0));
     const cost = artistAed + courier + out.customs + frameWork + frame + P.local;
     const raw = (cost * (1 + margin)) / (1 - pct);
     const price = rnd(raw);
@@ -102,6 +124,7 @@ async function loadAll() {
     P[k] = { ...DEFAULT_P[k], ...saved };
   }
   market = { ...structuredClone(DEFAULT_MARKET), ...(base.market || {}) };
+  try { framers = ((await client.models.SellerProfile.list({ limit: 500 })).data || []).filter((p) => p.type === 'FRAMER' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business))); } catch { framers = []; }
   works = [];
   let nextToken = null;
   do { const x = await client.models.Product.list({ limit: 500, nextToken }); works.push(...(x.data || [])); nextToken = x.nextToken; } while (nextToken);
@@ -137,6 +160,11 @@ function masterHtml() {
     </div>
     <table class="costs" style="max-width:420px"><thead><tr><th>AED by artwork size</th>${TIERS.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
       ${tierRow('courier', 'Courier India → Dubai')}</tbody></table>
+    <div class="pc-grid"><label>Frame costs from <select id="pcFrameSrc" style="width:auto">
+      <option value="">The master table below (my own figures)</option>
+      <option value="cheapest" ${P.frameSource === 'cheapest' ? 'selected' : ''}>Cheapest frame shop, per size and style</option>
+      ${framers.map((f) => `<option value="${esc(f.id)}" ${P.frameSource === f.id ? 'selected' : ''}>${esc(f.business)}'s price list</option>`).join('')}
+    </select></label><span class="muted" style="font-size:12px">${framers.length ? 'A frame shop\'s price per size and style (frame + fixing). Any size or style missing from its list uses the master table.' : 'No approved frame shops yet: add them under Artists & sellers → Frame shops & delivery.'}</span></div>
     <table class="costs" style="max-width:720px"><thead><tr><th>AED by frame size (cm)</th>${FRAME_SIZES.map(([f]) => `<th>${f}</th>`).join('')}</tr></thead><tbody>
       ${['frameWork', 'moulding'].map((k) => `<tr><th>${k === 'frameWork' ? 'Frame work (mount, glass, labour)' : 'Frame, plain style'}</th>${FRAME_SIZES.map(([f]) => `<td><input data-pf="${k}|${f}" type="number" min="0" step="1" value="${P[k][f]}" style="width:72px"></td>`).join('')}</tr>`).join('')}</tbody></table>
     <div class="pc-grid">${STYLES.filter((s) => s.k !== 'none').map((s) => `<label>${s.n} <input data-px="${s.k}" type="number" min="0" step="5" value="${Math.round((P.extra[s.k] || 0) * 100)}" style="width:60px">% more</label>`).join('')}</div>
@@ -149,6 +177,7 @@ function readMaster() {
   document.querySelectorAll('[data-pt]').forEach((i) => { const [k, t] = i.dataset.pt.split('.'); P[k][t] = num(i.value) ?? 0; });
   document.querySelectorAll('[data-px]').forEach((i) => { P.extra[i.dataset.px] = (num(i.value) ?? 0) / 100; });
   document.querySelectorAll('[data-pf]').forEach((i) => { const [k, f] = i.dataset.pf.split('|'); P[k][f] = num(i.value) ?? 0; });
+  if ($('pcFrameSrc')) P.frameSource = $('pcFrameSrc').value;
 }
 
 // Market check for one work: Kalai's band for its size and medium; the proposed price lifts a cost-based price that
@@ -270,8 +299,9 @@ function drawCalc(w) {
         <tr><td>Artist (₹${Number(b.inr).toLocaleString('en-IN')} × ${P.fx})</td>${cell(() => Math.round(b.artistAed))}</tr>
         <tr><td>Courier India → Dubai</td>${cell(() => Math.round(b.courier))}</tr>
         <tr><td>Customs ${(P.customs * 100).toFixed(1)}%</td>${cell(() => Math.round(b.customs))}</tr>
-        <tr><td>Frame work (mount, glass, labour)</td>${cell((x) => Math.round(x.frameWork))}</tr>
+        <tr><td>${P.frameSource ? 'Fixing (mount, glass, fitting)' : 'Frame work (mount, glass, labour)'}</td>${cell((x) => Math.round(x.frameWork))}</tr>
         <tr><td>Frame</td>${cell((x) => Math.round(x.frame))}</tr>
+        ${P.frameSource ? `<tr><td class="muted" style="font-size:12px">Frame price from</td>${STYLES.map((s) => `<td class="num muted" style="font-size:11px">${esc(b.from?.[s.k] === 'master' ? 'master table' : b.from?.[s.k] || '–')}</td>`).join('')}</tr>` : ''}
         <tr><td>Courier Dubai → customer</td>${cell(() => Math.round(b.local))}</tr>
         <tr class="tot"><td>Total cost</td>${cell((x) => Math.round(x.cost))}</tr>
         <tr><td>Margin ${Math.round(b.margin * 100)}%</td>${cell((x) => Math.round(x.marginAmt))}</tr>
@@ -387,12 +417,12 @@ export async function showPricing() {
   try { await loadAll(); } catch (ex) { $('pcList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; return; }
   upgradeOld().then((n) => { if (n) { $('pcMasterMsg') && ($('pcMasterMsg').textContent = `${n} earlier price list(s) now have frame sizes and Dhs 25 rounding.`); drawList(); } });
   $('pcMaster').innerHTML = masterHtml();
-  $('pcMaster').querySelectorAll('input').forEach((i) => i.addEventListener('change', () => { readMaster(); drawList(); }));
+  $('pcMaster').querySelectorAll('input, select').forEach((i) => i.addEventListener('change', () => { readMaster(); drawList(); }));
   $('pcSaveMaster').onclick = async () => {
     readMaster();
     $('pcMasterMsg').textContent = 'Saving…';
     try {
-      const data = { ...(ratesRow || {}), pricing: { courier: P.courier, frameWork: P.frameWork, moulding: P.moulding, extra: P.extra },
+      const data = { ...(ratesRow || {}), pricing: { courier: P.courier, frameWork: P.frameWork, moulding: P.moulding, extra: P.extra, frameSource: P.frameSource || '' },
         fx: P.fx, customs: P.customs, local: P.local, margin: P.margin, margins: { ...(ratesRow?.margins || {}), collection: P.margin }, fee: P.fee, ins: P.ins, reserve: P.reserve, round9: P.round9, round25: P.round25,
         tiers: Object.fromEntries(TIERS.map((t) => { const f = { S: '30×40', M: '40×50', L: '50×70' }[t]; return [t, { ...(ratesRow?.tiers?.[t] || {}), courier: P.courier[t], framing: Math.round((P.frameWork[f] || 0) + (P.moulding[f] || 0)) }]; })),
         updatedAt: new Date().toISOString() };
