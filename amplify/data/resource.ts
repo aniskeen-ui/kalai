@@ -179,6 +179,8 @@ const schema = a.schema({
       indiaCourierOverride: a.float(),
       localCourierOverride: a.float(),
       costs: a.json(),
+      // Actual costs from the vendors' bills (AED): {artist, framing, india, customs, local, other, ref:{…}, at}. Reports: plan vs actual.
+      actual: a.json(),
       // Every Zoho document for the order (quote, invoices, payments, PO, bills), refreshed by Check Zoho.
       zohoDocs: a.json(),
       docsAt: a.string(),

@@ -73,6 +73,7 @@ td.mono{font-family:var(--mono);font-size:13px}
 @media (max-width:480px){.two{grid-template-columns:1fr}}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 [hidden]{display:none!important}
+.report td.est{font-style:italic;color:var(--muted)}
 .cg-list{display:grid;gap:8px}
 .msg-edit{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
 .msg-form{display:grid;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
@@ -235,12 +236,13 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
         <label class="muted" for="rFrom" style="font-weight:400">From</label><input type="date" id="rFrom" style="width:auto">
         <label class="muted" for="rTo" style="font-weight:400">To</label><input type="date" id="rTo" style="width:auto">
         <select id="rKind" aria-label="Type"><option value="">All types</option><option value="PRICE">Catalogue works</option><option value="COMMISSION">Commissions</option><option value="GIFT">Little Artists</option><option value="MARKET">Crafts shop</option></select>
+        <select id="rBasis" aria-label="Cost columns"><option value="plan">Cost columns: planned</option><option value="actual">Cost columns: actual (planned where no bill yet)</option></select>
         <button class="btn ghost" id="rCsv" type="button">Download CSV</button>
       </div>
       <div class="tiles" id="rTiles"></div>
-      <p class="muted" style="font-size:13px;margin:0 0 10px">Paid orders only (Paid, Being framed, Shipped, Delivered, Replacement, Refunded), by order date. Costs are the estimates saved in each order's Costing box, plus the actual extra cost of any replacement (less insurance received); refunds and cancelled Siva orders are taken into account. Sales are shown with VAT; margin is on net sales (excluding VAT and the payment fee).</p>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Paid orders only (Paid, Being framed, Shipped, Delivered, Replacement, Refunded), by order date. Planned costs are the estimates saved in each order's Costing box; actual costs come from the bills entered under <b>Actual costs</b> on each paid order (a cost with no bill yet stays at its planned figure, shown in <i>italics</i>). Both include the actual extra cost of any replacement (less insurance received); refunds and cancelled Siva orders are taken into account. Sales are shown with VAT; margin is on net sales (excluding VAT and the payment fee).</p>
       <div class="tablewrap"><table class="report">
-        <thead><tr><th>Date</th><th>Ref</th><th>Order</th><th>Customer</th><th>Status</th><th class="num">Sales</th><th class="num">Refund</th><th class="num">Net sales</th><th class="num">Artist</th><th class="num">Framing</th><th class="num">India courier</th><th class="num">Customs</th><th class="num">Local courier</th><th class="num">Rework</th><th class="num">Fees &amp; ins.</th><th class="num">Total cost</th><th class="num">Margin</th><th class="num">Margin %</th></tr></thead>
+        <thead><tr><th>Date</th><th>Ref</th><th>Order</th><th>Customer</th><th>Status</th><th class="num">Sales</th><th class="num">Refund</th><th class="num">Net sales</th><th class="num">Artist</th><th class="num">Framing</th><th class="num">India courier</th><th class="num">Customs</th><th class="num">Local courier</th><th class="num">Rework</th><th class="num">Fees &amp; ins.</th><th class="num">Total cost</th><th class="num">Planned margin</th><th class="num">Actual margin</th><th class="num">Variance</th><th class="num">Margin %</th></tr></thead>
         <tbody id="rRows"></tbody>
         <tfoot id="rFoot"></tfoot>
       </table></div>

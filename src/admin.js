@@ -319,7 +319,14 @@ function parseCosts(c) {
   return v && typeof v === 'object' ? v : null;
 }
 
-/** One report line: sales, refund, net sales, each cost (estimated from the Costing box) and margin. */
+// Actual costs (AED) from the vendors' bills, entered per paid order.
+const ACT_FIELDS = [['artist', 'Artist (paid, AED)'], ['framing', 'Frame shop'], ['india', 'Courier India → Dubai'], ['customs', 'Customs / duty'], ['local', 'Courier to the customer'], ['other', 'Other (packing, etc.)']];
+function actualOf(c) {
+  let v = c?.actual;
+  try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
+  return v && typeof v === 'object' ? v : null;
+}
+/** One report line: sales, refund, net sales, each cost (planned from the Costing box, actual from bills) and margin. */
 function reportLine(e) {
   const c = costings.get(e.id);
   const costs = parseCosts(c);
@@ -352,12 +359,25 @@ function reportLine(e) {
     if (e.refundAction === 'CANCEL_HALF' && e.purchaseState !== 'CANCELLED') { k.artist *= 0.5; if (!e.artistShippedAt) { k.india = 0; k.customs = 0; } }
   }
   const rc = reworkCost(e);
-  if (k) k.rework = rc.net;
+  if (k) { k.rework = rc.net; k.other = 0; }
   const ins = price * (rates.ins || 0);
   const fees = fee + ins;
-  const total = k ? k.artist + k.framing + k.india + k.customs + k.local + k.rework : null;
+  const sumK = (x) => x.artist + x.framing + x.india + x.customs + x.local + x.rework + (x.other || 0);
+  const total = k ? sumK(k) : null;
   const margin = k ? net - fees - total : null;
-  return { e, price, refund, net: r2(net), fee: r2(fees), reserve: r2(price * (rates.reserve || 0)), rc, k, total: total == null ? null : r2(total), margin: margin == null ? null : r2(margin), pct: margin == null || !net ? null : margin / net, note };
+  // Actual: each cost from its bill where entered (Actual costs box), else the planned figure (marked as estimated).
+  const act = actualOf(c);
+  let ka = null, est = new Set(), haveAct = false;
+  if (k) {
+    ka = { ...k };
+    for (const f of ACT_FIELDS.map((x) => x[0])) {
+      if (act && act[f] != null && act[f] !== '') { ka[f] = Number(act[f]); haveAct = true; } else if (f !== 'other' && k[f]) est.add(f);
+    }
+  }
+  const totalA = ka ? sumK(ka) : null;
+  const marginA = ka && haveAct ? net - fees - totalA : null;
+  return { e, price, refund, net: r2(net), fee: r2(fees), reserve: r2(price * (rates.reserve || 0)), rc, k, ka, est, haveAct, total: total == null ? null : r2(total), totalA: totalA == null ? null : r2(totalA),
+    margin: margin == null ? null : r2(margin), marginA: marginA == null ? null : r2(marginA), pct: margin == null || !net ? null : margin / net, pctA: marginA == null || !net ? null : marginA / net, note };
 }
 
 function reportLines() {
@@ -373,8 +393,12 @@ function renderReport() {
   const lines = reportLines();
   const sum = (f) => lines.reduce((a, l) => a + (f(l) || 0), 0);
   const costed = lines.filter((l) => l.k);
-  const T = { sales: sum((l) => l.price), refund: sum((l) => l.refund), net: sum((l) => l.net), fee: sum((l) => l.fee), cost: sum((l) => l.total), margin: costed.reduce((a, l) => a + l.margin, 0), costedNet: costed.reduce((a, l) => a + l.net, 0) };
+  const basis = $('rBasis').value === 'actual';
+  const withAct = costed.filter((l) => l.haveAct);
+  const T = { sales: sum((l) => l.price), refund: sum((l) => l.refund), net: sum((l) => l.net), fee: sum((l) => l.fee), cost: sum((l) => (basis ? l.totalA : l.total)), margin: costed.reduce((a, l) => a + l.margin, 0), costedNet: costed.reduce((a, l) => a + l.net, 0),
+    planA: withAct.reduce((a, l) => a + l.margin, 0), actA: withAct.reduce((a, l) => a + l.marginA, 0), netA: withAct.reduce((a, l) => a + l.net, 0) };
   const pct = T.costedNet ? T.margin / T.costedNet : null;
+  const pctA = T.netA ? T.actA / T.netA : null;
   const tile = (k, v, cls = '') => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
   $('rTiles').innerHTML = [
     tile('Orders', lines.length),
@@ -382,8 +406,9 @@ function renderReport() {
     tile('Refunds', money(T.refund)),
     tile('Net sales', money(T.net)),
     tile('Total cost', money(T.cost)),
-    tile('Margin', money(T.margin), T.margin < 0 ? 'neg' : ''),
-    tile('Margin %', pct == null ? '–' : (pct * 100).toFixed(1) + '%', pct != null && pct < 0.1 ? 'neg' : ''),
+    tile('Planned margin', `${money(T.margin)} · ${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}`, T.margin < 0 ? 'neg' : ''),
+    tile(`Actual margin (${withAct.length} of ${costed.length} with bills)`, withAct.length ? `${money(T.actA)} · ${pctA == null ? '–' : (pctA * 100).toFixed(1) + '%'}` : '–', T.actA < 0 ? 'neg' : ''),
+    tile('Variance on those orders', withAct.length ? money(T.actA - T.planA) : '–', T.actA - T.planA < 0 ? 'neg' : ''),
     (() => { const loss = sum((l) => l.rc.cost), rec = sum((l) => l.rc.received), res = sum((l) => l.reserve); return loss || rec ? tile('Damage: cost / insurance / reserve', `${money(loss)} / ${money(rec)} / ${money(res)}`, loss - rec > res ? 'neg' : '') : ''; })(),
     (() => { const rv = lines.map((l) => reviews.get(l.e.id)).filter(Boolean); const a = avgRating(rv); return tile('Customer rating', a == null ? '–' : `${a.toFixed(1)} ★ (${rv.length})`, a != null && a < 4 ? 'neg' : ''); })(),
   ].join('') + (lines.length - costed.length ? `<div class="tile"><div class="k">Without costing</div><div class="v neg">${lines.length - costed.length}</div></div>` : '');
@@ -393,11 +418,12 @@ function renderReport() {
     return `<tr data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(d)}</td><td class="mono">${esc(l.e.ref)}</td>
       <td style="white-space:normal;min-width:160px">${esc(l.e.title)}${l.note ? `<br><span class="flag">${esc(l.note)}</span>` : ''}</td><td>${esc(l.e.customerName)}</td>
       <td><span class="pill ${esc(l.e.status)}">${esc(STATUS[l.e.status] || l.e.status)}</span></td>
-      ${td(l.price)}${td(l.refund || null)}${td(l.net)}${td(l.k?.artist)}${td(l.k?.framing)}${td(l.k?.india)}${td(l.k?.customs)}${td(l.k?.local)}${td(l.k?.rework || null, l.k?.rework > 0 ? 'neg' : '')}${td(l.fee)}${td(l.total)}
-      ${td(l.margin, l.margin != null && l.margin < 0 ? 'neg' : '')}<td class="num ${l.pct != null && l.pct < Math.min(0.1, marginFor(l.e.kind)) ? 'neg' : ''}" title="Target ${Math.round(marginFor(l.e.kind) * 100)}%">${l.pct == null ? '–' : (l.pct * 100).toFixed(1) + '%'}</td></tr>`;
-  }).join('') : '<tr><td colspan="18" class="muted">No paid orders in this period.</td></tr>';
-  const k = (f) => costed.reduce((a, l) => a + (f(l.k) || 0), 0);
-  $('rFoot').innerHTML = lines.length ? `<tr><td colspan="5">Total (${lines.length} orders)</td>${td(T.sales)}${td(T.refund || null)}${td(T.net)}${td(k((x) => x.artist))}${td(k((x) => x.framing))}${td(k((x) => x.india))}${td(k((x) => x.customs))}${td(k((x) => x.local))}${td(k((x) => x.rework) || null)}${td(T.fee)}${td(T.cost)}${td(T.margin, T.margin < 0 ? 'neg' : '')}<td class="num">${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}</td></tr>` : '';
+      ${td(l.price)}${td(l.refund || null)}${td(l.net)}${['artist', 'framing', 'india', 'customs', 'local'].map((f) => { const kk = basis ? l.ka : l.k; return td(kk?.[f], basis && l.haveAct && l.est.has(f) ? 'est' : ''); }).join('')}${td((basis ? l.ka : l.k)?.rework || null, l.k?.rework > 0 ? 'neg' : '')}${td(l.fee)}${td(basis ? l.totalA : l.total)}
+      ${td(l.margin, l.margin != null && l.margin < 0 ? 'neg' : '')}${td(l.marginA, l.marginA != null && l.marginA < 0 ? 'neg' : '')}${l.marginA == null ? '<td class="num muted">–</td>' : td(l.marginA - l.margin, l.marginA - l.margin < 0 ? 'neg' : '')}
+      ${(() => { const p = l.pctA ?? l.pct; return `<td class="num ${p != null && p < Math.min(0.1, marginFor(l.e.kind)) ? 'neg' : ''}" title="${l.pctA != null ? 'Actual' : 'Planned'} · target ${Math.round(marginFor(l.e.kind) * 100)}%">${p == null ? '–' : (p * 100).toFixed(1) + '%'}${l.pctA != null ? '' : ' <span class="muted" style="font-size:10px">plan</span>'}</td>`; })()}</tr>`;
+  }).join('') : '<tr><td colspan="20" class="muted">No paid orders in this period.</td></tr>';
+  const k = (f) => costed.reduce((a, l) => a + (f(basis ? l.ka : l.k) || 0), 0);
+  $('rFoot').innerHTML = lines.length ? `<tr><td colspan="5">Total (${lines.length} orders)</td>${td(T.sales)}${td(T.refund || null)}${td(T.net)}${td(k((x) => x.artist))}${td(k((x) => x.framing))}${td(k((x) => x.india))}${td(k((x) => x.customs))}${td(k((x) => x.local))}${td(k((x) => x.rework) || null)}${td(T.fee)}${td(T.cost)}${td(T.margin, T.margin < 0 ? 'neg' : '')}${withAct.length ? td(T.actA, T.actA < 0 ? 'neg' : '') : '<td class="num">–</td>'}${withAct.length ? td(T.actA - T.planA, T.actA - T.planA < 0 ? 'neg' : '') : '<td class="num">–</td>'}<td class="num">${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}</td></tr>` : '';
   $('rRows').querySelectorAll('tr[data-id]').forEach((tr) => {
     const open = () => { const e = all.find((x) => x.id === tr.dataset.id); if (!e) return; showPane('orders', 'tabOrders'); selectedId = e.id; render(); showDetail(e); };
     tr.onclick = open;
@@ -405,13 +431,15 @@ function renderReport() {
   });
 }
 
-['rFrom', 'rTo', 'rKind'].forEach((id) => $(id).addEventListener('change', renderReport));
+['rFrom', 'rTo', 'rKind', 'rBasis'].forEach((id) => $(id).addEventListener('change', renderReport));
 $('rCsv').onclick = () => {
-  const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Total cost', 'Margin', 'Margin %', 'Note'];
+  const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Planned total cost', 'Planned margin', 'Planned margin %', 'Actual artist', 'Actual framing', 'Actual India courier', 'Actual customs', 'Actual local courier', 'Actual other', 'Actual total cost (planned where no bill)', 'Actual margin', 'Actual margin %', 'Variance', 'Note'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = reportLines().map((l) => [String(l.e.createdAt || '').slice(0, 10), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
     l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '', l.k ? r2(l.k.rework) : '',
-    l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%', l.note]);
+    l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%',
+    ...['artist', 'framing', 'india', 'customs', 'local', 'other'].map((f) => { const a = actualOf(costings.get(l.e.id)); return a && a[f] != null && a[f] !== '' ? r2(Number(a[f])) : ''; }),
+    l.haveAct ? l.totalA : '', l.marginA ?? '', l.pctA == null ? '' : (l.pctA * 100).toFixed(1) + '%', l.marginA == null ? '' : r2(l.marginA - l.margin), l.note]);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
@@ -534,6 +562,42 @@ function parseDetails(d) {
   try { const v = JSON.parse(d); return typeof v === 'string' ? JSON.parse(v) : v; } catch { return {}; }
 }
 const waDigits = (p) => String(p || '').replace(/[^\d]/g, '').replace(/^00/, '').replace(/^0(?=5)/, '971');
+
+/** Actual costs from the bills (paid orders): plan vs actual for this order; Reports adds them up. */
+function actualSection(e) {
+  if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
+  const l = reportLine(e), a = actualOf(costings.get(e.id)) || {}, ref = a.ref || {};
+  const plan = (f) => (l.k && f !== 'other' ? r2(l.k[f] || 0) : null);
+  const rows = ACT_FIELDS.map(([f, label]) => `<tr><td>${label}</td><td class="num mono">${plan(f) == null ? '–' : money(plan(f))}</td>
+    <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="bill amount" style="width:110px"></td>
+    <td><input data-actref="${f}" maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
+  const mv = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : `Planned margin <b>${l.margin == null ? '–' : money(l.margin)}</b>. Enter the bills as they come; costs without a bill stay at the planned figure.`;
+  return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, AED)</legend>
+    <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th>Actual</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="marginline" id="actSum">${mv}</div>
+    <div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn small" onclick="window.kalaiSaveActual('${esc(e.id)}')">Save actual costs</button><span class="muted" id="actMsg" style="font-size:12px">${a.at ? `Last saved ${esc(when(a.at))}` : ''}</span></div></fieldset>`;
+}
+window.kalaiSaveActual = async (id) => {
+  const e = all.find((x) => x.id === id); if (!e) return;
+  const box = $('actualBox'), out = { ref: {} };
+  for (const [f, label] of ACT_FIELDS) {
+    const raw = box.querySelector(`[data-act="${f}"]`).value.trim();
+    if (raw !== '') { const v = Number(raw); if (!(v >= 0)) { $('actMsg').textContent = `${label}: enter an amount in AED.`; return; } out[f] = Math.round(v * 100) / 100; }
+    const rf = box.querySelector(`[data-actref="${f}"]`).value.trim(); if (rf) out.ref[f] = rf;
+  }
+  out.at = new Date().toISOString();
+  $('actMsg').textContent = 'Saving…';
+  try {
+    const existing = costings.get(id);
+    const rec = { enquiryId: id, actual: JSON.stringify(out) };
+    const res = existing ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec);
+    if (res.errors?.length) throw new Error(res.errors[0].message);
+    costings.set(id, res.data || { ...existing, ...rec });
+    const l = reportLine(e);
+    $('actSum').innerHTML = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : 'Saved.';
+    $('actMsg').textContent = 'Saved. Reports show plan vs actual.';
+  } catch (ex) { $('actMsg').textContent = ex.message; }
+};
 
 function costingSection(e) {
   if (!hasArtist(e)) return '';
@@ -1173,6 +1237,7 @@ async function showDetail(e) {
       ${addressSection(e)}
       ${shippingSection(e)}
       ${costingSection(e)}
+      ${actualSection(e)}
       <div class="two">
         <div class="field"><label for="ePayMethod">Paid by</label><select id="ePayMethod">
           ${[['', '–'], ['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${k === (e.paymentMethod || '') ? 'selected' : ''}>${v}</option>`).join('')}
