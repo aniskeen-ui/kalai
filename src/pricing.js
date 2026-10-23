@@ -116,7 +116,9 @@ const matrixOf = (w) => { try { return w.priceMatrix ? JSON.parse(w.priceMatrix)
 const basePrice = (m, k) => (!m ? null : m.v === 2 ? (k === 'none' ? m.none : m.sizes?.[m.base]?.[k]) : m[k]);
 const stateOf = (w) => {
   const ap = prices.get(w.id), m = matrixOf(w);
-  if (m && ap?.artistPriceAt && w.priceApprovedAt && ap.artistPriceAt > w.priceApprovedAt) return ['CHANGED', 'Artist changed his price'];
+  // Changed = the artist's price now differs from the one the website price was approved with.
+  let used = null; try { used = ap?.calc ? JSON.parse(ap.calc).artistUsed ?? null : null; } catch { used = null; }
+  if (m && used != null && ap?.artistPrice != null && Number(ap.artistPrice) !== Number(used)) return ['CHANGED', `Artist changed his price (was ₹${Number(used).toLocaleString('en-IN')})`];
   if (m) return ['LIVE', 'Price on website'];
   if (ap?.artistPrice != null) return ['TODO', 'To approve'];
   return ['WAIT', 'Waiting for artist price'];
@@ -189,19 +191,20 @@ function drawList() {
       <button class="btn small" type="button" id="pcBulkMarket">Approve selected at the proposed price</button>
       <button class="btn small ghost" type="button" id="pcBulkCost">Approve selected at the cost-based price</button>
       <span class="muted" id="pcBulkMsg" style="font-size:12px">${bulkNote ? esc(bulkNote) : 'All frame styles and sizes follow from the black-frame price. Open a work with Calculate to fine-tune.'}</span></div>
-    <div class="tablewrap"><table class="pc-table"><thead><tr><th></th><th></th><th>Work</th><th>Size</th><th>Artist</th><th>Cost-based (black frame)</th><th>Market check</th><th>Proposed price</th><th>On website</th><th></th></tr></thead><tbody>
+    <div class="tablewrap"><table class="pc-table"><thead><tr><th></th><th></th><th>Work</th><th>Size</th><th>Artist</th><th>Ready in</th><th>Cost-based (black frame)</th><th>Market check</th><th>Proposed price</th><th>On website</th><th></th></tr></thead><tbody>
     ${rows.map((w) => {
       const b = build(w), m = matrixOf(w), [st, label] = stateOf(w), mc = marketOf(w, b);
       return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><input type="checkbox" data-pick="${esc(w.id)}" ${picked.has(w.id) ? 'checked' : ''} ${b.artistAed == null ? 'disabled title="No artist price yet"' : ''}></td><td><img data-key="${esc(w.imageKey)}" alt=""></td>
         <td><b>${esc(w.named ? w.title : 'Untitled')}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
         <td>${esc(w.size || '–')}<br><span class="muted" style="font-size:11px">${b.tier} · ${mediumOf(w) === 'sk' ? 'sketch' : 'watercolour'}</span></td>
         <td class="mono">${b.inr != null ? '₹' + Number(b.inr).toLocaleString('en-IN') : '–'}</td>
+        <td style="font-size:12px">${w.leadDays != null ? (w.leadDays === 0 ? 'ready now' : `${w.leadDays} days`) : '<span class="muted">–</span>'}</td>
         <td class="mono">${aed(b.styles.black?.price)}</td>
         <td style="font-size:12px">${mc.cost == null ? '–' : `${aed(mc.band[0])}–${aed(mc.band[1])}<br><span class="pc-st ${mc.verdict === 'inside' ? 'LIVE' : 'TODO'}">${mc.verdict === 'below' ? 'below the band' : mc.verdict === 'above' ? 'above the band' : 'inside the band'}</span>`}</td>
         <td class="mono"><b>${aed(mc.proposed)}</b></td>
         <td class="mono">${m ? aed(basePrice(m, 'black')) : '–'}${m?.v === 2 ? ` <span class="muted" style="font-size:11px">${esc(m.base)}</span>` : ''}<br><span class="pc-st ${st}">${label}</span></td>
         <td><button class="btn small ghost" type="button" data-open="${esc(w.id)}">${w.id === openId ? 'Close' : 'Calculate'}</button></td></tr>
-        ${w.id === openId ? `<tr class="pc-open"><td colspan="10" id="pcCalc"></td></tr>` : ''}`;
+        ${w.id === openId ? `<tr class="pc-open"><td colspan="11" id="pcCalc"></td></tr>` : ''}`;
     }).join('')}</tbody></table></div>`;
   $('pcList').querySelectorAll('img[data-key]').forEach(async (img) => { try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* none */ } });
   $('pcList').querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { openId = openId === b.dataset.open ? null : b.dataset.open; drawList(); }; });
@@ -226,7 +229,7 @@ function drawList() {
         const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
         if (r1.errors?.length) throw new Error(r1.errors[0].message);
         Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
-        const rec = { productId: w.id, calc: JSON.stringify({ ...o, master: P, at: now, bulk: useMarket ? 'market' : 'cost' }), approvedAt: now };
+        const rec = { productId: w.id, calc: JSON.stringify({ ...o, artistUsed: ap?.artistPrice ?? null, master: P, at: now, bulk: useMarket ? 'market' : 'cost' }), approvedAt: now };
         const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: 'INR', ...rec });
         if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });
         ok++; picked.delete(w.id);
@@ -338,7 +341,7 @@ function drawCalc(w) {
         const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
         if (r1.errors?.length) throw new Error(r1.errors[0].message);
         Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
-        const rec = { productId: w.id, calc: JSON.stringify({ tier: o.tier, fsize: o.fsize, courier: o.courier, margin: o.margin, master: P, at: now }), approvedAt: now,
+        const rec = { productId: w.id, calc: JSON.stringify({ artistUsed: o.artist ?? ap?.artistPrice ?? null, tier: o.tier, fsize: o.fsize, courier: o.courier, margin: o.margin, master: P, at: now }), approvedAt: now,
           ...(o.artist != null && o.artist !== ap?.artistPrice ? { artistPrice: o.artist, currency: 'INR', artistNote: 'Entered by the studio' } : {}) };
         const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: 'INR', ...rec });
         if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });

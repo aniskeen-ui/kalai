@@ -2427,7 +2427,9 @@ async function artistWorks(ev: ApiEvent) {
     const price = d.price === '' || d.price == null ? null : Number(d.price);
     if (price != null) {
       if (!Number.isFinite(price) || price < 100 || price > 10_000_000) throw new Error('Enter your price in rupees (at least 100).');
-      if (ptab) {
+      const before = ptab ? (await ddb.send(new GetItemCommand({ TableName: ptab, Key: { productId: { S: id } } }))).Item : undefined;
+      // Only a real change of price counts (saving the title or lead time again must not ask for re-approval).
+      if (ptab && num(before as Img | undefined, 'artistPrice') !== Math.round(price)) {
         const now = new Date().toISOString();
         await ddb.send(new UpdateItemCommand({ TableName: ptab, Key: { productId: { S: id } },
           UpdateExpression: 'SET artistPrice = :p, currency = :c, artistPriceAt = :t, updatedAt = :t, createdAt = if_not_exists(createdAt, :t), #tn = :tn',
