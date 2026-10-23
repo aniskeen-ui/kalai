@@ -2504,6 +2504,11 @@ async function assignCodes() {
       out.artworks++;
     }
   }
+  // Keep every approved artist's public portfolio card up to date (photo, featured work, training…).
+  try {
+    const { S } = mtables();
+    for (const p of (await scanAll(S)).map(plain).filter((x): x is Dict => !!x && x.type === 'ARTIST' && x.status === 'APPROVED')) await publishArtist(p);
+  } catch (e) { console.log('Artist cards not refreshed', e); }
   return out;
 }
 
