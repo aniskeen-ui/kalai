@@ -217,7 +217,7 @@ $('authForm').addEventListener('submit', async (e) => {
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
 
 // ---------- application (artists and sellers) ----------
-const AF = { pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pLink: 'portfolio' };
+const AF = { pTrain: 'training', pBorn: 'bornYear', pCity: 'city', pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pLink: 'portfolio' };
 let samples = [];
 let photoKey = '';
 async function drawPhoto() {

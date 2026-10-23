@@ -1751,6 +1751,8 @@ async function publishArtist(p: Dict) {
     id: artistKey(String(p.id)), __typename: 'ArtistProfile', createdAt: String(p.approvedAt ?? now), updatedAt: now,
     name: p.business, photoKey: p.photoKey, about: p.about, mediums: p.mediums, region: p.emirate, country: p.country || 'UAE',
     commissions: p.commissions, publishedAt: String(p.approvedAt ?? now),
+    training: p.training || '', city: p.city || '', experience: p.experience || '', ...(Number(p.bornYear) ? { bornYear: Number(p.bornYear) } : {}),
+    featuredKey: (() => { try { return (JSON.parse(String(p.sampleKeys || '[]')) as string[])[0] || ''; } catch { return ''; } })(), sampleKeys: String(p.sampleKeys || '[]'),
   });
 }
 async function unpublishArtist(sub: string) {
@@ -1802,6 +1804,7 @@ async function sellerAction(ev: ApiEvent) {
       bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
       accountNumber: txt(d.accountNumber, 30).replace(/\s+/g, ''), ifsc: txt(d.ifsc, 20).toUpperCase().replace(/\s+/g, ''),
       mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', portfolio: txt(d.portfolio, 300),
+      training: txt(d.training, 120), city: txt(d.city, 60),
       sampleKeys: '[]', photoKey: '',
     };
     const artist = type === 'ARTIST';
@@ -1817,10 +1820,12 @@ async function sellerAction(ev: ApiEvent) {
     if (artist && samples.length < 3) throw new Error('Upload at least 3 photos of your work.');
     if (!artist && !samples.length) throw new Error('Upload at least 1 photo of your products.');
     f.sampleKeys = JSON.stringify(samples);
+    const born = Math.floor(Number(d.bornYear));
+    const bornYear = born >= 1920 && born <= new Date().getFullYear() - 10 ? born : null;
     const photo = txt(d.photoKey, 300);
     f.photoKey = photo.startsWith('market/') ? photo : '';
     const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : 'APPLIED';
-    const row = { ...(profile ?? {}), ...f, id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
+    const row = { ...(profile ?? {}), ...f, ...(bornYear ? { bornYear } : {}), id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
     await putRow(S, row);
     if (row.status === 'APPROVED' && type === 'ARTIST') await publishArtist(row);
     if (!profile || profile.status === 'REJECTED') {

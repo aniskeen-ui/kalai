@@ -87,6 +87,16 @@ section{padding-block:56px}
 .sec-head h2{font-size:clamp(28px,3.4vw,38px)}
 .sec-head p{color:var(--muted);margin:6px 0 0;max-width:60ch}
 .artist-sel{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600;width:auto}
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:34px 26px;margin-top:26px}
+.pf-card{display:grid;gap:12px;align-content:start}
+.pf-art{border:0;padding:20px;background:var(--sunk);aspect-ratio:1/1.05;display:grid;place-items:center;cursor:pointer}
+.pf-art img{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.pf-row{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:start}
+.pf-face{width:72px;height:72px;object-fit:cover;background:var(--sunk);display:block}
+.pf-name{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;font-size:24px;line-height:1.15;margin:0}
+.pf-meta{font-size:14px;color:var(--fg);opacity:.85}
+.pf-bio{justify-self:start;background:none;border:0;padding:0;font:inherit;font-size:14px;letter-spacing:.05em;text-transform:uppercase;text-decoration:underline;text-underline-offset:3px;color:var(--fg);cursor:pointer}
+.pf-works{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px}.pf-works img{width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--sunk)}
 .artists-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;margin-top:22px}
 .artist-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:8px;align-content:start}
 .artist-card img{width:72px;height:72px;border-radius:50%;object-fit:cover;background:var(--sunk)}
@@ -493,10 +503,10 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 
 <section id="artist"><div class="wrap" style="max-width:1100px">
   <div style="max-width:820px"><div class="kind" id="artistKicker" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">Our artist</div>
-  <h2 style="font-size:clamp(28px,3.4vw,38px);margin-top:6px">Meet the artist</h2>
-  <p class="note" style="font-size:15px">Painter, sketch artist and story illustrator. Every watercolour and pencil sketch in this gallery, and every commission, is drawn by hand in the artist's studio and shipped to you.</p>
+  <h2 style="font-size:clamp(28px,3.4vw,38px);margin-top:6px" id="artistH2">Meet the artist</h2>
+  <p class="note" style="font-size:15px" id="artistIntro">Painter, sketch artist and story illustrator. Every watercolour and pencil sketch in this gallery, and every commission, is drawn by hand in the artist's studio and shipped to you.</p>
 </div>
-  <div id="moreArtists" hidden><h3 style="font-size:22px;margin-top:34px">More artists at Kalai</h3><div class="artists-grid" id="artistsGrid"></div></div>
+  <div id="moreArtists" hidden><div class="pf-grid" id="artistsGrid"></div></div>
 </div></section>
 
 <section id="join" class="studio"><div class="wrap">
@@ -666,14 +676,31 @@ function drawArtistSel(){
 window.kalaiPickArtist=function(name){artistF=name;drawArtistSel();drawGrid();document.getElementById("collection").scrollIntoView({behavior:"smooth"})};
 document.addEventListener("click",e=>{const b=e.target.closest("[data-artist-pick]");if(b)window.kalaiPickArtist(b.dataset.artistPick)});
 window.kalaiShowArtistWorks=function(list){ARTWORKS=list||[];drawArtistSel();drawGrid()};
+/* Artist portfolio (like a gallery's artist page): a featured work, the artist's photo, name, origin, training, Read bio */
+let ARTISTS=[];
 window.kalaiShowArtists=function(list){
-  const g=document.getElementById("artistsGrid"),box=document.getElementById("moreArtists");if(!SHOW_ARTIST_NAMES||!g||!list.length)return;
-  g.innerHTML=list.map(a=>`<article class="artist-card">${a.img?`<img src="${esc2(a.img)}" alt="${esc2(a.name)}">`:""}<h3>${esc2(a.name)}</h3>
-    <div class="meta">${esc2(a.mediums||"")}${a.place?` · ${esc2(a.place)}`:""}</div>${a.about?`<p>${esc2(a.about)}</p>`:""}
-    <button class="btn ghost-dark" type="button" data-artist-pick="${esc2(a.name)}" style="justify-self:start">See works</button></article>`).join("");
-  box.hidden=false;const k=document.getElementById("artistKicker");if(k)k.textContent="Our artists";
+  const g=document.getElementById("artistsGrid"),box=document.getElementById("moreArtists");if(!g||!list.length)return;
+  ARTISTS=list;
+  g.innerHTML=list.map((a,i)=>`<article class="pf-card">
+    <button type="button" class="pf-art" data-bio="${i}" aria-label="Read about ${esc2(a.name)}">${a.featured?`<img src="${esc2(a.featured)}" alt="A work by ${esc2(a.name)}" loading="lazy">`:""}</button>
+    <div class="pf-row">${a.img?`<img class="pf-face" src="${esc2(a.img)}" alt="${esc2(a.name)}" loading="lazy">`:`<span class="pf-face"></span>`}
+      <div><h3 class="pf-name">${esc2(a.name)}</h3><div class="pf-meta">${esc2(a.born)}</div>${a.training?`<div class="pf-meta">${esc2(a.training)}</div>`:""}</div></div>
+    <button type="button" class="pf-bio" data-bio="${i}">Read bio</button></article>`).join("");
+  box.hidden=false;const k=document.getElementById("artistKicker");if(k)k.textContent="Our artists";const h=document.getElementById("artistH2");if(h)h.textContent="Meet our artists";const it=document.getElementById("artistIntro");if(it&&list.length>1)it.textContent="Painters and sketch artists from India and the UAE. Every work in this gallery, and every commission, is made by hand in the artist's studio and shipped to you.";
   const nav=document.querySelector('nav.links a[href="#artist"]');if(nav)nav.textContent="Our artists";
 };
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-bio]");if(!b)return;const a=ARTISTS[+b.dataset.bio];if(!a)return;
+  const box=document.getElementById("modalBox");box.className="box wide";
+  box.innerHTML=`<button class="x xtop" id="mClose" aria-label="Close">×</button><div class="viewer"><div class="pf-works" id="bioWorks">${a.featured?`<img src="${esc2(a.featured)}" alt="">`:""}</div></div>
+    <div class="info"><div style="display:flex;gap:14px;align-items:center">${a.img?`<img src="${esc2(a.img)}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:50%">`:""}
+      <div><h2 class="pf-name" style="font-size:32px">${esc2(a.name)}</h2><div class="note">${esc2(a.place)}</div></div></div>
+     <dl class="spec">${a.training?`<dt>Training</dt><dd>${esc2(a.training)}</dd>`:""}${a.experience?`<dt>Experience</dt><dd>${esc2(a.experience)}</dd>`:""}${a.mediums?`<dt>Works in</dt><dd>${esc2(a.mediums)}</dd>`:""}<dt>Commissions</dt><dd>${a.commissions==="NO"?"Own works only":"Yes: paints from your photo"}</dd></dl>
+     ${a.about?`<p style="white-space:pre-wrap;margin:0">${esc2(a.about)}</p>`:""}
+     <div class="acts"><button class="btn primary" data-jump="commission">Commission a painting</button><button class="btn ghost-dark" type="button" id="bioClose">See the collection</button></div></div>`;
+  modal.hidden=false;scrim.hidden=false;document.getElementById("mClose").onclick=closeAll;document.getElementById("bioClose").onclick=()=>{closeAll();document.getElementById("collection").scrollIntoView({behavior:"smooth"})};
+  const urls=await Promise.all((a.sampleKeys||[]).slice(0,8).map(k=>a.url(k)));
+  const w=document.getElementById("bioWorks");if(w&&urls.filter(Boolean).length)w.innerHTML=urls.filter(Boolean).map(u=>`<img src="${esc2(u)}" alt="Sample work" loading="lazy">`).join("");
+});
 function drawGrid(){
   const g=document.getElementById("grid");g.innerHTML="";
   const list=PRODUCTS.concat(ARTWORKS).filter(p=>(filter==="all"||p.kind===filter)&&(subj==="all"||p.subject===subj)&&(artistF==="all"||(p.artist||"Siva Raja")===artistF));

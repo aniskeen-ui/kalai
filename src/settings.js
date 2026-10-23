@@ -45,6 +45,8 @@ export async function showSettings() {
         <div id="rmStep" class="muted" style="font-size:13px"></div>
         <div id="rmWrap" style="position:relative;max-width:640px;display:none;cursor:crosshair"><img id="rmImg" alt="Room photo" style="width:100%;display:block;border-radius:6px"><div id="rmDots"></div></div>
       </div>
+      <h3 style="margin:0;font-size:17px">Artists</h3>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-showArtists" style="width:auto"> Show the artist portfolio on the website (photo, name, origin, training, bio and sample works of each approved artist)</label>
       <h3 style="margin:0;font-size:17px">Currency</h3>
       <div class="field" style="max-width:560px"><label for="st-inr">Rupees per dirham (for prices shown in ₹)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="st-inr" type="number" min="1" max="100" step="0.01" style="max-width:140px"><button type="button" class="btn small ghost" id="stInrNow">Get today's rate</button>
         <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-inrAuto" style="width:auto"> Update automatically every morning</label></div>
@@ -99,6 +101,7 @@ export async function showSettings() {
     $('st-roundUp').value = row?.roundUp ? 'up' : 'near';
     $('st-approx').checked = row?.approxSign !== false;
     window.kalaiRoundEg?.();
+    $('st-showArtists').checked = row?.showArtists !== false;
     $('stInrAt').textContent = row?.inrRateAt ? `Rate from the European Central Bank (via Frankfurter), updated ${new Date(row.inrRateAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Updated automatically each morning at 06:05 Dubai time, from the European Central Bank rate.';
     try { marks = row?.roomMarks ? JSON.parse(row.roomMarks) : null; } catch { marks = null; }
     if (marks?.cm) $('rmCm').value = marks.cm;
@@ -126,6 +129,7 @@ async function save() {
   rec.inrRound = Number($('st-inrRound').value) || 50;
   rec.roundUp = $('st-roundUp').value === 'up';
   rec.approxSign = $('st-approx').checked;
+  rec.showArtists = $('st-showArtists').checked;
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';

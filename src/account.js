@@ -955,12 +955,19 @@ showOfferBanner();
 async function showArtists() {
   if (typeof window.kalaiShowArtists !== 'function') return;
   try {
+    const st = await client.models.SiteSetting.get({ id: 'site' }, { authMode: 'apiKey' }).catch(() => null);
+    if (st?.data?.showArtists === false) return; // switched off in Order management → Settings
     const r = await client.models.ArtistProfile.list({ authMode: 'apiKey', limit: 200 });
     if (r.errors?.length) throw new Error(r.errors[0].message);
+    const url = async (k) => { try { return k ? (await getUrl({ path: k, options: { expiresIn: 3600 } })).url.toString() : ''; } catch { return ''; } };
     const list = await Promise.all((r.data || []).sort((a, b) => String(a.publishedAt).localeCompare(String(b.publishedAt))).map(async (a) => {
-      let img = '';
-      try { if (a.photoKey) img = (await getUrl({ path: a.photoKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
-      return { name: a.name, mediums: a.mediums, about: a.about, place: [a.region, a.country === 'India' ? 'India' : ''].filter(Boolean).join(', '), img };
+      let keys = []; try { keys = JSON.parse(a.sampleKeys || '[]'); } catch { keys = []; }
+      return {
+        name: a.name, mediums: a.mediums, about: a.about, training: a.training || '', experience: a.experience || '', commissions: a.commissions,
+        place: [a.city || a.region, a.country === 'India' ? 'India' : 'UAE'].filter(Boolean).join(', '),
+        born: `b. ${a.country === 'India' ? 'India' : 'UAE'}${a.bornYear ? `, ${a.bornYear}` : ''}`,
+        img: await url(a.photoKey), featured: await url(a.featuredKey || keys[0]), sampleKeys: keys, url,
+      };
     }));
     window.kalaiShowArtists(list);
   } catch (ex) { console.warn('Artists not loaded.', ex); }

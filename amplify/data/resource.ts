@@ -308,6 +308,9 @@ const schema = a.schema({
       accountNumber: a.string(), // India bank account
       ifsc: a.string(),
       owner: a.string(),
+      training: a.string(), // artists: "Self-taught" or school and year
+      bornYear: a.integer(), // artists, optional (shown as "b. India, 1985")
+      city: a.string(),
     })
     .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
 
@@ -391,6 +394,7 @@ const schema = a.schema({
       heroText: a.string(),
       siteLook: a.string(), // classic | green
       inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
+      showArtists: a.boolean(), // artist portfolio on the website (false = hide)
       inrAuto: a.boolean(), // false = keep the rate typed in; otherwise updated every morning (ECB rate via Frankfurter)
       inrRateAt: a.string(),
       usdRound: a.integer(), // US$ prices on the website rounded to this many dollars (default 5)
@@ -415,6 +419,12 @@ const schema = a.schema({
       country: a.string(),
       commissions: a.string(),
       publishedAt: a.string(),
+      training: a.string(),
+      bornYear: a.integer(),
+      city: a.string(),
+      experience: a.string(),
+      featuredKey: a.string(), // one sample work shown on the portfolio card
+      sampleKeys: a.string(), // JSON list of sample works (public)
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
