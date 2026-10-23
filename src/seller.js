@@ -162,7 +162,8 @@ function route() {
   $('dPhoto').hidden = !profile.photoKey;
   if (profile.photoKey) imgUrl(profile.photoKey).then((u) => { $('dPhoto').src = u; });
   $('tabProducts').textContent = profile.type === 'ARTIST' ? 'My artworks' : 'My products';
-  $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
+  if (profile.type === 'ARTIST') $('dTerms').innerHTML = 'You receive <b>your price</b> for each work sold. Kalai Art House frames, prices and delivers your works, collects the payment from the customer and pays you your price.';
+  else $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
   if ($('tabProducts').hidden) $('dTerms').textContent = 'Price new works, follow your orders and payments, and name your works.';
   drawList();
 }
@@ -335,7 +336,7 @@ async function drawList() {
     <img alt="" data-key="${esc(keysOf(l)[0] || '')}">
     <div><h3>${esc(l.title)}</h3>
       <div style="font-size:12px;margin:3px 0"><span class="st ${esc(l.status)}">${STATUS[l.status] || esc(l.status)}</span> · stock ${Number(l.stock ?? 0)}</div>
-      <div class="muted" style="font-size:12px">You receive <b>${aed(l.sellerPrice)}</b> · customer pays <b>${aed(l.customerPrice)}</b> · ${l.deliveryBy === 'KALAI' ? 'Kalai collects and delivers' : 'You deliver'}</div>
+      <div class="muted" style="font-size:12px">You receive <b>${aed(l.sellerPrice)}</b>${profile.type === 'ARTIST' ? ' per sale · Kalai frames and delivers' : ` · customer pays <b>${aed(l.customerPrice)}</b> · ${l.deliveryBy === 'KALAI' ? 'Kalai collects and delivers' : 'You deliver'}`}</div>
       ${l.adminNote && ['REJECTED', 'PAUSED'].includes(l.status) ? `<div class="err" style="font-size:12px">Kalai: ${esc(l.adminNote)}</div>` : ''}</div>
     <div style="display:flex;flex-direction:column;gap:4px">
       <button class="btn small ghost" data-act="edit" type="button">Edit</button>
@@ -540,9 +541,9 @@ function edit(l) {
       ${v.deliveryBy === 'SELLER' ? `<tr><td>Your courier</td><td class="n">${aed(p.courier)}</td></tr>` : ''}
       <tr><td>Other charges</td><td class="n">${aed(v.otherCharges)}</td></tr>
       <tr class="t"><td>You receive per sale</td><td class="n">${aed(p.sellerPrice)}</td></tr>
-      <tr><td>Kalai commission ${pct}%</td><td class="n">${aed(p.commission)}</td></tr>
+      ${profile.type === 'ARTIST' ? '<tr><td colspan="2" class="muted" style="font-size:12px">Kalai Art House sets the website price (framing and delivery included).</td></tr>' : `<tr><td>Kalai commission ${pct}%</td><td class="n">${aed(p.commission)}</td></tr>
       ${v.deliveryBy === 'KALAI' ? `<tr><td>Kalai delivery</td><td class="n">${aed(p.delivery)}</td></tr>` : ''}
-      <tr class="t c"><td>Customer pays on the website</td><td class="n">${aed(p.customerPrice)}</td></tr>`;
+      <tr class="t c"><td>Customer pays on the website</td><td class="n">${aed(p.customerPrice)}</td></tr>`}`;
   };
   const thumbs = async () => {
     $('eThumbs').innerHTML = keys.map((k, i) => `<figure data-i="${i}"><img alt=""><button type="button" aria-label="Remove photo">×</button></figure>`).join('')
