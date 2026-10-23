@@ -240,7 +240,8 @@ const schema = a.schema({
       priceMatrix: a.string(),
       // The picture is an AI-made preview of the design; the artist paints the ordered work by hand.
       aiPreview: a.boolean(),
-      leadDays: a.integer(), // the artist's days to have the work ready to send (his desk)
+      leadDays: a.integer(), // the artist's days to have the work ready to send (his desk), from…
+      leadMax: a.integer(), // …to (when he gives a range like 10-15)
       priceApprovedAt: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),

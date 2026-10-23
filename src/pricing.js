@@ -198,7 +198,7 @@ function drawList() {
         <td><b>${esc(w.named ? w.title : 'Untitled')}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
         <td>${esc(w.size || '–')}<br><span class="muted" style="font-size:11px">${b.tier} · ${mediumOf(w) === 'sk' ? 'sketch' : 'watercolour'}</span></td>
         <td class="mono">${b.inr != null ? '₹' + Number(b.inr).toLocaleString('en-IN') : '–'}</td>
-        <td style="font-size:12px">${w.leadDays != null ? (w.leadDays === 0 ? 'ready now' : `${w.leadDays} days`) : '<span class="muted">–</span>'}</td>
+        <td style="font-size:12px">${w.leadDays != null ? (w.leadDays === 0 && !w.leadMax ? 'ready now' : `${w.leadDays}${w.leadMax && w.leadMax !== w.leadDays ? `–${w.leadMax}` : ''} days`) : '<span class="muted">–</span>'}</td>
         <td class="mono">${aed(b.styles.black?.price)}</td>
         <td style="font-size:12px">${mc.cost == null ? '–' : `${aed(mc.band[0])}–${aed(mc.band[1])}<br><span class="pc-st ${mc.verdict === 'inside' ? 'LIVE' : 'TODO'}">${mc.verdict === 'below' ? 'below the band' : mc.verdict === 'above' ? 'above the band' : 'inside the band'}</span>`}</td>
         <td class="mono"><b>${aed(mc.proposed)}</b></td>
