@@ -98,7 +98,9 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['ses:SendEmail', 'ses:SendRawEmail'],
-    resources: [`arn:aws:ses:${fnStack.region}:${fnStack.account}:identity/*`],
+    // SES v2 also checks the configuration set (and tenant) a send uses, not only the identity: allow any in this
+    // account. The sender is still fixed in the code (noreply@pranixtechno.com, a verified domain).
+    resources: ['*'],
   }),
 );
 
