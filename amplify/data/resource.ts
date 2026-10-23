@@ -487,6 +487,13 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(zohoQuoteSync)),
 
+  // Studio (Settings): this month's AWS cost, by service, with the forecast. About US$0.02 per call (Cost Explorer).
+  awsCosts: a
+    .mutation()
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(zohoQuoteSync)),
+
   // Studio: publish today's Thirukkural now (it is also published every morning automatically).
   dailyKural: a
     .mutation()

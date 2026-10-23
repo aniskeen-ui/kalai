@@ -90,6 +90,7 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
 // Daily message translation (Tamil → English, Arabic).
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({ effect: Effect.ALLOW, actions: ['translate:TranslateText'], resources: ['*'] }),
+  new PolicyStatement({ effect: Effect.ALLOW, actions: ['ce:GetCostAndUsage', 'ce:GetCostForecast'], resources: ['*'] }),
 );
 
 // Order emails to customers and the studio (Amazon SES, verified domain pranixtechno.com).

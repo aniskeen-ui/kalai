@@ -35,7 +35,10 @@ export async function showSettings() {
       return `${head}<div class="field" style="max-width:720px"><label for="st-${t.k}">${esc(t.label)}</label>${input}
         <div class="muted" style="font-size:12px">Blank = the current text (shown in grey). <button type="button" class="linkbtn" data-copy="${t.k}">Copy it in to edit</button></div></div>`;
     }).join('');
-    box.innerHTML = `<h3 style="margin:0;font-size:17px">Website theme</h3>
+    box.innerHTML = `<h3 style="margin:0;font-size:17px">AWS costs</h3>
+      <div class="field" style="max-width:720px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small ghost" id="awsCostBtn">Check AWS costs now</button><span class="muted" style="font-size:12px">Whole AWS account (website, database, emails, translation…). Amazon charges about US$0.02 per check. Alert email to kalaiarthouse@pranixtechno.com above US$20 a month.</span></div>
+        <div id="awsCostOut" style="font-size:13px"></div></div>
+      <h3 style="margin:0;font-size:17px">Website theme</h3>
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=green" target="_blank" rel="noopener">preview 2. Monda theme</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview 1. Original theme</a> · <a href="/?look=auto" target="_blank" rel="noopener">end preview</a>. A preview changes only your own browser.</div></div>
       <h3 style="margin:0;font-size:17px">Room photo for "On a wall"</h3>
@@ -64,6 +67,27 @@ export async function showSettings() {
       ${textHtml}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
     $('stSave').onclick = save;
+    // AWS costs: on demand (each check costs Amazon's Cost Explorer fee); the last result is kept in this browser.
+    const usd = (v) => `US$${Number(v).toFixed(2)}`, both = (v) => `${usd(v)} <span class="muted">(Dhs ${(v * 3.6725).toFixed(2)})</span>`;
+    const drawCosts = (c) => {
+      if (!c) return;
+      $('awsCostOut').innerHTML = `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0"><div><div class="muted" style="font-size:12px">This month so far (${esc(c.month)})</div><b style="font-size:18px">${both(c.monthToDate)}</b></div>
+        <div><div class="muted" style="font-size:12px">Forecast for the month</div><b style="font-size:18px">${c.forecast == null ? '–' : both(c.forecast)}</b></div>
+        <div><div class="muted" style="font-size:12px">Last month</div><b style="font-size:18px">${both(c.lastMonth)}</b></div></div>
+        ${c.services.length ? `<table style="border-collapse:collapse;font-size:13px">${c.services.map((x) => `<tr><td style="padding:2px 14px 2px 0">${esc(x.name)}</td><td style="text-align:right">${usd(x.usd)}</td></tr>`).join('')}</table>` : '<div class="muted">No charges yet this month.</div>'}
+        <div class="muted" style="font-size:12px;margin-top:4px">Checked ${new Date(c.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}. AWS updates these figures a few times a day; taxes are added on the bill.</div>`;
+    };
+    try { drawCosts(JSON.parse(localStorage.getItem('kalai-aws-costs') || 'null')); } catch { /* none kept */ }
+    $('awsCostBtn').onclick = async () => {
+      const b = $('awsCostBtn'); b.disabled = true; $('awsCostOut').textContent = 'Asking AWS…';
+      try {
+        const r = await client.mutations.awsCosts();
+        if (r.errors?.length) throw new Error(r.errors[0].message);
+        const c = JSON.parse(r.data); drawCosts(c);
+        try { localStorage.setItem('kalai-aws-costs', JSON.stringify(c)); } catch { /* private window */ }
+      } catch (ex) { $('awsCostOut').textContent = `Could not get the costs: ${ex.message}`; }
+      b.disabled = false;
+    };
     // Live example of the rounding, on a Dhs 1,000 price.
     const eg = () => {
       const up = $('st-roundUp').value === 'up', f = up ? Math.ceil : Math.round, ap = $('st-approx').checked ? '≈ ' : '';
