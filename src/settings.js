@@ -9,6 +9,11 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Little Artists shipping zones outside the UAE (the website maps each country to one).
 const SHIP_ZONES = [['A', 'GCC (Saudi Arabia, Oman, Qatar, Bahrain, Kuwait)'], ['B', 'South Asia (India, Sri Lanka, Pakistan, Bangladesh, Nepal, Maldives, Bhutan)'], ['C', 'UK and Europe'], ['D', 'USA, Canada, Australia, New Zealand'], ['E', 'Rest of the world']];
+// Customer emails by event (the website emails the customer at each step; untick to stop one).
+const MAILS = [['RECEIVED', 'Enquiry or order received'], ['PRICE_SENT', 'Price sent (with the payment link)'], ['PAID', 'Payment received'], ['ARTIST_STARTED', 'The artist has started (paintings and sketches)'],
+  ['FRAMING', 'Being framed'], ['SHIPPED', 'Shipped (courier and tracking number)'], ['DELIVERED', 'Delivered (with the rating link)'], ['CANCELLED', 'Cancelled'],
+  ['REQUEST', 'Cancellation or damage request received'], ['DECLINED', 'Request declined'], ['PICKUP', 'Return pickup booked'], ['REPLACEMENT', 'Replacement under way'],
+  ['REFUND', 'Refund sent'], ['REFUNDED', 'Order closed as refunded (when no refund email went)'], ['RECEIVED_AGAIN', 'Enquiry reopened']];
 const FIELDS = [
   { k: 'heroSeconds', label: 'Home page picture', note: 'The big picture at the top of the home page changes to another artwork, picked at random, every this many seconds. 0 = never changes.', min: 0, max: 600 },
   { k: 'kuralHour', label: 'Thirukkural of the day: publish at (hour, Dubai time, 0–23)', unit: '', note: 'The new kural goes up every day at this hour, e.g. 6 = 6 am, 0 = midnight. Until then the website shows yesterday\'s.', min: 0, max: 23, def: 6 },
@@ -65,6 +70,9 @@ export async function showSettings() {
       <h3 style="margin:0;font-size:17px">Little Artists: shipping outside the UAE</h3>
       <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">Dhs per parcel, added to the customer's total on the form (framing stays free for ages 3 to 10). Leave a zone blank to show "we quote before you pay". UAE delivery stays Dhs 25 / 35.</div>
         <div style="display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;margin-top:6px">${SHIP_ZONES.map(([z, n]) => `<label for="st-zone${z}" style="font-weight:400;font-size:13px">${z}. ${n}</label><input id="st-zone${z}" type="number" min="0" max="2000" step="5" placeholder="quote">`).join('')}</div></div>
+      <h3 style="margin:0;font-size:17px">Customer emails</h3>
+      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">The customer gets an email at each step, from kalaiarthouse@pranixtechno.com (replies come to the studio mailbox). Untick any you don't want sent. Studio notifications always go.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 14px;margin-top:6px">${MAILS.map(([k, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-mail="${k}" style="width:auto"> ${l}</label>`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label}${f.unit === '' ? '' : ' (seconds)'}</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
@@ -110,6 +118,8 @@ export async function showSettings() {
     window.kalaiRoundEg?.();
     $('st-showArtists').checked = row?.showArtists !== false;
     $('st-leadDefault').value = row?.leadDefault || '';
+    const off = String(row?.mailOff || '').split(',');
+    document.querySelectorAll('[data-mail]').forEach((c) => { c.checked = !off.includes(c.dataset.mail); });
     let zones = {}; try { zones = JSON.parse(row?.shipZones || '{}') || {}; } catch { zones = {}; }
     SHIP_ZONES.forEach(([z]) => { $('st-zone' + z).value = zones[z] ?? ''; });
     $('stInrAt').textContent = row?.inrRateAt ? `Rate from the European Central Bank (via Frankfurter), updated ${new Date(row.inrRateAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Updated automatically each morning at 06:05 Dubai time, from the European Central Bank rate.';
@@ -153,6 +163,7 @@ async function save() {
     zones[z] = v;
   }
   rec.shipZones = JSON.stringify(zones);
+  rec.mailOff = [...document.querySelectorAll('[data-mail]')].filter((c) => !c.checked).map((c) => c.dataset.mail).join(',') || null;
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';

@@ -2999,7 +2999,7 @@ async function emailsOn() {
 }
 const h = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 const aed = (n: number | null) => (n == null ? '' : `AED ${n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`);
-type Mail = { to: string; subject: string; lines: string[]; button?: { label: string; url: string }; footer?: string };
+type Mail = { to: string; subject: string; lines: string[]; button?: { label: string; url: string }; footer?: string; key?: string };
 
 function renderMail(m: Mail) {
   const para = (l: string) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#232046">${l}</p>`;
@@ -3046,10 +3046,13 @@ function mailsFor(rec: StreamRecord): Mail[] {
   const msgLine = msg ? `<b>Message from us:</b> ${h(msg)}` : '';
   const hi = `Hello ${h(name)},`;
   const out: Mail[] = [];
-  const cust = (subject: string, lines: string[], button = MY) => out.push({ to, subject, lines: [hi, ...lines.filter(Boolean)], button });
+  // key: which customer email this is (each can be switched off in Order Management → Settings → Customer emails).
+  let key = '';
+  const cust = (subject: string, lines: string[], button = MY) => out.push({ to, subject, lines: [hi, ...lines.filter(Boolean)], button, key });
   const studio = (subject: string, lines: string[]) => out.push({ to: STUDIO_EMAIL, subject, lines: lines.filter(Boolean), button: DESK(id), footer: 'Studio notification from art.pranixtechno.com' });
 
   if (rec.eventName === 'INSERT') {
+    key = 'RECEIVED';
     cust(`We've received your enquiry ${ref}`, [
       kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
         : kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
@@ -3066,6 +3069,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
   // Results our function wrote (refund recorded).
   const rs = str(img, 'refundState'), ors = str(old, 'refundState');
   if (rs !== ors && ['DONE', 'TEST'].includes(rs) && str(img, 'refundAction') !== 'DAMAGED_REPLACE') {
+    key = 'REFUND';
     const amt = num(img, 'refundAmount');
     cust(`Refund of ${aed(amt)} for ${ref}`, [`We've refunded <b>${aed(amt)}</b> for <b>${h(title)}</b>${str(img, 'refundRef') ? ` (reference ${h(str(img, 'refundRef'))})` : ''}.`,
       'Depending on your bank it usually shows in your account within 7 working days.', 'We are sorry this one did not work out, and we hope to paint for you again.']);
@@ -3076,8 +3080,9 @@ function mailsFor(rec: StreamRecord): Mail[] {
   const ost = str(old, 'status') || 'RECEIVED';
   const statusChanged = st !== ost;
   if (statusChanged) {
+    key = st;
     if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
-      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>, including framing, delivery in the UAE and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
+      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>, including framing, ${(str(img, 'deliveryCountry') || 'UAE') === 'UAE' ? 'delivery in the UAE' : `shipping to ${h(str(img, 'deliveryCountry'))}`} and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
       msgLine, str(img, 'paymentLink') ? 'You can pay securely with the button below. The price is held for 7 days.' : 'The price is held for 7 days. Reply to this email or message us on WhatsApp to go ahead.',
       str(img, 'deliveryAddress') ? '' : 'Please also add your <b>delivery address</b> under My enquiries & orders, so we can ship it as soon as it is ready.',
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>, including the cancellation policy.`],
@@ -3087,12 +3092,18 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
-    // Being framed: shown on My enquiries & orders only (no email).
+    if (st === 'FRAMING') cust(kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
+      kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> has reached our framer in Dubai and is being framed now.`,
+      msgLine, "We'll email you the courier and tracking number as soon as it ships."]);
     if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries & orders within 48 hours.']);
     if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
       'If anything arrived damaged, report it with photos under My enquiries & orders within 48 hours and choose a replacement or a refund.',
       'We would be grateful for your feedback: you can rate your order under My enquiries & orders.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
-    // Replacement: the customer already got "We've received your damage report"; progress is on their page.
+    if (st === 'REPLACEMENT') cust(`Your replacement is under way (${ref})`, [`We've started the replacement for <b>${h(title)}</b>.`, msgLine,
+      'You can follow each step (collection, the new work, framing and delivery) under My enquiries & orders. There is nothing to pay.']);
+    if (st === 'REFUNDED' && rs === ors) cust(`Order closed: ${ref}`, [`Your order for <b>${h(title)}</b> is closed as refunded${num(img, 'refundAmount') ? ` (<b>${aed(num(img, 'refundAmount'))}</b>)` : ''}.`, msgLine,
+      'If the refund has not reached your account within 7 working days, just reply to this email.']);
+    if (st === 'RECEIVED' && ost !== 'RECEIVED') (key = 'RECEIVED_AGAIN'), cust(`Your enquiry ${ref} is open again`, [`We've reopened your enquiry for <b>${h(title)}</b>.`, msgLine, "We'll be in touch shortly."]);
     if (st === 'CANCELLED') {
       const self = str(img, 'cancelRequest') === 'CANCEL';
       cust(`Cancelled: ${ref}`, [self ? `As you asked, your enquiry for <b>${h(title)}</b> is cancelled. Nothing was paid, so there is nothing more to do.` : `Your enquiry for <b>${h(title)}</b> is now closed.`, msgLine, 'You are welcome back any time.']);
@@ -3100,11 +3111,18 @@ function mailsFor(rec: StreamRecord): Mail[] {
     }
   }
 
-  // Artist started: shown on the customer's page (and in the cancellation terms there), no email.
+  // The artist has started the work (the 50% cancellation terms apply from now).
+  if (str(img, 'artistStartedAt') && !str(old, 'artistStartedAt') && kind !== 'MARKET' && kind !== 'GIFT') {
+    key = 'ARTIST_STARTED';
+    cust(`The artist has started: ${title} (${ref})`, [`Good news: the artist has started work on <b>${h(title)}</b>.`,
+      kind === 'COMMISSION' ? "We'll share the pencil sketch with you for approval before any paint goes on." : "We'll let you know when it moves to the framer.",
+      'From now, a cancellation is refunded at 50% under our terms.']);
+  }
 
   // A customer request (cancel / damage) or the studio's answer to it.
   const cs = str(img, 'cancelState'), ocs = str(old, 'cancelState');
   if (cs !== ocs && cs === 'REQUESTED') {
+    key = 'REQUEST';
     const req = str(img, 'cancelRequest');
     const due = num(img, 'cancelRefundDue');
     const damage = req.startsWith('DAMAGED');
@@ -3120,11 +3138,13 @@ function mailsFor(rec: StreamRecord): Mail[] {
       'Pay the refund, then confirm it in the order (the box is filled in for you).']);
   }
   if (cs !== ocs && cs === 'DECLINED') {
+    key = 'DECLINED';
     cust(`About your request for ${ref}`, [`We've looked at your request for <b>${h(title)}</b>.`, str(img, 'cancelReply') ? h(str(img, 'cancelReply')) : 'We are unable to accept it under our terms. Please reply to this email if you would like to talk it through.']);
   }
 
   // Return pickup for a replacement.
   if (str(img, 'returnAwb') && str(img, 'returnAwb') !== str(old, 'returnAwb') && str(img, 'returnMode') === 'PICKUP') {
+    key = 'PICKUP';
     const d = str(img, 'returnPickupDate');
     cust(`Pickup booked for ${title} (${ref})`, [`We've booked a courier to collect the damaged <b>${h(title)}</b>${d ? ` on <b>${h(new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` : ''}.`,
       `Courier: <b>${h(str(img, 'returnCourier'))}</b> · return AWB <b>${h(str(img, 'returnAwb'))}</b>. The driver brings the label; please pack it in the original packaging if you still have it.`,
@@ -3143,10 +3163,24 @@ function mailsFor(rec: StreamRecord): Mail[] {
   return out;
 }
 
+let mailOffCache: { at: number; list: string[] } | null = null;
+async function mailOff(): Promise<string[]> {
+  if (mailOffCache && Date.now() - mailOffCache.at < 60_000) return mailOffCache.list;
+  let list: string[] = [];
+  try {
+    const t = process.env.SITE_TABLE;
+    if (t) list = String((await ddb.send(new GetItemCommand({ TableName: t, Key: { id: { S: 'site' } } }))).Item?.mailOff?.S ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  } catch { list = []; }
+  mailOffCache = { at: Date.now(), list };
+  return list;
+}
 async function notify(rec: StreamRecord) {
   try {
-    const mails = mailsFor(rec);
+    let mails = mailsFor(rec);
     if (!mails.length || !(await emailsOn())) return;
+    // Customer emails switched off in Settings (studio notifications always go).
+    const off = await mailOff();
+    mails = mails.filter((m) => !m.key || !off.includes(m.key));
     for (const m of mails) {
       try { await sendMail(m); } catch (err) { console.warn(`Email "${m.subject}" not sent:`, err); }
     }
