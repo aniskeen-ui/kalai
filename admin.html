@@ -41,7 +41,7 @@ label{font-size:13px;font-weight:600}
 .login{max-width:380px;margin:40px auto;display:grid;gap:14px}
 .err{color:var(--kumkum);font-size:14px;min-height:1em}
 .muted{color:var(--muted);font-size:14px}
-.desk{display:grid;grid-template-columns:minmax(0,var(--lw,1.5fr)) 14px minmax(0,1fr);gap:6px;align-items:start}
+.desk{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start}
 .deskL{display:grid;gap:16px;min-width:0}
 .dsplit{align-self:stretch;cursor:col-resize;display:flex;justify-content:center;touch-action:none;border-radius:8px}
 .dsplit span{width:4px;border-radius:4px;background:linear-gradient(#7fbf3f,#2f7d32);opacity:.55;margin:4px 0;transition:opacity .15s,width .15s}
@@ -181,6 +181,8 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .deskL>.tablewrap::-webkit-scrollbar-thumb{background:linear-gradient(#7fbf3f,#2f7d32);border-radius:8px;border:3px solid #e6eedc}
 .deskL>.tablewrap::-webkit-scrollbar-track{background:#e6eedc;border-radius:8px}
 .deskL>.tablewrap thead th{position:sticky;top:0;z-index:1;background:var(--surface)}
+.deskL>.tablewrap td:nth-child(6){white-space:normal;min-width:120px}
+.deskL>.tablewrap td:nth-child(6) .chip{display:inline-block;margin:2px 2px 0 0}
 /* Document flow (below the order list): dark card */
 .flowcard{container-type:inline-size;border-radius:16px;padding:16px 18px;background:radial-gradient(120% 140% at 0% 0%,#2a1b4d 0%,#141a33 45%,#0d2a26 100%);border:1px solid #3b2f63;box-shadow:0 10px 30px rgba(20,10,50,.35);color:#eef0ff}
 .flowhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -262,7 +264,6 @@ a.df[href]:hover{transform:translateY(-2px)}
         <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
       </table></div>
       <section id="flowSlot" class="flowcard" hidden></section></div>
-      <div class="dsplit" id="dSplit" role="separator" aria-orientation="vertical" aria-label="Drag to resize the order list" title="Drag to widen or narrow the order list" tabindex="0"><span></span></div>
       <aside class="card detail" id="detail"><p class="muted">Select an order to see the details, set a price and update its status.</p></aside>
     </div>
     </div>

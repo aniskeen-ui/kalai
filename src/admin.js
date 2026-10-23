@@ -1750,16 +1750,5 @@ async function showDetail(e) {
 start();
 
 
-// Drag the bar between the order list and the order to resize them (remembered on this computer).
-(() => {
-  const bar = $('dSplit'), desk = $('desk'); if (!bar || !desk) return;
-  const set = (px) => { const w = desk.getBoundingClientRect().width; const v = Math.max(Math.min(620, w - 480), Math.min(w - 480, px)); desk.style.setProperty('--lw', `${v}px`); return v; };
-  try { const v = Number(localStorage.getItem('kalaiDeskW')); if (v > 0) set(v); } catch { /* storage blocked */ }
-  let on = false;
-  bar.addEventListener('pointerdown', (ev) => { on = true; bar.classList.add('drag'); bar.setPointerCapture(ev.pointerId); ev.preventDefault(); });
-  bar.addEventListener('pointermove', (ev) => { if (on) set(ev.clientX - desk.getBoundingClientRect().left); });
-  const end = () => { if (!on) return; on = false; bar.classList.remove('drag'); try { localStorage.setItem('kalaiDeskW', String(parseFloat(getComputedStyle(desk).getPropertyValue('--lw')) || '')); } catch { /* ignore */ } };
-  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
-  bar.addEventListener('keydown', (ev) => { if (!['ArrowLeft', 'ArrowRight'].includes(ev.key)) return; const cur = desk.querySelector('.deskL').getBoundingClientRect().width; set(cur + (ev.key === 'ArrowRight' ? 40 : -40)); on = true; end(); });
-  bar.addEventListener('dblclick', () => { desk.style.removeProperty('--lw'); try { localStorage.removeItem('kalaiDeskW'); } catch { /* ignore */ } });
-})();
+// The old drag-to-resize width is no longer used: forget it.
+try { localStorage.removeItem('kalaiDeskW'); } catch { /* storage blocked */ }
