@@ -305,7 +305,11 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
    (big picture with thumbnails, details and stacked buttons on the right, more works below).
    Chosen in Order Management → Settings; preview with ?look=green, back with ?look=classic or ?look=auto. ===== */
 html[data-skin="green"]{--ink:#1d4a2e;--gold:#6b8e23;--kumkum:#4f7a1d;--on-ink:#ffffff}
-html[data-skin="green"]:not([data-theme="dark"]){--bg:#ffffff;--surface:#ffffff;--sunk:#f5f7f0;--fg:#1f2a22;--muted:#5d6b60;--line:#e2e8dc;--gold-soft:#eef3e1}
+/* light green when the page is light (chosen, or the device is in light mode); dark green when the page is dark.
+   Both halves switch together, so badges never end up dark on a white page. */
+html[data-skin="green"][data-theme="light"]{--bg:#ffffff;--surface:#ffffff;--sunk:#f5f7f0;--fg:#1f2a22;--muted:#5d6b60;--line:#e2e8dc;--gold-soft:#eef3e1;color-scheme:light}
+@media (prefers-color-scheme:light){html[data-skin="green"]:not([data-theme="dark"]){--bg:#ffffff;--surface:#ffffff;--sunk:#f5f7f0;--fg:#1f2a22;--muted:#5d6b60;--line:#e2e8dc;--gold-soft:#eef3e1}}
+html[data-skin="green"][data-theme="dark"]{--ink:#0f2418;--gold:#9cc24a;--kumkum:#9cc24a;--gold-soft:#24301a}
 @media (prefers-color-scheme:dark){html[data-skin="green"]:not([data-theme="light"]){--ink:#0f2418;--gold:#9cc24a;--kumkum:#9cc24a;--gold-soft:#24301a}}
 html[data-skin="green"] header.top{border-top:30px solid #5f8a1e}
 html[data-skin="green"] header.top::before{content:"Customer service: +971 55 299 6626";position:absolute;top:-30px;left:0;right:0;height:30px;display:grid;place-items:center;font-size:13px;color:#fff;font-weight:600}
