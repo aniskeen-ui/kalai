@@ -645,7 +645,7 @@ function addressSection(e) {
 }
 function readAddress(e) {
   if (!$('addrBox')) return {};
-  const india = $('dCountry').value === 'India';
+  const india = $('dCountry').value !== 'UAE'; // a PIN / postal code is kept for every country but the UAE
   const v = { deliveryName: $('dName').value.trim() || null, deliveryPhone: $('dPhone').value.trim() || null, deliveryCountry: $('dCountry').value, deliveryEmirate: $('dRegion').value || null, deliveryPin: india ? $('dPin').value.trim() || null : null, deliveryAddress: $('dAddr').value.trim() || null, deliveryLandmark: $('dLand').value.trim() || null };
   const was = { ...e, deliveryCountry: e.deliveryCountry || 'UAE' };
   const changed = ['deliveryCountry', 'deliveryEmirate', 'deliveryPin', 'deliveryAddress', 'deliveryLandmark'].some((k) => (v[k] || '') !== (was[k] || '')) || (v.deliveryAddress && ((v.deliveryName || '') !== (e.deliveryName || '') || (v.deliveryPhone || '') !== (e.deliveryPhone || '')));

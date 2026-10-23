@@ -252,7 +252,7 @@ function bankKind() {
   $('pIbanBox').hidden = india; $('pInBank').hidden = !india;
 }
 function fillApply() {
-  $('pWhere').innerHTML = countryRegionHtml({ country: profile?.country || 'UAE', region: profile?.emirate, prefix: 'p', names: false }).replace(/<div class="field" data-pin-box[\s\S]*$/, '');
+  $('pWhere').innerHTML = countryRegionHtml({ country: profile?.country || 'UAE', region: profile?.emirate, prefix: 'p', names: false, only: ['UAE', 'India'] }).replace(/<div class="field" data-pin-box[\s\S]*$/, '');
   wireRegion($('pWhere'));
   $('pCountry').addEventListener('change', bankKind);
   for (const [id, k] of Object.entries(AF)) $(id).value = profile?.[k] ?? (id === 'pComm' ? 'YES' : '');

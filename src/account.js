@@ -521,14 +521,14 @@ function wireAddress(root, items) {
         ev.preventDefault();
         const err = f.querySelector('.acct-err');
         const v = { name: f.name.value.trim(), phone: f.phone.value.trim(), country: f.country.value, emirate: f.emirate.value, pin: f.pin.value.trim(), address: f.address.value.trim(), landmark: f.landmark.value.trim() };
-        const india = v.country === 'India';
-        const why = !v.name ? "Add the receiver's name." : v.phone.replace(/\D/g, '').length < 9 ? 'Add a mobile number the courier can call.' : !v.emirate ? (india ? 'Choose the state.' : 'Choose the emirate.') : india && !/^\d{6}$/.test(v.pin) ? 'Add the 6-digit PIN code.' : v.address.length < 10 ? 'Add the full address: house or flat, building, street and area.' : '';
+        const india = v.country === 'India', uae = v.country === 'UAE';
+        const why = !v.name ? "Add the receiver's name." : v.phone.replace(/\D/g, '').length < 9 ? 'Add a mobile number the courier can call.' : !v.emirate ? (india ? 'Choose the state.' : uae ? 'Choose the emirate.' : 'Add the state, province or city.') : india && !/^\d{6}$/.test(v.pin) ? 'Add the 6-digit PIN code.' : v.address.length < 10 ? 'Add the full address: house or flat, building, street and area.' : '';
         if (why) { err.textContent = why; return; }
         const btn = f.querySelector('button[type=submit]'); btn.disabled = true; err.textContent = '';
         try {
-          const { errors } = await client.mutations.customerAddress({ id: e.id, ...v, landmark: v.landmark || null, pin: india ? v.pin : null });
+          const { errors } = await client.mutations.customerAddress({ id: e.id, ...v, landmark: v.landmark || null, pin: !uae && v.pin ? v.pin : null });
           if (errors?.length) throw new Error(errors[0].message);
-          Object.assign(e, { deliveryName: v.name, deliveryPhone: v.phone, deliveryCountry: v.country, deliveryEmirate: v.emirate, deliveryPin: india ? v.pin : '', deliveryAddress: v.address, deliveryLandmark: v.landmark });
+          Object.assign(e, { deliveryName: v.name, deliveryPhone: v.phone, deliveryCountry: v.country, deliveryEmirate: v.emirate, deliveryPin: uae ? '' : v.pin, deliveryAddress: v.address, deliveryLandmark: v.landmark });
           showList();
         } catch (ex) { err.textContent = ex.message || 'Could not save the address.'; btn.disabled = false; }
       };
@@ -747,7 +747,7 @@ async function showOrder(p) {
       <div class="field"><label for="moName">Receiver's name</label><input id="moName" name="name" autocomplete="name" value="${esc(a.name)}"></div>
       <div class="field"><label for="moPhone">Receiver's mobile</label><input id="moPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(a.phone)}"></div>
       ${countryRegionHtml({ country: a.country || 'UAE', region: a.emirate, pin: a.pin, prefix: 'mo' })}
-      <p class="acct-info" id="moIndia" style="margin:0;font-size:12px" hidden>Delivery to India: we confirm the shipping charge with your payment link, before you pay.</p>
+      <p class="acct-info" id="moIndia" style="margin:0;font-size:12px" hidden>Delivery outside the UAE: we confirm the shipping charge with your payment link, before you pay.</p>
       <div class="field"><label for="moAddr">Address</label><textarea id="moAddr" name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(a.address)}</textarea></div>
       <div class="field"><label for="moLand">Landmark (optional)</label><input id="moLand" name="landmark" value="${esc(a.landmark)}"></div>
       <div class="field"><label for="moNote">Note to the maker (optional)</label><input id="moNote" name="note" maxlength="300"></div>
@@ -771,7 +771,7 @@ async function showOrder(p) {
   const total = () => { body.querySelector('#moTotal').innerHTML = `Total: <b>AED ${(Number(p.price) * Number(f.qty.value)).toLocaleString('en-US')}</b>`; };
   f.qty.onchange = total; total();
   wireRegion(f);
-  const india = () => { body.querySelector('#moIndia').hidden = f.country.value !== 'India'; };
+  const india = () => { body.querySelector('#moIndia').hidden = f.country.value === 'UAE'; };
   f.country.addEventListener('change', india); india();
   body.querySelector('#moBack').onclick = showList;
   if (!a.name) f.name.focus();
@@ -794,7 +794,9 @@ const KURAL_TITLE = { ta: 'இன்றைய திருக்குறள்'
 const RTL = ['ar', 'ur', 'fa', 'fa-AF', 'he', 'ps'];
 // The visitor's own language (browser setting), if the kural has it; ?klang=hi to preview one.
 function visitorLang(have) {
-  const q = new URLSearchParams(location.search).get('klang');
+  let picked = ''; try { picked = localStorage.getItem('kalai-klang') || ''; } catch { picked = ''; }
+  if (picked === 'none') return '';
+  const q = new URLSearchParams(location.search).get('klang') || picked;
   const keys = Object.keys(have).filter((k) => k !== '_h'), byLower = Object.fromEntries(keys.map((k) => [k.toLowerCase(), k]));
   const alias = { fil: 'tl', iw: 'he', nb: 'no', nn: 'no', 'zh-hk': 'zh-TW', 'zh-mo': 'zh-TW', 'zh-hant': 'zh-TW', 'es-419': 'es-MX', 'pt-br': 'pt', 'fa-af': 'fa-AF', prs: 'fa-AF' };
   const list = [q, ...(navigator.languages || [navigator.language || ''])].filter(Boolean).map((x) => String(x).toLowerCase());
@@ -826,9 +828,12 @@ async function showDailyMessage() {
     if (!m) return;
     // Tamil, the visitor's own language (if not Tamil, English or Arabic), English, Arabic.
     let extra = {}; try { extra = JSON.parse(m.more || '{}') || {}; } catch { extra = {}; }
-    const own = visitorLang(extra);
+    let own = visitorLang(extra);
     if (own) m[own] = extra[own];
     const langs = ['ta', own, 'en', 'ar'].filter((l) => l && (m[l] || '').trim());
+    // "Other languages": every language today's kural has, each named in its own language.
+    const native = (l) => { try { return new Intl.DisplayNames([l], { type: 'language' }).of(l) || l; } catch { return l; } };
+    const others = Object.keys(extra).filter((l) => l !== '_h' && extra[l]).map((l) => [l, native(l)]).sort((a, b) => a[1].localeCompare(b[1]));
     if (!langs.length) return;
     // The flash card is for the Thirukkural only: always the Thiruvalluvar picture and the Thirukkural title.
     const kural = true;
@@ -841,7 +846,8 @@ async function showDailyMessage() {
 .kmsg-img img{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);background:#f7e7c1}
 .kmsg-head{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap}
 .kmsg-head b{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);flex-basis:100%}
-.kmsg-langs{display:flex;gap:2px}
+.kmsg-more{background:none;border:0;color:var(--muted);font:inherit;font-size:10px;cursor:pointer;padding:0;text-decoration:underline}
+.kmsg-pick{font:inherit;font-size:11px;padding:2px 4px;width:100%}
 .kmsg-langs button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:0 5px;font:inherit;font-size:9px;line-height:16px;cursor:pointer}
 .kmsg-langs button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1b2b}
 .kmsg-x{position:absolute;top:4px;right:5px;background:none;border:0;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
@@ -864,7 +870,8 @@ async function showDailyMessage() {
     if (kural) { try { picture = (await getUrl({ path: 'catalogue/site/thiruvalluvar.jpg', options: { expiresIn: 3600, validateObjectExistence: true } })).url.toString(); } catch { picture = '/valluvar.svg'; } }
     box.innerHTML = `${kural ? `<div class="kmsg-img"><img alt="Thiruvalluvar" src="${esc(picture)}" onerror="this.onerror=null;this.src='/valluvar.svg'"></div>` : ''}
       <div class="kmsg-head"><b></b><button class="kmsg-x" type="button" aria-label="Close">×</button></div>
-      <p></p>${langs.length > 1 ? '<div class="kmsg-bar" aria-hidden="true"><i></i></div>' : ''}`;
+      <p></p>${langs.length > 1 ? '<div class="kmsg-bar" aria-hidden="true"><i></i></div>' : ''}
+      ${others.length ? `<button type="button" class="kmsg-more">🌐 Other languages</button><select class="kmsg-pick" aria-label="Choose your language" hidden><option value="">🌐 Choose your language…</option><option value="none">Only Tamil, English, Arabic</option>${others.map(([l, n]) => `<option value="${esc(l)}" ${l === own ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : ''}`;
     const p = box.querySelector('p'), bar = box.querySelector('.kmsg-bar i');
     const show = (l, fade = true) => {
       lang = l;
@@ -890,6 +897,20 @@ async function showDailyMessage() {
     p.style.cursor = langs.length > 1 ? 'pointer' : ''; p.title = langs.length > 1 ? 'Next language' : ''; p.onclick = () => { if (langs.length > 1) { show(langs[(langs.indexOf(lang) + 1) % langs.length]); restart(); } };
     box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); };
     tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); show(lang, false); restart(); };
+    // The visitor picks a language: it joins the card after Tamil and is remembered on this device.
+    const more = box.querySelector('.kmsg-more'), pick = box.querySelector('.kmsg-pick');
+    if (more) {
+      more.onclick = () => { more.hidden = true; pick.hidden = false; pick.focus(); };
+      pick.onchange = () => {
+        const v = pick.value; if (!v) return;
+        try { localStorage.setItem('kalai-klang', v); } catch { /* private window */ }
+        if (own) langs.splice(langs.indexOf(own), 1);
+        own = v === 'none' ? '' : v;
+        if (own) { m[own] = extra[own]; langs.splice(langs.includes('ta') ? 1 : 0, 0, own); }
+        if (bar) bar.parentElement.hidden = langs.length < 2 || !kuralSec;
+        show(own || 'ta'); restart();
+      };
+    }
     show(lang, false);
     restart();
     // Closed this same message before: keep it as the small tab.

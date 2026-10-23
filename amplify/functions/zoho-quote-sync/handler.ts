@@ -2825,23 +2825,29 @@ const IN_STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal P
   'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka',
   'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab',
   'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal'];
-/** Checks a delivery address for the UAE or India; returns the cleaned fields or throws a message for the customer. */
+/** Checks a delivery address (UAE and India with their own lists; any other country with a typed state/city and an
+ *  optional postal code); returns the cleaned fields or throws a message for the customer. */
 function checkAddress(a: { name?: unknown; phone?: unknown; country?: unknown; emirate?: unknown; pin?: unknown; address?: unknown; landmark?: unknown }) {
   const clip = (v: unknown, n: number) => String(v ?? '').trim().replace(/\s+\n/g, '\n').slice(0, n);
-  const country = clip(a.country, 20) === 'India' ? 'India' : 'UAE';
-  const name = clip(a.name, 80), phone = clip(a.phone, 30), region = clip(a.emirate, 60), pin = clip(a.pin, 10).replace(/\s/g, ''), address = clip(a.address, 400), landmark = clip(a.landmark, 120);
+  const c0 = clip(a.country, 60).replace(/\s+/g, ' ');
+  const country = !c0 || c0 === 'UAE' ? 'UAE' : c0;
+  if (!/^[\p{L}][\p{L} .'’()&-]{1,59}$/u.test(country)) throw new Error('Choose the country.');
+  const name = clip(a.name, 80), phone = clip(a.phone, 30), region = clip(a.emirate, 60), address = clip(a.address, 400), landmark = clip(a.landmark, 120);
+  const pin = country === 'India' ? clip(a.pin, 10).replace(/\s/g, '') : clip(a.pin, 12).replace(/\s+/g, ' ').toUpperCase();
   if (!name) throw new Error('Add the name of the person receiving it.');
   if (phone.replace(/\D/g, '').length < 9) throw new Error('Add a mobile number the courier can call.');
   if (country === 'UAE' && !EMIRATES.includes(region)) throw new Error('Choose the emirate.');
   if (country === 'India' && !IN_STATES.includes(region)) throw new Error('Choose the state.');
   if (country === 'India' && !/^[1-9]\d{5}$/.test(pin)) throw new Error('Add the 6-digit PIN code.');
+  if (country !== 'UAE' && country !== 'India' && region.length < 2) throw new Error('Add the state, province or city.');
+  if (pin && country !== 'India' && !/^[A-Z0-9][A-Z0-9 -]{1,11}$/.test(pin)) throw new Error('Check the postal code.');
   if (address.length < 10) throw new Error('Add the full address: house or flat number, building, street and area.');
-  return { name, phone, country, region, pin: country === 'India' ? pin : '', address, landmark };
+  return { name, phone, country, region, pin: country === 'UAE' ? '' : pin, address, landmark };
 }
-/** "Villa 12, Mirdif, Dubai" or "12 MG Road, Chennai, Tamil Nadu 600001, India". */
+/** "Villa 12, Mirdif, Dubai", "12 MG Road, Chennai, Tamil Nadu 600001, India" or "…, London SW1A 2AA, United Kingdom". */
 function addressText(img: Img) {
-  const india = str(img, 'deliveryCountry') === 'India';
-  return [str(img, 'deliveryAddress'), str(img, 'deliveryLandmark') ? `near ${str(img, 'deliveryLandmark')}` : '', `${str(img, 'deliveryEmirate')}${india && str(img, 'deliveryPin') ? ` ${str(img, 'deliveryPin')}` : ''}`, india ? 'India' : ''].filter(Boolean).join(', ');
+  const c = str(img, 'deliveryCountry') || 'UAE', away = c !== 'UAE';
+  return [str(img, 'deliveryAddress'), str(img, 'deliveryLandmark') ? `near ${str(img, 'deliveryLandmark')}` : '', `${str(img, 'deliveryEmirate')}${away && str(img, 'deliveryPin') ? ` ${str(img, 'deliveryPin')}` : ''}`, away ? c : ''].filter(Boolean).join(', ');
 }
 async function customerAddress(ev: ApiEvent) {
   const table = process.env.ENQUIRY_TABLE;
