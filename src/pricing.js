@@ -6,6 +6,7 @@
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { parseCard } from './ratecard.js';
+import { cleanTitle } from './title.js';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -230,7 +231,7 @@ function drawList() {
     ${rows.map((w) => {
       const b = build(w), m = matrixOf(w), [st, label] = stateOf(w), mc = marketOf(w, b);
       return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><input type="checkbox" data-pick="${esc(w.id)}" ${picked.has(w.id) ? 'checked' : ''} ${b.artistAed == null ? 'disabled title="No artist price yet"' : ''}></td><td><img data-key="${esc(w.imageKey)}" alt=""></td>
-        <td><b>${esc(w.named ? w.title : 'Untitled')}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
+        <td><b>${esc(w.named ? w.title : cleanTitle(w.title))}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
         <td>${esc(w.size || '–')}<br><span class="muted" style="font-size:11px">${b.tier} · ${mediumOf(w) === 'sk' ? 'sketch' : 'watercolour'}</span></td>
         <td class="mono">${artistPrice(w, b.inr)}${w.artist ? `<br><span class="muted" style="font-size:11px;font-family:inherit">${esc(w.artist)}</span>` : ''}</td>
         <td style="font-size:12px">${w.leadDays != null ? (w.leadDays === 0 && !w.leadMax ? 'ready now' : `${w.leadDays}${w.leadMax && w.leadMax !== w.leadDays ? `–${w.leadMax}` : ''} days`) : '<span class="muted">–</span>'}</td>
