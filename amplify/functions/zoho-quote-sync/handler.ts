@@ -6,7 +6,6 @@ import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
-import { CostExplorerClient, GetCostAndUsageCommand, GetCostForecastCommand } from '@aws-sdk/client-cost-explorer';
 import { createHmac, createHash, timingSafeEqual } from 'node:crypto';
 
 /**
@@ -2599,39 +2598,6 @@ async function applyCode(ev: ApiEvent) {
 // Arabic by Amazon Translate. Switch off with SSM /kalai/kural/enabled = off. The studio's own message wins on the site.
 // Rupees per dirham for prices shown in ₹ on the website: every morning, from the European Central Bank's USD→INR
 // rate (Frankfurter, free, no key) and the dirham's fixed peg (3.6725 per dollar). Off when Settings says "keep my rate".
-// ---------- AWS costs (Settings) ----------
-// Month to date by service, last month's total and AWS's forecast for this month. Cost Explorer charges $0.01 a call.
-async function awsCosts() {
-  const ce = new CostExplorerClient({ region: 'us-east-1' });
-  const ymd = (d: Date) => d.toISOString().slice(0, 10);
-  const now = new Date();
-  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const tomorrow = new Date(today.getTime() + 86_400_000);
-  // From the 1st of last month to tomorrow, monthly, by service: last month and this month in one call.
-  type CeRows = { ResultsByTime?: { TimePeriod?: { Start?: string }; Groups?: { Keys?: string[]; Metrics?: Record<string, { Amount?: string }> }[] }[] };
-  const r: CeRows = await ce.send(new GetCostAndUsageCommand({
-    TimePeriod: { Start: ymd(prev), End: ymd(tomorrow) }, Granularity: 'MONTHLY', Metrics: ['UnblendedCost'],
-    GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }],
-  }));
-  const months = (r.ResultsByTime ?? []).map((t) => ({
-    start: t.TimePeriod?.Start ?? '',
-    services: (t.Groups ?? []).map((g) => ({ name: g.Keys?.[0] ?? '', usd: Number(g.Metrics?.UnblendedCost?.Amount ?? 0) })).filter((x) => Math.abs(x.usd) >= 0.005).sort((x, y) => y.usd - x.usd),
-  }));
-  const sum = (m?: { services: { usd: number }[] }) => Math.round((m?.services ?? []).reduce((t, s) => t + s.usd, 0) * 100) / 100;
-  const thisM = months.find((m) => m.start === ymd(first)), lastM = months.find((m) => m.start === ymd(prev));
-  let forecast: number | null = null;
-  try {
-    const f: { Total?: { Amount?: string } } = await ce.send(new GetCostForecastCommand({ TimePeriod: { Start: ymd(today), End: ymd(next) }, Metric: 'UNBLENDED_COST', Granularity: 'MONTHLY' }));
-    const rest = Number(f.Total?.Amount ?? NaN);
-    // The forecast covers today to month end; add what is already spent.
-    forecast = Number.isFinite(rest) ? Math.round((sum(thisM) + rest) * 100) / 100 : null;
-  } catch { forecast = null; } // too little history yet, or the last day of the month
-  return { month: ymd(first).slice(0, 7), monthToDate: sum(thisM), forecast, lastMonth: sum(lastM), services: thisM?.services ?? [], at: now.toISOString() };
-}
-
 async function refreshInr() {
   const table = process.env.SITE_TABLE;
   if (!table) return;
@@ -3167,7 +3133,6 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
     if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));
-    if (field === 'awsCosts') return JSON.stringify(await awsCosts());
     if (field === 'applyCode') return JSON.stringify(await applyCode(event));
     if (field === 'assignCodes') return JSON.stringify(await assignCodes());
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
