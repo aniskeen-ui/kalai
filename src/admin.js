@@ -495,6 +495,8 @@ function render() {
   });
   // Search: order no., customer name, mobile, email, customer code, artwork code / title; dates in Dubai time.
   fillFinders();
+  // Types with no orders yet (e.g. Crafts shop before the first seller) are hidden from the Type filter.
+  [...$('fKind').options].forEach((o) => { if (o.value) o.hidden = !all.some((e) => e.kind === o.value) && $('fKind').value !== o.value; });
   const q = $('fSearch').value.trim().toLowerCase(), from = $('fFrom').value, to = $('fTo').value, fc = $('fCust').value;
   const dubaiDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
   // Order box: order no., title, artwork code (in the details). Customer: the dropdown.
