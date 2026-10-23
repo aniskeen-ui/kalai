@@ -804,6 +804,8 @@ const sivaDone = (e) => e.artistStage === 'SHIPPED';
 function statusBlock(e, k, s) {
   if (k === s) return '';
   if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
+  // Delivered is final: after that only after-sales (a replacement for damage, or a refund).
+  if (s === 'DELIVERED' && !['REPLACEMENT', 'REFUNDED'].includes(k)) return 'already delivered';
   if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return 'waiting for Siva';
   if (k === 'DELIVERED' && !['SHIPPED', 'DELIVERED'].includes(s)) return 'ship it first';
   return '';
