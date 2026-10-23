@@ -50,6 +50,7 @@ export async function showSettings() {
       </div>
       <h3 style="margin:0;font-size:17px">Artists</h3>
       <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-showArtists" style="width:auto"> Show the artist portfolio on the website (photo, name, origin, training, bio and sample works of each approved artist)</label>
+      <div class="field" style="max-width:560px"><label for="st-leadDefault">Ready to send in (days), for works the artist hasn't given a time</label><input id="st-leadDefault" maxlength="9" placeholder="e.g. 7 or 10-15" style="max-width:160px"><div class="muted" style="font-size:12px">The website's Delivery line uses the artist's own time for each work (artist desk → My works &amp; prices); this one fills the gaps. Blank = "ready to ship".</div></div>
       <h3 style="margin:0;font-size:17px">Currency</h3>
       <div class="field" style="max-width:560px"><label for="st-inr">Rupees per dirham (for prices shown in ₹)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="st-inr" type="number" min="1" max="100" step="0.01" style="max-width:140px"><button type="button" class="btn small ghost" id="stInrNow">Get today's rate</button>
         <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-inrAuto" style="width:auto"> Update automatically every morning</label></div>
@@ -108,6 +109,7 @@ export async function showSettings() {
     $('st-approx').checked = row?.approxSign !== false;
     window.kalaiRoundEg?.();
     $('st-showArtists').checked = row?.showArtists !== false;
+    $('st-leadDefault').value = row?.leadDefault || '';
     let zones = {}; try { zones = JSON.parse(row?.shipZones || '{}') || {}; } catch { zones = {}; }
     SHIP_ZONES.forEach(([z]) => { $('st-zone' + z).value = zones[z] ?? ''; });
     $('stInrAt').textContent = row?.inrRateAt ? `Rate from the European Central Bank (via Frankfurter), updated ${new Date(row.inrRateAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Updated automatically each morning at 06:05 Dubai time, from the European Central Bank rate.';
@@ -138,6 +140,10 @@ async function save() {
   rec.roundUp = $('st-roundUp').value === 'up';
   rec.approxSign = $('st-approx').checked;
   rec.showArtists = $('st-showArtists').checked;
+  const ld = $('st-leadDefault').value.trim();
+  const lm = ld.match(/^(\d{1,3})\s*(?:[-–to]+\s*(\d{1,3}))?$/i);
+  if (ld && (!lm || Number(lm[1]) > 120 || (lm[2] && Number(lm[2]) < Number(lm[1])))) { $('stMsg').textContent = 'Ready to send in: type days, e.g. 7 or 10-15.'; $('st-leadDefault').focus(); return; }
+  rec.leadDefault = lm ? (lm[2] && lm[2] !== lm[1] ? `${lm[1]}-${lm[2]}` : lm[1]) : null;
   const zones = {};
   for (const [z, n] of SHIP_ZONES) {
     const raw = $('st-zone' + z).value.trim();

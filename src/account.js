@@ -28,6 +28,7 @@ let kuralSec = 10;
     if (st.inrPerAed) window.kalaiInrPerAed = Number(st.inrPerAed);
     window.kalaiRound = { usd: Number(st.usdRound) || 5, inr: Number(st.inrRound) || 50, up: st.roundUp === true, approx: st.approxSign !== false };
     try { window.kalaiShipZones = JSON.parse(st.shipZones || '{}') || {}; } catch { window.kalaiShipZones = {}; }
+    window.kalaiLeadDefault = st.leadDefault || '';
     window.kalaiRedrawPrices?.();
     if (st.kuralSeconds != null) { kuralSec = Number(st.kuralSeconds) || 0; window.kalaiKuralRestart?.(); }
     // Home page texts from Order Management → Settings (blank = keep the built-in text).

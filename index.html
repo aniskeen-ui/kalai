@@ -920,7 +920,9 @@ function frameDims(p){const f=FRAME_SIZES.find(x=>x[0]===(FSIZE||baseSize(p)));i
 /** Framed preview drawn to scale (cm): the artwork keeps its size and a bigger frame really looks bigger.
  *  One scale for all the frame sizes on offer, so switching sizes is a fair comparison. */
 /* delivery time: the artist's days to have it ready (his desk) + about a week for courier to Dubai, framing and delivery */
-function leadText(p){const d=p.leadDays,x=p.leadMax!=null?p.leadMax:d;
+function leadText(p){let d=p.leadDays,x=p.leadMax!=null?p.leadMax:d;
+  // Not set by the artist for this work: the studio's default (Order management → Settings), if any.
+  if(d==null&&!p.ai&&window.kalaiLeadDefault){const m=String(window.kalaiLeadDefault).match(/(\d+)(?:\D+(\d+))?/);if(m){d=+m[1];x=m[2]?+m[2]:d}}
   if(d==null)return p.ai?"Painted by hand to order · delivered in about 2–3 weeks":p.ship;
   const ready=x===0?"Ready now":d===x?`Ready in ${d} day${d===1?"":"s"} at the artist's studio`:`Ready in ${d}–${x} days at the artist's studio`;
   return `${ready} · delivered in the UAE in about ${d+7}–${x+10} days (worldwide: we confirm the time)`}
@@ -985,11 +987,11 @@ function openModal(p){
      <div class="badges">
        <div class="badge"><i>✦</i><div><b>Original &amp; signed</b>Hand-made by the artist, not a print</div></div>
        <div class="badge"><i>✓</i><div><b>Certificate of authenticity</b>Signed certificate with every original</div></div>
-       <div class="badge"><i>⛟</i><div><b>Delivered across the UAE</b>Duties paid, insured courier</div></div>
+       <div class="badge"><i>⛟</i><div><b>Delivered worldwide</b>UAE: duties paid, insured courier · abroad: shipping quoted before you pay</div></div>
        <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
      </div>
      <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">${p.prices?"Order this work":"Ask for price"}</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
-     <p class="note" style="margin:0">${p.prices?"The price changes with the frame and size you choose. It includes the mount, glass and insured delivery in the UAE.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
+     <p class="note" style="margin:0">${p.prices?"The price changes with the frame and size you choose. It includes the mount, glass and insured delivery in the UAE; for other countries we quote the shipping before you pay.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
      <details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>
      <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. We also ship worldwide: the shipping charge is confirmed before you pay. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
      ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
