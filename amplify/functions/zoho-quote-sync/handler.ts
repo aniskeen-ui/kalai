@@ -2667,16 +2667,23 @@ async function ziinaPriceLink(rec: StreamRecord, img: Img) {
   const id = str(img, 'id'), ref = str(img, 'ref');
   try {
     const test = await ziinaTest();
-    const r = await ziinaCall('/payment_intent', {
+    // Ziina rejects some messages as "too long or too short" (limit not documented): send a short one with only
+    // plain characters, and if it is still refused, none.
+    const plainTitle = str(img, 'title').replace(/^(Artwork order|Price enquiry(?: \(offer\))?|Commission request|Crafts shop order): /i, '').replace(/[^A-Za-z0-9 .,&'-]/g, '').replace(/\s+/g, ' ').trim();
+    const msg = `Kalai Art House ${ref}${plainTitle ? ` - ${plainTitle}` : ''}`.slice(0, 60).trim();
+    const intent = (message?: string) => ziinaCall('/payment_intent', {
       method: 'POST',
       body: JSON.stringify({
         amount: fils(price), currency_code: 'AED', test,
-        message: `Kalai Art House ${ref}: ${str(img, 'title')}`.slice(0, 200),
+        ...(message ? { message } : {}),
         success_url: `${SITE}/?paid=${encodeURIComponent(ref)}#my-enquiries`,
         cancel_url: `${SITE}/#my-enquiries`,
         failure_url: `${SITE}/?payfail=${encodeURIComponent(ref)}#my-enquiries`,
       }),
     });
+    let r = await intent(msg);
+    if (r.status === 400 && /message/i.test(String(r.body?.message ?? ''))) r = await intent(`Kalai Art House ${ref}`);
+    if (r.status === 400 && /message/i.test(String(r.body?.message ?? ''))) r = await intent();
     if (!r.ok || !r.body?.redirect_url) throw new Error(`Ziina payment link failed (${r.status}): ${r.body?.message ?? JSON.stringify(r.body).slice(0, 200)}`);
     await writeBack(id, { paymentLink: r.body.redirect_url, ziinaIntentId: r.body.id, ziinaAmount: price, ziinaTest: test ? 'yes' : null, ziinaMessage: `${test ? 'Test ' : ''}Ziina payment link created for AED ${price.toLocaleString('en-US')}.` });
     // The same stream record goes on to the email step: give it the link.
