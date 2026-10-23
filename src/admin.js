@@ -806,6 +806,8 @@ function statusBlock(e, k, s) {
   if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
   // Delivered is final: after that only after-sales (a replacement for damage, or a refund).
   if (s === 'DELIVERED' && !['REPLACEMENT', 'REFUNDED'].includes(k)) return 'already delivered';
+  // Work starts only after payment: Being framed / Shipped / Delivered need the order Paid first.
+  if (['FRAMING', 'SHIPPED', 'DELIVERED'].includes(k) && !isLocked(e) && !['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(s)) return 'mark Paid first';
   if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return 'waiting for Siva';
   if (k === 'DELIVERED' && !['SHIPPED', 'DELIVERED'].includes(s)) return 'ship it first';
   return '';
