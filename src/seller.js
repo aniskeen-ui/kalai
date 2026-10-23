@@ -416,7 +416,7 @@ function drawComms() {
         <button class="btn small" type="submit">${p != null ? 'Update price' : 'Send price'}</button></form>` : ''}
       ${x.ordered ? `<div class="muted" style="font-size:12px">${['STARTED', 'FINISHED', 'SHIPPED'].map((s) => `${x.progress && ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(x.progress) >= ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(s) ? '✓' : '○'} ${STEP_LABEL[s]}`).join(' · ')}${x.artistAwb ? ` · ${esc(x.artistCourier)} AWB ${esc(x.artistAwb)}` : ''}</div>` : ''}
       ${canWork ? `<div class="acts">${!x.progress ? '<button class="btn small" type="button" data-step="STARTED">I have started</button>' : ''}${['', 'STARTED'].includes(x.progress || '') ? '<button class="btn small ghost" type="button" data-step="FINISHED">Finished</button>' : ''}
-        <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" placeholder="e.g. DHL"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">AWB</span><input data-f="awb"></label><button class="btn small ghost" type="button" data-step="SHIPPED">Sent to frame shop</button></div>` : ''}
+        <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" placeholder="${profile?.country === 'India' ? 'e.g. DHL' : 'optional (e.g. handed over)'}"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">AWB</span><input data-f="awb"></label><button class="btn small ghost" type="button" data-step="SHIPPED">Sent to frame shop</button></div>` : ''}
       <span class="err" data-m></span>
     </article>`;
   }).join('');

@@ -801,6 +801,9 @@ const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-
 const AFTER_SIVA = ['FRAMING', 'SHIPPED', 'DELIVERED'];
 const needsSiva = (e) => hasArtist(e) && !!e.zohoPOId && e.purchaseState !== 'CANCELLED' && e.refundAction !== 'DAMAGED_REPLACE';
 const sivaDone = (e) => e.artistStage === 'SHIPPED';
+// The artist doing this order (Siva unless a portal artist was chosen), and where the studio marks progress for them.
+const artistOf = (e) => e.artistName || 'Siva';
+const artistPage = (e) => (e.artistId ? `<a href="/seller.html?view=${encodeURIComponent(e.artistId)}" target="_blank" rel="noopener">their artist portal</a> → Commissions` : 'his Artist desk');
 // Order life-cycle. Forward one step at a time; one step back to correct a mistake (before money moves);
 // after payment no way back to the quote stages; Delivered / Refunded / Cancelled close the order.
 //   Received → Price sent → Paid → Being framed → Shipped → Delivered
@@ -824,16 +827,16 @@ function statusBlock(e, k, s) {
   // Moved on without a recorded payment by mistake: it can go back to Price sent.
   const fixUnpaid = k === 'PRICE_SENT' && !isLocked(e) && ['FRAMING', 'SHIPPED'].includes(s);
   if (!fixUnpaid && !(NEXT[s] || []).includes(k)) return s === 'DELIVERED' ? 'already delivered' : ['REFUNDED', 'CANCELLED'].includes(s) && !(NEXT[s] || []).length ? 'order closed' : WHY[k] || 'not now';
-  if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return 'waiting for Siva';
+  if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return `waiting for ${artistOf(e)}`;
   return '';
 }
 
 function sivaProgress(e) {
   const stopped = String(e.refundAction || '').startsWith('CANCEL') && ['REFUNDED', 'CANCELLED'].includes(e.status) && e.purchaseState !== 'CANCELLED' && e.zohoPOId;
   if (stopped) return `Stopped: customer cancelled after he started${e.artistStartedAt ? ` (${day(e.artistStartedAt)})` : ''}. He is paid 50% of his price${costings.get(e.id)?.artistPriceInr ? ` (INR ${(costings.get(e.id).artistPriceInr / 2).toLocaleString('en-IN')})` : ''}${e.artistShippedAt ? ' plus the India courier' : ''}: enter his invoice no. and the bill is made for that.`;
-  if (!e.artistStage) return e.zohoPOId ? "Siva hasn't marked this as started yet." : '';
+  if (!e.artistStage) return e.zohoPOId ? `${artistOf(e)} hasn't marked this as started yet.` : '';
   return [`Started ${day(e.artistStartedAt)}`, e.artistFinishedAt ? `Finished ${day(e.artistFinishedAt)}` : '', e.artistShippedAt ? `Sent to frame shop ${day(e.artistShippedAt)}${e.artistAwb ? ` (${e.artistCourier} · AWB ${e.artistAwb})` : ''}` : '',
-    e.artistBy ? `last update by ${e.artistBy === 'Siva' ? 'Siva' : 'you, on his behalf'}` : ''].filter(Boolean).join(' · ');
+    e.artistBy ? `last update by ${e.artistBy && !String(e.artistBy).startsWith('Kalai Art House') ? e.artistBy : 'you, on their behalf'}` : ''].filter(Boolean).join(' · ');
 }
 
 function purchaseSection(e) {
@@ -842,7 +845,7 @@ function purchaseSection(e) {
   const color = st === 'ARTIST_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
   return `<fieldset class="cost" id="purchase">
     <legend>${esc(e.artistName || 'Siva Raja')} (purchase)</legend>
-    <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || 'Siva\'s order is recorded once the customer has paid and the costing has his price.')}</div>
+    <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || `${artistOf(e)}'s order is recorded once the customer has paid and the costing has the artist's price.`)}</div>
     ${sivaProgress(e) ? `<div style="font-size:13px"><b>${esc(e.artistName || 'Siva')}'s progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
     <div class="two">
       <div class="field"><label for="pInv">${esc(e.artistName || 'Siva')}'s invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From his invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
@@ -928,8 +931,8 @@ function shippingSection(e) {
 
 // ---------- after-sales: cancellations, damage, replacement ----------
 const AFTER = {
-  CANCEL_FULL: { label: 'Customer cancelled, Siva not started: full refund', pct: 1, status: 'REFUNDED' },
-  CANCEL_HALF: { label: 'Customer cancelled, Siva already started: 50% refund', pct: 0.5, status: 'REFUNDED' },
+  CANCEL_FULL: { label: 'Customer cancelled, artist not started: full refund', pct: 1, status: 'REFUNDED' },
+  CANCEL_HALF: { label: 'Customer cancelled, artist already started: 50% refund', pct: 0.5, status: 'REFUNDED' },
   DAMAGED_REFUND: { label: 'Damaged in transit, customer wants a refund: full refund', pct: 1, status: 'REFUNDED' },
   DAMAGED_REPLACE: { label: 'Damaged in transit, customer wants a replacement / repair', pct: 0, status: 'REPLACEMENT' },
 };
@@ -950,7 +953,7 @@ function requestBanner(e) {
     <div>${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest)}${e.cancelRequest !== 'DAMAGED_REPLACE' ? ` · refund under the policy: <b>AED ${Number(e.cancelRefundDue || 0).toLocaleString('en-US')}</b>` : ''}</div>
     ${e.cancelReason ? `<div>Reason: “${esc(e.cancelReason)}”</div>` : ''}
     ${e.cancelPhotos ? `<div class="links" id="reqPhotos"><span class="muted">Loading photos…</span></div>` : ''}
-    <div class="muted" style="font-size:12px">${e.cancelRequest === 'CANCEL' && e.zohoPOId ? "Siva's order is on hold. " : ''}To accept: ${e.cancelRequest === 'DAMAGED_REPLACE' ? 'tick the box below and save.' : 'pay the refund (Ziina / bank), enter its reference below, tick the box and save.'} The customer is emailed automatically.</div>
+    <div class="muted" style="font-size:12px">${e.cancelRequest === 'CANCEL' && e.zohoPOId ? `${esc(artistOf(e))}'s order is on hold. ` : ''}To accept: ${e.cancelRequest === 'DAMAGED_REPLACE' ? 'tick the box below and save.' : 'pay the refund (Ziina / bank), enter its reference below, tick the box and save.'} The customer is emailed automatically.</div>
     <details><summary>Decline the request instead</summary>
       <div class="field" style="margin-top:8px"><label for="rqReply">Reply to the customer (emailed)</label><textarea id="rqReply" rows="2" placeholder="e.g. As agreed on the phone, you are keeping the painting."></textarea></div>
       <button class="btn ghost" type="button" id="rqDecline">Decline and email the customer</button> <span class="ok" id="rqMsg" role="status"></span>
@@ -959,7 +962,7 @@ function requestBanner(e) {
 }
 
 // ---------- Replacement rework: frame shop or Siva, costs and the courier insurance claim ----------
-const REWORK_TYPE = { REFRAME: 'New glass / re-frame at the frame shop', SIVA_REPAIR: 'Repair by Siva', SIVA_REPAINT: 'Repaint by Siva (new painting)' };
+const REWORK_TYPE = { REFRAME: 'New glass / re-frame at the frame shop', SIVA_REPAIR: 'Repair by the artist', SIVA_REPAINT: 'Repaint by the artist (new painting)' };
 function parseRework(c) {
   let v = c?.rework;
   try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
@@ -987,13 +990,13 @@ function reworkTimeline(e) {
   }
   if (e.returnMode !== 'NONE') add(!!e.returnReceivedAt, 'Received at the frame shop', e.returnReceivedAt);
   if (e.reworkType === 'SIVA_REPAIR') {
-    add(!!e.toSivaSentAt, 'Sent to Siva (India)', e.toSivaSentAt, e.toSivaAwb ? `${e.toSivaCourier} · AWB ${e.toSivaAwb}` : '');
-    add(!!e.sivaReceivedAt, 'Siva received it', e.sivaReceivedAt);
+    add(!!e.toSivaSentAt, 'Sent to the artist', e.toSivaSentAt, e.toSivaAwb ? `${e.toSivaCourier} · AWB ${e.toSivaAwb}` : '');
+    add(!!e.sivaReceivedAt, 'The artist received it', e.sivaReceivedAt);
   }
   if (siva) {
-    add(!!e.reworkStartedAt, 'Siva: rework started', e.reworkStartedAt);
-    add(!!e.reworkFinishedAt, 'Siva: finished', e.reworkFinishedAt);
-    add(!!e.reworkSentAt, 'Siva: sent to the frame shop', e.reworkSentAt, e.reworkAwb ? `${e.reworkCourier} · AWB ${e.reworkAwb}` : '');
+    add(!!e.reworkStartedAt, 'The artist: rework started', e.reworkStartedAt);
+    add(!!e.reworkFinishedAt, 'The artist: finished', e.reworkFinishedAt);
+    add(!!e.reworkSentAt, 'The artist: sent to the frame shop', e.reworkSentAt, e.reworkAwb ? `${e.reworkCourier} · AWB ${e.reworkAwb}` : '');
     add(!!e.reworkBackAt, 'Back at the frame shop', e.reworkBackAt);
   }
   add(e.reworkStage === 'READY', 'Checked and ready', e.reworkReadyAt);
@@ -1018,12 +1021,12 @@ function transportSection(e) {
       ${tick('rtRecv', 'Received at the frame shop (the customer is emailed)', e.returnReceivedAt)}
     </div>
     ${e.reworkType === 'SIVA_REPAIR' ? `<div class="three">
-      <div class="field"><label for="tsCourier">To Siva: courier</label>${sel('tsCourier', e.toSivaCourier, ['DHL', 'Aramex', 'FedEx', 'SMSA', 'Emirates Post'])}</div>
-      <div class="field"><label for="tsAwb">To Siva: AWB</label><input id="tsAwb" value="${esc(e.toSivaAwb)}" ${e.toSivaSentAt ? 'disabled' : ''}></div>
-      <div class="field" style="align-self:end">${tick('tsSent', 'Sent to Siva (he sees the AWB)', e.toSivaSentAt)}</div>
+      <div class="field"><label for="tsCourier">To the artist: courier</label>${sel('tsCourier', e.toSivaCourier, ['DHL', 'Aramex', 'FedEx', 'SMSA', 'Emirates Post'])}</div>
+      <div class="field"><label for="tsAwb">To the artist: AWB</label><input id="tsAwb" value="${esc(e.toSivaAwb)}" ${e.toSivaSentAt ? 'disabled' : ''}></div>
+      <div class="field" style="align-self:end">${tick('tsSent', 'Sent to the artist (they see the AWB)', e.toSivaSentAt)}</div>
     </div>
-    <div class="muted" style="font-size:12px">${e.sivaReceivedAt ? `Siva received it ${esc(when(e.sivaReceivedAt))}.` : 'Siva taps “I\'ve received it” on his page; he can only start the repair after that.'} Sending art to India and back needs export / re-import papers (repair and return); keep the courier's paperwork.</div>` : ''}
-    ${(e.reworkType || '').startsWith('SIVA') ? tick('rwBack', 'Siva\'s piece is back at the frame shop', e.reworkBackAt) : ''}`;
+    <div class="muted" style="font-size:12px">${e.sivaReceivedAt ? `The artist received it ${esc(when(e.sivaReceivedAt))}.` : 'The artist taps “I\'ve received it” on his page; he can only start the repair after that.'} Sending art to India and back needs export / re-import papers (repair and return); keep the courier's paperwork.</div>` : ''}
+    ${(e.reworkType || '').startsWith('SIVA') ? tick('rwBack', 'The artist\'s piece is back at the frame shop', e.reworkBackAt) : ''}`;
 }
 
 function reworkSection(e) {
@@ -1039,9 +1042,9 @@ function reworkSection(e) {
     <legend>Replacement: rework ${ready ? '<span class="muted">· ready to ship</span>' : ''}</legend>
     <div class="two">
       <div class="field"><label for="rwType">Fix</label><select id="rwType" ${e.reworkStage ? 'disabled' : ''}><option value="">Choose…</option>${Object.entries(REWORK_TYPE).map(([k, v]) => `<option value="${k}" ${e.reworkType === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-      <div class="field"><label for="rwNote">Instructions (Siva sees them)</label><input id="rwNote" value="${esc(e.reworkNote)}" placeholder="e.g. glass cracked, painting fine"></div>
+      <div class="field"><label for="rwNote">Instructions (the artist sees them)</label><input id="rwNote" value="${esc(e.reworkNote)}" placeholder="e.g. glass cracked, painting fine"></div>
     </div>
-    ${siva ? `<div style="font-size:13px"><b>Siva:</b> ${c.reworkPriceInr != null ? `rework price INR ${Number(c.reworkPriceInr).toLocaleString('en-IN')}${c.reworkPriceBy && c.reworkPriceBy !== 'Siva' ? ' (entered by you)' : ''}` : 'no rework price yet'}${sivaSteps ? ` · ${esc(sivaSteps)}` : e.reworkType ? ' · not started (he sees it on his page; you can tick it there for him)' : ''}</div>` : ''}
+    ${siva ? `<div style="font-size:13px"><b>The artist:</b> ${c.reworkPriceInr != null ? `rework price INR ${Number(c.reworkPriceInr).toLocaleString('en-IN')}${c.reworkPriceBy && c.reworkPriceBy !== 'Siva' ? ' (entered by you)' : ''}` : 'no rework price yet'}${sivaSteps ? ` · ${esc(sivaSteps)}` : e.reworkType ? ' · not started (he sees it on his page; you can tick it there for him)' : ''}</div>` : ''}
     ${e.reworkMessage ? `<div style="font-size:13px;color:${/^Error/.test(e.reworkMessage) ? 'var(--kumkum)' : 'var(--muted)'}">${esc(e.reworkMessage)}</div>` : ''}
     ${reworkTimeline(e)}
     ${transportSection(e)}
@@ -1049,13 +1052,13 @@ function reworkSection(e) {
     <div class="three">
       ${num('rwFr', 'Frame shop (glass / frame)', r.framing)}
       ${num('rwLc', 'Couriers (pickup, re-delivery)', r.localCourier)}
-      ${siva ? num('rwIc', 'India courier (Siva)', r.indiaCourier) : ''}
+      ${siva ? num('rwIc', 'India courier (the artist)', r.indiaCourier) : ''}
       ${num('rwOt', 'Other', r.other)}
-      ${siva ? `<div class="field"><label for="rwInr">Siva's rework price (INR)</label><input id="rwInr" type="number" min="0" step="1" value="${c.reworkPriceInr ?? ''}" ${e.zohoReworkBillId ? 'disabled' : ''}></div>` : ''}
+      ${siva ? `<div class="field"><label for="rwInr">The artist's rework price (INR)</label><input id="rwInr" type="number" min="0" step="1" value="${c.reworkPriceInr ?? ''}" ${e.zohoReworkBillId ? 'disabled' : ''}></div>` : ''}
     </div>
     ${siva ? `<div class="two">
-      <div class="field"><label for="rwInv">Siva's rework invoice no.</label><input id="rwInv" value="${esc(e.reworkInvoiceNo)}" placeholder="Creates a second bill in Zoho" ${e.zohoReworkBillId ? 'disabled' : ''}></div>
-      <div class="field"><label for="rwPaid">Paid to Siva (rework): bank ref</label><input id="rwPaid" value="${esc(e.reworkPaidRef)}" ${!e.zohoReworkBillId || e.zohoReworkPaymentId ? 'disabled' : ''}></div>
+      <div class="field"><label for="rwInv">The artist's rework invoice no.</label><input id="rwInv" value="${esc(e.reworkInvoiceNo)}" placeholder="Creates a second bill in Zoho" ${e.zohoReworkBillId ? 'disabled' : ''}></div>
+      <div class="field"><label for="rwPaid">Paid to the artist (rework): bank ref</label><input id="rwPaid" value="${esc(e.reworkPaidRef)}" ${!e.zohoReworkBillId || e.zohoReworkPaymentId ? 'disabled' : ''}></div>
     </div>` : ''}
     <details ${r.claimRef || r.received ? 'open' : ''}><summary>Courier insurance claim</summary>
       <div class="three" style="margin-top:8px">
@@ -1119,7 +1122,7 @@ function afterSection(e) {
     <legend>Cancellation, damage or refund</legend>
     ${requestBanner(e)}
     ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.refundMessage)}</div>` : ''}
-    ${!done && e.zohoPOId ? `<div style="font-size:13px"><b>Siva:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
+    ${!done && e.zohoPOId ? `<div style="font-size:13px"><b>${esc(artistOf(e))}:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
     <div class="field"><label for="aAction">What happened?</label><select id="aAction" ${dis}>
       <option value="">Nothing: order is fine</option>
       ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${act === k ? 'selected' : ''}>${v.label}</option>`).join('')}
@@ -1132,7 +1135,7 @@ function afterSection(e) {
     </div>
     <div class="field" id="aNoteBox" ${act ? '' : 'hidden'}><label for="aNote">Note (reason, customer's photos received…)</label><input id="aNote" value="${esc(e.refundNote || (pre ? `Customer request: ${e.cancelReason || REQ_LABEL[e.cancelRequest] || ''}` : ''))}" ${dis}></div>
     ${done ? '' : `<label id="aConfirmBox" style="display:${act ? 'flex' : 'none'};gap:8px;align-items:flex-start;font-weight:400;font-size:13px"><input type="checkbox" id="aConfirm" style="width:auto;margin-top:3px"> <span id="aConfirmText">I confirm. Saving sets the status and records this in Zoho (credit note + refund, or the challan as returned). It can't be undone from here.</span></label>`}
-    <div class="muted" style="font-size:12px">Policy: no change-of-mind returns. Cancelled before Siva starts → full refund; after he starts → 50%. Damaged in transit (photos within 48 hours) → customer chooses refund or replacement.</div>
+    <div class="muted" style="font-size:12px">Policy: no change-of-mind returns. Cancelled before the artist starts → full refund; after they start → 50%. Damaged in transit (photos within 48 hours) → customer chooses refund or replacement.</div>
   </fieldset>`;
 }
 
@@ -1278,7 +1281,7 @@ function docsList(e) {
       <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
       <td class="num mono">${x.total != null ? aed(x.total, 2) : ''}${x.balance ? `<br><span class="muted">due ${aed(x.balance, 2)}</span>` : ''}</td></tr>`).join('');
   };
-  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', 'Purchase (Siva)')}</tbody></table>
+  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', `Purchase (${esc(artistOf(e))})`)}</tbody></table>
     <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
 }
 
@@ -1411,7 +1414,7 @@ async function showDetail(e) {
         <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
-          ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once Siva marks it <b>Sent to frame shop</b> on his page (you can do it for him there).</span>` : ''}</div>
+          ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once ${esc(artistOf(e))} marks it <b>Sent to frame shop</b> (you can do it for them in ${artistPage(e)}).</span>` : ''}</div>
         <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^AED \d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : e.kind === 'GIFT' && /^AED [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
           ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: AED ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : 'AED 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
@@ -1426,7 +1429,7 @@ async function showDetail(e) {
         </select></div>
         <div class="field"><label for="ePayRef">Payment reference</label><input id="ePayRef" placeholder="Ziina / bank transaction ID" value="${esc(e.paymentRef)}"></div>
       </div>
-      <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? ', then records Siva’s order' : ''}.</div>
+      <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? `, then records ${esc(artistOf(e))}’s order` : ''}.</div>
       ${purchaseSection(e)}
       ${marketSection(e)}
       ${reworkSection(e)}
@@ -1498,8 +1501,8 @@ async function showDetail(e) {
       if ($('aConfirmBox')) $('aConfirmBox').style.display = a ? 'flex' : 'none';
       if (a && a.pct > 0 && !e.refundState) $('aAmount').value = Math.round(Number(e.quotedPrice || 0) * a.pct * 100) / 100;
       const v = $('aAction').value;
-      const warn = v === 'CANCEL_FULL' && e.artistStartedAt ? `Siva marked this as started on ${day(e.artistStartedAt)}: policy is the 50% refund. Continue only if you agreed otherwise.`
-        : v === 'CANCEL_HALF' && e.zohoPOId && !e.artistStartedAt ? "Siva hasn't marked this as started: policy is a full refund. Continue only if he told you he started." : '';
+      const warn = v === 'CANCEL_FULL' && e.artistStartedAt ? `${artistOf(e)} marked this as started on ${day(e.artistStartedAt)}: policy is the 50% refund. Continue only if you agreed otherwise.`
+        : v === 'CANCEL_HALF' && e.zohoPOId && !e.artistStartedAt ? `${artistOf(e)} hasn't marked this as started: policy is a full refund. Continue only if they told you they started.` : '';
       $('aWarn').textContent = warn; $('aWarn').hidden = !warn;
     });
   }
@@ -1609,20 +1612,20 @@ async function showDetail(e) {
       const isOn = (id) => !!$(id)?.checked;
       const t = $('rwType').value || e.reworkType || '';
       const why = $('rtMode').value === 'PICKUP' && isOn('rtPicked') && !v('rtAwb') ? 'Enter the return AWB before marking it picked up.'
-        : isOn('tsSent') && (!v('tsCourier') || !v('tsAwb')) ? 'Enter the courier and AWB for the parcel to Siva.'
-        : isOn('tsSent') && !isOn('rtRecv') && $('rtMode').value !== 'NONE' ? 'Tick “Received at the frame shop” before sending it to Siva.'
+        : isOn('tsSent') && (!v('tsCourier') || !v('tsAwb')) ? 'Enter the courier and AWB for the parcel to the artist.'
+        : isOn('tsSent') && !isOn('rtRecv') && $('rtMode').value !== 'NONE' ? 'Tick “Received at the frame shop” before sending it to the artist.'
         : isOn('rwReady') && !$('rwReady').disabled && ['PICKUP', 'DROP'].includes($('rtMode').value) && !isOn('rtRecv') ? 'The damaged piece hasn\'t been received at the frame shop yet.'
-        : isOn('rwReady') && !$('rwReady').disabled && t.startsWith('SIVA') && !isOn('rwBack') ? 'Siva\'s piece isn\'t back at the frame shop yet: tick that first.'
-        : isOn('rwBack') && !$('rwBack').disabled && e.reworkStage !== 'SENT' ? 'Siva hasn\'t marked the rework as sent to the frame shop yet.' : '';
+        : isOn('rwReady') && !$('rwReady').disabled && t.startsWith('SIVA') && !isOn('rwBack') ? 'The artist\'s piece isn\'t back at the frame shop yet: tick that first.'
+        : isOn('rwBack') && !$('rwBack').disabled && e.reworkStage !== 'SENT' ? 'The artist hasn\'t marked the rework as sent to the frame shop yet.' : '';
       if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }
     }
     if ($('rwType') && !$('rwType').disabled && !$('rwType').value && s === 'REPLACEMENT' && $('rwReady')?.checked) {
-      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose the fix (frame shop or Siva) in the Replacement box.</div>');
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Choose the fix (frame shop or the artist) in the Replacement box.</div>');
       b.disabled = false; return;
     }
     const blockWhy = statusBlock(e, $('eStatus').value, s);
     if (blockWhy) {
-      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'not for crafts' ? 'Crafts shop orders skip “Being framed”.' : blockWhy === 'waiting for Siva' ? 'Siva hasn\'t marked this work “Sent to frame shop” yet. Update it on his page first (you can do it for him there).' : 'Mark it Shipped before Delivered.'}</div>`);
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'not for crafts' ? 'Crafts shop orders skip “Being framed”.' : blockWhy.startsWith('waiting for') ? `${esc(artistOf(e))} hasn't marked this work “Sent to frame shop” yet. Update it in ${artistPage(e)} first (you can do it for them).` : 'Mark it Shipped before Delivered.'}</div>`);
       b.disabled = false; return;
     }
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {

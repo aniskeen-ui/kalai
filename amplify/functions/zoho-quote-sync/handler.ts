@@ -1186,8 +1186,10 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const current = PROGRESS.indexOf(str(e, 'artistStage'));
   const target = PROGRESS.indexOf(step);
   if (target < current) throw new Error(`Already marked ${str(e, 'artistStage').toLowerCase()}.`);
-  const courier = String(args.courier ?? '').trim().slice(0, 60);
-  const awb = String(args.awb ?? '').trim().slice(0, 60);
+  // Artists in the UAE usually hand the work over (or the frame shop collects it): courier and AWB optional.
+  const local = !!str(e, 'artistId') && str(e, 'artistCountry') !== 'India';
+  const courier = String(args.courier ?? '').trim().slice(0, 60) || (local && step === 'SHIPPED' ? 'Handed over' : '');
+  const awb = String(args.awb ?? '').trim().slice(0, 60) || (local && step === 'SHIPPED' ? '–' : '');
   if (step === 'SHIPPED' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
   // Once sent, the courier and AWB are fixed for Siva; only Kalai Art House can correct them.
   if (step === 'SHIPPED' && str(e, 'artistStage') === 'SHIPPED' && !by.startsWith('Kalai Art House')) throw new Error('Already sent: the courier and AWB can only be corrected by Kalai Art House.');
