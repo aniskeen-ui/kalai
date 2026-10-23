@@ -551,6 +551,13 @@ function jobWa(e, cur, role, spec) {
       sp?.owner ? 'Details: art.pranixtechno.com/supplier.html' : ''];
   return `<a class="btn small ghost" style="padding:2px 8px;font-size:12px" target="_blank" rel="noopener" href="https://wa.me/${n}?text=${encodeURIComponent(lines.filter(Boolean).join('\n'))}">WhatsApp</a>`;
 }
+// The chosen frame shop's frames in this style (its catalogue), as a hint for the note.
+function framesOf(id, style) {
+  const sp = suppliers.find((x) => x.id === id); let list = [];
+  try { list = JSON.parse(sp?.catalogue || '[]') || []; } catch { list = []; }
+  const m = list.filter((f) => f.style === style);
+  return m.length ? `<span class="muted" style="font-size:12px">Their ${esc(style)} frames: ${m.map((f) => `${esc(f.name)}${f.widthMm ? ` ${esc(f.widthMm)} mm` : ''}${f.extra ? ` (+AED ${esc(f.extra)})` : ''}`).join('; ')}</span><br>` : '';
+}
 // The frame shop's name, phone and address, as the delivery pickup point.
 function j0(e) { const fj = jobsOf(e).framer; const sp = fj && suppliers.find((x) => x.id === fj.supplierId); return sp ? [sp.business, sp.phone, sp.address].filter(Boolean).join(', ') : ''; }
 function supplierSection(e) {
@@ -571,7 +578,7 @@ function supplierSection(e) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
         <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
-          <span class="muted" style="font-size:12px">${role === 'framer' ? `${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${spec.small ? 'small' : 'large'} parcel`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
+          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'framer' ? `${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${spec.small ? 'small' : 'large'} parcel`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
         <div class="field"><label>Price you pay them (AED)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
         <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
         <div class="field"><label>Note for them (frame style, size, glass, timing…)</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>

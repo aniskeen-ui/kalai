@@ -100,6 +100,12 @@ const samplesOf = (s) => { try { return JSON.parse(s.sampleKeys || '[]'); } catc
 // WhatsApp link with the message typed in (opens WhatsApp on this device; you press Send).
 const waLink = (phone, text) => { const n = String(phone || '').replace(/[^\d]/g, '').replace(/^00/, '').replace(/^0(?=5)/, '971'); return n.length >= 9 ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : ''; };
 const inviteText = (s) => `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We'd like to work with ${s.business} as our ${s.type === 'FRAMER' ? 'framing' : 'delivery'} partner. Please create an account on our supplier portal with ${s.email ? `your email ${s.email}` : 'your email'}: art.pranixtechno.com/supplier.html. Your business is already set up there; please add your ${s.type === 'FRAMER' ? 'price list (frame price per style and size, fixing charge, and delivery charge if you deliver)' : 'delivery charges to each emirate'}. Thank you!`;
+// A frame shop's catalogue: photos and names of their frames (supplier portal → My frames).
+function frameStrip(s) {
+  let list = []; try { list = JSON.parse(s.catalogue || '[]') || []; } catch { list = []; }
+  if (!list.length) return '<div class="muted">No frames in their catalogue yet (“Open their portal” → My frames).</div>';
+  return `<div><b>Frames (${list.length}):</b><div class="mk-imgs">${list.map((f) => `<figure style="margin:0;width:96px;font-size:11px">${f.photoKey ? `<a data-key="${esc(f.photoKey)}" target="_blank" rel="noopener"><img alt="${esc(f.name)}" data-key="${esc(f.photoKey)}" style="width:96px;height:96px;object-fit:cover"></a>` : '<div style="width:96px;height:96px;background:var(--sunk)"></div>'}<figcaption>${esc(f.name)}${f.widthMm ? ` · ${esc(f.widthMm)} mm` : ''}${f.extra ? ` · +AED ${esc(f.extra)}` : ''}</figcaption></figure>`).join('')}</div></div>`;
+}
 function addSupplierForm() {
   const f = (id, label, attrs = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" ${attrs}></div>`;
   return `<details class="mk-card" id="addSup"><summary style="cursor:pointer;font-weight:600">+ Add a frame shop or delivery partner yourself</summary>
@@ -108,7 +114,7 @@ function addSupplierForm() {
       ${f('asBiz', 'Business name', 'maxlength="120"')}${f('asName', 'Contact person', 'maxlength="80"')}${f('asPhone', 'Mobile / WhatsApp', 'maxlength="30" placeholder="+971 50 123 4567"')}
       ${f('asEmail', 'Email (they sign up with it to use the portal; optional)', 'type="email" maxlength="120"')}
       <div class="field"><label for="asEm">Emirate</label><select id="asEm">${['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'].map((x) => `<option>${x}</option>`).join('')}</select></div>
-      ${f('asAddr', 'Workshop / pickup address', 'maxlength="300"')}${f('asAbout', 'Services and notes', 'maxlength="2000"')}${f('asLic', 'Trade licence no. (optional)', 'maxlength="60"')}${f('asIban', 'IBAN (optional)', 'maxlength="40"')}
+      ${f('asAddr', 'Workshop / pickup address', 'maxlength="300"')}${f('asAbout', 'Services and notes', 'maxlength="2000"')}${f('asLic', 'Trade licence no. (optional)', 'maxlength="60"')}${f('asWeb', 'Website or Instagram (optional)', 'maxlength="300" placeholder="https://"')}${f('asIban', 'IBAN (optional)', 'maxlength="40"')}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn small" type="submit">Add (approved)</button><span class="muted" id="asMsg"></span></div>
       <div class="muted" style="font-size:12px">Then use “Open their portal” to enter their price list, and send them the WhatsApp or email invite so they can sign in themselves.</div>
     </form></details>`;
@@ -119,7 +125,8 @@ function supplierCard(s) {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge SCHEDULED">${fr ? 'Frame shop' : 'Delivery partner'}</span>${!s.owner ? '<span class="cg-badge DRAFT" title="Added by you; they have not signed in yet">No login yet</span>' : ''}<span class="cg-badge ${esc(s.status)}">${esc(SST[s.status] || s.status)}</span>
       <span class="muted" style="margin-left:auto">Applied ${esc(day(s.appliedAt))}</span></div>
     <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
-    <div style="white-space:pre-wrap"><b>Services:</b> ${esc(s.about)}</div>
+    <div style="white-space:pre-wrap"><b>Services:</b> ${esc(s.about)}${s.portfolio ? ` · <a href="${esc(s.portfolio)}" target="_blank" rel="noopener noreferrer">website</a>` : ''}</div>
+    ${fr ? frameStrip(s) : ''}
     <div class="muted">${fr ? 'Workshop' : 'Base'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     <div class="mk-act">
@@ -203,7 +210,7 @@ function wireCards() {
   if (form) form.onsubmit = async (ev) => {
     ev.preventDefault();
     const v = (id) => $(id).value.trim();
-    const data = { type: $('asType').value, business: v('asBiz'), contactName: v('asName'), phone: v('asPhone'), email: v('asEmail'), emirate: $('asEm').value, address: v('asAddr'), about: v('asAbout'), tradeLicence: v('asLic'), iban: v('asIban') };
+    const data = { type: $('asType').value, business: v('asBiz'), contactName: v('asName'), phone: v('asPhone'), email: v('asEmail'), emirate: $('asEm').value, address: v('asAddr'), about: v('asAbout'), tradeLicence: v('asLic'), iban: v('asIban'), website: v('asWeb') };
     const b = form.querySelector('button'); b.disabled = true; $('asMsg').textContent = 'Adding…';
     try {
       const r = await act('addSupplier', data);

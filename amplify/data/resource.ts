@@ -319,6 +319,7 @@ const schema = a.schema({
       bornYear: a.integer(), // artists, optional (shown as "b. India, 1985")
       city: a.string(),
       rateCard: a.string(), // frame shops / delivery partners: their price list (JSON, supplier portal → My rates)
+      catalogue: a.string(), // frame shops: their frames (JSON [{name, style, material, colour, widthMm, extra, photoKey, note}])
     })
     .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
 

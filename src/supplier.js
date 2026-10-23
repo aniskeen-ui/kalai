@@ -9,6 +9,7 @@ import {
   fetchUserAttributes, resetPassword, confirmResetPassword,
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
+import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones } from './phone.js';
 import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, parseCard } from './ratecard.js';
 
@@ -34,7 +35,7 @@ async function call(action, data) {
   return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
 }
 function show(view) {
-  ['loginView', 'applyView', 'statusView', 'jobsView', 'ratesView'].forEach((v) => { $(v).hidden = v !== view; });
+  ['loginView', 'applyView', 'statusView', 'jobsView', 'ratesView', 'framesView'].forEach((v) => { $(v).hidden = v !== view; });
   $('signOutBtn').hidden = view === 'loginView';
 }
 
@@ -93,13 +94,15 @@ function route() {
     show('statusView');
     $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. We'll check your details and email you, usually within a few days. Once approved, the jobs we give you appear here.</p>
       <p><b>Please add your price list</b> (${profile.type === 'FRAMER' ? 'frame prices by style and size, and the fixing charge' : 'delivery charges by emirate'}): we compare suppliers on it.</p>
-      <div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn" id="goRates" type="button">My price list</button><button class="linkbtn" id="editApp" type="button">Edit my application</button></div>`;
+      <div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn" id="goRates" type="button">My price list</button>${profile.type === 'FRAMER' ? '<button class="btn ghost" id="goFrames" type="button">My frames</button>' : ''}<button class="linkbtn" id="editApp" type="button">Edit my application</button></div>`;
     $('editApp').onclick = () => { show('applyView'); fillApply(); };
     $('goRates').onclick = () => openRates('statusView');
+    if ($('goFrames')) $('goFrames').onclick = () => openFrames('statusView');
     return;
   }
   if (s === 'SUSPENDED') { show('statusView'); $('statusBox').innerHTML = `<h2>Your account is paused</h2><p>${profile.adminNote ? esc(profile.adminNote) : 'Please contact Kalai Art House on WhatsApp.'}</p>`; return; }
   show('jobsView');
+  $('tabFrames').hidden = profile.type !== 'FRAMER';
   $('jBiz').textContent = profile.business;
   $('jNote').textContent = profile.type === 'FRAMER'
     ? 'Framing jobs from Kalai Art House: accept, frame, mark ready for pickup (or deliver it yourself when we ask), then enter your invoice.'
@@ -158,7 +161,7 @@ $('authForm').addEventListener('submit', async (e) => {
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
 
 // ---------- application ----------
-const AF = { sBiz: 'business', sName: 'contactName', sPhone: 'phone', sEmirate: 'emirate', sAddr: 'address', sLic: 'tradeLicence', sAbout: 'about', sBank: 'bankName', sAcc: 'accountName', sIban: 'iban' };
+const AF = { sWeb: 'portfolio', sBiz: 'business', sName: 'contactName', sPhone: 'phone', sEmirate: 'emirate', sAddr: 'address', sLic: 'tradeLicence', sAbout: 'about', sBank: 'bankName', sAcc: 'accountName', sIban: 'iban' };
 function fillApply() {
   Object.entries(AF).forEach(([id, k]) => { if (profile?.[k] != null) $(id).value = profile[k]; });
   const t = profile?.type === 'COURIER' ? 'COURIER' : new URLSearchParams(location.search).get('as') === 'courier' ? 'COURIER' : 'FRAMER';
@@ -175,6 +178,7 @@ $('applyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(Object.entries(AF).map(([id, k]) => [k, $(id).value.trim()]));
   data.type = document.querySelector('input[name="sType"]:checked').value;
+  if (data.portfolio && !/^https?:\/\//i.test(data.portfolio)) data.portfolio = `https://${data.portfolio}`;
   data.country = 'UAE';
   const b = $('sBtn'); b.disabled = true; $('sErr').textContent = '';
   try { profile = (await call('apply', data)).profile; route(); } catch (ex) { $('sErr').textContent = ex.message; } finally { b.disabled = false; }
@@ -189,7 +193,7 @@ async function loadJobs() {
   try { jobs = (await call('jobs')).jobs || []; drawJobs(); } catch (ex) { $('jList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
 }
 $('jReload').onclick = loadJobs;
-$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'rates') { openRates('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
+$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'rates') { openRates('jobsView'); return; } if (b.dataset.t === 'frames') { openFrames('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
 
 function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
 function jobCard(j) {
@@ -305,5 +309,60 @@ $('rateForm').addEventListener('submit', async (ev) => {
   const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';
   try { profile = (await call('saveRates', data)).profile; $('rMsg').textContent = 'Saved. Kalai Art House sees your prices when giving out jobs.'; } catch (ex) { $('rErr').textContent = ex.message; } finally { b.disabled = false; }
 });
+
+// ---------- frame catalogue (frame shops) ----------
+let frames = [];
+let framesBack = 'jobsView';
+const urlCache = new Map();
+const imgUrl = (k) => { if (!urlCache.has(k)) urlCache.set(k, getUrl({ path: k, options: { expiresIn: 3600 } }).then((r) => r.url.toString()).catch(() => '')); return urlCache.get(k); };
+const STY = [...RC_STYLES, ['other', 'Other']];
+function openFrames(back) {
+  framesBack = back;
+  try { frames = JSON.parse(profile.catalogue || '[]') || []; } catch { frames = []; }
+  drawFrames(); show('framesView');
+}
+function readFrames() {
+  $('fList').querySelectorAll('.fr-item').forEach((el, i) => {
+    const v = (k) => el.querySelector(`[data-k="${k}"]`).value.trim();
+    Object.assign(frames[i], { name: v('name'), style: v('style'), material: v('material'), colour: v('colour'), widthMm: v('widthMm'), extra: v('extra'), note: v('note') });
+  });
+}
+function drawFrames() {
+  $('fList').innerHTML = frames.length ? frames.map((f, i) => `<div class="fr-item" data-i="${i}">
+    <div><img data-photo alt="${esc(f.name || 'Frame')}" ${f.photoKey ? `data-key="${esc(f.photoKey)}"` : ''}><label class="linkbtn" style="display:block;margin-top:4px;cursor:pointer">${f.photoKey ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" data-file hidden></label></div>
+    <div class="g">
+      <div class="field"><label>Name / code</label><input data-k="name" maxlength="80" value="${esc(f.name)}" placeholder="e.g. Oak flat 25 mm"></div>
+      <div class="field"><label>Style</label><select data-k="style">${STY.map(([k, n]) => `<option value="${k}" ${f.style === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
+      <div class="field"><label>Material</label><input data-k="material" maxlength="40" value="${esc(f.material)}" placeholder="Wood, aluminium…"></div>
+      <div class="field"><label>Colour / finish</label><input data-k="colour" maxlength="40" value="${esc(f.colour)}"></div>
+      <div class="field"><label>Width (mm)</label><input data-k="widthMm" type="number" min="0" max="300" value="${f.widthMm ?? ''}"></div>
+      <div class="field"><label>Extra over price list (AED)</label><input data-k="extra" type="number" min="0" step="0.5" value="${f.extra ?? ''}" placeholder="0"></div>
+      <div class="field" style="grid-column:1/-1"><label>Note</label><input data-k="note" maxlength="200" value="${esc(f.note)}"></div>
+      <button type="button" class="linkbtn" data-del style="justify-self:start">Remove</button>
+    </div></div>`).join('') : '<p class="muted" style="margin:0">No frames yet. Click “Add a frame”.</p>';
+  $('fList').querySelectorAll('img[data-key]').forEach(async (img) => { img.src = await imgUrl(img.dataset.key); });
+  $('fList').querySelectorAll('.fr-item').forEach((el) => {
+    const i = Number(el.dataset.i);
+    el.querySelector('[data-del]').onclick = () => { readFrames(); frames.splice(i, 1); drawFrames(); };
+    el.querySelector('[data-file]').onchange = async (ev) => {
+      const file = ev.target.files?.[0]; if (!file) return;
+      if (!/^image\//.test(file.type) || file.size > 10 * 1024 * 1024) { $('fErr').textContent = 'Use a photo (JPG or PNG) up to 10 MB.'; return; }
+      readFrames(); $('fMsg').textContent = 'Uploading…';
+      try {
+        const name = `${Date.now()}-${file.name.replace(/[^\w.\-]+/g, '_').slice(-40)}`;
+        const r = await uploadData({ path: ({ identityId }) => `market/${identityId}/frames/${name}`, data: file, options: { contentType: file.type } }).result;
+        frames[i].photoKey = r.path; $('fMsg').textContent = 'Photo added: click Save my frames.'; drawFrames();
+      } catch (ex) { $('fErr').textContent = ex.message; $('fMsg').textContent = ''; }
+    };
+  });
+}
+$('fAdd').onclick = () => { readFrames(); frames.push({ name: '', style: 'black', material: '', colour: '', widthMm: '', extra: '', note: '', photoKey: '' }); drawFrames(); };
+$('fBack').onclick = () => show(framesBack);
+$('fSave').onclick = async () => {
+  readFrames();
+  const b = $('fSave'); b.disabled = true; $('fErr').textContent = ''; $('fMsg').textContent = 'Saving…';
+  try { profile = (await call('saveCatalogue', { items: frames.filter((f) => f.name) })).profile; frames = JSON.parse(profile.catalogue || '[]'); drawFrames(); $('fMsg').textContent = 'Saved. Kalai Art House sees your frames when choosing a frame shop.'; }
+  catch (ex) { $('fErr').textContent = ex.message; $('fMsg').textContent = ''; } finally { b.disabled = false; }
+};
 
 start();

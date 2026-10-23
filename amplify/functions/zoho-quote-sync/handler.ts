@@ -1916,6 +1916,21 @@ async function sellerAction(ev: ApiEvent) {
     await putRow(S, row);
     return { profile: row };
   }
+  // Frame shops: their frame catalogue (photo, name, style, material, colour, width, extra price), for the studio.
+  if (action === 'saveCatalogue') {
+    if (!profile || profile.type !== 'FRAMER') throw new Error('The frame catalogue is for frame shops.');
+    const STY = ['black', 'white', 'oak', 'walnut', 'gold', 'other'];
+    const items = (Array.isArray(d.items) ? d.items : []).slice(0, 40).map((x) => {
+      const o = (x ?? {}) as Dict;
+      const photo = txt(o.photoKey, 300);
+      return { id: txt(o.id, 40) || crypto.randomUUID().slice(0, 8), name: txt(o.name, 80), style: STY.includes(String(o.style)) ? String(o.style) : 'other', material: txt(o.material, 40), colour: txt(o.colour, 40),
+        widthMm: o.widthMm === '' || o.widthMm == null ? null : Math.min(300, Math.max(0, Math.round(Number(o.widthMm)))), extra: o.extra === '' || o.extra == null ? null : Math.min(5000, Math.max(0, Number(o.extra))),
+        photoKey: photo.startsWith('market/') ? photo : '', note: txt(o.note, 200) };
+    }).filter((x) => x.name);
+    const row = { ...profile, catalogue: JSON.stringify(items), updatedAt: now };
+    await putRow(S, row);
+    return { profile: row };
+  }
   if (!profile || profile.status !== 'APPROVED') throw new Error('Your seller account is not approved yet.');
 
   if (action === 'saveListing') {
@@ -2228,7 +2243,8 @@ async function marketAdmin(ev: ApiEvent) {
   if (action === 'addSupplier') {
     const type = d.type === 'COURIER' ? 'COURIER' : 'FRAMER';
     const f = { business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), email: txt(d.email, 120).toLowerCase(), emirate: txt(d.emirate, 60) || 'Dubai',
-      address: txt(d.address, 300), about: txt(d.about, 2000), tradeLicence: txt(d.tradeLicence, 60), bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, '') };
+      address: txt(d.address, 300), about: txt(d.about, 2000), tradeLicence: txt(d.tradeLicence, 60), bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
+      portfolio: txt(d.website, 300) && !/^https?:\/\//i.test(txt(d.website, 300)) ? `https://${txt(d.website, 300)}` : txt(d.website, 300) };
     if (!f.business) throw new Error('Add the business name.');
     if (f.phone.replace(/\D/g, '').length < 9) throw new Error('Add their mobile or phone number.');
     if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) throw new Error('Check the email address.');
