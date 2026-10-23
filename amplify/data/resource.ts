@@ -181,6 +181,8 @@ const schema = a.schema({
       costs: a.json(),
       // Actual costs from the vendors' bills (AED): {artist, framing, india, customs, local, other, ref:{…}, at}. Reports: plan vs actual.
       actual: a.json(),
+      // Frame shop / delivery partner jobs: {framer:{supplierId,name,price,stage,…}, delivery:{…}} (supplier portal).
+      supplierJobs: a.json(),
       // Every Zoho document for the order (quote, invoices, payments, PO, bills), refreshed by Check Zoho.
       zohoDocs: a.json(),
       docsAt: a.string(),

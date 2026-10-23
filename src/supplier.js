@@ -1,0 +1,262 @@
+// Supplier portal: frame shops (FRAMER) and delivery partners (COURIER).
+// They apply, and once approved see the jobs Kalai Art House gives them: the work's photo, frame spec and size,
+// the agreed price, pickup and delivery addresses. They update each step and enter their invoice (a Zoho bill).
+// A frame shop can also take the delivery of its own job when we ask (it confirms when accepting).
+import './amplify-config.js';
+import './skin.js';
+import {
+  fetchAuthSession, signIn, signUp, confirmSignUp, resendSignUpCode, autoSignIn, signOut, getCurrentUser,
+  fetchUserAttributes, resetPassword, confirmResetPassword,
+} from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/data';
+import { autoPhones } from './phone.js';
+
+autoPhones();
+const client = generateClient();
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const aed = (n) => (n == null || n === '' ? '–' : 'AED ' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 2 }));
+const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
+
+let profile = null;
+let jobs = [];
+let tab = 'open';
+let mode = 'in';
+let groups = [];
+let viewAs = new URLSearchParams(location.search).get('view') || '';
+const isAdmin = () => groups.includes('ADMINS');
+
+async function call(action, data) {
+  const body = viewAs ? { ...(data || {}), viewAs } : data;
+  const r = await client.mutations.sellerAction({ action, data: body ? JSON.stringify(body) : undefined });
+  if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+  return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+}
+function show(view) {
+  ['loginView', 'applyView', 'statusView', 'jobsView'].forEach((v) => { $(v).hidden = v !== view; });
+  $('signOutBtn').hidden = view === 'loginView';
+}
+
+async function start() {
+  try { await getCurrentUser(); } catch { show('loginView'); setMode('in'); return; }
+  const attrs = await fetchUserAttributes().catch(() => ({}));
+  $('who').textContent = attrs.email || '';
+  groups = (await fetchAuthSession().catch(() => null))?.tokens?.accessToken?.payload?.['cognito:groups'] || [];
+  if (isAdmin()) await adminBar(); else viewAs = '';
+  await load();
+}
+async function load() {
+  try {
+    profile = (await call('me')).profile;
+  } catch (ex) {
+    if (/No current user|Unauthorized|not authorized/i.test(ex.message)) { show('loginView'); setMode('in'); return; }
+    show('statusView'); $('statusBox').innerHTML = `<p class="err">Could not load your account: ${esc(ex.message)}</p>`; return;
+  }
+  route();
+}
+
+async function adminBar() {
+  $('adminBar').hidden = false;
+  try {
+    const list = ((await client.mutations.sellerAction({ action: 'portals' })).data);
+    const all = (typeof list === 'string' ? JSON.parse(list) : list).portals || [];
+    const sup = all.filter((p) => p.type === 'FRAMER' || p.type === 'COURIER');
+    const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)} · ${p.type === 'FRAMER' ? 'frame shop' : 'delivery'} · ${esc({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' }[p.status] || p.status)}</option>`;
+    $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${sup.map(opt).join('')}`;
+    $('viewAs').value = sup.some((p) => p.id === viewAs) ? viewAs : '';
+    if (!$('viewAs').value) viewAs = '';
+    $('adminNote').textContent = sup.length ? '' : 'No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them.';
+  } catch (ex) { $('adminNote').textContent = ex.message; }
+  $('viewAs').onchange = () => {
+    viewAs = $('viewAs').value;
+    const u = new URL(location.href); if (viewAs) u.searchParams.set('view', viewAs); else u.searchParams.delete('view');
+    history.replaceState(null, '', u);
+    load();
+  };
+}
+
+function route() {
+  const s = profile?.status;
+  if (profile && !['FRAMER', 'COURIER'].includes(profile.type)) {
+    show('statusView');
+    $('statusBox').innerHTML = `<h2>This is the supplier portal</h2><p>Your account is an ${profile.type === 'ARTIST' ? 'artist' : 'seller'} account. <a href="/seller.html">Open the artist &amp; seller portal</a>.</p>`;
+    return;
+  }
+  if (!profile || s === 'REJECTED') {
+    if (isAdmin() && !viewAs) { show('statusView'); $('statusBox').innerHTML = '<h2>Studio view</h2><p>Choose a frame shop or delivery partner above to see their jobs as they do.</p>'; return; }
+    show('applyView'); fillApply();
+    if (s === 'REJECTED') $('applyNote').innerHTML = `Your earlier application was not accepted.${profile.adminNote ? ` <b>Our note:</b> ${esc(profile.adminNote)}` : ''} You can update it and send it again.`;
+    return;
+  }
+  if (s === 'APPLIED') {
+    show('statusView');
+    $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. We'll check your details and email you, usually within a few days. Once approved, the jobs we give you appear here.</p><button class="linkbtn" id="editApp" type="button">Edit my application</button>`;
+    $('editApp').onclick = () => { show('applyView'); fillApply(); };
+    return;
+  }
+  if (s === 'SUSPENDED') { show('statusView'); $('statusBox').innerHTML = `<h2>Your account is paused</h2><p>${profile.adminNote ? esc(profile.adminNote) : 'Please contact Kalai Art House on WhatsApp.'}</p>`; return; }
+  show('jobsView');
+  $('jBiz').textContent = profile.business;
+  $('jNote').textContent = profile.type === 'FRAMER'
+    ? 'Framing jobs from Kalai Art House: accept, frame, mark ready for pickup (or deliver it yourself when we ask), then enter your invoice.'
+    : 'Delivery jobs from Kalai Art House: accept, pick up (from the frame shop shown), deliver, then enter your invoice.';
+  loadJobs();
+}
+
+// ---------- sign in ----------
+function setMode(m) {
+  mode = m;
+  $('tSignIn').setAttribute('aria-pressed', String(m === 'in' || m === 'reset'));
+  $('tSignUp').setAttribute('aria-pressed', String(m === 'up' || m === 'code'));
+  $('aCodeBox').hidden = !(m === 'code' || m === 'reset');
+  $('aPass').closest('.field').querySelector('label').textContent = m === 'reset' ? 'New password' : 'Password';
+  $('aPass').autocomplete = m === 'in' ? 'current-password' : 'new-password';
+  $('aBtn').textContent = { in: 'Sign in', up: 'Create account', code: 'Confirm', reset: 'Set new password' }[m];
+  $('aForgot').hidden = m !== 'in';
+  $('aErr').textContent = '';
+}
+$('tSignIn').onclick = () => setMode('in');
+$('tSignUp').onclick = () => setMode('up');
+$('aForgot').onclick = async () => {
+  const email = $('aEmail').value.trim().toLowerCase();
+  if (!email) { $('aErr').textContent = 'Type your email first.'; return; }
+  try { await resetPassword({ username: email }); setMode('reset'); $('aErr').textContent = 'We emailed you a code. Enter it with a new password.'; } catch (ex) { $('aErr').textContent = ex.message; }
+};
+$('authForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('aEmail').value.trim().toLowerCase(), password = $('aPass').value, code = $('aCode').value.trim();
+  const b = $('aBtn'); b.disabled = true; $('aErr').textContent = '';
+  try {
+    if (!email) throw new Error('Type your email.');
+    if (mode === 'in') {
+      const { nextStep } = await signIn({ username: email, password });
+      if (nextStep.signInStep === 'CONFIRM_SIGN_UP') { await resendSignUpCode({ username: email }); setMode('code'); $('aErr').textContent = 'Confirm your email: we sent you a code.'; return; }
+      if (nextStep.signInStep !== 'DONE') throw new Error('Finish setting up this account first.');
+      await start();
+    } else if (mode === 'up') {
+      if (password.length < 8) throw new Error('Use at least 8 characters for the password.');
+      await signUp({ username: email, password, options: { userAttributes: { email }, autoSignIn: true } });
+      setMode('code'); $('aErr').textContent = 'We emailed you a code. Enter it to confirm.';
+    } else if (mode === 'code') {
+      const { nextStep } = await confirmSignUp({ username: email, confirmationCode: code });
+      if (nextStep.signUpStep === 'COMPLETE_AUTO_SIGN_IN') await autoSignIn(); else await signIn({ username: email, password });
+      await start();
+    } else {
+      await confirmResetPassword({ username: email, confirmationCode: code, newPassword: password });
+      await signIn({ username: email, password });
+      await start();
+    }
+  } catch (ex) {
+    $('aErr').textContent = ex.name === 'NotAuthorizedException' || ex.name === 'UserNotFoundException' ? 'Email or password is incorrect.'
+      : ex.name === 'UsernameExistsException' ? 'This email already has an account: sign in instead.' : (ex.message || 'Something went wrong.');
+  } finally { b.disabled = false; }
+});
+$('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
+
+// ---------- application ----------
+const AF = { sBiz: 'business', sName: 'contactName', sPhone: 'phone', sEmirate: 'emirate', sAddr: 'address', sLic: 'tradeLicence', sAbout: 'about', sBank: 'bankName', sAcc: 'accountName', sIban: 'iban' };
+function fillApply() {
+  Object.entries(AF).forEach(([id, k]) => { if (profile?.[k] != null) $(id).value = profile[k]; });
+  const t = profile?.type === 'COURIER' ? 'COURIER' : new URLSearchParams(location.search).get('as') === 'courier' ? 'COURIER' : 'FRAMER';
+  document.querySelector(`input[name="sType"][value="${t}"]`).checked = true;
+  document.querySelectorAll('input[name="sType"]').forEach((r) => { r.disabled = !!profile?.type && profile.status !== 'REJECTED'; r.onchange = typeText; });
+  typeText();
+}
+function typeText() {
+  const fr = document.querySelector('input[name="sType"]:checked').value === 'FRAMER';
+  $('sAddrL').textContent = fr ? 'Workshop address (where works are dropped off and collected)' : 'Your address / base';
+  $('sAboutL').textContent = fr ? 'Your services: frame styles and mouldings, glass/acrylic, mount, usual turnaround, and whether you deliver' : 'Your services: vehicles, areas you cover (emirates), same-day or next-day, and your usual rates';
+}
+$('applyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = Object.fromEntries(Object.entries(AF).map(([id, k]) => [k, $(id).value.trim()]));
+  data.type = document.querySelector('input[name="sType"]:checked').value;
+  data.country = 'UAE';
+  const b = $('sBtn'); b.disabled = true; $('sErr').textContent = '';
+  try { profile = (await call('apply', data)).profile; route(); } catch (ex) { $('sErr').textContent = ex.message; } finally { b.disabled = false; }
+});
+
+// ---------- jobs ----------
+const FR_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['READY', 'Framed, ready'], ['COLLECTED', 'Collected']];
+const DL_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['PICKED', 'Picked up'], ['DELIVERED', 'Delivered']];
+const isDone = (j) => j.cancelled || !!j.invoiceNo;
+async function loadJobs() {
+  $('jList').innerHTML = '<p class="muted">Loading…</p>';
+  try { jobs = (await call('jobs')).jobs || []; drawJobs(); } catch (ex) { $('jList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
+}
+$('jReload').onclick = loadJobs;
+$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
+
+function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
+function jobCard(j) {
+  const fr = j.role === 'framer';
+  const steps = fr ? FR_STEPS : DL_STEPS;
+  const at = steps.findIndex((s) => s[0] === j.stage);
+  const label = j.cancelled ? 'Cancelled: please stop' : j.invoiceNo ? `Invoiced ${j.invoiceNo}` : steps[Math.max(0, at)][1];
+  const key = `${j.id}:${j.role}`;
+  let act = '';
+  if (!j.cancelled) {
+    if (j.stage === 'ASSIGNED') {
+      act = `${fr && j.canDeliver ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-deliver style="width:auto"> We will also deliver it to the customer${j.deliveryPrice != null ? ` (${aed(j.deliveryPrice)})` : ''}</label>` : ''}
+        <button class="btn small" data-a="jobAccept">Accept the job</button>`;
+    } else if (fr && j.stage === 'ACCEPTED') act = '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
+    else if (!fr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
+      act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't finished framing yet.</span>`
+        : `<div class="inline"><div class="field"><label>Tracking / AWB (optional)</label><input data-awb maxlength="60"></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
+    } else if (!fr && j.stage === 'PICKED') act = '<button class="btn small" data-a="jobDelivered">Delivered to the customer</button>';
+    const canInvoice = fr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
+    if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (AED)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
+  }
+  return `<article class="job" data-key="${esc(key)}">
+    <div class="row"><h3>${fr ? 'Framing' : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
+      <span class="muted" style="margin-left:auto">Order ${esc(j.ref)} · ${esc(j.kind)} · given ${esc(day(j.assignedAt))}</span></div>
+    <div class="steps">${steps.map((s, i) => `<i class="${i <= at ? 'on' : ''}" title="${esc(s[1])}"></i>`).join('')}</div>
+    <div class="grid2">
+      <dl>
+        <dt>Agreed price</dt><dd><b>${aed(j.price)}</b></dd>
+        ${j.due ? `<dt>Please finish by</dt><dd>${esc(j.due)}</dd>` : ''}
+        ${j.note ? `<dt>Note from us</dt><dd>${esc(j.note)}</dd>` : ''}
+        ${fr && j.delivering ? '<dt>Delivery</dt><dd>You deliver this one too (see the delivery job)</dd>' : ''}
+        ${j.specs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
+        ${j.awb ? `<dt>Tracking</dt><dd>${esc(j.awb)}</dd>` : ''}
+        ${j.invoiceNo ? `<dt>Your invoice</dt><dd>${esc(j.invoiceNo)} · ${aed(j.invoiceAmt)}${j.bill ? ' · received' : ''}</dd>` : ''}
+      </dl>
+      <dl>
+        ${!fr ? `<dt>Pick up from</dt><dd>${addr(j.from)}</dd>` : ''}
+        <dt>Deliver to</dt><dd>${addr(j.to)}</dd>
+      </dl>
+    </div>
+    ${j.hasPhoto ? `<div><button class="linkbtn" data-photo>Show the artwork photo</button><div data-img></div></div>` : ''}
+    <div style="display:grid;gap:8px;justify-items:start">${act}</div>
+    <div class="err" data-msg></div>
+  </article>`;
+}
+function drawJobs() {
+  const list = jobs.filter((j) => (tab === 'all' ? true : tab === 'done' ? isDone(j) : !isDone(j)));
+  $('jList').innerHTML = list.length ? list.map(jobCard).join('') : `<div class="sbox"><p class="muted" style="margin:0">${tab === 'open' ? 'No open jobs right now. We email you when there is a new one.' : 'Nothing here yet.'}</p></div>`;
+  $('jList').querySelectorAll('.job').forEach((card) => {
+    const [id, role] = card.dataset.key.split(':');
+    const msg = card.querySelector('[data-msg]');
+    const ph = card.querySelector('[data-photo]');
+    if (ph) ph.onclick = async () => {
+      ph.disabled = true;
+      try { const r = await call('jobPhoto', { id, role }); card.querySelector('[data-img]').innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener"><img class="photo" alt="Artwork to frame" src="${esc(r.url)}"></a><div class="muted">Tap to open full size (link works for 15 minutes).</div>`; ph.hidden = true; }
+      catch (ex) { msg.textContent = ex.message; ph.disabled = false; }
+    };
+    card.querySelectorAll('[data-a]').forEach((b) => {
+      b.onclick = async () => {
+        const a = b.dataset.a, data = { id, role };
+        if (a === 'jobAccept' && card.querySelector('[data-deliver]')) data.deliver = card.querySelector('[data-deliver]').checked;
+        if (a === 'jobPicked') data.awb = card.querySelector('[data-awb]')?.value.trim() || '';
+        if (a === 'jobInvoice') { data.invoiceNo = card.querySelector('[data-inv]').value.trim(); data.amount = card.querySelector('[data-amt]').value; }
+        b.disabled = true; msg.textContent = '';
+        try {
+          await call(a, data);
+          await loadJobs();
+        } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+      };
+    });
+  });
+}
+
+start();

@@ -339,7 +339,16 @@ function zohoActual(e) {
   try { d = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; if (typeof d === 'string') d = JSON.parse(d); } catch { d = null; }
   const out = {}, ref = {}, unmapped = [];
   const who = (e.artistName || 'Siva').split(/\s+/)[0].toLowerCase(), rules = vendorRules();
-  for (const b of (d?.docs || []).filter((x) => x.group === 'PURCHASE' && (x.type === 'Bill' || x.type === 'Vendor bill') && x.status !== 'void')) {
+  // Frame shop and delivery partner invoices from the supplier portal (also Zoho bills, counted once here).
+  const sj = jobsOf(e), seen = new Set();
+  for (const [role, f] of [['framer', 'framing'], ['delivery', 'local']]) {
+    const jb = sj[role];
+    if (jb?.invoiceAmt == null) continue;
+    out[f] = Math.round(((out[f] || 0) + Number(jb.invoiceAmt)) * 100) / 100;
+    ref[f] = [ref[f], `${jb.name} · ${jb.invoiceNo}${jb.billState && jb.billState !== 'open' ? ` (${jb.billState})` : ''}`].filter(Boolean).join('; ');
+    if (jb.billId) seen.add(jb.billId);
+  }
+  for (const b of (d?.docs || []).filter((x) => x.group === 'PURCHASE' && (x.type === 'Bill' || x.type === 'Vendor bill') && x.status !== 'void' && !seen.has(x.id))) {
     const v = String(b.vendor || '').toLowerCase(), amt = Number(b.amount ?? b.total ?? 0);
     const f = b.id === e.zohoBillId || (b.type === 'Bill' && v.includes(who)) ? 'artist' : (rules.find(([m]) => v.includes(m)) || [])[1];
     if (!f) { unmapped.push(`${b.vendor || 'vendor?'} ${b.number}`); continue; }
@@ -519,6 +528,60 @@ let artists = [];
 async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
+  suppliers = (r.data || []).filter((p) => (p.type === 'FRAMER' || p.type === 'COURIER') && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
+}
+let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COURIER)
+const jobsOf = (e) => { let v = costings.get(e.id)?.supplierJobs; try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; } return v && typeof v === 'object' ? v : {}; };
+const JOB_STAGE = { ASSIGNED: 'sent, waiting to accept', ACCEPTED: 'accepted', READY: 'framed, ready for pickup', COLLECTED: 'collected', PICKED: 'picked up (Shipped)', DELIVERED: 'delivered' };
+/** Frame shop & delivery partner for a paid order (supplier portal). */
+function supplierSection(e) {
+  if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
+  const j = jobsOf(e);
+  const row = (role, label, type) => {
+    const cur = j[role];
+    const list = suppliers.filter((s) => s.type === type);
+    const locked = cur && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage);
+    const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
+    return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
+      ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
+        <div class="field"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select></div>
+        <div class="field"><label>Price you pay them (AED)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
+        <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
+        <div class="field"><label>Note for them (frame style, size, glass, timing…)</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
+        ${role === 'framer' && !j.delivery ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-js="framer-deliver" style="width:auto" ${cur?.canDeliver ? 'checked' : ''}> Ask them to deliver too, for AED <input data-js="framer-dprice" type="number" min="0" step="1" value="${cur?.deliveryPrice ?? ''}" style="width:90px"> (they confirm when accepting)</label>` : ''}
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-jobsend="${role}">${cur ? 'Update the job' : 'Send the job'}</button>${cur ? `<button type="button" class="btn small ghost" data-jobremove="${role}">Take it back</button>` : ''}<span class="muted" data-jobmsg="${role}" style="font-size:12px"></span></div>`}
+    </div>`;
+  };
+  return `<fieldset class="cost" id="supplierBox"><legend>Frame shop &amp; delivery</legend>
+    <div class="muted" style="font-size:12px">They see this order in their supplier portal: the photo, frame spec and size, your price, and the pickup and delivery addresses. Their steps update the order (Being framed, Shipped, Delivered) and their invoice becomes a Zoho bill.</div>
+    ${row('framer', 'Framing', 'FRAMER')}${row('delivery', 'Delivery', 'COURIER')}</fieldset>`;
+}
+function wireSuppliers(e) {
+  const box = $('supplierBox'); if (!box) return;
+  const v = (k) => box.querySelector(`[data-js="${k}"]`);
+  box.querySelectorAll('[data-jobsend],[data-jobremove]').forEach((b) => {
+    b.onclick = async () => {
+      const role = b.dataset.jobsend || b.dataset.jobremove, remove = !!b.dataset.jobremove;
+      const msg = box.querySelector(`[data-jobmsg="${role}"]`);
+      const data = { id: e.id, role };
+      if (!remove) {
+        data.supplierId = v(`${role}-sid`).value;
+        if (!data.supplierId) { msg.textContent = 'Choose who does it.'; return; }
+        data.price = v(`${role}-price`).value; data.due = v(`${role}-due`).value; data.note = v(`${role}-note`).value.trim();
+        if (role === 'framer' && v('framer-deliver')) { data.canDeliver = v('framer-deliver').checked; data.deliveryPrice = v('framer-dprice').value; }
+      }
+      b.disabled = true; msg.textContent = remove ? 'Taking it back…' : 'Sending…';
+      try {
+        const r = await client.mutations.marketAdmin({ action: remove ? 'removeJob' : 'assignJob', data: JSON.stringify(data) });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+        costings.set(e.id, { ...(costings.get(e.id) || { enquiryId: e.id }), supplierJobs: JSON.stringify(out.jobs || {}) });
+        box.outerHTML = supplierSection(e); wireSuppliers(e);
+        $('supplierBox').querySelector(`[data-jobmsg="${role}"]`) && ($('supplierBox').querySelector(`[data-jobmsg="${role}"]`).textContent = remove ? 'Taken back; they were emailed.' : 'Sent: they were emailed and see it in their portal.');
+      } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+    };
+  });
 }
 let codesAsked = false;
 let curAed = false; // the open order's artist prices in AED (artist in the UAE)
@@ -1284,6 +1347,7 @@ async function showDetail(e) {
       ${addressSection(e)}
       ${shippingSection(e)}
       ${costingSection(e)}
+      ${supplierSection(e)}
       ${actualSection(e)}
       <div class="two">
         <div class="field"><label for="ePayMethod">Paid by</label><select id="ePayMethod">
@@ -1399,6 +1463,7 @@ async function showDetail(e) {
     };
   }
 
+  wireSuppliers(e);
   $('checkZoho').onclick = async (ev) => {
     const b = ev.currentTarget; b.disabled = true; $('zohoMsg').textContent = 'Checking Zoho…';
     try {

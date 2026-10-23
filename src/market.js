@@ -8,6 +8,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const aed = (n) => 'AED ' + (Math.round(Number(n || 0) * 100) / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 });
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 const r2 = (n) => Math.round(n * 100) / 100;
+const SUP = (s) => s.type === 'FRAMER' || s.type === 'COURIER';
 const SST = { APPLIED: 'New application', APPROVED: 'Approved', REJECTED: 'Rejected', SUSPENDED: 'Suspended' };
 const LST = { DRAFT: 'Draft', SUBMITTED: 'To approve', APPROVED: 'Live', REJECTED: 'Changes asked', PAUSED: 'Paused' };
 
@@ -73,14 +74,18 @@ function draw() {
   const queueL = listings.filter((l) => l.status === 'SUBMITTED');
   let html = '';
   if (view === 'queue') {
-    const qa = queueS.filter((s) => s.type === 'ARTIST'), qs = queueS.filter((s) => s.type !== 'ARTIST');
+    const qa = queueS.filter((s) => s.type === 'ARTIST'), qs = queueS.filter((s) => s.type !== 'ARTIST' && !SUP(s)), qp = queueS.filter(SUP);
     html = (qa.length ? `<h2 style="font-size:17px;margin:4px 0">Artist applications</h2>${qa.map(sellerCard).join('')}` : '')
       + (qs.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Seller applications</h2>${qs.map(sellerCard).join('')}` : '')
+      + (qp.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Frame shop &amp; delivery applications</h2>${qp.map(sellerCard).join('')}` : '')
       + (queueL.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Listings to approve</h2>${queueL.map(listingCard).join('')}` : '')
       || '<p class="muted">Nothing waiting for approval.</p>';
+  } else if (view === 'suppliers') {
+    const these = sellers.filter(SUP).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
+    html = these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>';
   } else if (view === 'artists' || view === 'sellers') {
     const wantArtist = view === 'artists';
-    const these = sellers.filter((s) => (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
+    const these = sellers.filter((s) => !SUP(s) && (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
     html = these.length ? these.map(sellerCard).join('') : wantArtist
       ? '<p class="muted">No artists yet. Share art.pranixtechno.com/seller.html?as=artist (or the “Become an artist” page) with artists.</p>'
       : '<p class="muted">No sellers yet. Share art.pranixtechno.com/seller.html with craftspeople who want to sell.</p>';
@@ -92,7 +97,26 @@ function draw() {
 }
 
 const samplesOf = (s) => { try { return JSON.parse(s.sampleKeys || '[]'); } catch { return []; } };
+function supplierCard(s) {
+  const fr = s.type === 'FRAMER';
+  return `<article class="mk-card" data-seller="${esc(s.id)}">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge SCHEDULED">${fr ? 'Frame shop' : 'Delivery partner'}</span><span class="cg-badge ${esc(s.status)}">${esc(SST[s.status] || s.status)}</span>
+      <span class="muted" style="margin-left:auto">Applied ${esc(day(s.appliedAt))}</span></div>
+    <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
+    <div style="white-space:pre-wrap"><b>Services:</b> ${esc(s.about)}</div>
+    <div class="muted">${fr ? 'Workshop' : 'Base'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
+    ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
+    <div class="mk-act">
+      <label>Note to ${fr ? 'frame shop' : 'delivery partner'}<input class="note" data-f="note" maxlength="500" value=""></label>
+      ${s.status === 'APPROVED' ? '<button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
+        : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
+        : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`}
+      <a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open their portal</a>
+      <span class="muted" data-msg></span>
+    </div></article>`;
+}
 function sellerCard(s) {
+  if (SUP(s)) return supplierCard(s);
   const n = listings.filter((l) => l.sellerId === s.id);
   const live = n.filter((l) => l.status === 'APPROVED').length;
   return `<article class="mk-card" data-seller="${esc(s.id)}">
@@ -172,7 +196,7 @@ function wireCards() {
       const msg = card.querySelector('[data-msg]');
       if (['rejectSeller', 'rejectListing', 'suspendSeller'].includes(a) && !f('note').trim()) { msg.textContent = 'Write a short note to the seller first.'; return; }
       const data = { id, note: f('note').trim() };
-      if (a === 'approveSeller') { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
+      if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
       if (a === 'approveListing') data.commissionPct = f('pct');
       card.querySelectorAll('button').forEach((x) => { x.disabled = true; }); msg.textContent = '';
       try {

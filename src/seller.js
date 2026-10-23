@@ -90,7 +90,7 @@ async function adminBar() {
   try {
     const list = (await call('portals')).portals || [];
     const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)}${p.country === 'India' ? ' (India)' : ''} · ${esc(({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' })[p.status] || p.status)}</option>`;
-    const art = list.filter((p) => p.type === 'ARTIST'), sel = list.filter((p) => p.type !== 'ARTIST');
+    const art = list.filter((p) => p.type === 'ARTIST'), sel = list.filter((p) => p.type !== 'ARTIST' && p.type !== 'FRAMER' && p.type !== 'COURIER');
     $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${art.length ? `<optgroup label="Artists">${art.map(opt).join('')}</optgroup>` : ''}${sel.length ? `<optgroup label="Sellers">${sel.map(opt).join('')}</optgroup>` : ''}`;
     $('viewAs').value = list.some((p) => p.id === viewAs) ? viewAs : '';
     if (!$('viewAs').value) viewAs = '';
@@ -118,6 +118,8 @@ function deskOnly() {
 }
 
 function route() {
+  // Frame shops and delivery partners have their own portal.
+  if (['FRAMER', 'COURIER'].includes(profile?.type) && !viewAs) { location.replace('/supplier.html'); return; }
   brand();
   const s = profile?.status;
   $('dNew').hidden = false; $('dProfile').hidden = false; $('tabProducts').hidden = false; $('tabOrders').hidden = false;

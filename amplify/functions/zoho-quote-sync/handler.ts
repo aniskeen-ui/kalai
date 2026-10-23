@@ -1338,7 +1338,10 @@ async function checkZoho(id: string) {
     // The artist's bill (vendor bills for the frame shop or courier can carry the same Reference#).
     const who = (str(img, 'artistName') || 'Siva').split(/\s+/)[0].toLowerCase();
     const bills = docs.filter((d) => d.type === 'Bill' && d.status !== 'void');
-    const bill = bills.find((d) => String(d.vendor ?? '').toLowerCase().includes(who)) ?? (bills.length === 1 ? bills[0] : undefined);
+    const sj = await jobsOf(id).catch(() => ({} as Jobs));
+    const supplierBills = new Set([sj.framer?.billId, sj.delivery?.billId].filter(Boolean));
+    const artistBills = ['PRICE', 'COMMISSION'].includes(str(img, 'kind')) ? bills.filter((d) => !supplierBills.has(d.id)) : [];
+    const bill = artistBills.find((d) => String(d.vendor ?? '').toLowerCase().includes(who)) ?? (artistBills.length === 1 ? artistBills[0] : undefined);
     const fill: Record<string, string | null> = {};
     if (bill && !str(img, 'zohoBillId')) Object.assign(fill, { zohoBill: bill.number, zohoBillId: bill.id });
     const dc = docs.find((d) => d.type === 'Delivery challan');
@@ -1821,7 +1824,8 @@ async function sellerAction(ev: ApiEvent) {
 
   if (action === 'apply') {
     // Artists and sellers apply the same way; the type is fixed once approved.
-    const type = profile?.type && profile.status !== 'REJECTED' ? String(profile.type) : d.type === 'ARTIST' ? 'ARTIST' : 'SELLER';
+    const type = profile?.type && profile.status !== 'REJECTED' ? String(profile.type) : d.type === 'ARTIST' ? 'ARTIST' : d.type === 'FRAMER' || d.type === 'COURIER' ? String(d.type) : 'SELLER';
+    const supplier = type === 'FRAMER' || type === 'COURIER';
     const country = d.country === 'India' ? 'India' : 'UAE';
     const f = {
       type, country,
@@ -1835,7 +1839,8 @@ async function sellerAction(ev: ApiEvent) {
     };
     const artist = type === 'ARTIST';
     if (!f.business || !f.contactName || f.phone.replace(/\D/g, '').length < 9) throw new Error(artist ? 'Add your artist name, full name and mobile.' : 'Add your business name, contact name and mobile.');
-    if (!f.about) throw new Error(artist ? 'Tell us about yourself and your art.' : 'Tell us what you sell.');
+    if (!f.about) throw new Error(artist ? 'Tell us about yourself and your art.' : supplier ? 'Tell us about your services.' : 'Tell us what you sell.');
+    if (supplier && !f.address) throw new Error(type === 'FRAMER' ? 'Add your workshop address (where works are collected).' : 'Add your address.');
     if (f.portfolio && !/^https?:\/\/\S+$/i.test(f.portfolio)) throw new Error('The portfolio link should start with https://');
     if (country === 'UAE' && f.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(f.iban)) throw new Error('Check the IBAN (e.g. AE07 0331 2345 6789 0123 456).');
     if (country === 'India' && f.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(f.ifsc)) throw new Error('Check the IFSC code (e.g. SBIN0001234).');
@@ -1844,7 +1849,7 @@ async function sellerAction(ev: ApiEvent) {
     try { samples = (JSON.parse(String(d.sampleKeys ?? '[]')) as unknown[]).filter((k): k is string => typeof k === 'string' && k.startsWith('market/')).slice(0, 8); } catch { samples = []; }
     if (artist && !f.mediums) throw new Error('Tick the mediums you work in.');
     if (artist && samples.length < 3) throw new Error('Upload at least 3 photos of your work.');
-    if (!artist && !samples.length) throw new Error('Upload at least 1 photo of your products.');
+    if (!artist && !supplier && !samples.length) throw new Error('Upload at least 1 photo of your products.');
     f.sampleKeys = JSON.stringify(samples);
     const born = Math.floor(Number(d.bornYear));
     const bornYear = born >= 1920 && born <= new Date().getFullYear() - 10 ? born : null;
@@ -1856,7 +1861,7 @@ async function sellerAction(ev: ApiEvent) {
     if (row.status === 'APPROVED' && type === 'ARTIST') await publishArtist(row);
     if (!profile || profile.status === 'REJECTED') {
       await sendMail({
-        to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : 'seller'} application: ${f.business}`,
+        to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : type === 'FRAMER' ? 'frame shop' : type === 'COURIER' ? 'delivery partner' : 'seller'} application: ${f.business}`,
         lines: [`<b>${h(f.business)}</b> · ${h(f.contactName)} · ${h(f.phone)} · ${h(me.email)} · ${h(f.emirate)}${country === 'India' ? ', India' : ''}`,
           artist ? `Mediums: ${h(f.mediums)} · ${h(f.experience || 'experience not given')} · commissions: ${f.commissions === 'YES' ? 'yes' : 'no'} · ${samples.length} sample photos` : `Sells: ${h(f.about)} · ${samples.length} product photos`,
           artist ? `About: ${h(f.about)}` : f.tradeLicence ? `Trade licence: ${h(f.tradeLicence)}` : 'No trade licence given.',
@@ -1897,6 +1902,7 @@ async function sellerAction(ev: ApiEvent) {
     return { listing: row, price: p, backToReview: old?.status === 'APPROVED' && status === 'SUBMITTED' };
   }
 
+  if (action.startsWith('job')) return supplierJobs(action, d, me.sub, profile);
   if (['orders', 'orderReady', 'orderDispatched', 'orderDelivered'].includes(action)) return sellerOrders(action, d, me.sub, profile);
   if (action.startsWith('commission')) return artistCommissions(action, d, me.sub, profile);
 
@@ -1928,10 +1934,236 @@ async function sellerAction(ev: ApiEvent) {
   throw new Error('Unknown action');
 }
 
+// ---------- Supplier portal: frame shops (FRAMER) and delivery partners (COURIER) ----------
+// The studio gives an order to a frame shop and/or a delivery partner (Order Management → order → Frame shop & delivery).
+// The job lives on the admin-only Costing record (supplierJobs), so customers never see what Kalai pays its suppliers.
+// Frame shop: Accept → Framed, ready for pickup → its invoice (Zoho bill). Delivery partner: Accept → Picked up
+// (order Shipped, tracking no.) → Delivered (order Delivered) → its invoice (Zoho bill).
+type Job = { supplierId: string; name: string; price: number | null; due: string; note: string; stage: string; assignedAt: string; acceptedAt?: string; readyAt?: string; canDeliver?: boolean; deliveryPrice?: number | null; byFramer?: boolean;
+  pickedAt?: string; deliveredAt?: string; awb?: string; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
+type Jobs = { framer?: Job; delivery?: Job };
+const ROLE_OF: Record<string, 'framer' | 'delivery'> = { FRAMER: 'framer', COURIER: 'delivery' };
+const ROLE_LABEL = { framer: 'frame shop', delivery: 'delivery partner' };
+
+async function jobsOf(enquiryId: string): Promise<Jobs> {
+  const t = process.env.COSTING_TABLE;
+  if (!t) throw new Error('Not configured');
+  const row = await getRow(t, { enquiryId: { S: enquiryId } });
+  return parseJobs(row?.supplierJobs?.S);
+}
+function parseJobs(raw?: string): Jobs {
+  try { let v: unknown = JSON.parse(raw || '{}'); if (typeof v === 'string') v = JSON.parse(v); return (v && typeof v === 'object' ? v : {}) as Jobs; } catch { return {}; }
+}
+async function saveJobs(enquiryId: string, jobs: Jobs) {
+  const t = process.env.COSTING_TABLE;
+  if (!t) throw new Error('Not configured');
+  const now = new Date().toISOString();
+  await ddb.send(new UpdateItemCommand({ TableName: t, Key: { enquiryId: { S: enquiryId } },
+    UpdateExpression: 'SET supplierJobs = :j, updatedAt = :n, createdAt = if_not_exists(createdAt, :n), #tn = if_not_exists(#tn, :t)',
+    ExpressionAttributeNames: { '#tn': '__typename' },
+    ExpressionAttributeValues: { ':j': { S: JSON.stringify(jobs) }, ':n': { S: now }, ':t': { S: 'Costing' } } }));
+}
+async function enquiryRow(id: string) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  return (await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }))).Item as Img | undefined;
+}
+
+/** Studio (ADMINS): give an order's framing or delivery to a supplier, or take it back. */
+async function assignJob(action: string, d: Dict) {
+  const { S } = mtables();
+  const id = txt(d.id, 80), role = d.role === 'delivery' ? 'delivery' : 'framer';
+  const e = await enquiryRow(id);
+  if (!e) throw new Error('Order not found');
+  const jobs = await jobsOf(id);
+  const cur = jobs[role];
+  const now = new Date().toISOString();
+  if (action === 'removeJob') {
+    if (!cur) return { jobs };
+    if (!['ASSIGNED', 'ACCEPTED'].includes(cur.stage)) throw new Error(`The ${ROLE_LABEL[role]} has already ${cur.stage === 'READY' ? 'framed it' : 'started'}: it can't be taken back here.`);
+    delete jobs[role];
+    await saveJobs(id, jobs);
+    const p = plain(await getRow(S, { id: { S: cur.supplierId } }));
+    if (p?.email) await sendMail({ to: String(p.email), subject: `Job withdrawn: ${str(e, 'ref')}`, lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has withdrawn the ${role === 'framer' ? 'framing' : 'delivery'} job for order <b>${h(str(e, 'ref'))}</b>. Please don't start it. Sorry for any inconvenience.`] }).catch(() => {});
+    return { jobs };
+  }
+  const sid = txt(d.supplierId, 80);
+  const p = plain(await getRow(S, { id: { S: sid } }));
+  if (!p || ROLE_OF[String(p.type)] !== role) throw new Error(`Choose a ${ROLE_LABEL[role]}.`);
+  if (p.status !== 'APPROVED') throw new Error(`${String(p.business)} is not approved yet (Artists & sellers).`);
+  if (cur && cur.supplierId !== sid && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage)) throw new Error(`${cur.name} has already started this job.`);
+  const price = d.price === '' || d.price == null ? null : numIn(d.price, 100000);
+  // A frame shop may also be asked to deliver (it confirms when accepting); the delivery job is then its own too.
+  const canDeliver = role === 'framer' && !!d.canDeliver && !jobs.delivery;
+  const deliveryPrice = canDeliver && d.deliveryPrice !== '' && d.deliveryPrice != null ? numIn(d.deliveryPrice, 100000) : null;
+  const job: Job = cur && cur.supplierId === sid
+    ? { ...cur, price, due: txt(d.due, 10), note: txt(d.note, 500), canDeliver, deliveryPrice }
+    : { supplierId: sid, name: String(p.business || p.contactName), price, due: txt(d.due, 10), note: txt(d.note, 500), stage: 'ASSIGNED', assignedAt: now, canDeliver, deliveryPrice };
+  jobs[role] = job;
+  await saveJobs(id, jobs);
+  if ((!cur || cur.supplierId !== sid) && p.email) {
+    await sendMail({ to: String(p.email), subject: `New ${role === 'framer' ? 'framing' : 'delivery'} job: ${str(e, 'ref')}`,
+      lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has a ${role === 'framer' ? 'framing' : 'delivery'} job for you: <b>${h(str(e, 'title'))}</b> (order ${h(str(e, 'ref'))}).`,
+        job.price != null ? `Agreed price: <b>${aed(job.price)}</b>.` : '', job.canDeliver ? `We'd also like you to deliver it to the customer${job.deliveryPrice != null ? ` for <b>${aed(job.deliveryPrice)}</b>` : ''}: please confirm when you accept.` : '', job.due ? `Please complete it by <b>${h(job.due)}</b>.` : '', job.note ? `Note: ${h(job.note)}` : '',
+        'Open your supplier portal to see the details and accept the job.'],
+      button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } }).catch((err) => console.warn('Supplier email failed', err));
+  }
+  if (cur && cur.supplierId !== sid) {
+    const old = plain(await getRow(S, { id: { S: cur.supplierId } }));
+    if (old?.email) await sendMail({ to: String(old.email), subject: `Job withdrawn: ${str(e, 'ref')}`, lines: [`Hello ${h(old.contactName)},`, `Kalai Art House has given order <b>${h(str(e, 'ref'))}</b> to another supplier. Please don't start it.`] }).catch(() => {});
+  }
+  return { jobs };
+}
+
+const PRIVATE_KEYS = ['Name', 'Mobile', 'Email', 'Parent', 'Consent', 'Address', 'Reference', 'Estimate', 'Total', 'Price', 'Delivery charge', 'Message'];
+/** What a supplier sees of one order. */
+function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile: Dict | null) {
+  const j = jobs[role]!;
+  const selfDelivery = role === 'delivery' && !!jobs.framer && jobs.framer.supplierId === j.supplierId;
+  const det = parseDetails(str(e, 'details'));
+  return {
+    id: str(e, 'id'), role, ref: str(e, 'ref'), kind: KIND[str(e, 'kind')] ?? str(e, 'kind'), title: str(e, 'title'), orderStatus: str(e, 'status'),
+    canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
+    stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null,
+    bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
+    specs: Object.entries(det).filter(([k, v]) => v && !PRIVATE_KEYS.includes(k)).map(([k, v]) => [k, String(v).slice(0, 300)]),
+    hasPhoto: !!str(e, 'fileKey') || str(e, 'kind') === 'PRICE',
+    to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
+    from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
+      : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'Studio, Dubai (we confirm the pickup point)', ready: true }) : null,
+    cancelled: str(e, 'status') === 'CANCELLED' || String(str(e, 'refundAction')).startsWith('CANCEL'),
+  };
+}
+
+let supplierAccounts: Record<string, string | null> = {};
+async function supplierAccount(role: 'framer' | 'delivery') {
+  if (!(role in supplierAccounts)) supplierAccounts[role] = (await optionalParam(role === 'framer' ? '/kalai/zoho/frame_account_id' : '/kalai/zoho/delivery_account_id')) ?? (await optionalParam('/kalai/zoho/market_account_id')) ?? (await artistAccountId());
+  return supplierAccounts[role];
+}
+
+/** Supplier portal actions (the signed-in frame shop or delivery partner). */
+async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict) {
+  const own = ROLE_OF[String(profile.type)];
+  if (!own) throw new Error('Jobs are for frame shops and delivery partners.');
+  // A frame shop can also hold the delivery of its own orders; a delivery partner only deliveries.
+  const roles: ('framer' | 'delivery')[] = own === 'framer' ? ['framer', 'delivery'] : ['delivery'];
+  const role: 'framer' | 'delivery' = d.role === 'delivery' && roles.includes('delivery') ? 'delivery' : own;
+  const ct = process.env.COSTING_TABLE;
+  if (!ct) throw new Error('Not configured');
+  const { S } = mtables();
+  if (action === 'jobs') {
+    const rows = (await scanAll(ct)).map((c) => ({ id: str(c, 'enquiryId'), jobs: parseJobs(c.supplierJobs?.S) })).filter((x) => roles.some((r) => x.jobs[r]?.supplierId === sub));
+    const out = [];
+    for (const x of rows) {
+      const e = await enquiryRow(x.id);
+      if (!e) continue;
+      for (const r of roles.filter((r) => x.jobs[r]?.supplierId === sub)) {
+        const fp = r === 'delivery' && x.jobs.framer ? plain(await getRow(S, { id: { S: x.jobs.framer.supplierId } })) : null;
+        out.push(jobView(e, x.jobs, r, fp));
+      }
+    }
+    return { role: own, jobs: out.sort((a, b) => String(b.assignedAt).localeCompare(String(a.assignedAt))) };
+  }
+  const id = txt(d.id, 80);
+  const e = await enquiryRow(id);
+  const jobs = await jobsOf(id);
+  const j = jobs[role];
+  if (!e || !j || j.supplierId !== sub) throw new Error('Job not found');
+  const ref = str(e, 'ref'), now = new Date().toISOString(), by = String(profile.business || profile.contactName);
+  const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const fp = role === 'delivery' && js.framer ? plain(await getRow(S, { id: { S: js.framer.supplierId } })) : null; return { job: jobView(fresh!, js, role, fp) }; };
+  if (action === 'jobPhoto') {
+    const bucket = process.env.UPLOADS_BUCKET;
+    if (!bucket) throw new Error('Not configured');
+    let key = str(e, 'fileKey');
+    if (!key.startsWith('uploads/') && str(e, 'kind') === 'PRICE' && process.env.PRODUCT_TABLE) {
+      const det = parseDetails(str(e, 'details'));
+      const name = String(det['Artwork'] || str(e, 'title')).split(' (')[0].trim().toLowerCase();
+      const pr = (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'title').trim().toLowerCase() === name || (str(x, 'code') && String(det['Code'] ?? '').includes(str(x, 'code'))));
+      key = str(pr, 'imageKey');
+    }
+    if (!key) throw new Error('No photo for this order yet: ask Kalai Art House.');
+    return { url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 900 }) };
+  }
+  if (str(e, 'status') === 'CANCELLED' || String(str(e, 'refundAction')).startsWith('CANCEL')) throw new Error('This order was cancelled. Please stop.');
+  const studio = (subject: string, lines: string[]) => sendMail({ to: STUDIO_EMAIL, subject, lines, button: { label: 'Open in Order Management', url: `${SITE}/admin.html#order=${id}` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+  if (action === 'jobAccept') {
+    if (j.stage !== 'ASSIGNED') throw new Error('Already accepted.');
+    j.stage = 'ACCEPTED'; j.acceptedAt = now;
+    // The frame shop confirms it will also deliver: the delivery job is its own.
+    const delivering = role === 'framer' && j.canDeliver && !jobs.delivery && d.deliver === true;
+    if (delivering) jobs.delivery = { supplierId: sub, name: by, price: j.deliveryPrice ?? null, due: j.due, note: '', stage: 'ACCEPTED', assignedAt: now, acceptedAt: now, byFramer: true };
+    await saveJobs(id, jobs);
+    // The frame shop has it: the order is "Being framed" (the customer is emailed). Siva's works only once he has sent them.
+    if (role === 'framer' && str(e, 'status') === 'PAID' && (str(e, 'kind') === 'GIFT' || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
+    await studio(`${by} accepted ${ref}`, [`${h(by)} accepted the ${role === 'framer' ? 'framing' : 'delivery'} of <b>${h(str(e, 'title'))}</b> (${h(ref)})${role === 'framer' && j.canDeliver ? (delivering ? ' <b>and will deliver it too</b>' : '. They will <b>not</b> deliver it: please assign a delivery partner') : ''}.`]);
+    return view();
+  }
+  if (role === 'framer' && action === 'jobReady') {
+    if (j.stage !== 'ACCEPTED') throw new Error(j.stage === 'ASSIGNED' ? 'Accept the job first.' : 'Already marked ready.');
+    j.stage = 'READY'; j.readyAt = now; j.note = j.note; await saveJobs(id, jobs);
+    await studio(`Framed and ready: ${ref}`, [`${h(by)} has framed <b>${h(str(e, 'title'))}</b> (${h(ref)}). It is ready for pickup at ${h(String(profile.address ?? ''))}.`]);
+    const dj = jobs.delivery;
+    if (dj && dj.supplierId !== sub) {
+      const dp = plain(await getRow(S, { id: { S: dj.supplierId } }));
+      if (dp?.email) await sendMail({ to: String(dp.email), subject: `Ready for pickup: ${ref}`, lines: [`Hello ${h(dp.contactName)},`, `Order <b>${h(ref)}</b> is framed and ready for pickup at <b>${h(by)}</b>, ${h(String(profile.address ?? ''))} (${h(String(profile.phone ?? ''))}).`, 'Please collect it and mark it Picked up in your portal.'], button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } }).catch(() => {});
+    }
+    return view();
+  }
+  if (role === 'delivery' && action === 'jobPicked') {
+    if (!['ASSIGNED', 'ACCEPTED'].includes(j.stage)) throw new Error('Already picked up.');
+    if (jobs.framer && !['READY', 'COLLECTED'].includes(jobs.framer.stage)) throw new Error(jobs.framer.supplierId === sub ? 'Mark the framing ready first.' : `${jobs.framer.name} hasn't marked it ready yet.`);
+    j.stage = 'PICKED'; j.pickedAt = now; j.acceptedAt = j.acceptedAt ?? now; j.awb = txt(d.awb, 60);
+    if (jobs.framer) jobs.framer.stage = 'COLLECTED';
+    await saveJobs(id, jobs);
+    if (['PAID', 'FRAMING'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'SHIPPED', courierName: by, trackingNo: j.awb || ref });
+    await studio(`Picked up: ${ref}`, [`${h(by)} picked up <b>${h(str(e, 'title'))}</b> (${h(ref)})${j.awb ? `, tracking ${h(j.awb)}` : ''}. The order is now Shipped and the customer has been emailed.`]);
+    return view();
+  }
+  if (role === 'delivery' && action === 'jobDelivered') {
+    if (j.stage !== 'PICKED') throw new Error('Mark it picked up first.');
+    j.stage = 'DELIVERED'; j.deliveredAt = now;
+    await saveJobs(id, jobs);
+    if (str(e, 'status') === 'SHIPPED') await updateEnquiry(id, { status: 'DELIVERED' });
+    await studio(`Delivered: ${ref}`, [`${h(by)} delivered <b>${h(str(e, 'title'))}</b> (${h(ref)}) to ${h(str(e, 'deliveryName') || str(e, 'customerName'))}.`]);
+    return view();
+  }
+  if (action === 'jobInvoice') {
+    const ok = role === 'framer' ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
+    if (!ok) throw new Error(role === 'framer' ? 'Mark it framed and ready first.' : 'Mark it delivered first.');
+    if (j.billId) throw new Error(`Invoice ${j.invoiceNo} is already with us.`);
+    const no = txt(d.invoiceNo, 40), amt = numIn(d.amount, 100000);
+    if (!no) throw new Error('Enter your invoice number.');
+    if (!(amt > 0)) throw new Error('Enter the invoice amount in AED.');
+    j.invoiceNo = no; j.invoiceAmt = r2(amt); j.invoiceAt = now;
+    try {
+      const vendor = await sellerVendorId(sub);
+      const testing = await testMode();
+      const account = await supplierAccount(role);
+      const r = await zoho('/bills', { method: 'POST', body: JSON.stringify({
+        vendor_id: vendor.id, bill_number: no, reference_number: ref, date: dubaiToday(),
+        line_items: [{ name: `${role === 'framer' ? 'Framing' : 'Delivery'} · ${ref}`.slice(0, 100), description: `${role === 'framer' ? 'Framing' : 'Delivery'} of ${str(e, 'title')} (${ref})${j.price != null ? ` · agreed AED ${j.price}` : ''}`, rate: r2(amt), quantity: 1, ...(account ? { account_id: account } : {}) }],
+        notes: `Kalai Art House ${role === 'framer' ? 'framing' : 'delivery'} job ${ref}, invoice entered by ${by} in the supplier portal.` }) });
+      if (!r.ok || !r.body.bill) throw new Error(`Zoho bill failed (${r.status}): ${r.body.message}`);
+      const bill = r.body.bill;
+      const state = testing ? await keepAsDraft(`/bills/${bill.bill_id}`, bill.status) : 'open';
+      j.bill = bill.bill_number; j.billId = bill.bill_id; j.billState = state; j.message = '';
+    } catch (err) {
+      j.message = `Invoice saved; Zoho bill not created yet: ${err instanceof Error ? err.message : String(err)}`.slice(0, 400);
+      console.warn(`Supplier bill for ${ref} failed`, err);
+    }
+    await saveJobs(id, jobs);
+    await studio(`Invoice from ${by}: ${ref}`, [`${h(by)} sent invoice <b>${h(no)}</b> for <b>${aed(j.invoiceAmt)}</b> (${role === 'framer' ? 'framing' : 'delivery'} of ${h(ref)})${j.price != null ? `, agreed ${aed(j.price)}` : ''}.`,
+      j.billId ? `Zoho bill ${h(j.bill)} ${j.billState === 'open' ? 'created' : `created as ${h(j.billState)} (test mode)`}.` : h(j.message ?? '')]);
+    return view();
+  }
+  throw new Error('Unknown action');
+}
+
 async function marketAdmin(ev: ApiEvent) {
   const { S, L } = mtables();
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
+  if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
   const now = new Date().toISOString();
   const id = txt(d.id, 80);
   if (action.endsWith('Seller')) {
@@ -1946,6 +2178,11 @@ async function marketAdmin(ev: ApiEvent) {
         // Works already live move to the collection with the artist's name.
         for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) await publishItem(plain(x)!);
       }
+      if (ROLE_OF[String(p.type)]) {
+        await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'FRAMER' ? 'frame shop' : 'delivery partner'} account is approved`, lines: [`Hello ${h(p.contactName)},`,
+          `Welcome to Kalai Art House as a ${p.type === 'FRAMER' ? 'frame shop' : 'delivery partner'}. When we have a ${p.type === 'FRAMER' ? 'framing' : 'delivery'} job for you, you get an email and it appears under My jobs in your supplier portal, with the agreed price.`,
+          'Accept it there, update each step, and enter your invoice when done: we pay against it.'], button: { label: 'Open the supplier portal', url: `${SITE}/supplier.html` } }).catch(() => {});
+      } else
       await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'ARTIST' ? 'artist' : 'seller'} account is approved`, lines: [`Hello ${h(p.contactName)},`, `Welcome to Kalai Art House${p.type === 'ARTIST' ? ' as one of our artists' : ''}. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, p.type === 'ARTIST' ? 'You can now list your artworks with their price. Each one is checked by us before it goes live.' : 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
       return { profile: row };
     }
