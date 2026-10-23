@@ -3096,7 +3096,15 @@ async function notify(rec: StreamRecord) {
 export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
   if ('requestContext' in event && event.requestContext?.http) return ziinaWebhook(event);
   // Every morning (EventBridge schedule): the Thirukkural of the day.
-  if ((event as { task?: string }).task === 'dailyKural') { await refreshInr().catch((e) => console.log('INR rate not updated', e)); return dailyKural(false); }
+  if ((event as { task?: string }).task === 'dailyKural') {
+    // Runs every hour: publish once a day, from the hour set in Settings (Dubai time).
+    const st = process.env.SITE_TABLE ? (await ddb.send(new GetItemCommand({ TableName: process.env.SITE_TABLE, Key: { id: { S: 'site' } } })).catch(() => null))?.Item : undefined;
+    const hour = Number(st?.kuralHour?.N ?? 6), dubaiHour = new Date(Date.now() + 4 * 3600_000).getUTCHours();
+    if (dubaiHour < hour) return { skipped: 'not yet' };
+    const r = await dailyKural(false);
+    if (!(r as { skipped?: string }).skipped) await refreshInr().catch((e) => console.log('INR rate not updated', e));
+    return r;
+  }
   if ('arguments' in event) {
     const a = event.arguments ?? {};
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');

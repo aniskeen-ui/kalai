@@ -118,6 +118,7 @@ backend.addOutput({ custom: { ziinaWebhookUrl: ziinaHook.url } });
 
 // Thirukkural of the day: every morning at 06:05 Dubai (02:05 UTC) the function publishes the day's kural.
 new Rule(fnStack, 'DailyKuralRule', {
-  schedule: Schedule.cron({ minute: '5', hour: '2' }),
+  // Every hour at :05; the function publishes once a day, at the hour set in Order management → Settings (default 6 am Dubai).
+  schedule: Schedule.cron({ minute: '5', hour: '*' }),
   targets: [new LambdaFunction(backend.zohoQuoteSync.resources.lambda, { event: RuleTargetInput.fromObject({ task: 'dailyKural' }) })],
 });

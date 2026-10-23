@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const FIELDS = [
   { k: 'heroSeconds', label: 'Home page picture', note: 'The big picture at the top of the home page changes to another artwork, picked at random, every this many seconds. 0 = never changes.', min: 0, max: 600 },
+  { k: 'kuralHour', label: 'Thirukkural of the day: publish at (hour, Dubai time, 0–23)', unit: '', note: 'The new kural goes up every day at this hour, e.g. 6 = 6 am, 0 = midnight. Until then the website shows yesterday\'s.', min: 0, max: 23, def: 6 },
   { k: 'kuralSeconds', label: 'Thirukkural card language', note: 'The daily Thirukkural card switches Tamil → English → Arabic every this many seconds. 0 = stays in Tamil (visitors can still switch).', min: 0, max: 600 },
 ];
 // Home page texts. Blank = the built-in text (shown as the grey example).
@@ -58,7 +59,7 @@ export async function showSettings() {
           <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-approx" style="width:auto"> Show ≈ before converted prices</label></div>
         <div class="muted" id="stRoundEg" style="font-size:12px"></div>
         <div class="muted" style="font-size:12px">Visitors can show prices in Dhs, US$ or ₹ (header). Dollars use the fixed peg of 3.6725 Dhs. Customers always pay in dirhams.</div></div>
-      <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
+      <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label}${f.unit === '' ? '' : ' (seconds)'}</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
@@ -91,7 +92,7 @@ export async function showSettings() {
     const r = await client.models.SiteSetting.get({ id: 'site' });
     if (r.errors?.length) throw new Error(r.errors[0].message);
     row = r.data;
-    FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? 10; });
+    FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? f.def ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
     $('st-inr').value = row?.inrPerAed ?? 24;
@@ -116,7 +117,7 @@ async function save() {
   const rec = { id: 'site' };
   for (const f of FIELDS) {
     const v = Number($('st-' + f.k).value);
-    if (!Number.isInteger(v) || v < f.min || v > f.max) { $('stMsg').textContent = `${f.label}: enter whole seconds from ${f.min} to ${f.max}.`; $('st-' + f.k).focus(); return; }
+    if (!Number.isInteger(v) || v < f.min || v > f.max) { $('stMsg').textContent = `${f.label}: enter a whole number from ${f.min} to ${f.max}.`; $('st-' + f.k).focus(); return; }
     rec[f.k] = v;
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
