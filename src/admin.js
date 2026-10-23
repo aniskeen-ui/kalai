@@ -533,6 +533,8 @@ async function loadArtists() {
   suppliers = (r.data || []).filter((p) => (p.type === 'FRAMER' || p.type === 'COURIER') && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
 }
 let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COURIER)
+// Price lists change in the supplier portal (often in another tab): reload when coming back to this tab.
+window.addEventListener('focus', () => { loadArtists().catch(() => {}); });
 const jobsOf = (e) => { let v = costings.get(e.id)?.supplierJobs; try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; } return v && typeof v === 'object' ? v : {}; };
 const JOB_STAGE = { ASSIGNED: 'sent, waiting to accept', ACCEPTED: 'accepted', READY: 'framed, ready for pickup', COLLECTED: 'collected', PICKED: 'picked up (Shipped)', DELIVERED: 'delivered' };
 /** Frame shop & delivery partner for a paid order (supplier portal). */
