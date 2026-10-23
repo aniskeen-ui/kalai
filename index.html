@@ -319,7 +319,7 @@ html[data-skin="green"] .btn.ghost,html[data-skin="green"] .cart-btn,html[data-s
 @media (max-width:860px){html[data-skin="green"] .viewer .stage{min-height:260px;padding:14px}}
 /* artwork as its own page */
 html[data-skin="green"] #scrim{display:none!important}
-html[data-skin="green"] .modal{inset:var(--hdr,70px) 0 0 0;padding:0;display:block;background:var(--bg);overflow:auto;z-index:8}
+html[data-skin="green"] .modal{inset:var(--hdr,70px) 0 0 0;padding:0;display:block;background:var(--bg);overflow:auto;z-index:8;pointer-events:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y pinch-zoom}
 html[data-skin="green"] .modal .box.wide{max-width:1180px;margin:0 auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:var(--bg);grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px 40px;padding:16px max(16px,env(safe-area-inset-left,0px)) 60px}
 html[data-skin="green"] .modal .xtop{display:none}
 html[data-skin="green"] .ap-back{display:inline-block;grid-column:1/-1;justify-self:start;background:none;border:0;color:var(--gold);font-weight:600;font-size:14px;padding:6px 0;cursor:pointer}
@@ -940,7 +940,7 @@ function framedHtml(p){
     <div class="mt2" style="background:${MOUNT?"#fbf8f1":"transparent"}"><img src="${p.img}" alt="${alt}" style="width:${iw*k}px;height:${ih*k}px;object-fit:${MOUNT?"contain":"cover"}"></div></div>`;
 }
 /* magnifying lens: move over the picture (or touch and drag) to look closer */
-let LENS=true;
+let LENS=!(window.matchMedia&&matchMedia("(pointer:coarse)").matches);
 const lensEl=document.createElement("div");lensEl.className="lens";lensEl.setAttribute("aria-hidden","true");document.body.appendChild(lensEl);
 function lensAt(img,x,y){
   const r=img.getBoundingClientRect();
@@ -956,7 +956,7 @@ function wireLens(stage){
   stage.addEventListener("pointermove",e=>{const im=hit(e);if(im)lensAt(im,e.clientX,e.clientY);else lensEl.style.display="none"});
   stage.addEventListener("pointerdown",e=>{const im=hit(e);if(im&&LENS){if(e.pointerType!=="mouse")e.preventDefault();lensAt(im,e.clientX,e.clientY)}});
   ["pointerleave","pointerup","pointercancel"].forEach(t=>stage.addEventListener(t,e=>{if(t==="pointerleave"||e.pointerType!=="mouse")lensEl.style.display="none"}));
-  document.getElementById("modalBox").addEventListener("scroll",()=>{lensEl.style.display="none"},{passive:true});
+  [document.getElementById("modalBox"),document.getElementById("modalBox").parentElement].forEach(el=>el.addEventListener("scroll",()=>{lensEl.style.display="none"},{passive:true}));
 }
 function openModal(p){
   const box=document.getElementById("modalBox");box.className="box wide";box.innerHTML="";
