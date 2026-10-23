@@ -1493,6 +1493,13 @@ async function onStreamRecord(rec: StreamRecord) {
   // Shipped / Delivered: delivery challan in Zoho (needs the invoice first).
   if (['SHIPPED', 'DELIVERED'].includes(status)) await deliverySteps(img, old);
 
+  // Paid online with Ziina before this edit (in test mode Zoho has no payment, so "locked" above is false):
+  // a stale Order Management page must not move the order back to Received / Price sent / Cancelled.
+  if (!locked && str(old, 'ziinaPaidAt') && BEFORE_PAYMENT.includes(status) && !BEFORE_PAYMENT.includes(oldStatus)) {
+    await writeBack(id, { status: oldStatus, zohoMessage: `Status kept at ${oldStatus}: the customer has paid online with Ziina. Use the after-sales box for a refund.` });
+    console.log(`Kept ${str(img, 'ref')} at ${oldStatus}: paid with Ziina`);
+    return;
+  }
   if (locked) {
     await purchaseSteps(img);
     // Zoho holds the payment: undo a step back or a price change made in the Studio desk.
@@ -3319,7 +3326,9 @@ function mailsFor(rec: StreamRecord): Mail[] {
 
   const st = str(img, 'status') || 'RECEIVED';
   const ost = str(old, 'status') || 'RECEIVED';
-  const statusChanged = st !== ost;
+  // A stale page moving a Ziina-paid order back (the server puts it back): no customer email for it.
+  const staleBack = !!str(old, 'ziinaPaidAt') && BEFORE_PAYMENT.includes(st) && !BEFORE_PAYMENT.includes(ost);
+  const statusChanged = st !== ost && !staleBack;
   if (statusChanged) {
     key = st;
     if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [

@@ -25,7 +25,8 @@ const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists',
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
-const isLocked = (e) => !!e.zohoPaymentId;
+// Paid: the payment is in Zoho, or the customer paid online with Ziina (also in test mode, where Zoho keeps drafts).
+const isLocked = (e) => !!e.zohoPaymentId || !!e.ziinaPaidAt;
 // The price is fixed once Zoho has an invoice for the order (a draft one too, in test mode).
 const priceLocked = (e) => isLocked(e) || !!e.zohoInvoiceId;
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
@@ -1537,9 +1538,19 @@ async function showDetail(e) {
       if (why) { $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${why}</div>`); b.disabled = false; return; }
     }
     if (locked && BEFORE_PAYMENT.includes($('eStatus').value) && $('eStatus').value !== s) {
-      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Locked: reverse the payment in Zoho first, then press Check Zoho.</div>');
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">Locked: ${e.ziinaPaidAt && !e.zohoPaymentId ? 'the customer has paid online with Ziina.' : 'reverse the payment in Zoho first, then press Check Zoho.'}</div>`);
       b.disabled = false; return;
     }
+    // Someone else (or Ziina, the customer, a supplier) changed this order since it was opened: don't overwrite it.
+    try {
+      const fresh = (await client.models.Enquiry.get({ id: e.id })).data;
+      if (fresh && fresh.updatedAt && e.updatedAt && fresh.updatedAt !== e.updatedAt && (fresh.status !== e.status || fresh.ziinaPaidAt !== e.ziinaPaidAt || fresh.quotedPrice !== e.quotedPrice)) {
+        Object.assign(e, fresh); all = all.map((x) => (x.id === e.id ? e : x));
+        render(); showDetail(e);
+        setTimeout(() => $('detail').querySelector('#saveMsg')?.insertAdjacentHTML('afterend', `<div class="err">This order changed while it was open (now <b>${esc(STATUS[fresh.status] || fresh.status)}</b>${fresh.ziinaPaidAt ? ', paid with Ziina' : ''}). It has been reloaded: check it, then make your change again.</div>`), 50);
+        return;
+      }
+    } catch { /* could not check: carry on */ }
     const savedAt = new Date().toISOString();
     const invNo = $('pInv') && !$('pInv').disabled ? $('pInv').value.trim() : null;
     const paidRef = $('pPaid') && !$('pPaid').disabled ? $('pPaid').value.trim() : null;
