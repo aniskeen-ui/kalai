@@ -1270,13 +1270,14 @@ const DOC_STATUS_OK = ['delivered', 'paid', 'accepted', 'closed', 'billed', 'iss
 function docFlow(e, d) {
   const docs = d?.docs || [];
   const st = (x) => (!x ? 'todo' : ['void', 'cancelled'].includes(x.status) ? 'void' : x.status === 'draft' ? 'draft' : 'done');
-  const box = (label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : '–'))}</span>${x?.total != null ? `<span class="mono">${aed(x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
-  const arrow = '<span class="dfa" aria-hidden="true">→</span>';
-  const lane = (title, boxes) => `<div class="dfl"><div class="dft">${esc(title)}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
-  const one = (type, f = () => true) => docs.filter((x) => x.type === type && f(x)).slice(-1)[0];
-  const cust = [box('Quote', one('Quote')), box('Invoice', one('Invoice')), box('Payment', one('Payment received'), e.paymentMethod || ''), box('Delivery challan', one('Delivery challan'), e.status === 'DELIVERED' ? 'delivered' : '')];
-  const cn = one('Credit note'); if (cn) cust.push(box('Credit note (refund)', cn));
-  const lanes = [lane(`Customer · ${e.customerName || ''}`, cust)];
+  const TAG = { done: '✓', draft: '✎', todo: '…', void: '✕' };
+  const box = (icon, label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><span class="ic" aria-hidden="true">${icon}</span><span class="tag" aria-hidden="true">${TAG[st(x)]}</span><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : 'to come'))}</span>${x?.total != null ? `<span class="mono">${aed(x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
+  const arrow = '<span class="dfa" aria-hidden="true">➜</span>';
+  const lane = (cls, icon, title, boxes) => `<div class="dfl ${cls}"><div class="dft"><i aria-hidden="true">${icon}</i>${esc(title)}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
+  const one = (type) => docs.filter((x) => x.type === type).slice(-1)[0];
+  const cust = [box('📝', 'Quote', one('Quote')), box('🧾', 'Invoice', one('Invoice')), box('💳', 'Payment', one('Payment received'), e.paymentMethod || ''), box('🚚', 'Delivery challan', one('Delivery challan'), e.status === 'DELIVERED' ? 'delivered' : '')];
+  const cn = one('Credit note'); if (cn) cust.push(box('↩️', 'Credit note (refund)', cn));
+  const lanes = [lane('cust', '🛍️', `Customer · ${e.customerName || ''}`, cust)];
   const bills = docs.filter((x) => x.group === 'PURCHASE' && /bill/i.test(x.type));
   const who = artistOf(e).split(/\s+/)[0].toLowerCase();
   const isArtist = (b) => (!!e.zohoBillId && b.id === e.zohoBillId) || (!!who && String(b.vendor || '').toLowerCase().includes(who));
@@ -1284,15 +1285,23 @@ function docFlow(e, d) {
   if (hasArtist(e)) {
     const ab = bills.find(isArtist);
     const po = e.zohoPOId ? { type: 'Purchase order', number: e.zohoPO || 'PO', status: e.zohoState === 'TEST' ? 'draft' : 'open' } : null;
-    lanes.push(lane(`Artist · ${artistOf(e)}`, [box('Purchase order', po), box('Bill', ab), box('Payment', paidFor(ab), e.artistPaidRef ? 'paid' : '')]));
+    lanes.push(lane('art', '🎨', `Artist · ${artistOf(e)}`, [box('📦', 'Purchase order', po), box('🧾', 'Bill', ab), box('💸', 'Payment', paidFor(ab), e.artistPaidRef ? 'paid' : '')]));
   }
-  for (const b of bills.filter((x) => !hasArtist(e) || !isArtist(x))) lanes.push(lane(`Supplier · ${b.vendor || 'vendor'}`, [box('Bill', b), box('Payment', paidFor(b))]));
-  return `<div class="dflow">${lanes.join('')}<div class="muted" style="font-size:11px">Green: done in Zoho · amber: draft · grey: still to come. Click a box to open it in Zoho Books.</div></div>`;
+  for (const b of bills.filter((x) => !hasArtist(e) || !isArtist(x))) lanes.push(lane('sup', /aram|courier|deliver|dhl|fedex|post/i.test(b.vendor || '') ? '🚚' : '🖼️', `Supplier · ${b.vendor || 'vendor'}`, [box('🧾', 'Bill', b), box('💸', 'Payment', paidFor(b))]));
+  return `<div class="dflow">${lanes.join('')}<div class="muted" style="font-size:11px">✓ done in Zoho · ✎ draft · … still to come. Click a box to open it in Zoho Books.</div></div>`;
+}
+/** The flow goes in the space under the order list (beside the open order). */
+function showFlow(e, d) {
+  const slot = $('flowSlot'); if (!slot) return;
+  if (!e) { slot.hidden = true; slot.innerHTML = ''; return; }
+  slot.hidden = false;
+  slot.innerHTML = `<div class="flowhead"><h3>✨ Document flow</h3><span class="muted mono" style="font-size:12px">${esc(e.ref)} · ${esc(e.customerName || '')}</span></div>${d ? docFlow(e, d) : '<div class="muted" style="font-size:13px">Press <b>Check Zoho</b> on the order to draw its documents.</div>'}`;
 }
 function docsList(e) {
   const raw = costings.get(e.id)?.zohoDocs;
   let d = null;
   try { d = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; if (typeof d === 'string') d = JSON.parse(d); } catch { d = null; }
+  queueMicrotask(() => showFlow(e, d));
   if (!d) return '<div class="muted" style="font-size:12px">Press Check Zoho to list every Zoho document for this order.</div>';
   if (!d.docs?.length) return `<div class="muted" style="font-size:12px">No Zoho documents with reference ${esc(e.ref)} (checked ${esc(when(d.checkedAt))}).</div>`;
   const pretty = (st) => String(st || '').replace(/creditcard/, 'card').replace(/banktransfer/, 'bank transfer').replace(/_/g, ' ');
@@ -1305,7 +1314,7 @@ function docsList(e) {
       <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
       <td class="num mono">${x.total != null ? aed(x.total, 2) : ''}${x.balance ? `<br><span class="muted">due ${aed(x.balance, 2)}</span>` : ''}</td></tr>`).join('');
   };
-  return `${docFlow(e, d)}<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', hasArtist(e) ? `Purchase (${esc(artistOf(e))}, frame shop, courier)` : 'Purchase (frame shop, courier)')}</tbody></table>
+  return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', hasArtist(e) ? `Purchase (${esc(artistOf(e))}, frame shop, courier)` : 'Purchase (frame shop, courier)')}</tbody></table>
     <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
 }
 
@@ -1417,6 +1426,7 @@ async function showThumb(e, det) {
 }
 
 async function showDetail(e) {
+  showFlow(null);
   const det = parseDetails(e.details);
   const s = e.status || 'RECEIVED';
   const locked = isLocked(e);
@@ -1738,3 +1748,18 @@ async function showDetail(e) {
 }
 
 start();
+
+
+// Drag the bar between the order list and the order to resize them (remembered on this computer).
+(() => {
+  const bar = $('dSplit'), desk = $('desk'); if (!bar || !desk) return;
+  const set = (px) => { const w = desk.getBoundingClientRect().width; const v = Math.max(320, Math.min(w - 480, px)); desk.style.setProperty('--lw', `${v}px`); return v; };
+  try { const v = Number(localStorage.getItem('kalaiDeskW')); if (v > 0) set(v); } catch { /* storage blocked */ }
+  let on = false;
+  bar.addEventListener('pointerdown', (ev) => { on = true; bar.classList.add('drag'); bar.setPointerCapture(ev.pointerId); ev.preventDefault(); });
+  bar.addEventListener('pointermove', (ev) => { if (on) set(ev.clientX - desk.getBoundingClientRect().left); });
+  const end = () => { if (!on) return; on = false; bar.classList.remove('drag'); try { localStorage.setItem('kalaiDeskW', String(parseFloat(getComputedStyle(desk).getPropertyValue('--lw')) || '')); } catch { /* ignore */ } };
+  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+  bar.addEventListener('keydown', (ev) => { if (!['ArrowLeft', 'ArrowRight'].includes(ev.key)) return; const cur = desk.querySelector('.deskL').getBoundingClientRect().width; set(cur + (ev.key === 'ArrowRight' ? 40 : -40)); on = true; end(); });
+  bar.addEventListener('dblclick', () => { desk.style.removeProperty('--lw'); try { localStorage.removeItem('kalaiDeskW'); } catch { /* ignore */ } });
+})();
