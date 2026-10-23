@@ -393,6 +393,10 @@ const schema = a.schema({
       inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
       inrAuto: a.boolean(), // false = keep the rate typed in; otherwise updated every morning (ECB rate via Frankfurter)
       inrRateAt: a.string(),
+      usdRound: a.integer(), // US$ prices on the website rounded to this many dollars (default 5)
+      inrRound: a.integer(), // ₹ prices rounded to this many rupees (default 50)
+      roundUp: a.boolean(), // true = always round up; otherwise to the nearest
+      approxSign: a.boolean(), // false = hide the ≈ before converted prices
       roomMarks: a.string(), // JSON {l,r,top,ratio,cm}: the sofa in the room photo used by "On a wall"
       heroLines: a.string(), // several headlines, one per line, "plain part | gold part"; they take turns
       kidsTitle: a.string(),

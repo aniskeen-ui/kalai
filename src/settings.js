@@ -49,12 +49,27 @@ export async function showSettings() {
       <div class="field" style="max-width:560px"><label for="st-inr">Rupees per dirham (for prices shown in ₹)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="st-inr" type="number" min="1" max="100" step="0.01" style="max-width:140px"><button type="button" class="btn small ghost" id="stInrNow">Get today's rate</button>
         <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-inrAuto" style="width:auto"> Update automatically every morning</label></div>
         <div class="muted" id="stInrAt" style="font-size:12px"></div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px">Round US$ to <select id="st-usdRound" style="width:auto"><option value="1">1</option><option value="5">5</option><option value="10">10</option><option value="25">25</option></select></label>
+          <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px">Round ₹ to <select id="st-inrRound" style="width:auto"><option value="1">1</option><option value="10">10</option><option value="50">50</option><option value="100">100</option><option value="500">500</option></select></label>
+          <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px"><select id="st-roundUp" style="width:auto"><option value="near">to the nearest</option><option value="up">always up</option></select></label>
+          <label style="display:inline-flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="st-approx" style="width:auto"> Show ≈ before converted prices</label></div>
+        <div class="muted" id="stRoundEg" style="font-size:12px"></div>
         <div class="muted" style="font-size:12px">Visitors can show prices in Dhs, US$ or ₹ (header). Dollars use the fixed peg of 3.6725 Dhs. Customers always pay in dirhams.</div></div>
       <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label} (seconds)</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
     $('stSave').onclick = save;
+    // Live example of the rounding, on a Dhs 1,000 price.
+    const eg = () => {
+      const up = $('st-roundUp').value === 'up', f = up ? Math.ceil : Math.round, ap = $('st-approx').checked ? '≈ ' : '';
+      const r = (v, st) => f(v / st - (up ? 1e-9 : 0)) * st;
+      const u = Number($('st-usdRound').value), i = Number($('st-inrRound').value), inr = Number($('st-inr').value) || 24;
+      $('stRoundEg').textContent = `Example: Dhs 1,000 shows as ${ap}$${r(1000 / 3.6725, u).toLocaleString('en-US')} (exact $${(1000 / 3.6725).toFixed(2)}) and ${ap}₹${r(1000 * inr, i).toLocaleString('en-IN')} (exact ₹${(1000 * inr).toLocaleString('en-IN')}).`;
+    };
+    ['st-usdRound', 'st-inrRound', 'st-roundUp', 'st-approx', 'st-inr'].forEach((id) => { $(id).oninput = eg; $(id).onchange = eg; });
+    window.kalaiRoundEg = eg;
     wireRoom();
     // Today's rate: the dirham is pegged at 3.6725 per US dollar, so ₹ per Dhs = (₹ per $) ÷ 3.6725.
     $('stInrNow').onclick = async () => {
@@ -79,6 +94,11 @@ export async function showSettings() {
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
+    $('st-usdRound').value = String(row?.usdRound || 5);
+    $('st-inrRound').value = String(row?.inrRound || 50);
+    $('st-roundUp').value = row?.roundUp ? 'up' : 'near';
+    $('st-approx').checked = row?.approxSign !== false;
+    window.kalaiRoundEg?.();
     $('stInrAt').textContent = row?.inrRateAt ? `Rate from the European Central Bank (via Frankfurter), updated ${new Date(row.inrRateAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Updated automatically each morning at 06:05 Dubai time, from the European Central Bank rate.';
     try { marks = row?.roomMarks ? JSON.parse(row.roomMarks) : null; } catch { marks = null; }
     if (marks?.cm) $('rmCm').value = marks.cm;
@@ -102,6 +122,10 @@ async function save() {
   if (!(inr >= 1 && inr <= 100)) { $('stMsg').textContent = 'Rupees per dirham: enter a number like 24.'; return; }
   rec.inrPerAed = inr;
   rec.inrAuto = $('st-inrAuto').checked;
+  rec.usdRound = Number($('st-usdRound').value) || 5;
+  rec.inrRound = Number($('st-inrRound').value) || 50;
+  rec.roundUp = $('st-roundUp').value === 'up';
+  rec.approxSign = $('st-approx').checked;
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';

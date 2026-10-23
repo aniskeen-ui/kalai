@@ -865,9 +865,12 @@ let FRAME=FRAMES[1],MOUNT=true;
 /* ---------- money: Dhs, or the visitor's currency (approximate; payment is always in dirhams) ---------- */
 let CUR="AED";try{CUR=localStorage.getItem("kalaiCur")||"AED"}catch(e){}
 const FX={USD:3.6725}; // the dirham is pegged to the dollar
-function money(a){a=Number(a)||0;
-  if(CUR==="USD")return "$"+Math.round(a/FX.USD).toLocaleString("en-US");
-  if(CUR==="INR")return "₹"+(Math.round(a*(window.kalaiInrPerAed||24)/50)*50).toLocaleString("en-IN");
+/* rounding of converted prices, from Order management → Settings → Currency */
+window.kalaiRound=window.kalaiRound||{usd:5,inr:50,up:false,approx:true};
+function roundTo(v,step){const r=window.kalaiRound,f=r.up?Math.ceil:Math.round;step=Number(step)||1;return f(v/step-1e-9*(r.up?1:0))*step}
+function money(a){a=Number(a)||0;const ap=window.kalaiRound.approx?"≈ ":"";
+  if(CUR==="USD")return ap+"$"+roundTo(a/FX.USD,window.kalaiRound.usd).toLocaleString("en-US");
+  if(CUR==="INR")return ap+"₹"+roundTo(a*(window.kalaiInrPerAed||24),window.kalaiRound.inr).toLocaleString("en-IN");
   return "Dhs "+a.toLocaleString("en-GB")}
 /* the UAE dirham sign (Central Bank of the UAE, 2025): a D crossed by two lines. Drawn as SVG, as most fonts don't have it yet */
 const DHS_SIGN=`<svg class="dhs" viewBox="0 0 24 20" role="img" aria-label="Dhs"><g fill="currentColor"><rect x="5.2" y="2" width="2.8" height="16"/><rect x="3.4" y="2" width="5" height="1.3"/><rect x="3.4" y="16.7" width="5" height="1.3"/><path d="M7.6 2h3.2a8 8 0 0 1 0 16H7.6v-1.3h3.2a6.6 6.6 0 0 0 0-13.4H7.6z"/><path d="M1.2 7.7q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/><path d="M1.2 11.1q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/></g></svg>`;
