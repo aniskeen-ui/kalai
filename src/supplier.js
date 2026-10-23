@@ -10,6 +10,7 @@ import {
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { autoPhones } from './phone.js';
+import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, parseCard } from './ratecard.js';
 
 autoPhones();
 const client = generateClient();
@@ -33,7 +34,7 @@ async function call(action, data) {
   return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
 }
 function show(view) {
-  ['loginView', 'applyView', 'statusView', 'jobsView'].forEach((v) => { $(v).hidden = v !== view; });
+  ['loginView', 'applyView', 'statusView', 'jobsView', 'ratesView'].forEach((v) => { $(v).hidden = v !== view; });
   $('signOutBtn').hidden = view === 'loginView';
 }
 
@@ -90,8 +91,11 @@ function route() {
   }
   if (s === 'APPLIED') {
     show('statusView');
-    $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. We'll check your details and email you, usually within a few days. Once approved, the jobs we give you appear here.</p><button class="linkbtn" id="editApp" type="button">Edit my application</button>`;
+    $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. We'll check your details and email you, usually within a few days. Once approved, the jobs we give you appear here.</p>
+      <p><b>Please add your price list</b> (${profile.type === 'FRAMER' ? 'frame prices by style and size, and the fixing charge' : 'delivery charges by emirate'}): we compare suppliers on it.</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn" id="goRates" type="button">My price list</button><button class="linkbtn" id="editApp" type="button">Edit my application</button></div>`;
     $('editApp').onclick = () => { show('applyView'); fillApply(); };
+    $('goRates').onclick = () => openRates('statusView');
     return;
   }
   if (s === 'SUSPENDED') { show('statusView'); $('statusBox').innerHTML = `<h2>Your account is paused</h2><p>${profile.adminNote ? esc(profile.adminNote) : 'Please contact Kalai Art House on WhatsApp.'}</p>`; return; }
@@ -185,7 +189,7 @@ async function loadJobs() {
   try { jobs = (await call('jobs')).jobs || []; drawJobs(); } catch (ex) { $('jList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
 }
 $('jReload').onclick = loadJobs;
-$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
+$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'rates') { openRates('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
 
 function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
 function jobCard(j) {
@@ -258,5 +262,48 @@ function drawJobs() {
     });
   });
 }
+
+// ---------- price list ----------
+let ratesBack = 'jobsView';
+const cell = (name, v) => `<input type="number" min="0" step="0.5" data-n="${esc(name)}" value="${v ?? ''}" placeholder="–">`;
+function openRates(back) {
+  ratesBack = back;
+  const card = parseCard(profile), fr = profile.type === 'FRAMER';
+  $('rTitle').textContent = fr ? 'My frame price list' : 'My delivery charges';
+  $('rNote').textContent = fr
+    ? "Your price per frame, in AED, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
+    : 'Your charge in AED to deliver one framed work from Dubai to each emirate: a small parcel (up to A3 / 40×50 cm) and a large one. Outside the UAE is optional.';
+  $('rGrid').innerHTML = fr
+    ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
+        ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
+       <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin-top:8px"><input type="checkbox" id="rIncl" style="width:auto" ${card.fixingIncluded ? 'checked' : ''}> Fixing (mount, glass, fitting) is included in my frame prices</label>
+       <h3 style="font-size:15px;margin:14px 0 4px">If you also deliver: your delivery charge to each emirate (optional)</h3>
+       <table class="rc"><thead><tr><th>To</th><th>Small parcel (up to A3 / 40×50)</th><th>Large parcel</th></tr></thead><tbody>
+        ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}</tbody></table>`
+    : `<table class="rc"><thead><tr><th>To</th><th>Small parcel</th><th>Large parcel</th></tr></thead><tbody>
+        ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}
+        <tr><th colspan="3" style="padding-top:12px">Outside the UAE (optional)</th></tr>
+        ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th><td>${cell(`intl.${z}.small`, card.intl?.[z]?.small)}</td><td>${cell(`intl.${z}.large`, card.intl?.[z]?.large)}</td></tr>`).join('')}</tbody></table>`;
+  $('rNotes').value = card.notes || '';
+  $('rErr').textContent = ''; $('rMsg').textContent = card.at ? `Last saved ${new Date(card.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
+  show('ratesView');
+}
+$('rBack').onclick = () => { show(ratesBack); };
+$('rateForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const data = { notes: $('rNotes').value.trim() };
+  let bad = false;
+  $('rGrid').querySelectorAll('[data-n]').forEach((i) => {
+    if (i.value === '') return;
+    const v = Number(i.value); if (!(v >= 0 && v <= 5000)) { bad = true; return; }
+    const path = i.dataset.n.split('.'); let o = data;
+    path.slice(0, -1).forEach((k) => { o = o[k] ??= {}; });
+    o[path[path.length - 1]] = v;
+  });
+  if (bad) { $('rErr').textContent = 'Enter amounts in AED from 0 to 5,000.'; return; }
+  if ($('rIncl')) data.fixingIncluded = $('rIncl').checked;
+  const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';
+  try { profile = (await call('saveRates', data)).profile; $('rMsg').textContent = 'Saved. Kalai Art House sees your prices when giving out jobs.'; } catch (ex) { $('rErr').textContent = ex.message; } finally { b.disabled = false; }
+});
 
 start();

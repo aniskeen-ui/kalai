@@ -1,4 +1,5 @@
 // Studio desk: list every enquiry, view uploads, set price / payment link / status / message.
+import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf } from './ratecard.js';
 import './amplify-config.js';
 import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
@@ -538,15 +539,22 @@ const JOB_STAGE = { ASSIGNED: 'sent, waiting to accept', ACCEPTED: 'accepted', R
 function supplierSection(e) {
   if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
   const j = jobsOf(e);
+  // Each supplier's price for this order from their price list (frame style + size; destination and parcel size).
+  const spec = specOf(e, parseDetails(e.details));
+  const costFor = (s, role) => (role === 'framer' ? frameCost(parseCard(s), spec) : deliveryCost(parseCard(s), e, spec, zoneOf));
   const row = (role, label, type) => {
     const cur = j[role];
-    const list = suppliers.filter((s) => s.type === type);
+    // Delivery: delivery partners, and frame shops that deliver (delivery charges in their price list).
+    const list = suppliers.filter((s) => s.type === type || (role === 'delivery' && s.type === 'FRAMER' && Object.keys(parseCard(s).uae || {}).length)).map((s) => ({ ...s, cost: costFor(s, role), shop: s.type === 'FRAMER' && role === 'delivery' }))
+      .sort((a, b) => (a.cost == null) - (b.cost == null) || (a.cost ?? 0) - (b.cost ?? 0) || String(a.business).localeCompare(String(b.business)));
+    const best = list.find((s) => s.cost != null);
     const locked = cur && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage);
     const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
-        <div class="field"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select></div>
+        <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
+          <span class="muted" style="font-size:12px">${role === 'framer' ? `${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${spec.small ? 'small' : 'large'} parcel`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
         <div class="field"><label>Price you pay them (AED)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
         <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
         <div class="field"><label>Note for them (frame style, size, glass, timing…)</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
@@ -561,6 +569,14 @@ function supplierSection(e) {
 function wireSuppliers(e) {
   const box = $('supplierBox'); if (!box) return;
   const v = (k) => box.querySelector(`[data-js="${k}"]`);
+  ['framer', 'delivery'].forEach((role) => {
+    const sel = v(`${role}-sid`), pr = v(`${role}-price`);
+    if (sel && pr) sel.onchange = () => {
+      const c = sel.selectedOptions[0]?.dataset.cost; if (c) pr.value = c;
+      // The frame shop's own delivery charge for this address, for "Ask them to deliver too".
+      if (role === 'framer' && v('framer-dprice') && !v('framer-dprice').value) { const sp = suppliers.find((x) => x.id === sel.value); const dc = sp ? deliveryCost(parseCard(sp), e, specOf(e, parseDetails(e.details)), zoneOf) : null; if (dc != null) v('framer-dprice').value = dc; }
+    };
+  });
   box.querySelectorAll('[data-jobsend],[data-jobremove]').forEach((b) => {
     b.onclick = async () => {
       const role = b.dataset.jobsend || b.dataset.jobremove, remove = !!b.dataset.jobremove;

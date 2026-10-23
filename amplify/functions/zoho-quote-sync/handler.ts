@@ -1880,6 +1880,24 @@ async function sellerAction(ev: ApiEvent) {
     return { profile: row };
   }
 
+  // Frame shops and delivery partners keep a price list (also while their application is being checked).
+  if (action === 'saveRates') {
+    if (!profile || !ROLE_OF[String(profile.type)]) throw new Error('Price lists are for frame shops and delivery partners.');
+    const n = (v: unknown) => (v === '' || v == null ? undefined : Math.min(5000, Math.max(0, Math.round(Number(v) * 100) / 100)));
+    const grid = (o: unknown, rows: string[], cols: string[]) => {
+      const out: Record<string, Record<string, number>> = {};
+      for (const r of rows) for (const c of cols) { const v = n((o as Record<string, Record<string, unknown>> | undefined)?.[r]?.[c]); if (v !== undefined && Number.isFinite(v)) (out[r] ??= {})[c] = v; }
+      return out;
+    };
+    const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
+    const card = profile.type === 'FRAMER'
+      ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true,
+          uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
+      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], ['small', 'large']), notes: txt(d.notes, 500), at: now };
+    const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
+    await putRow(S, row);
+    return { profile: row };
+  }
   if (!profile || profile.status !== 'APPROVED') throw new Error('Your seller account is not approved yet.');
 
   if (action === 'saveListing') {
@@ -1996,7 +2014,8 @@ async function assignJob(action: string, d: Dict) {
   }
   const sid = txt(d.supplierId, 80);
   const p = plain(await getRow(S, { id: { S: sid } }));
-  if (!p || ROLE_OF[String(p.type)] !== role) throw new Error(`Choose a ${ROLE_LABEL[role]}.`);
+  // Delivery: a delivery partner, or a frame shop that delivers (it has delivery charges in its price list).
+  if (!p || (ROLE_OF[String(p.type)] !== role && !(role === 'delivery' && p.type === 'FRAMER'))) throw new Error(`Choose a ${ROLE_LABEL[role]}.`);
   if (p.status !== 'APPROVED') throw new Error(`${String(p.business)} is not approved yet (Artists & sellers).`);
   if (cur && cur.supplierId !== sid && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage)) throw new Error(`${cur.name} has already started this job.`);
   const price = d.price === '' || d.price == null ? null : numIn(d.price, 100000);
