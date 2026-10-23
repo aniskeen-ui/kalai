@@ -848,10 +848,10 @@ function purchaseSection(e) {
     <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || `${artistOf(e)}'s order is recorded once the customer has paid and the costing has the artist's price.`)}</div>
     ${sivaProgress(e) ? `<div style="font-size:13px"><b>${esc(e.artistName || 'Siva')}'s progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
     <div class="two">
-      <div class="field"><label for="pInv">${esc(e.artistName || 'Siva')}'s invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From his invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
+      <div class="field"><label for="pInv">${esc(e.artistName || 'Siva')}'s invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From the artist's invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
       <div class="field"><label for="pPaid">Paid to ${esc(e.artistName || 'Siva')}: bank ref</label><input id="pPaid" value="${esc(e.artistPaidRef)}" placeholder="Transfer reference" ${!e.zohoPOId || e.zohoVendorPaymentId ? 'disabled' : ''}></div>
     </div>
-    <div class="muted" style="font-size:12px">Save with his invoice number to create the bill in Zoho; save with your bank reference to record the payment made to him.</div>
+    <div class="muted" style="font-size:12px">Save with the artist's invoice number to create their bill in Zoho; save with your bank reference to record the payment made to them.</div>
   </fieldset>`;
 }
 
