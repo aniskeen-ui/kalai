@@ -119,6 +119,9 @@ function addSupplierForm() {
       <div class="muted" style="font-size:12px">Then use “Open their portal” to enter their price list, and send them the WhatsApp or email invite so they can sign in themselves.</div>
     </form></details>`;
 }
+const priceText = (s) => s.type === 'FRAMER'
+  ? `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We frame original artworks and children's drawings for our customers and would like your trade prices for regular orders:\n\n• Sizes: A4, A3, 30×40, 40×50, 50×70, 60×80, 70×100 cm\n• Styles: black slim, white, natural oak, walnut, gold\n• With white mount and glass or acrylic: fixing charge per size, or included?\n• Delivery to the customer within Dubai and other emirates: your charge?\n\nYou can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`
+  : `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We deliver framed artworks to customers and would like your rates for regular jobs: one framed work picked up in Dubai, delivered to each emirate (small parcel up to A3 / 40×50 cm, and large up to 70×100 cm), and same-day if available. You can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`;
 function supplierCard(s) {
   const fr = s.type === 'FRAMER';
   return `<article class="mk-card" data-seller="${esc(s.id)}">
@@ -135,7 +138,7 @@ function supplierCard(s) {
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
         : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`}
       <a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open their portal${!s.owner ? ' (price list, jobs)' : ''}</a>
-      ${waLink(s.phone, inviteText(s)) ? `<a class="btn small ghost" href="${waLink(s.phone, inviteText(s))}" target="_blank" rel="noopener">WhatsApp invite</a>` : ''}
+      ${waLink(s.phone, inviteText(s)) ? `<a class="btn small ghost" href="${waLink(s.phone, inviteText(s))}" target="_blank" rel="noopener">WhatsApp invite</a><a class="btn small ghost" href="${waLink(s.phone, priceText(s))}" target="_blank" rel="noopener">WhatsApp: ask for prices</a>` : ''}
       ${s.email ? '<button class="btn small ghost" data-a="inviteSupplier" type="button">Email invite</button>' : ''}
       <span class="muted" data-msg></span>
     </div></article>`;
