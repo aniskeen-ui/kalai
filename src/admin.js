@@ -602,6 +602,9 @@ function wireSuppliers(e) {
       // The frame shop's own delivery charge for this address, for "Ask them to deliver too".
       if (role === 'framer' && v('framer-dprice') && !v('framer-dprice').value) { const sp = suppliers.find((x) => x.id === sel.value); const dc = sp ? deliveryCost(parseCard(sp), e, specOf(e, parseDetails(e.details)), zoneOf) : null; if (dc != null) v('framer-dprice').value = dc; }
     };
+    // Not given yet: start with the cheapest supplier that has a price. Given without a price: take it from their price list.
+    if (sel && pr && !sel.value) { const o = [...sel.options].find((x) => x.value && x.dataset.cost); if (o) sel.value = o.value; }
+    if (sel && pr && !pr.value) { const c = sel.selectedOptions[0]?.dataset.cost; if (c) pr.value = c; }
   });
   box.querySelectorAll('[data-jobsend],[data-jobremove]').forEach((b) => {
     b.onclick = async () => {
