@@ -4,6 +4,7 @@ import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { StartingPosition, EventSourceMapping, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { Rule, Schedule, RuleTargetInput } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { CfnBudget } from 'aws-cdk-lib/aws-budgets';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -121,4 +122,16 @@ new Rule(fnStack, 'DailyKuralRule', {
   // Every hour at :05; the function publishes once a day, at the hour set in Order management → Settings (default 6 am Dubai).
   schedule: Schedule.cron({ minute: '5', hour: '*' }),
   targets: [new LambdaFunction(backend.zohoQuoteSync.resources.lambda, { event: RuleTargetInput.fromObject({ task: 'dailyKural' }) })],
+});
+
+// Cost alert for the whole AWS account: email the studio mailbox at 80% of US$20 (actual), at US$20 (actual)
+// and when AWS forecasts the month will pass US$20. Change the amount here.
+const alertTo = [{ subscriptionType: 'EMAIL', address: 'kalaiarthouse@pranixtechno.com' }];
+new CfnBudget(fnStack, 'MonthlyCostAlert', {
+  budget: { budgetName: 'Kalai-monthly-cost', budgetType: 'COST', timeUnit: 'MONTHLY', budgetLimit: { amount: 20, unit: 'USD' } },
+  notificationsWithSubscribers: [
+    { notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 80, thresholdType: 'PERCENTAGE' }, subscribers: alertTo },
+    { notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 100, thresholdType: 'PERCENTAGE' }, subscribers: alertTo },
+    { notification: { notificationType: 'FORECASTED', comparisonOperator: 'GREATER_THAN', threshold: 100, thresholdType: 'PERCENTAGE' }, subscribers: alertTo },
+  ],
 });
