@@ -1437,7 +1437,22 @@ async function showDetail(e) {
   if ($('addrBox')) wireRegion($('addrBox'));
   if ($('reviewBox')) wireReviews($('reviewBox'));
   ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
-  $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); });
+  $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); doneLock(); });
+  // Delivered (or refunded / cancelled): the order is closed, so its fields are read-only. Still open: the status
+  // (Replacement / Refunded), the message to the customer, actual costs (bills come later) and after-sales.
+  // Choosing Replacement or Refunded opens the fields again.
+  const doneLock = () => {
+    const closed = ['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(s) && $('eStatus').value === s;
+    const sel = '#ePhone, #ePrice, #ePayMethod, #ePayRef, #eLink, #addrBox input, #addrBox select, #addrBox textarea, #addrBox button, #shipBox input, #shipBox select, #shipBox textarea, #costing input, #costing select, #costing textarea, #costing button, #supplierBox input, #supplierBox select, #supplierBox textarea, #supplierBox button';
+    $('editForm').querySelectorAll(sel).forEach((el) => {
+      if (closed) { if (!el.disabled) { el.disabled = true; el.dataset.doneLock = '1'; } }
+      else if (el.dataset.doneLock) { el.disabled = false; delete el.dataset.doneLock; }
+    });
+    let n = $('doneNote');
+    if (closed && !n) { n = document.createElement('div'); n.id = 'doneNote'; n.className = 'muted'; n.style.fontSize = '12px'; n.innerHTML = `🔒 ${esc(STATUS[s])}: this order is closed, so its details are read-only. For damage or a return, choose <b>Replacement</b> or <b>Refunded</b> to open them again.`; $('eStatus').closest('.two').after(n); }
+    if (!closed && n) n.remove();
+  };
+  doneLock();
   // Courier dropdown (works on phones); "Other…" opens a text box. The text box always holds the value saved.
   $('eCourierSel').addEventListener('change', () => {
     const v = $('eCourierSel').value;

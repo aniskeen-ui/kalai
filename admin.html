@@ -169,6 +169,8 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .dstat.good{background:var(--ok);color:#fff}
 .dstat.draft{background:var(--gold-soft)}
 .dstat.bad{background:var(--kumkum);color:#fff}
+/* Read-only fields (closed orders, locked sections): clearly greyed out. */
+#editForm input:disabled,#editForm select:disabled,#editForm textarea:disabled{background:var(--sunk);color:var(--muted);cursor:not-allowed;opacity:1}
 </style>
 </head>
 <body>
