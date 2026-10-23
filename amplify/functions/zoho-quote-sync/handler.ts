@@ -1,6 +1,7 @@
 import { env } from '$amplify/env/zoho-quote-sync';
 import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, PutItemCommand, DeleteItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import { KURALS } from './kural-data';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
@@ -2582,7 +2583,6 @@ async function applyCode(ev: ApiEvent) {
 // ---------- Thirukkural of the day (flash panel on the website) ----------
 // Kural number cycles 1 → 1330 by date. Tamil couplet + short English translation from the open Thirukkural API;
 // Arabic by Amazon Translate. Switch off with SSM /kalai/kural/enabled = off. The studio's own message wins on the site.
-const KURAL_API = 'https://api-thirukkural.web.app/kural/';
 // Rupees per dirham for prices shown in ₹ on the website: every morning, from the European Central Bank's USD→INR
 // rate (Frankfurter, free, no key) and the dirham's fixed peg (3.6725 per dollar). Off when Settings says "keep my rate".
 async function refreshInr() {
@@ -2613,9 +2613,9 @@ async function dailyKural(force: boolean) {
     const have = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
     if (have.Item) return { skipped: 'already', id };
   }
-  const r = await fetch(`${KURAL_API}${n}`, { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error(`Thirukkural service answered ${r.status}`);
-  const k = (await r.json()) as { line1?: string; line2?: string; eng?: string; chap_eng?: string; chap_tam?: string };
+  // Kept in the function itself (the free online Thirukkural service the site used has shut down).
+  const row = KURALS[n - 1];
+  const k: { line1?: string; line2?: string; eng?: string; chap_eng?: string } = { line1: row?.[0], line2: row?.[1], eng: row?.[2] };
   const ta = [k.line1, k.line2].filter(Boolean).join('\n').trim();
   const en = String(k.eng ?? '').trim();
   if (!ta) throw new Error('Thirukkural service returned no text');
