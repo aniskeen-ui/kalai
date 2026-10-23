@@ -785,7 +785,20 @@ window.kalaiMarketOrder = (p) => {
 
 /* ---------- daily message: small notice at the side of the page, Tamil / English / Arabic ---------- */
 const MSG_TITLE = { ta: 'இன்றைய செய்தி', en: "Today's message", ar: 'رسالة اليوم' };
-const KURAL_TITLE = { ta: 'இன்றைய திருக்குறள்', en: 'Thirukkural of the day', ar: 'حكمة اليوم من الثيروكورال' };
+const KURAL_TITLE = { ta: 'இன்றைய திருக்குறள்', en: 'Thirukkural of the day', ar: 'حكمة اليوم من الثيروكورال',
+  hi: 'आज का तिरुक्कुरल', ml: 'ഇന്നത്തെ തിരുക്കുറൾ', ur: 'آج کا تروکورل', tl: 'Thirukkural ngayong araw', bn: 'আজকের তিরুক্কুরল',
+  te: 'నేటి తిరుక్కురళ్', kn: 'ಇಂದಿನ ತಿರುಕ್ಕುರಳ್', ru: 'Тируккурал дня', fr: 'Le Thirukkural du jour', zh: '今日蒂鲁古拉尔',
+  mr: 'आजचे तिरुक्कुरल', gu: 'આજનું તિરુક્કુરલ', pa: 'ਅੱਜ ਦਾ ਤਿਰੁੱਕੁਰਲ', si: 'අද දින තිරුක්කුරල්', ne: 'आजको तिरुक्कुरल', fa: 'تیروکورال امروز',
+  de: 'Thirukkural des Tages', es: 'Thirukkural del día', it: 'Il Thirukkural del giorno', pt: 'Thirukkural do dia', tr: 'Günün Thirukkural’ı',
+  ja: '今日のティルックラル', ko: '오늘의 티루쿠랄', id: 'Thirukkural hari ini', ms: 'Thirukkural hari ini' };
+const RTL = ['ar', 'ur', 'fa'];
+// The visitor's own language (browser setting), if the kural has it; ?klang=hi to preview one.
+function visitorLang(have) {
+  const q = new URLSearchParams(location.search).get('klang');
+  const list = [q, ...(navigator.languages || [navigator.language || ''])].filter(Boolean).map((x) => String(x).toLowerCase());
+  for (const x of list) { const l = x.startsWith('fil') ? 'tl' : x.slice(0, 2); if (['ta', 'en', 'ar'].includes(l)) return ''; if (have[l]) return l; }
+  return '';
+}
 const LANG_LABEL = { ta: 'தமிழ்', en: 'English', ar: 'العربية' };
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
@@ -804,7 +817,11 @@ async function showDailyMessage() {
     const kurals = (r.data || []).filter((x) => x.source === 'KURAL').sort((a, b) => String(b.showFrom || b.createdAt).localeCompare(String(a.showFrom || a.createdAt)));
     const m = kurals.find((x) => x.active && (!x.showFrom || x.showFrom <= nowIso) && (!x.showUntil || x.showUntil > nowIso)) || kurals[0];
     if (!m) return;
-    const langs = ['ta', 'en', 'ar'].filter((l) => (m[l] || '').trim());
+    // Tamil, the visitor's own language (if not Tamil, English or Arabic), English, Arabic.
+    let extra = {}; try { extra = JSON.parse(m.more || '{}') || {}; } catch { extra = {}; }
+    const own = visitorLang(extra);
+    if (own) m[own] = extra[own];
+    const langs = ['ta', own, 'en', 'ar'].filter((l) => l && (m[l] || '').trim());
     if (!langs.length) return;
     // The flash card is for the Thirukkural only: always the Thiruvalluvar picture and the Thirukkural title.
     const kural = true;
@@ -844,7 +861,7 @@ async function showDailyMessage() {
     const show = (l, fade = true) => {
       lang = l;
       const put = () => {
-        box.setAttribute('lang', lang); p.dir = lang === 'ar' ? 'rtl' : 'ltr'; p.style.textAlign = lang === 'ar' ? 'right' : '';
+        box.setAttribute('lang', lang); p.dir = RTL.includes(lang) ? 'rtl' : 'ltr'; p.style.textAlign = RTL.includes(lang) ? 'right' : '';
         const hb = box.querySelector('.kmsg-head b'); hb.textContent = title(lang); hb.dir = p.dir;
         p.textContent = m[lang];
         box.querySelectorAll('[data-l]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.l === lang)));

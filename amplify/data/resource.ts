@@ -267,6 +267,7 @@ const schema = a.schema({
       ta: a.string(),
       en: a.string(),
       ar: a.string(),
+      more: a.string(), // JSON { hi, ml, ur, … 25 languages }: the kural in the visitor's own language
       active: a.boolean(),
       showFrom: a.string(),
       showUntil: a.string(),

@@ -2614,6 +2614,8 @@ async function refreshInr() {
   console.log(`INR per AED ${rate}`);
 }
 
+// Amazon Translate codes. Each day's meaning is translated from the plain English meaning, not the poem.
+const KURAL_MORE = ['hi', 'ml', 'ur', 'tl', 'bn', 'te', 'kn', 'mr', 'gu', 'pa', 'si', 'ne', 'fa', 'ru', 'fr', 'de', 'es', 'it', 'pt', 'tr', 'zh', 'ja', 'ko', 'id', 'ms'];
 async function dailyKural(force: boolean) {
   const table = process.env.ANNOUNCE_TABLE;
   if (!table) throw new Error('Not configured');
@@ -2635,6 +2637,11 @@ async function dailyKural(force: boolean) {
   if (!ta) throw new Error('Thirukkural service returned no text');
   let ar = '';
   try { if (en) ar = (await translator.send(new TranslateTextCommand({ Text: en, SourceLanguageCode: 'en', TargetLanguageCode: 'ar' }))).TranslatedText ?? ''; } catch { ar = ''; }
+  // The same meaning in the languages most visitors in the UAE read; the website shows the visitor's own one as a fourth.
+  const more: Record<string, string> = {};
+  if (en) await Promise.all(KURAL_MORE.map(async (l) => {
+    try { const t = (await translator.send(new TranslateTextCommand({ Text: en, SourceLanguageCode: 'en', TargetLanguageCode: l }))).TranslatedText ?? ''; if (t) more[l] = `${t}\n— Thirukkural ${n}`; } catch { /* that language is skipped today */ }
+  }));
   // Yesterday's kural comes down; the studio's own messages are left alone.
   for (const x of (await scanAll(table)).filter((x) => str(x, 'source') === 'KURAL' && x.active?.BOOL && str(x, 'id') !== id)) {
     await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(x, 'id') } }, UpdateExpression: 'SET active = :f', ExpressionAttributeValues: { ':f': { BOOL: false } } }));
@@ -2644,7 +2651,7 @@ async function dailyKural(force: boolean) {
   const now = new Date().toISOString();
   await putRow(table, {
     id, __typename: 'Announcement', createdAt: now, updatedAt: now, active: true, showFrom: from, showUntil: until, source: 'KURAL',
-    ta: `${ta}\n— திருக்குறள் ${n}`, en: en ? `${en}\n— Thirukkural ${n}` : '', ar: ar ? `${ar}\n— ثيروكورال ${n}` : '',
+    ta: `${ta}\n— திருக்குறள் ${n}`, en: en ? `${en}\n— Thirukkural ${n}` : '', ar: ar ? `${ar}\n— ثيروكورال ${n}` : '', more: JSON.stringify(more),
     ref: `Kural ${n}${k.chap_eng ? ` · ${k.chap_eng}` : ''}`,
   });
   console.log(`Thirukkural ${n} published for ${day}`);
