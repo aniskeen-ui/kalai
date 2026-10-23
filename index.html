@@ -297,7 +297,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 
 
 .ap-back{display:none}
-.similar button:nth-child(4){display:none}
+.similar button:nth-child(n+4){display:none}
 .acts .wa-btn{text-decoration:none;display:inline-flex;align-items:center}
 .vtabs button img{display:none}
 
@@ -324,11 +324,18 @@ html[data-skin="green"] .btn.ghost,html[data-skin="green"] .cart-btn,html[data-s
 /* artwork as its own page */
 html[data-skin="green"] #scrim{display:none!important}
 html[data-skin="green"] .modal{inset:var(--hdr,70px) 0 0 0;padding:0;display:block;background:var(--bg);overflow:auto;z-index:8;pointer-events:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y pinch-zoom}
-html[data-skin="green"] .modal .box.wide{max-width:1180px;margin:0 auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:var(--bg);grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px 40px;padding:16px max(16px,env(safe-area-inset-left,0px)) 60px}
+html[data-skin="green"] .modal .box.wide{max-width:1440px;margin:0 auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:var(--bg);grid-template-columns:minmax(0,1.55fr) minmax(340px,1fr);gap:8px 48px;padding:16px max(16px,env(safe-area-inset-left,0px)) 60px}
 html[data-skin="green"] .modal .xtop{display:none}
 html[data-skin="green"] .ap-back{display:inline-block;grid-column:1/-1;justify-self:start;background:none;border:0;color:var(--gold);font-weight:600;font-size:14px;padding:6px 0;cursor:pointer}
 html[data-skin="green"] .viewer{background:var(--bg);padding:0;display:flex;flex-direction:column}
-html[data-skin="green"] .viewer .stage{order:1;background:var(--sunk);padding:24px;min-height:420px}
+html[data-skin="green"] .viewer .stage{order:1;background:var(--sunk);padding:28px;min-height:min(72vh,720px)}
+html[data-skin="green"] .viewer .stage>img{height:min(66vh,680px);width:auto;max-width:100%;max-height:none;object-fit:contain}
+@media (max-width:860px){html[data-skin="green"] .viewer .stage>img{height:auto;max-height:60vh}}
+/* "You may also like": its own full-width row under the picture and details */
+.modal .box.wide>#mSimilar{grid-column:1/-1;padding:0 22px 22px}
+html[data-skin="green"] .modal .box.wide>#mSimilar{padding:18px 0 0;border-top:1px solid var(--line);margin-top:10px}
+html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+html[data-skin="green"] .modal .box.wide>#mSimilar .similar button{font-size:13px}
 html[data-skin="green"] .viewer .vtools{order:2}
 html[data-skin="green"] .viewer #vFrames{order:3}
 html[data-skin="green"] .viewer .room-cap{order:4}
@@ -342,9 +349,10 @@ html[data-skin="green"] .acts .btn{width:100%;justify-content:center;text-align:
 html[data-skin="green"] .acts .btn.primary{background:var(--gold);color:#fff}
 html[data-skin="green"] .acts .btn.ghost-dark{border:1px solid var(--gold);color:var(--gold);background:var(--surface)}
 html[data-skin="green"] .similar{grid-template-columns:repeat(4,minmax(0,1fr))}
-html[data-skin="green"] .similar button:nth-child(4){display:grid}
+html[data-skin="green"] .similar button:nth-child(n+4){display:grid}
 html[data-skin="green"] .similar button{background:var(--surface);border:1px solid var(--line);border-radius:2px}
-@media (max-width:860px){html[data-skin="green"] .modal .box.wide{grid-template-columns:1fr}html[data-skin="green"] .similar{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1100px){html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:860px){html[data-skin="green"] .modal .box.wide{grid-template-columns:1fr}html[data-skin="green"] .similar,html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(2,minmax(0,1fr))}html[data-skin="green"] .viewer .stage{min-height:300px}}
 </style>
 </head>
 <body>
@@ -935,7 +943,7 @@ function framedHtml(p){
   const sizes=p.prices&&p.prices.v===2?Object.keys(p.prices.sizes):[];
   const big=sizes.length?FRAME_SIZES.find(f=>f[0]===sizes[sizes.length-1]):null;
   const bigD=big?(W>=H?[big[2],big[1]]:[big[1],big[2]]):fd||[W+16,H+16];
-  const st=document.getElementById("vStage"),availW=Math.min(((st&&st.clientWidth)||560)-24,620),availH=Math.min(innerHeight*.58,560);
+  const st=document.getElementById("vStage"),availW=Math.min(((st&&st.clientWidth)||560)-24,900),availH=Math.min(innerHeight*.68,700);
   const k=Math.min(availW/bigD[0],availH/bigD[1]); // px per cm
   const alt=`${p.name}${FRAME.k==="none"?"":` in a ${FRAME.n.toLowerCase()} frame`}`;
   if(FRAME.k==="none")return `<div class="fr2" style="width:${W*k}px;height:${H*k}px"><img src="${p.img}" alt="${alt}" style="width:100%;height:100%;object-fit:contain;box-shadow:0 10px 26px rgba(0,0,0,.3)"></div>`;
@@ -966,7 +974,7 @@ function wireLens(stage){
 }
 function openModal(p){
   const box=document.getElementById("modalBox");box.className="box wide";box.innerHTML="";
-  const sim=PRODUCTS.filter(x=>x.id!==p.id&&x.price&&(x.subject===p.subject||x.kind===p.kind)).sort((a,b)=>(b.subject===p.subject)-(a.subject===p.subject)).slice(0,4);
+  const sim=PRODUCTS.filter(x=>x.id!==p.id&&x.price&&(x.subject===p.subject||x.kind===p.kind)).sort((a,b)=>(b.subject===p.subject)-(a.subject===p.subject)).slice(0,6);
   document.documentElement.style.setProperty("--hdr",(document.querySelector("header.top")?.offsetHeight||70)+"px");
   box.insertAdjacentHTML("beforeend",`<button class="x xtop" id="mClose" aria-label="Close">×</button><button type="button" class="ap-back" id="mBack">← Back to the collection</button><div class="viewer">
       <div class="vtools"><div class="vtabs" role="group" aria-label="Choose view"><button type="button" data-v="art" aria-pressed="true"><img src="${p.img}" alt="">Artwork</button><button type="button" data-v="frame" aria-pressed="false"><img src="${p.img}" alt="" style="border:6px solid #3b2a1d;box-sizing:border-box">Try a frame</button><button type="button" data-v="room" aria-pressed="false"><img src="${p.img}" alt="" style="padding:14px 18px 24px;background:#e3dccd;object-fit:contain;box-sizing:border-box">On a wall</button></div>
@@ -998,7 +1006,7 @@ function openModal(p){
      <p class="note" style="margin:0">${p.prices?"The price changes with the frame and size you choose. It includes the mount, glass and insured delivery in the UAE; for other countries we quote the shipping before you pay.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
      <details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>
      <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. We also ship worldwide: the shipping charge is confirmed before you pay. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
-     ${sim.length?`<div><div style="font-weight:600;font-size:14px;margin:6px 0 8px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
+     ${sim.length?`<div id="mSimilar"><div style="font-weight:600;font-size:15px;margin:6px 0 10px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
     </div>`);
   const stage=box.querySelector("#vStage"),cap=box.querySelector("#vCap");
   let cur="art";
@@ -1026,7 +1034,7 @@ function openModal(p){
   box.querySelectorAll("[data-fs]").forEach(b=>b.onclick=()=>{FSIZE=b.dataset.fs;box.querySelectorAll("[data-fs]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vLens").onclick=e=>{LENS=!LENS;e.currentTarget.setAttribute("aria-pressed",LENS);lensEl.style.display="none";show(cur)};
   window.kalaiFrameChoice="";window.kalaiPriceStyle="";FSIZE="";wireLens(stage);show("art");
-  modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("mClose").focus();
+  {const ms=box.querySelector('#mSimilar');if(ms&&ms.parentElement!==box)box.appendChild(ms);}modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("mClose").focus();
   // Each artwork has its own link (…/#art-ID): shareable, and the phone's Back button closes it.
   try{if(location.hash!=="#art-"+p.id)history.pushState({art:p.id},"","#art-"+p.id)}catch(e){}
 }
