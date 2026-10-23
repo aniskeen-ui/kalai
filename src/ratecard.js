@@ -1,12 +1,21 @@
 // Supplier rate cards (supplier portal → My rates), and the cost of one order with each supplier (Order Management).
 // Frame shop: frame price per style and size, plus a fixing charge per size (or "fixing included").
-// Delivery partner: price per destination emirate for a small parcel (up to A3 / 40×50) and a large one, and
+// Delivery partner: price per destination emirate and parcel size (older cards: small / large), and
 // optionally per zone outside the UAE. Later a courier aggregator (e.g. Shipy) can quote live instead.
 export const RC_STYLES = [['black', 'Black slim'], ['white', 'White'], ['oak', 'Natural wood / oak'], ['walnut', 'Walnut'], ['gold', 'Gold']];
 export const RC_SIZES = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
 export const RC_EMIRATES = ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'];
 export const RC_ZONES = [['A', 'GCC'], ['B', 'South Asia'], ['C', 'UK & Europe'], ['D', 'USA, Canada, Australia, NZ'], ['E', 'Rest of the world']];
 const SMALL = ['A4', 'A3', '30×40', '40×50'];
+// Delivery partners price by parcel size (couriers bill by volumetric weight, so a 70×100 costs far more than a 30×40).
+export const RC_PARCELS = [['s1', 'Up to 30×40 / A3'], ['40×50', '40×50'], ['50×70', '50×70'], ['60×80', '60×80'], ['70×100', '70×100']];
+export const parcelOf = (size) => (['A4', 'A3', '30×40'].includes(size) ? 's1' : size);
+/** A courier's price for one cell: the size price, else the older small/large price. */
+export const parcelPrice = (row, size) => {
+  if (!row) return null;
+  const v = row[parcelOf(size)] ?? row[SMALL.includes(size) ? 'small' : 'large'];
+  return v == null || v === '' ? null : Number(v);
+};
 
 export function parseCard(p) {
   let v = p?.rateCard;
@@ -37,15 +46,8 @@ export function frameCost(card, spec) {
 /** Delivery partner's cost to this order's address, or null when its card has no price for it. */
 export function deliveryCost(card, e, spec, zoneOf) {
   const country = e.deliveryCountry || 'UAE';
-  const big = spec.small ? 'small' : 'large';
-  if (country === 'UAE') {
-    const em = String(e.deliveryEmirate || '').split(' (')[0];
-    const v = card.uae?.[em]?.[big];
-    return v == null || v === '' ? null : Number(v);
-  }
-  const z = zoneOf ? zoneOf(country) : 'E';
-  const v = card.intl?.[z]?.[big];
-  return v == null || v === '' ? null : Number(v);
+  if (country === 'UAE') return parcelPrice(card.uae?.[String(e.deliveryEmirate || '').split(' (')[0]], spec.size);
+  return parcelPrice(card.intl?.[zoneOf ? zoneOf(country) : 'E'], spec.size);
 }
 
 // Same zones as Little Artists shipping.

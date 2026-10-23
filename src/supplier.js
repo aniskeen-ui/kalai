@@ -11,7 +11,7 @@ import {
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones } from './phone.js';
-import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, parseCard } from './ratecard.js';
+import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, parcelPrice, parseCard } from './ratecard.js';
 
 autoPhones();
 const client = generateClient();
@@ -272,13 +272,15 @@ function drawJobs() {
 // ---------- price list ----------
 let ratesBack = 'jobsView';
 const cell = (name, v) => `<input type="number" min="0" step="0.5" data-n="${esc(name)}" value="${v ?? ''}" placeholder="–">`;
+// One row of a courier's price list; older small / large prices fill the matching sizes.
+const pRow = (path, row) => RC_PARCELS.map(([k]) => `<td>${cell(`${path}.${k}`, parcelPrice(row, k === 's1' ? 'A3' : k))}</td>`).join('');
 function openRates(back) {
   ratesBack = back;
   const card = parseCard(profile), fr = profile.type === 'FRAMER';
   $('rTitle').textContent = fr ? 'My frame price list' : 'My delivery charges';
   $('rNote').textContent = fr
     ? "Your price per frame, in AED, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
-    : 'Your charge in AED to deliver one framed work from Dubai to each emirate: a small parcel (up to A3 / 40×50 cm) and a large one. Outside the UAE is optional.';
+    : 'Your charge in AED to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional.';
   $('rGrid').innerHTML = fr
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
@@ -286,10 +288,10 @@ function openRates(back) {
        <h3 style="font-size:15px;margin:14px 0 4px">If you also deliver: your delivery charge to each emirate (optional)</h3>
        <table class="rc"><thead><tr><th>To</th><th>Small parcel (up to A3 / 40×50)</th><th>Large parcel</th></tr></thead><tbody>
         ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}</tbody></table>`
-    : `<table class="rc"><thead><tr><th>To</th><th>Small parcel</th><th>Large parcel</th></tr></thead><tbody>
-        ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}
-        <tr><th colspan="3" style="padding-top:12px">Outside the UAE (optional)</th></tr>
-        ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th><td>${cell(`intl.${z}.small`, card.intl?.[z]?.small)}</td><td>${cell(`intl.${z}.large`, card.intl?.[z]?.large)}</td></tr>`).join('')}</tbody></table>`;
+    : `<table class="rc"><thead><tr><th>To</th>${RC_PARCELS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>
+        ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th>${pRow(`uae.${em}`, card.uae?.[em])}</tr>`).join('')}
+        <tr><th colspan="${RC_PARCELS.length + 1}" style="padding-top:12px">Outside the UAE (optional)</th></tr>
+        ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th>${pRow(`intl.${z}`, card.intl?.[z])}</tr>`).join('')}</tbody></table>`;
   $('rNotes').value = card.notes || '';
   $('rErr').textContent = ''; $('rMsg').textContent = card.at ? `Last saved ${new Date(card.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
   show('ratesView');

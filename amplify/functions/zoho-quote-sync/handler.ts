@@ -1908,10 +1908,11 @@ async function sellerAction(ev: ApiEvent) {
       return out;
     };
     const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
+    const PARCELS = ['s1', '40×50', '50×70', '60×80', '70×100']; // delivery partners: price by parcel (frame) size
     const card = profile.type === 'FRAMER'
       ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true,
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
-      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], ['small', 'large']), notes: txt(d.notes, 500), at: now };
+      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), notes: txt(d.notes, 500), at: now };
     const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
     await putRow(S, row);
     return { profile: row };
@@ -2243,7 +2244,7 @@ async function marketAdmin(ev: ApiEvent) {
       lines: [`Hello ${h(p.contactName || p.business)},`,
         `Kalai Art House (art.pranixtechno.com, Dubai) is launching shortly, and we would like to work with <b>${h(p.business)}</b> as a ${fr ? 'framing' : 'delivery'} partner.`,
         `Please open our supplier portal and <b>create an account with this email address</b> (${h(p.email)}): your business is already set up there.`,
-        fr ? 'Then add your <b>price list</b>: frame price per style and size, the fixing charge (or included), and your delivery charge if you also deliver.' : 'Then add your <b>delivery charges</b> to each emirate, for a small and a large parcel.',
+        fr ? 'Then add your <b>price list</b>: frame price per style and size, the fixing charge (or included), and your delivery charge if you also deliver.' : 'Then add your <b>delivery charges</b> to each emirate, by frame size.',
         'Every job we give you appears there with the photo, size, address and agreed price; you update each step and enter your invoice, and we pay against it.',
         txt(d.note, 500) ? h(txt(d.note, 500)) : ''].filter(Boolean),
       button: { label: 'Open the supplier portal', url: `${SITE}/supplier.html` } });
