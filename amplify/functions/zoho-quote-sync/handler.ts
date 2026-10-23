@@ -1974,7 +1974,7 @@ async function sellerAction(ev: ApiEvent) {
     const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
     const PARCELS = ['s1', '40×50', '50×70', '60×80', '70×100']; // delivery partners: price by parcel (frame) size
     const card = profile.type === 'FRAMER'
-      ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true,
+      ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3']).x ?? {},
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
       : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), notes: txt(d.notes, 500), at: now };
     const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
@@ -2149,6 +2149,12 @@ function parcelOf(det: Record<string, string>) {
   return /unframed/i.test(String(det['Framing'] || '')) ? 'Unframed artwork (flat or rolled)' : 'Framed work';
 }
 /** What a supplier sees of one order. */
+/** Little Artists: what the frame shop prints from the customer's photo before framing. */
+function giftPrintSpec(det: Record<string, string>) {
+  const size = /A3|Large size/i.test(String(det['Extras'] ?? '')) ? 'A3' : 'A4';
+  const copies = /second framed copy/i.test(String(det['Extras'] ?? '')) ? 2 : 1;
+  return `${copies === 2 ? '2 copies' : '1 copy'}, ${size}, on matte / fine-art paper from the photo (download the full-size file below). Crop to the paper edge, keep the colours true.`;
+}
 function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile: Dict | null) {
   const j = jobs[role]!;
   const selfDelivery = role === 'delivery' && !!jobs.framer && jobs.framer.supplierId === j.supplierId;
@@ -2158,7 +2164,8 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
     stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null, hasBill: !!j.billId,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
-    specs: role === 'framer' ? FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)]) : [['Parcel', parcelOf(det)]],
+    specs: role === 'framer' ? [...(str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
+    printJob: role === 'framer' && str(e, 'kind') === 'GIFT',
     hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || str(e, 'kind') === 'PRICE'),
     to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
     from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
@@ -2220,7 +2227,9 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
       key = str(pr, 'imageKey');
     }
     if (!key) throw new Error('No photo for this order yet: ask Kalai Art House.');
-    return { url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 900 }) };
+    // download: the original file as uploaded (full size), saved under the order number, for printing.
+    const ext = (key.match(/\.([a-z0-9]{2,5})$/i)?.[1] ?? 'jpg').toLowerCase();
+    return { url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key, ...(d.download ? { ResponseContentDisposition: `attachment; filename="${ref}-to-print.${ext}"` } : {}) }), { expiresIn: 900 }) };
   }
   if (str(e, 'status') === 'CANCELLED' || String(str(e, 'refundAction')).startsWith('CANCEL')) throw new Error('This order was cancelled. Please stop.');
   const studio = (subject: string, lines: string[]) => sendMail({ to: STUDIO_EMAIL, subject, lines, button: { label: 'Open in Order Management', url: `${SITE}/admin.html#order=${id}` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});

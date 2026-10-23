@@ -1,5 +1,5 @@
 // Studio desk: list every enquiry, view uploads, set price / payment link / status / message.
-import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf } from './ratecard.js';
+import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf, printCost, copiesOf } from './ratecard.js';
 import './amplify-config.js';
 import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
@@ -36,6 +36,7 @@ const STUDIO_WHATSAPP_NAME = 'Kalai Art House';
 // ---------- master rates and the cost calculator ----------
 // Placeholders until the real frame shop and courier quotes are saved under "Rates".
 const DEFAULT_RATES = {
+  printA4: 25, printA3: 40, // Little Artists: printing the child's drawing from the photo (rough Dubai prices: replace with the frame shop's)
   tiers: {
     S: { label: 'Up to A4 (21×30 cm)', framing: 90, courier: 45 },
     M: { label: 'A3 / 38×28 cm', framing: 140, courier: 65 },
@@ -394,8 +395,11 @@ function reportLine(e) {
     k = { artist: e.purchaseState === 'CANCELLED' ? 0 : Number(e.sellerAmount || 0), framing: 0, india: 0, customs: 0, local: e.deliveryBy === 'KALAI' && !String(e.refundAction || '').startsWith('CANCEL') ? Number(rates.local || 0) : 0 };
     note = 'crafts shop: maker payout in Artist';
   } else if (e.kind === 'GIFT') {
-    k = { artist: 0, framing: Number(rates.tiers.S?.framing || 0), india: 0, customs: 0, local: Number(rates.local || 0) };
-    note = 'est. from Rates';
+    // Print (from the photo) + framing, per copy; A3 when the customer chose the large size.
+    const gd = parseDetails(e.details), big = /A3|Large size/i.test(String(gd.Extras || ''));
+    const per = Number((big ? rates.tiers.M?.framing : rates.tiers.S?.framing) || 0) + Number((big ? rates.printA3 : rates.printA4) || 0);
+    k = { artist: 0, framing: per * copiesOf(gd), india: 0, customs: 0, local: Number(rates.local || 0) };
+    note = 'est. from Rates (print + frame)';
   } else {
     note = 'no costing';
   }
@@ -573,7 +577,10 @@ function supplierSection(e) {
   const j = jobsOf(e);
   // Each supplier's price for this order from their price list (frame style + size; destination and parcel size).
   const spec = specOf(e, parseDetails(e.details));
-  const costFor = (s, role) => (role === 'framer' ? frameCost(parseCard(s), spec) : deliveryCost(parseCard(s), e, spec, zoneOf));
+  // Little Artists: the frame shop prints the drawing too (print + frame, per copy).
+  const gift = e.kind === 'GIFT', copies = gift ? copiesOf(parseDetails(e.details)) : 1;
+  const framerCost = (card) => { const f = frameCost(card, spec); if (!gift) return f; const p = printCost(card, spec); return f == null || p == null ? null : Math.round((f + p) * copies * 100) / 100; };
+  const costFor = (s, role) => (role === 'framer' ? framerCost(parseCard(s)) : deliveryCost(parseCard(s), e, spec, zoneOf));
   const row = (role, label, type) => {
     const cur = j[role];
     // Delivery: delivery partners, and frame shops that deliver (delivery charges in their price list).
@@ -586,7 +593,7 @@ function supplierSection(e) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
         <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
-          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'framer' ? `${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
+          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'framer' ? `${gift ? `Print + frame${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
         <div class="field"><label>Price you pay them (AED)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
         <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
         <div class="field"><label>${role === 'framer' ? 'Note for them (frame style, size, glass, timing…)' : 'Note for them (pickup time, contact, handling…)'}</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
@@ -1216,6 +1223,8 @@ function showRates() {
         <tbody>${Object.keys(t).map(tierRow).join('')}</tbody></table></div>
       <div class="two">
         <div class="field"><label for="rLocal">Local courier (AED)</label><input id="rLocal" type="number" min="0" step="1" value="${rates.local}"></div>
+        <div class="field"><label for="rPr4">Little Artists print, A4 (AED)</label><input id="rPr4" type="number" min="0" step="1" value="${rates.printA4 ?? 25}"></div>
+        <div class="field"><label for="rPr3">Little Artists print, A3 (AED)</label><input id="rPr3" type="number" min="0" step="1" value="${rates.printA3 ?? 40}"></div>
         <div class="field"><label for="rFx">Exchange rate (AED per INR)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
@@ -1246,7 +1255,7 @@ function showRates() {
     $('detail').querySelectorAll('.err').forEach((x) => x.remove());
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
-    const data = { tiers, local: n($('rLocal').value) ?? 0, fx: n($('rFx').value) ?? 0,
+    const data = { tiers, local: n($('rLocal').value) ?? 0, printA4: n($('rPr4').value) ?? 0, printA3: n($('rPr3').value) ?? 0, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
       market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };

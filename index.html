@@ -482,7 +482,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
     </div>
   </div>
   <form class="panel" id="kidsForm" novalidate>
-    <div class="field"><label for="kDraw">Upload the drawing</label><input id="kDraw" type="file" accept="image/*"><span class="note">A clear phone photo in daylight works well. We'll ask you to post the original paper drawing if a photo is too small to frame.</span></div>
+    <div class="field"><label for="kDraw">Upload the drawing</label><input id="kDraw" type="file" accept="image/*"><span class="note" id="kRes" hidden></span><span class="note">A clear phone photo in daylight works well, taken straight above the paper. We'll ask you to post the original paper drawing if a photo is too small to frame.</span></div>
     <div class="two">
       <div class="field"><label for="kName">Child's first name</label><input id="kName" placeholder="Aarav" maxlength="20"></div>
       <div class="field"><label for="kAge">Age</label>
@@ -1128,7 +1128,15 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   if(window.kalaiCountries)window.kalaiKidsCountries(window.kalaiCountries);
   $("kCountry").addEventListener("change",()=>{$("kEmBox").hidden=!uae();$("kRegBox").hidden=uae();fee()});
   $("kDraw").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();
-    r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Uploaded drawing";$("kMount").replaceChildren(im)};r.readAsDataURL(f)});
+    r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Uploaded drawing";im.onload=kResCheck;$("kMount").replaceChildren(im)};r.readAsDataURL(f)});
+  /* We print the drawing from this photo: warn when it is too small to print sharply (A4 ≈ 2,500 px, A3 ≈ 3,500 px on the long side). */
+  function kResCheck(){const im=$("kMount").querySelector("img"),box=$("kRes");if(!im||!im.naturalWidth){box.hidden=true;return}
+    const long=Math.max(im.naturalWidth,im.naturalHeight),a3=$("kx-large")&&$("kx-large").checked,need=a3?3500:2500;
+    box.hidden=false;box.style.color=long>=need?"var(--ok)":"var(--kumkum)";
+    box.textContent=long>=need?`✓ Sharp enough to print ${a3?"A3":"A4"} (${im.naturalWidth} × ${im.naturalHeight} px).`
+      :long>=need*0.6?`This photo is a little small for ${a3?"A3":"A4"} (${long} px; ${need} is best): it may print slightly soft. A closer photo of the whole paper, in daylight, works better.`
+      :`This photo is too small to print well at ${a3?"A3":"A4"} (${long} px; ${need} is best). Please take a closer, sharper photo, or send it anyway and we'll ask you to post the drawing.`;}
+  $("kx-large")&&$("kx-large").addEventListener("change",kResCheck);
   document.querySelectorAll('input[name="kf"]').forEach(x=>x.addEventListener("change",()=>{$("kFrame").className="kframe "+(x.value==="wood"?"":x.value)}));
   ["kName","kAge","kMsg","kTo"].forEach(id=>$(id).addEventListener("input",plate));
   ["kEmirate","kAge"].forEach(id=>$(id).addEventListener("change",fee));document.querySelectorAll('[id^="kx-"]').forEach(x=>x.addEventListener("change",fee));fee();

@@ -12,7 +12,7 @@ import {
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones } from './phone.js';
-import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, parcelPrice, parseCard } from './ratecard.js';
+import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, PRINT_SIZES, parcelPrice, parseCard } from './ratecard.js';
 
 autoPhones();
 const client = generateClient();
@@ -219,7 +219,7 @@ function jobCard(j) {
     if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (AED)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
   }
   return `<article class="job" data-key="${esc(key)}">
-    <div class="row"><h3>${fr ? 'Framing' : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
+    <div class="row"><h3>${fr ? (j.printJob ? 'Print & frame' : 'Framing') : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
       <span class="muted" style="margin-left:auto">Order ${esc(j.ref)} · ${esc(j.kind)} · given ${esc(day(j.assignedAt))}</span></div>
     <div class="steps">${steps.map((s, i) => `<i class="${i <= at ? 'on' : ''}" title="${esc(s[1])}"></i>`).join('')}</div>
     <div class="grid2">
@@ -237,7 +237,7 @@ function jobCard(j) {
         <dt>Deliver to</dt><dd>${addr(j.to)}</dd>
       </dl>
     </div>
-    ${j.hasPhoto ? `<div><button class="linkbtn" data-photo>Show the artwork photo</button><div data-img></div></div>` : ''}
+    ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? 'drawing' : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
     <div style="display:grid;gap:8px;justify-items:start">${act}</div>
     <div class="err" data-msg></div>
   </article>`;
@@ -249,10 +249,16 @@ function drawJobs() {
     const [id, role] = card.dataset.key.split(':');
     const msg = card.querySelector('[data-msg]');
     card.querySelector('[data-invpdf]')?.addEventListener('click', () => openPdf(() => call('jobInvoicePdf', { id, role }), (ex) => { msg.textContent = ex.message; }));
+    const dl = card.querySelector('[data-dl]');
+    if (dl) dl.onclick = async () => {
+      dl.disabled = true;
+      try { const r = await call('jobPhoto', { id, role, download: true }); location.href = r.url; } catch (ex) { msg.textContent = ex.message; }
+      dl.disabled = false;
+    };
     const ph = card.querySelector('[data-photo]');
     if (ph) ph.onclick = async () => {
       ph.disabled = true;
-      try { const r = await call('jobPhoto', { id, role }); card.querySelector('[data-img]').innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener"><img class="photo" alt="Artwork to frame" src="${esc(r.url)}"></a><div class="muted">Tap to open full size (link works for 15 minutes).</div>`; ph.hidden = true; }
+      try { const r = await call('jobPhoto', { id, role }); card.querySelector('[data-img]').innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener"><img class="photo" alt="Artwork to frame" src="${esc(r.url)}" onload="this.closest('[data-img]').querySelector('[data-px]').textContent=this.naturalWidth+' × '+this.naturalHeight+' px'"></a><div class="muted" data-px></div><div class="muted">Tap to open full size (link works for 15 minutes).</div>`; ph.hidden = true; }
       catch (ex) { msg.textContent = ex.message; ph.disabled = false; }
     };
     card.querySelectorAll('[data-a]').forEach((b) => {
@@ -287,6 +293,9 @@ function openRates(back) {
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
        <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin-top:8px"><input type="checkbox" id="rIncl" style="width:auto" ${card.fixingIncluded ? 'checked' : ''}> Fixing (mount, glass, fitting) is included in my frame prices</label>
+       <h3 style="font-size:15px;margin:14px 0 4px">Printing (children's drawings sent as a photo)</h3>
+       <p class="muted" style="font-size:12px;margin:0 0 6px">Your price to print one copy on good matte / fine-art paper from the photo we send (we send the full-size file). Leave blank if you don't print.</p>
+       <table class="rc"><thead><tr><th>Size</th><th>Print price</th></tr></thead><tbody>${PRINT_SIZES.map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>
        <h3 style="font-size:15px;margin:14px 0 4px">If you also deliver: your delivery charge to each emirate (optional)</h3>
        <table class="rc"><thead><tr><th>To</th><th>Small parcel (up to A3 / 40×50)</th><th>Large parcel</th></tr></thead><tbody>
         ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}</tbody></table>`

@@ -34,6 +34,16 @@ export function specOf(e, det) {
   return { style, size, small: SMALL.includes(size) };
 }
 
+// Little Artists: the child's drawing arrives as a photo, so the frame shop prints it (A4 / A3) before framing.
+export const PRINT_SIZES = ['A4', 'A3'];
+/** Copies to print and frame: 2 when the customer chose "a second framed copy". */
+export const copiesOf = (det) => (/second framed copy/i.test(`${det?.Extras || ''}`) ? 2 : 1);
+/** Print price for this spec, or null when the card has none (or the size isn't printed). */
+export function printCost(card, spec) {
+  const v = card.print?.[spec.size];
+  return v == null || v === '' ? null : Number(v);
+}
+
 /** Frame shop's cost for this spec (frame + fixing), or null when its card has no price for it. */
 export function frameCost(card, spec) {
   if (spec.style === 'none') return card.fixing?.[spec.size] != null ? Number(card.fixing[spec.size]) : null;
