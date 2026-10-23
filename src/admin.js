@@ -801,15 +801,30 @@ const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-
 const AFTER_SIVA = ['FRAMING', 'SHIPPED', 'DELIVERED'];
 const needsSiva = (e) => hasArtist(e) && !!e.zohoPOId && e.purchaseState !== 'CANCELLED' && e.refundAction !== 'DAMAGED_REPLACE';
 const sivaDone = (e) => e.artistStage === 'SHIPPED';
+// Order life-cycle. Forward one step at a time; one step back to correct a mistake (before money moves);
+// after payment no way back to the quote stages; Delivered / Refunded / Cancelled close the order.
+//   Received → Price sent → Paid → Being framed → Shipped → Delivered
+//   unpaid: Cancelled (can be reopened) · paid: Refunded · delivered: Replacement (→ framed → shipped → delivered) or Refunded
+const NEXT = {
+  RECEIVED: ['PRICE_SENT', 'CANCELLED'],
+  PRICE_SENT: ['RECEIVED', 'PAID', 'CANCELLED'],
+  PAID: ['PRICE_SENT', 'FRAMING', 'SHIPPED', 'REFUNDED'],
+  FRAMING: ['PAID', 'SHIPPED', 'REFUNDED'],
+  SHIPPED: ['FRAMING', 'DELIVERED', 'REFUNDED'],
+  DELIVERED: ['REPLACEMENT', 'REFUNDED'],
+  REPLACEMENT: ['FRAMING', 'SHIPPED', 'REFUNDED'],
+  REFUNDED: [],
+  CANCELLED: ['RECEIVED', 'PRICE_SENT'],
+};
+const WHY = { RECEIVED: 'already priced', PRICE_SENT: 'not now', PAID: 'send the price first', FRAMING: 'mark Paid first', SHIPPED: 'mark Paid first',
+  DELIVERED: 'ship it first', REPLACEMENT: 'after delivery', REFUNDED: 'not paid', CANCELLED: 'paid: refund instead' };
 function statusBlock(e, k, s) {
   if (k === s) return '';
   if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
-  // Delivered is final: after that only after-sales (a replacement for damage, or a refund).
-  if (s === 'DELIVERED' && !['REPLACEMENT', 'REFUNDED'].includes(k)) return 'already delivered';
-  // Work starts only after payment: Being framed / Shipped / Delivered need the order Paid first.
-  if (['FRAMING', 'SHIPPED', 'DELIVERED'].includes(k) && !isLocked(e) && !['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(s)) return 'mark Paid first';
+  // Moved on without a recorded payment by mistake: it can go back to Price sent.
+  const fixUnpaid = k === 'PRICE_SENT' && !isLocked(e) && ['FRAMING', 'SHIPPED'].includes(s);
+  if (!fixUnpaid && !(NEXT[s] || []).includes(k)) return s === 'DELIVERED' ? 'already delivered' : ['REFUNDED', 'CANCELLED'].includes(s) && !(NEXT[s] || []).length ? 'order closed' : WHY[k] || 'not now';
   if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return 'waiting for Siva';
-  if (k === 'DELIVERED' && !['SHIPPED', 'DELIVERED'].includes(s)) return 'ship it first';
   return '';
 }
 
@@ -1440,19 +1455,30 @@ async function showDetail(e) {
   if ($('reviewBox')) wireReviews($('reviewBox'));
   ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
   $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); doneLock(); });
-  // Delivered (or refunded / cancelled): the order is closed, so its fields are read-only. Still open: the status
-  // (Replacement / Refunded), the message to the customer, actual costs (bills come later) and after-sales.
-  // Choosing Replacement or Refunded opens the fields again.
+  // Fields open and close with the stage:
+  //   payment (paid by, reference, link): open until the payment is recorded
+  //   delivery address: open until Shipped (then it's on the courier's label)
+  //   everything: read-only once Delivered / Refunded / Cancelled (choose Replacement or Refunded to reopen)
+  // Always open: the status, the message to the customer, actual costs (bills come later) and after-sales.
   const doneLock = () => {
-    const closed = ['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(s) && $('eStatus').value === s;
-    const sel = '#ePhone, #ePrice, #ePayMethod, #ePayRef, #eLink, #addrBox input, #addrBox select, #addrBox textarea, #addrBox button, #shipBox input, #shipBox select, #shipBox textarea, #costing input, #costing select, #costing textarea, #costing button, #supplierBox input, #supplierBox select, #supplierBox textarea, #supplierBox button';
-    $('editForm').querySelectorAll(sel).forEach((el) => {
-      if (closed) { if (!el.disabled) { el.disabled = true; el.dataset.doneLock = '1'; } }
+    const t = $('eStatus').value, same = t === s;
+    const closed = ['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(s) && same;
+    const groups = [
+      [closed, '#ePhone, #ePrice, #shipBox input, #shipBox select, #shipBox textarea, #costing input, #costing select, #costing textarea, #costing button, #supplierBox input, #supplierBox select, #supplierBox textarea, #supplierBox button'],
+      [closed || locked, '#ePayMethod, #ePayRef, #eLink'],
+      [closed || (s === 'SHIPPED' && same), '#addrBox input, #addrBox select, #addrBox textarea, #addrBox button'],
+    ];
+    const lockSet = new Set(), all = new Set();
+    for (const [on, sel] of groups) $('editForm').querySelectorAll(sel).forEach((el) => { all.add(el); if (on) lockSet.add(el); });
+    all.forEach((el) => {
+      if (lockSet.has(el)) { if (!el.disabled) { el.disabled = true; el.dataset.doneLock = '1'; } }
       else if (el.dataset.doneLock) { el.disabled = false; delete el.dataset.doneLock; }
     });
     let n = $('doneNote');
-    if (closed && !n) { n = document.createElement('div'); n.id = 'doneNote'; n.className = 'muted'; n.style.fontSize = '12px'; n.innerHTML = `🔒 ${esc(STATUS[s])}: this order is closed, so its details are read-only. For damage or a return, choose <b>Replacement</b> or <b>Refunded</b> to open them again.`; $('eStatus').closest('.two').after(n); }
-    if (!closed && n) n.remove();
+    const text = closed ? `🔒 ${esc(STATUS[s])}: this order is closed, so its details are read-only. For damage or a return, choose <b>Replacement</b> or <b>Refunded</b> to open them again.`
+      : s === 'SHIPPED' && same ? '🔒 Shipped: the delivery address is on the courier\'s label now, so it is read-only.' : '';
+    if (text && !n) { n = document.createElement('div'); n.id = 'doneNote'; n.className = 'muted'; n.style.fontSize = '12px'; $('eStatus').closest('.two').after(n); }
+    if (n) { if (text) n.innerHTML = text; else n.remove(); }
   };
   doneLock();
   // Courier dropdown (works on phones); "Other…" opens a text box. The text box always holds the value saved.
