@@ -293,6 +293,22 @@ function openRates(back) {
         <tr><th colspan="${RC_PARCELS.length + 1}" style="padding-top:12px">Outside the UAE (optional)</th></tr>
         ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th>${pRow(`intl.${z}`, card.intl?.[z])}</tr>`).join('')}</tbody></table>`;
   $('rNotes').value = card.notes || '';
+  // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.
+  $('rEst')?.remove();
+  if (!fr && isAdmin() && viewAs) {
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'rEst'; b.className = 'btn small ghost'; b.style.margin = '0 0 10px';
+    b.textContent = 'Fill with market estimates (until real prices)';
+    b.onclick = () => {
+      const near = [22, 35, 55, 75, 130], far = [32, 45, 65, 90, 150];
+      RC_EMIRATES.forEach((em) => RC_PARCELS.forEach(([k], i) => {
+        const inp = $('rGrid').querySelector(`[data-n="uae.${em}.${k}"]`);
+        if (inp) inp.value = (['Dubai', 'Sharjah', 'Ajman'].includes(em) ? near : far)[i];
+      }));
+      if (!$('rNotes').value.trim()) $('rNotes').value = 'Estimates only, until business rates. Charged on volumetric weight (L×W×H ÷ 5000). Remote areas (Liwa, Ruwais, Western Region, RAK mountains) add about AED 20+. 70×100 may need freight handling. Glass is fragile: pack well or use acrylic for large sizes. Artworks may be excluded from courier cover.';
+      $('rMsg').textContent = 'Estimates filled in. Check them, then press Save my price list.';
+    };
+    $('rGrid').before(b);
+  }
   $('rErr').textContent = ''; $('rMsg').textContent = card.at ? `Last saved ${new Date(card.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
   show('ratesView');
 }
