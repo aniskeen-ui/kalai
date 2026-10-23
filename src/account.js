@@ -903,6 +903,13 @@ async function showDailyMessage() {
     if (rot) { rot.style.cursor = 'pointer'; rot.title = 'Next language'; rot.onclick = () => { if (!fixed) { next(); restart(); } }; }
     box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); };
     tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); show(lang, false); restart(); };
+    // On an artwork page the card would cover the buttons: fold it into the small tab while the page is open.
+    const modal = document.getElementById('modal');
+    let autoFolded = false;
+    if (modal) new MutationObserver(() => {
+      if (!modal.hidden && !box.hidden) { box.hidden = true; tab.hidden = false; autoFolded = true; }
+      else if (modal.hidden && autoFolded) { autoFolded = false; box.hidden = false; tab.hidden = true; show(lang, false); restart(); }
+    }).observe(modal, { attributes: true, attributeFilter: ['hidden'] });
     const more = box.querySelector('.kmsg-more'), pick = box.querySelector('.kmsg-pick');
     if (more) {
       more.onclick = () => { more.hidden = true; pick.hidden = false; pick.focus(); };
