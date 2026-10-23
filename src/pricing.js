@@ -149,6 +149,31 @@ function readMaster() {
   document.querySelectorAll('[data-pf]').forEach((i) => { const [k, f] = i.dataset.pf.split('|'); P[k][f] = num(i.value) ?? 0; });
 }
 
+// Market check for one work: Kalai's band for its size and medium; the proposed price lifts a cost-based price that
+// is below the band to the middle of the band (rounded up to Dhs 25). Above the band it stays, flagged.
+function marketOf(w, b) {
+  const md = mediumOf(w), mk = market[b.tier] || DEFAULT_MARKET[b.tier], band = mk?.[md] || [0, 0];
+  const cost = b.styles.black?.price;
+  if (cost == null) return { band, md, cost: null, proposed: null, verdict: '' };
+  const mid = Math.ceil((band[0] + band[1]) / 2 / 25) * 25;
+  const verdict = cost < band[0] ? 'below' : cost > band[1] ? 'above' : 'inside';
+  return { band, md, cost, proposed: verdict === 'below' ? mid : cost, verdict };
+}
+/** Full price list (frame sizes × styles) from the final prices at the base frame size. */
+function matrixFor(w, o, fin) {
+  const b = build(w, o), pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0), out = {};
+  for (const fs of sizesFrom(b.fsize)) {
+    const bb = build(w, { ...o, fsize: fs });
+    out[fs] = Object.fromEntries(STYLES.filter((x) => x.k !== 'none').map((x) => {
+      const extra = (bb.styles[x.k].cost - b.styles[x.k].cost) * (1 + b.margin) / (1 - pct);
+      return [x.k, fs === b.fsize ? fin[x.k] : fin[x.k] + Math.ceil(extra / 25) * 25];
+    }));
+  }
+  return { v: 2, base: b.fsize, none: fin.none, sizes: out };
+}
+const picked = new Set();
+let bulkNote = '';
+
 function drawList() {
   const rows = works.filter((w) => filter === 'ALL' || stateOf(w)[0] === filter || (filter === 'TODO' && stateOf(w)[0] === 'CHANGED'))
     .sort((a, b) => String(a.code).localeCompare(String(b.code)));
@@ -156,21 +181,63 @@ function drawList() {
   $('pcTabs').innerHTML = [['TODO', 'To approve'], ['LIVE', 'On website'], ['WAIT', 'Waiting for artist price'], ['ALL', 'All']]
     .map(([k, l]) => `<button type="button" data-f="${k}" aria-pressed="${k === filter}">${l}${k !== 'ALL' ? ` <b>${counts[k]}</b>` : ''}</button>`).join('');
   $('pcTabs').querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => { filter = b.dataset.f; openId = null; drawList(); }; });
-  if (!rows.length) { $('pcList').innerHTML = `<p class="muted">${filter === 'TODO' ? 'Nothing to approve. Works appear here once the artist gives his price under "My works & prices".' : 'Nothing here.'}</p>`; return; }
-  $('pcList').innerHTML = `<div class="tablewrap"><table class="pc-table"><thead><tr><th></th><th>Work</th><th>Size</th><th>Artist</th><th>Suggested (black frame)</th><th>On website</th><th></th></tr></thead><tbody>
+  if (!rows.length) { $('pcList').innerHTML = `${bulkNote ? `<p class="ok">${esc(bulkNote)}</p>` : ''}<p class="muted">${filter === 'TODO' ? 'Nothing to approve. Works appear here once the artist gives his price under "My works & prices".' : 'Nothing here.'}</p>`; return; }
+  for (const id of [...picked]) if (!rows.some((w) => w.id === id)) picked.delete(id);
+  $('pcList').innerHTML = `<div class="pc-bulk">
+      <label><input type="checkbox" id="pcAll" ${rows.length && rows.every((w) => picked.has(w.id)) ? 'checked' : ''}> Select all shown</label>
+      <b id="pcPickN">${picked.size} selected</b>
+      <button class="btn small" type="button" id="pcBulkMarket">Approve selected at the proposed price</button>
+      <button class="btn small ghost" type="button" id="pcBulkCost">Approve selected at the cost-based price</button>
+      <span class="muted" id="pcBulkMsg" style="font-size:12px">${bulkNote ? esc(bulkNote) : 'All frame styles and sizes follow from the black-frame price. Open a work with Calculate to fine-tune.'}</span></div>
+    <div class="tablewrap"><table class="pc-table"><thead><tr><th></th><th></th><th>Work</th><th>Size</th><th>Artist</th><th>Cost-based (black frame)</th><th>Market check</th><th>Proposed price</th><th>On website</th><th></th></tr></thead><tbody>
     ${rows.map((w) => {
-      const b = build(w), m = matrixOf(w), [st, label] = stateOf(w);
-      return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><img data-key="${esc(w.imageKey)}" alt=""></td>
+      const b = build(w), m = matrixOf(w), [st, label] = stateOf(w), mc = marketOf(w, b);
+      return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><input type="checkbox" data-pick="${esc(w.id)}" ${picked.has(w.id) ? 'checked' : ''} ${b.artistAed == null ? 'disabled title="No artist price yet"' : ''}></td><td><img data-key="${esc(w.imageKey)}" alt=""></td>
         <td><b>${esc(w.named ? w.title : 'Untitled')}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
         <td>${esc(w.size || '–')}<br><span class="muted" style="font-size:11px">${b.tier} · ${mediumOf(w) === 'sk' ? 'sketch' : 'watercolour'}</span></td>
         <td class="mono">${b.inr != null ? '₹' + Number(b.inr).toLocaleString('en-IN') : '–'}</td>
         <td class="mono">${aed(b.styles.black?.price)}</td>
+        <td style="font-size:12px">${mc.cost == null ? '–' : `${aed(mc.band[0])}–${aed(mc.band[1])}<br><span class="pc-st ${mc.verdict === 'inside' ? 'LIVE' : 'TODO'}">${mc.verdict === 'below' ? 'below the band' : mc.verdict === 'above' ? 'above the band' : 'inside the band'}</span>`}</td>
+        <td class="mono"><b>${aed(mc.proposed)}</b></td>
         <td class="mono">${m ? aed(basePrice(m, 'black')) : '–'}${m?.v === 2 ? ` <span class="muted" style="font-size:11px">${esc(m.base)}</span>` : ''}<br><span class="pc-st ${st}">${label}</span></td>
         <td><button class="btn small ghost" type="button" data-open="${esc(w.id)}">${w.id === openId ? 'Close' : 'Calculate'}</button></td></tr>
-        ${w.id === openId ? `<tr class="pc-open"><td colspan="7" id="pcCalc"></td></tr>` : ''}`;
+        ${w.id === openId ? `<tr class="pc-open"><td colspan="10" id="pcCalc"></td></tr>` : ''}`;
     }).join('')}</tbody></table></div>`;
   $('pcList').querySelectorAll('img[data-key]').forEach(async (img) => { try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* none */ } });
   $('pcList').querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { openId = openId === b.dataset.open ? null : b.dataset.open; drawList(); }; });
+  const countPick = () => { $('pcPickN').textContent = `${picked.size} selected`; };
+  $('pcList').querySelectorAll('[data-pick]').forEach((c) => { c.onchange = () => { c.checked ? picked.add(c.dataset.pick) : picked.delete(c.dataset.pick); countPick(); }; });
+  $('pcAll').onchange = () => { rows.forEach((w) => { if (build(w).artistAed == null) return; $('pcAll').checked ? picked.add(w.id) : picked.delete(w.id); }); drawList(); };
+  const bulk = async (useMarket) => {
+    bulkNote = '';
+    const list = rows.filter((w) => picked.has(w.id));
+    if (!list.length) { $('pcBulkMsg').textContent = 'Tick the works to approve first.'; return; }
+    $('pcBulkMarket').disabled = true; $('pcBulkCost').disabled = true;
+    let ok = 0; const bad = [];
+    for (const w of list) {
+      const ap = prices.get(w.id); let saved = {}; try { saved = ap?.calc ? JSON.parse(ap.calc) : {}; } catch { saved = {}; }
+      const o = { tier: saved.tier || tierOf(w.size), fsize: saved.fsize || fitFrame(w.size), courier: saved.courier ?? null, margin: saved.margin ?? null };
+      const b = build(w, o);
+      if (b.artistAed == null) { bad.push(w.code); continue; }
+      const mc = marketOf(w, b), diff = useMarket ? mc.proposed - b.styles.black.price : 0;
+      const fin = Object.fromEntries(STYLES.map((x) => [x.k, Math.ceil((b.styles[x.k].price + diff) / 25) * 25]));
+      const matrix = matrixFor(w, o, fin), now = new Date().toISOString();
+      try {
+        const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
+        if (r1.errors?.length) throw new Error(r1.errors[0].message);
+        Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now });
+        const rec = { productId: w.id, calc: JSON.stringify({ ...o, master: P, at: now, bulk: useMarket ? 'market' : 'cost' }), approvedAt: now };
+        const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: 'INR', ...rec });
+        if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });
+        ok++; picked.delete(w.id);
+      } catch { bad.push(w.code); }
+      $('pcBulkMsg').textContent = `Approving… ${ok} of ${list.length}`;
+    }
+    bulkNote = `${ok} works now priced on the website.${bad.length ? ` Not done: ${bad.join(', ')}` : ''}`;
+    drawList();
+  };
+  $('pcBulkMarket').onclick = () => bulk(true);
+  $('pcBulkCost').onclick = () => bulk(false);
   if (openId) drawCalc(works.find((w) => w.id === openId));
 }
 
