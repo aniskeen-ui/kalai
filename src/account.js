@@ -791,12 +791,19 @@ const KURAL_TITLE = { ta: 'இன்றைய திருக்குறள்'
   mr: 'आजचे तिरुक्कुरल', gu: 'આજનું તિરુક્કુરલ', pa: 'ਅੱਜ ਦਾ ਤਿਰੁੱਕੁਰਲ', si: 'අද දින තිරුක්කුරල්', ne: 'आजको तिरुक्कुरल', fa: 'تیروکورال امروز',
   de: 'Thirukkural des Tages', es: 'Thirukkural del día', it: 'Il Thirukkural del giorno', pt: 'Thirukkural do dia', tr: 'Günün Thirukkural’ı',
   ja: '今日のティルックラル', ko: '오늘의 티루쿠랄', id: 'Thirukkural hari ini', ms: 'Thirukkural hari ini' };
-const RTL = ['ar', 'ur', 'fa'];
+const RTL = ['ar', 'ur', 'fa', 'fa-AF', 'he', 'ps'];
 // The visitor's own language (browser setting), if the kural has it; ?klang=hi to preview one.
 function visitorLang(have) {
   const q = new URLSearchParams(location.search).get('klang');
+  const keys = Object.keys(have).filter((k) => k !== '_h'), byLower = Object.fromEntries(keys.map((k) => [k.toLowerCase(), k]));
+  const alias = { fil: 'tl', iw: 'he', nb: 'no', nn: 'no', 'zh-hk': 'zh-TW', 'zh-mo': 'zh-TW', 'zh-hant': 'zh-TW', 'es-419': 'es-MX', 'pt-br': 'pt', 'fa-af': 'fa-AF', prs: 'fa-AF' };
   const list = [q, ...(navigator.languages || [navigator.language || ''])].filter(Boolean).map((x) => String(x).toLowerCase());
-  for (const x of list) { const l = x.startsWith('fil') ? 'tl' : x.slice(0, 2); if (['ta', 'en', 'ar'].includes(l)) return ''; if (have[l]) return l; }
+  for (const x of list) {
+    const base = x.split('-')[0];
+    if (['ta', 'en', 'ar'].includes(base)) return '';
+    const l = byLower[x] || byLower[alias[x]?.toLowerCase()] || byLower[alias[base]?.toLowerCase()] || (x.startsWith('zh-') && x.includes('tw') ? byLower['zh-tw'] : '') || byLower[base];
+    if (l) return l;
+  }
   return '';
 }
 const LANG_LABEL = { ta: 'தமிழ்', en: 'English', ar: 'العربية' };
@@ -850,7 +857,8 @@ async function showDailyMessage() {
     const tab = document.createElement('button');
     tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true;
     document.body.append(box, tab);
-    const title = (l) => (kural ? KURAL_TITLE : MSG_TITLE)[l];
+    let heads = {}; try { heads = JSON.parse(extra._h || '{}') || {}; } catch { heads = {}; }
+    const title = (l) => (kural ? KURAL_TITLE[l] || heads[l] || KURAL_TITLE.en : MSG_TITLE[l]);
     // Thiruvalluvar picture: the one uploaded in Order Management → Messages, else our emblem.
     let picture = '/valluvar.svg';
     if (kural) { try { picture = (await getUrl({ path: 'catalogue/site/thiruvalluvar.jpg', options: { expiresIn: 3600, validateObjectExistence: true } })).url.toString(); } catch { picture = '/valluvar.svg'; } }

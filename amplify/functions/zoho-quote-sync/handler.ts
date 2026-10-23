@@ -2615,7 +2615,11 @@ async function refreshInr() {
 }
 
 // Amazon Translate codes. Each day's meaning is translated from the plain English meaning, not the poem.
-const KURAL_MORE = ['hi', 'ml', 'ur', 'tl', 'bn', 'te', 'kn', 'mr', 'gu', 'pa', 'si', 'ne', 'fa', 'ru', 'fr', 'de', 'es', 'it', 'pt', 'tr', 'zh', 'ja', 'ko', 'id', 'ms'];
+// Every language Amazon Translate offers (besides Tamil, English and Arabic, which are always shown).
+const KURAL_MORE = ['af', 'sq', 'am', 'hy', 'az', 'bn', 'bs', 'bg', 'ca', 'zh', 'zh-TW', 'hr', 'cs', 'da', 'fa-AF', 'nl', 'et', 'fa', 'tl', 'fi',
+  'fr', 'fr-CA', 'ka', 'de', 'el', 'gu', 'ht', 'ha', 'he', 'hi', 'hu', 'is', 'id', 'ga', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml',
+  'mt', 'mr', 'mn', 'no', 'ps', 'pl', 'pt', 'pt-PT', 'pa', 'ro', 'ru', 'sr', 'si', 'sk', 'sl', 'so', 'es', 'es-MX', 'sw', 'sv', 'te', 'th', 'tr',
+  'uk', 'ur', 'uz', 'vi', 'cy'];
 async function dailyKural(force: boolean) {
   const table = process.env.ANNOUNCE_TABLE;
   if (!table) throw new Error('Not configured');
@@ -2639,9 +2643,20 @@ async function dailyKural(force: boolean) {
   try { if (en) ar = (await translator.send(new TranslateTextCommand({ Text: en, SourceLanguageCode: 'en', TargetLanguageCode: 'ar' }))).TranslatedText ?? ''; } catch { ar = ''; }
   // The same meaning in the languages most visitors in the UAE read; the website shows the visitor's own one as a fourth.
   const more: Record<string, string> = {};
-  if (en) await Promise.all(KURAL_MORE.map(async (l) => {
-    try { const t = (await translator.send(new TranslateTextCommand({ Text: en, SourceLanguageCode: 'en', TargetLanguageCode: l }))).TranslatedText ?? ''; if (t) more[l] = `${t}\n— Thirukkural ${n}`; } catch { /* that language is skipped today */ }
+  // The heading too ("Thirukkural of the day"), for languages the website has no heading of its own for. 10 at a time.
+  const heads: Record<string, string> = {};
+  const tr = async (text: string, l: string) => (await translator.send(new TranslateTextCommand({ Text: text, SourceLanguageCode: 'en', TargetLanguageCode: l }))).TranslatedText ?? '';
+  if (en) for (let i = 0; i < KURAL_MORE.length; i += 10) await Promise.all(KURAL_MORE.slice(i, i + 10).map(async (l) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const [t, h] = await Promise.all([tr(en, l), tr('Thirukkural of the day', l)]);
+        if (t) more[l] = `${t}\n— Thirukkural ${n}`;
+        if (h) heads[l] = h;
+        return;
+      } catch { await new Promise((ok) => setTimeout(ok, 400)); } // busy: once more, else skipped today
+    }
   }));
+  if (Object.keys(heads).length) more._h = JSON.stringify(heads);
   // Yesterday's kural comes down; the studio's own messages are left alone.
   for (const x of (await scanAll(table)).filter((x) => str(x, 'source') === 'KURAL' && x.active?.BOOL && str(x, 'id') !== id)) {
     await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(x, 'id') } }, UpdateExpression: 'SET active = :f', ExpressionAttributeValues: { ':f': { BOOL: false } } }));
