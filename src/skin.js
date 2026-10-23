@@ -4,7 +4,9 @@ import { generateClient } from 'aws-amplify/data';
 
 const CSS = `
 html[data-skin="green"]{--ink:#1d4a2e;--gold:#6b8e23;--on-ink:#ffffff}
-html[data-skin="green"]:not([data-theme="dark"]){--bg:#f7f8f4;--surface:#ffffff;--sunk:#eef1e8;--line:#dfe5d8;--gold-soft:#eef3e1}
+/* Light backgrounds only in light mode: a phone in dark mode keeps dark backgrounds, so the light text stays readable. */
+html[data-skin="green"][data-theme="light"]{--bg:#f7f8f4;--surface:#ffffff;--sunk:#eef1e8;--line:#dfe5d8;--gold-soft:#eef3e1}
+@media (prefers-color-scheme:light){html[data-skin="green"]:not([data-theme="dark"]){--bg:#f7f8f4;--surface:#ffffff;--sunk:#eef1e8;--line:#dfe5d8;--gold-soft:#eef3e1}}
 @media (prefers-color-scheme:dark){html[data-skin="green"]:not([data-theme="light"]){--ink:#0f2418;--gold:#9cc24a;--gold-soft:#24301a}}
 html[data-skin="green"][data-theme="dark"]{--ink:#0f2418;--gold:#9cc24a;--gold-soft:#24301a}
 html[data-skin="green"] header.top{border-top:4px solid #5f8a1e}`;
