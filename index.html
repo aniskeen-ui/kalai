@@ -961,6 +961,12 @@ function priceOf(p,style,fsize){const m=p.prices;if(!m)return null;
   if(m.v===2){if(style==="none")return m.none;const row=m.sizes[fsize]||m.sizes[m.base];return row?row[style]:null}
   return m[style]}
 function baseSize(p){return p.prices&&p.prices.v===2?p.prices.base:""}
+/* Frame sizes the customer can pick. The original keeps its real size, so a bigger frame only widens the white mount:
+   offer sizes with a mount of up to about 15 cm a side (on average). Without the work's size: the base and one up. */
+function sizesFor(p){if(!(p.prices&&p.prices.v===2))return[];const all=Object.keys(p.prices.sizes);
+  if(!/\d+\s*[×x]\s*\d+/.test(String(p.size||""))){const i=FRAME_SIZES.findIndex(x=>x[0]===p.prices.base);return all.filter(f=>{const j=FRAME_SIZES.findIndex(x=>x[0]===f);return j===i||j===i+1})}
+  const a=Math.min(p.wcm,p.hcm),b=Math.max(p.wcm,p.hcm);
+  return all.filter(f=>{if(f===p.prices.base)return true;const z=FRAME_SIZES.find(x=>x[0]===f);return z&&((z[1]-a)+(z[2]-b))/4<=15})}
 /** outside size of the chosen frame (cm), turned to match the artwork. */
 function frameDims(p){const f=FRAME_SIZES.find(x=>x[0]===(FSIZE||baseSize(p)));if(!f||FRAME.k==="none")return null;
   return p.wcm>=p.hcm?[f[2],f[1]]:[f[1],f[2]]}
@@ -975,7 +981,7 @@ function leadText(p){let d=p.leadDays,x=p.leadMax!=null?p.leadMax:d;
   return `${ready} · delivered in the UAE in about ${d+7}–${x+10} days (worldwide: we confirm the time)`}
 function framedHtml(p){
   const W=p.wcm||40,H=p.hcm||30,fd=frameDims(p);
-  const sizes=p.prices&&p.prices.v===2?Object.keys(p.prices.sizes):[];
+  const sizes=sizesFor(p);
   const big=sizes.length?FRAME_SIZES.find(f=>f[0]===sizes[sizes.length-1]):null;
   const bigD=big?(W>=H?[big[2],big[1]]:[big[1],big[2]]):fd||[W+16,H+16];
   const st=document.getElementById("vStage"),availW=Math.min(((st&&st.clientWidth)||560)-24,900),availH=Math.min(innerHeight*.68,700);
@@ -1015,7 +1021,7 @@ function openModal(p){
       <div class="vtools"><div class="vtabs" role="group" aria-label="Choose view"><button type="button" data-v="art" aria-pressed="true"><img src="${p.img}" alt="">Artwork</button><button type="button" data-v="frame" aria-pressed="false"><img src="${p.img}" alt="" style="border:6px solid #3b2a1d;box-sizing:border-box">Try a frame</button><button type="button" data-v="room" aria-pressed="false"><img src="${p.img}" alt="" style="padding:14px 18px 24px;background:#e3dccd;object-fit:contain;box-sizing:border-box">On a wall</button></div>
         <div class="vtabs"><button type="button" id="vLens" aria-pressed="${LENS}" title="Move over the picture to look closer">🔍 Lens</button></div></div>
       <div class="fchips" id="vFrames" hidden role="group" aria-label="Frame">${FRAMES.map(f=>`<button type="button" data-fr="${f.k}" aria-pressed="${f.k===FRAME.k}"><i style="--sw:${f.sw}"></i>${f.n}</button>`).join("")}<label><input type="checkbox" id="vMount" ${MOUNT?"checked":""}> White mount</label></div>
-      ${p.prices&&p.prices.v===2&&Object.keys(p.prices.sizes).length>1?`<div class="fchips" id="vSizes" hidden role="group" aria-label="Frame size"><span class="note" style="font-size:12px">Frame size</span>${Object.keys(p.prices.sizes).map(f=>`<button type="button" data-fs="${f}" aria-pressed="${f===p.prices.base}">${f} cm</button>`).join("")}</div>`:""}
+      ${sizesFor(p).length>1?`<div class="fchips" id="vSizes" hidden role="group" aria-label="Frame size"><span class="note" style="font-size:12px">Frame size</span>${sizesFor(p).map(f=>`<button type="button" data-fs="${f}" aria-pressed="${f===p.prices.base}">${f} cm</button>`).join("")}</div>`:""}
       <div class="stage" id="vStage"></div>
       <p class="room-cap" id="vCap">Photo of the original by the artist.</p>
     </div>
@@ -1026,7 +1032,7 @@ function openModal(p){
      ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; ${p.leadDays!=null?`it is ready in about ${p.leadDays}${p.leadMax&&p.leadMax!==p.leadDays?`–${p.leadMax}`:""} days, delivered about a week later`:"allow about 2–3 weeks before dispatch"}.</div>`:""}
      ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>
      <div class="pick-row"><label>Frame<select id="pkStyle">${FRAMES.map(f=>`<option value="${f.k}">${f.n}</option>`).join("")}</select></label>
-       ${p.prices.v===2&&Object.keys(p.prices.sizes).length>1?`<label id="pkSizeL">Frame size<select id="pkSize">${Object.keys(p.prices.sizes).map(f=>`<option value="${f}">${f} cm</option>`).join("")}</select></label>`:""}</div>`:""}
+       ${sizesFor(p).length>1?`<label id="pkSizeL">Frame size<select id="pkSize">${sizesFor(p).map(f=>`<option value="${f}">${f} cm</option>`).join("")}</select></label>`:""}</div>`:""}
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
      <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size?p.size+" (artwork)":"Ask us"}</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
@@ -1049,7 +1055,7 @@ function openModal(p){
   const show=v=>{cur=v;box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
     box.querySelector("#vFrames").hidden=v==="art";if(box.querySelector("#vSizes"))box.querySelector("#vSizes").hidden=v==="art"||FRAME.k==="none";box.querySelector(".viewer").classList.toggle("lens-on",LENS&&v!=="room");
     if(v==="art"){stage.innerHTML="";stage.appendChild(mk(p));cap.textContent=(p.ai?"AI-generated preview of the design. Your artwork is painted by hand by our artist from it, so the finished piece will differ a little.":"Photo of the original by the artist.")+lensTip();}
-    else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+(p.prices?" A preview of the look; the price above is for this frame.":" A preview of the look: we confirm the exact frame and its price with you.")+lensTip();}
+    else if(v==="frame"){stage.innerHTML=framedHtml(p);cap.textContent=(FRAME.k==="none"?"Unframed.":`${FRAME.n} frame${MOUNT?" with a white mount":""}.`)+(p.prices?" A preview of the look; the price above is for this frame.":" A preview of the look: we confirm the exact frame and its price with you.")+(FRAME.k!=="none"&&FSIZE&&FSIZE!==baseSize(p)?` The artwork keeps its real size${p.size?` (${p.size})`:""}: a bigger frame gives it a wider white mount.`:"")+lensTip();}
     else{stage.innerHTML=roomView(p);cap.textContent=`Shown to scale above a 2 m sofa, ${FRAME.k==="none"?"unframed":`${FRAME.n.toLowerCase()} frame${MOUNT?" and mount":""} (${frameDims(p)?`${frameDims(p)[0]} × ${frameDims(p)[1]}`:`about ${p.wcm+16} × ${p.hcm+16}`} cm framed)`}. Pick a frame above to see it on the wall.`;}
     window.kalaiFrameChoice=v==="art"?window.kalaiFrameChoice:(FRAME.k==="none"?"Unframed":FRAME.n+(MOUNT?" frame, white mount":" frame, no mount"));
     if(p.prices&&document.getElementById("mPrice")){const k=v==="art"&&!window.kalaiPriceStyle?"black":FRAME.k;if(v!=="art")window.kalaiPriceStyle=k;const st=window.kalaiPriceStyle||k;
