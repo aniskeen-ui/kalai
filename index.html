@@ -915,6 +915,10 @@ function frameDims(p){const f=FRAME_SIZES.find(x=>x[0]===(FSIZE||baseSize(p)));i
   return p.wcm>=p.hcm?[f[2],f[1]]:[f[1],f[2]]}
 /** Framed preview drawn to scale (cm): the artwork keeps its size and a bigger frame really looks bigger.
  *  One scale for all the frame sizes on offer, so switching sizes is a fair comparison. */
+/* delivery time: the artist's days to have it ready (his desk) + about a week for courier to Dubai, framing and delivery */
+function leadText(p){const d=p.leadDays;
+  if(d==null)return p.ai?"Painted by hand to order · delivered in about 2–3 weeks":p.ship;
+  const lo=d+7,hi=d+10;return `${d===0?"Ready now":`Ready in ${d} day${d===1?"":"s"} at the artist's studio`} · delivered in the UAE in about ${lo}–${hi} days`}
 function framedHtml(p){
   const W=p.wcm||40,H=p.hcm||30,fd=frameDims(p);
   const sizes=p.prices&&p.prices.v===2?Object.keys(p.prices.sizes):[];
@@ -965,14 +969,14 @@ function openModal(p){
      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · ${p.ai?"Hand-painted to order":"One"} of a kind</div>
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
-     ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; allow about 2–3 weeks before dispatch.</div>`:""}
+     ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; ${p.leadDays!=null?`it is ready in about ${p.leadDays} days, delivered about a week later`:"allow about 2–3 weeks before dispatch"}.</div>`:""}
      ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>
      <div class="pick-row"><label>Frame<select id="pkStyle">${FRAMES.map(f=>`<option value="${f.k}">${f.n}</option>`).join("")}</select></label>
        ${p.prices.v===2&&Object.keys(p.prices.sizes).length>1?`<label id="pkSizeL">Frame size<select id="pkSize">${Object.keys(p.prices.sizes).map(f=>`<option value="${f}">${f} cm</option>`).join("")}</select></label>`:""}</div>`:""}
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
      <dl class="spec"><dt>Medium</dt><dd>${p.medium}</dd><dt>Size</dt><dd>${p.size?p.size+" (artwork)":"Ask us"}</dd>
        <dt>Framing</dt><dd>Available framed, ready to hang, or unframed</dd><dt>Subject</dt><dd>${SUBJECTS[p.subject]}</dd>
-       <dt>Dispatch</dt><dd>${p.ai?"Painted by hand to order · about 2–3 weeks":p.ship}</dd></dl>
+       <dt>Delivery</dt><dd>${leadText(p)}</dd></dl>
      <div class="badges">
        <div class="badge"><i>✦</i><div><b>Original &amp; signed</b>Hand-made by the artist, not a print</div></div>
        <div class="badge"><i>✓</i><div><b>Certificate of authenticity</b>Signed certificate with every original</div></div>

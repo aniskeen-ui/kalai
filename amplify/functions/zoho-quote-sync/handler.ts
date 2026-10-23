@@ -2406,7 +2406,7 @@ async function artistWorks(ev: ApiEvent) {
     const items = (await scanAll(table)).filter((x) => str(x, 'status') !== 'HIDDEN' && str(x, 'imageKey'));
     const prices = new Map(ptab ? (await scanAll(ptab)).map((x) => [str(x, 'productId'), x] as const) : []);
     return {
-      works: items.map((x) => { const pr = prices.get(str(x, 'id')); return { id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named'), code: str(x, 'code'), artistPrice: num(pr, 'artistPrice'), currency: str(pr, 'currency') || 'INR' }; })
+      works: items.map((x) => { const pr = prices.get(str(x, 'id')); return { id: str(x, 'id'), title: str(x, 'named') ? str(x, 'title') : '', kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named'), code: str(x, 'code'), leadDays: num(x, 'leadDays'), artistPrice: num(pr, 'artistPrice'), currency: str(pr, 'currency') || 'INR' }; })
         .sort((a, b) => Number(!!a.named) - Number(!!b.named) || a.id.localeCompare(b.id)),
     };
   }
@@ -2419,6 +2419,8 @@ async function artistWorks(ev: ApiEvent) {
     if (!got.Item) throw new Error('Work not found');
     const set: Record<string, string> = priceOnly ? { updatedAt: new Date().toISOString() } : { title, named: `${actor(ev)} ${new Date().toISOString()}`, updatedAt: new Date().toISOString() };
     const size = txt(d.size, 40), description = txt(d.description, 1000);
+    const lead = d.leadDays === '' || d.leadDays == null ? null : Math.round(Number(d.leadDays));
+    if (lead != null && !(lead >= 0 && lead <= 120)) throw new Error('Ready in: enter days from 0 to 120.');
     if (size) set.size = size;
     if (description) set.description = description;
     // The artist's own price (INR) for this work, kept apart from the public catalogue.
@@ -2436,6 +2438,7 @@ async function artistWorks(ev: ApiEvent) {
     const names: Record<string, string> = {}; const values: Record<string, AttributeValue> = {};
     const parts = Object.entries(set).map(([k, v], i) => { names[`#w${i}`] = k; values[`:w${i}`] = { S: v }; return `#w${i} = :w${i}`; });
     await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+    if (lead != null) await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: 'SET leadDays = :l', ExpressionAttributeValues: { ':l': { N: String(lead) } } }));
     return { ok: true, id, ...set };
   }
   throw new Error('Unknown action');
