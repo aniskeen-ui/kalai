@@ -1254,8 +1254,8 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   window.kalaiPrintInfo=id=>{const it=PRINTS.find(x=>String(x.id)===String(id));if(!it)return null;return{from:from(it),sizes:sizesOf(it).map(z=>[z[1],price(z,"black",it),price(z,"none",it)])}};
   function openPrint(p){if(!p)return;const SZ=sizesOf(p);const box=document.getElementById("modalBox");box.className="box wide";
     box.innerHTML=`<button class="x xtop" id="mClose" aria-label="Close">×</button><button type="button" class="ap-back" id="mBack">← Back to the prints</button>
-     <div class="viewer"><div class="stage"><div class="kframe" id="prFrame" style="max-width:420px;margin:auto"><div class="kmount" id="prMount"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" style="width:100%;display:block"></div></div></div>
-      <p class="room-cap">A preview of the look. Printed on matte fine-art paper from our full-size file.</p></div>
+     <div class="viewer"><div class="stage"><div class="kframe" id="prFrame" style="width:260px;max-width:100%;margin:auto;transition:width .35s ease"><div class="kmount" id="prMount"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" style="width:100%;display:block"></div></div></div>
+      <p class="room-cap" id="prCap">A preview of the look. Printed on matte fine-art paper from our full-size file.</p></div>
      <div class="info"><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.painting?"Framed print · fine-art print of the painting":"Framed print · fine-art photographic print"}</div>
       <h2 style="font-size:30px">${esc2(p.name)}</h2>${p.code?`<p class="note" style="margin:0" class="mono">${esc2(p.code)}</p>`:""}
       <div class="pprice"><b id="prPrice"></b> <span class="note" id="prNote"></span></div>
@@ -1273,7 +1273,9 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
       <p class="note" style="margin:0">This is a print, not an original${p.painting?": the original painting is sold separately":" painting"}. Each print is made to order and framed in Dubai.</p></div>`;
     const upd=()=>{const z=SZ.find(x=>x[0]===box.querySelector("#prSize").value),f=box.querySelector("#prFr").value,q=+box.querySelector("#prQty").value;
       box.querySelector("#prPrice").innerHTML=moneyH(price(z,f,p)*q);box.querySelector("#prNote").textContent=`${f==="none"?"print only":FR.find(x=>x[0]===f)[1].toLowerCase()}, ${z[0]}${q>1?` × ${q}`:""} · delivered in the UAE`;
-      box.querySelector("#prMatBox").hidden=f==="none";box.querySelector("#prFrame").className="kframe "+(f==="wood"?"":f==="none"?"white":f);
+      box.querySelector("#prMatBox").hidden=f==="none";
+      {const zw=String(z[0]).match(/^(\d+)×(\d+)/),cm=z[0]==="A4"?[21,30]:z[0]==="A3"?[30,42]:zw?[+zw[1],+zw[2]]:[30,42];const px=Math.round(420*Math.pow(cm[0]/60,0.7));
+       box.querySelector("#prFrame").style.width=px+"px";box.querySelector("#prCap").textContent=`Shown to scale against the other sizes: ${cm[0]} × ${cm[1]} cm${f==="none"?" print":" framed"}. A preview of the look, printed on matte fine-art paper from our full-size file.`;}box.querySelector("#prFrame").className="kframe "+(f==="wood"?"":f==="none"?"white":f);
       box.querySelector("#prMount").style.padding=f==="none"?"0":box.querySelector("#prMat").checked?"":"0";
       [...box.querySelector("#prSize").options].forEach(o=>{const zz=SZ.find(x=>x[0]===o.value);o.textContent=`${zz[1]} · ${price(zz,f,p)} Dhs`});};
     ["prSize","prFr","prQty","prMat"].forEach(id=>box.querySelector("#"+id).addEventListener("change",upd));upd();
