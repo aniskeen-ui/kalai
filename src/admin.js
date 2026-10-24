@@ -1669,11 +1669,28 @@ async function showDetail(e) {
         <span class="muted" style="font-size:12px">${e.ziinaIntentId ? 'Created by Ziina automatically. Change the price and save again (still Price sent) to get a new link.' : 'Leave empty and save as <b>Price sent</b>: the Ziina link is made for you and emailed to the customer.'}</span></div>
       <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
       <div class="ok" id="saveMsg" role="status"></div>
-      <button class="btn" type="submit">Save and update customer</button>
+      <div class="muted" id="autoHint" style="font-size:12px;color:var(--gold)" hidden></div>
+      <button class="btn" type="submit" id="eSave">Save and update customer</button>
     </form>
     <div class="links" id="waLinks"></div>`;
 
   wireDiscount(e);
+  // Automatic next status from what was just done on the desk (unless the status was changed by hand):
+  // price entered on a new enquiry → Price sent (the customer gets the price and Ziina link);
+  // payment method + reference entered while waiting for payment → Paid.
+  const autoNext = () => {
+    const s = e.status || 'RECEIVED'; // the saved status (kept up to date after each save)
+    if ($('eStatus').value !== s || priceLocked(e) && s !== 'PRICE_SENT') return '';
+    const opt = (k) => { const o = [...$('eStatus').options].find((x) => x.value === k); return o && !o.disabled ? k : ''; };
+    if (s === 'RECEIVED' && Number(finalPriceStr()) > 0 && e.kind !== 'LICENCE') return opt('PRICE_SENT');
+    if (s === 'PRICE_SENT' && $('ePayMethod').value && ($('ePayRef').value.trim() || $('ePayMethod').value === 'CASH')) return opt('PAID');
+    return '';
+  };
+  const AUTO_TXT = { PRICE_SENT: 'Saving moves the status to Price sent: the customer is emailed the price and a secure Ziina payment link.', PAID: 'Saving moves the status to Paid: Zoho creates the invoice and records the payment, and the customer is emailed.' };
+  const showAuto = () => { const a = autoNext(); $('autoHint').hidden = !a; $('autoHint').textContent = a ? `→ ${AUTO_TXT[a]}` : ''; $('eSave').textContent = a === 'PRICE_SENT' ? 'Save and send the price' : a === 'PAID' ? 'Save as Paid' : 'Save and update customer'; };
+  ['ePrice', 'ePayMethod', 'ePayRef', 'eStatus', 'eDiscT', 'eDiscV'].forEach((id) => { $(id)?.addEventListener('input', showAuto); $(id)?.addEventListener('change', showAuto); });
+  showAuto();
+  e.__autoNext = autoNext;
   const waLink = () => {
     const digits = waDigits($('ePhone').value);
     if (!digits) { $('waLinks').innerHTML = '<span class="muted">No mobile number to message.</span>'; return; }
@@ -1829,6 +1846,7 @@ async function showDetail(e) {
     $('detail').querySelectorAll('.err').forEach((x) => x.remove());
     const priceVal = finalPriceStr();
     const disc = readDiscount();
+    { const a = e.__autoNext?.(); if (a) $('eStatus').value = a; }
     if ($('eStatus').value === 'PAID' && (!priceVal || Number(priceVal) <= 0)) {
       $('saveMsg').textContent = '';
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Set the price before marking it Paid, so the Zoho invoice has the right amount.</div>');
@@ -1949,7 +1967,7 @@ async function showDetail(e) {
       // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
       void toZoho;
       // Rework / return steps don't go through Zoho: redraw now so the ticks and the timeline show what was saved.
-      if (rw) { const msg = $('saveMsg').textContent; await showDetail(e); if ($('saveMsg')) $('saveMsg').textContent = msg; }
+      if (rw || $('eStatus').value !== s) { const msg = $('saveMsg').textContent; await showDetail(e); if ($('saveMsg')) $('saveMsg').textContent = msg; }
       waitForZoho(e.id, savedAt);
     } catch (ex) {
       $('saveMsg').textContent = '';

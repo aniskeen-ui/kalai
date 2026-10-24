@@ -1229,6 +1229,11 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const parts = Object.entries(set).map(([k, v], i) => { names[`#p${i}`] = k; values[`:p${i}`] = { S: v }; return `#p${i} = :p${i}`; });
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
   console.log(`Artist progress ${set.artistStage} for ${str(e, 'ref')}`);
+  // Sent to the frame shop and the frame shop has already accepted the job: the order is now "Being framed".
+  if (target >= 2 && str(e, 'status') === 'PAID') {
+    const fj = (await jobsOf(id)).framer;
+    if (fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage))) await updateEnquiry(id, { status: 'FRAMING' }).catch((err) => console.warn('Status not moved to FRAMING', err));
+  }
   return { ok: true, ref: str(e, 'ref'), ...set };
 }
 
