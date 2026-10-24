@@ -205,10 +205,10 @@ html.embed main{padding-left:0;padding-right:0}
     <div class="finder" id="finder">
       <input id="qRef" type="search" list="dlRefs" placeholder="Order no. (KA-…) or artwork" aria-label="Order number"><datalist id="dlRefs"></datalist>
       <select id="qSt" aria-label="Status">
-        <option value="OPEN">Open orders</option><option value="TO_START">To start</option><option value="WORKING">In progress</option>
-        <option value="TO_SEND">Finished · send to frame shop</option><option value="SENT">Sent · send your invoice</option>
-        <option value="REWORK">Rework / repair</option><option value="CANCELLED">Cancelled by customer</option>
-        <option value="INVOICED">Invoice sent · payment pending</option><option value="PAID">Paid to you</option>
+        <option value="OPEN">Open orders (work to do)</option><option value="TO_START">To start</option><option value="WORKING">In progress</option>
+        <option value="TO_SEND">Finished · send to frame shop</option><option value="REWORK">Rework / repair</option><option value="HOLD">On hold</option>
+        <option value="INVOICE">Invoice to send</option><option value="INVOICED">Invoice sent · payment pending</option><option value="PAID">Paid to you</option>
+        <option value="DELIVERED">Delivered to the customer</option><option value="CANCELLED">Cancelled by customer</option>
         <option value="PRICED">Price given · waiting for customer</option><option value="CLOSED">Closed / not going ahead</option>
         <option value="">All statuses</option>
       </select>

@@ -141,21 +141,27 @@ function fillFinder() {
   $('qCust').value = cs.has(cur) ? cur : '';
 }
 const dubaiDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
-/** One status per order for the Status filter. */
+/** The artist's step for the Status filter (what is left for the artist to do). */
 function stOf(x) {
   if (x.stage === 'NEEDED') return 'NEEDED';
   if (x.stage === 'PRICED') return 'PRICED';
   if (x.stage === 'CLOSED') return 'CLOSED';
   if (x.stage === 'PAID') return 'PAID';
   if (x.stage === 'INVOICED') return 'INVOICED';
-  if (x.stopped) return 'CANCELLED';
+  if (x.stopped) return 'INVOICE'; // cancelled after he started: invoice 50%
+  if (x.onHold) return 'HOLD';
   if (x.rework) return 'REWORK';
-  return x.progress === 'SHIPPED' ? 'SENT' : x.progress === 'FINISHED' ? 'TO_SEND' : x.progress === 'STARTED' ? 'WORKING' : 'TO_START';
+  return x.progress === 'SHIPPED' ? 'INVOICE' : x.progress === 'FINISHED' ? 'TO_SEND' : x.progress === 'STARTED' ? 'WORKING' : 'TO_START';
 }
-const OPEN_ST = ['TO_START', 'WORKING', 'TO_SEND', 'SENT', 'REWORK', 'CANCELLED', 'INVOICED'];
+const OPEN_ST = ['TO_START', 'WORKING', 'TO_SEND', 'REWORK', 'HOLD'];
 function stMatch(x) {
-  const v = $('qSt').value;
-  return !v || (v === 'OPEN' ? OPEN_ST.includes(stOf(x)) : stOf(x) === v);
+  const v = $('qSt').value, st = stOf(x);
+  if (!v) return true;
+  if (v === 'DELIVERED') return x.orderStatus === 'DELIVERED';
+  if (v === 'CANCELLED') return !!x.stopped || x.orderStatus === 'CANCELLED' || x.orderStatus === 'REFUNDED';
+  // Work to do: not when the customer's order is already delivered, refunded or cancelled (rework excepted).
+  if (v === 'OPEN') return OPEN_ST.includes(st) && (st === 'REWORK' || !['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(x.orderStatus));
+  return st === v;
 }
 function found(x) {
   const q = $('qRef').value.trim().toLowerCase(), c = $('qCust').value, from = $('qFrom').value, to = $('qTo').value;
@@ -191,7 +197,7 @@ function card(x) {
   const brief = x.brief.map(({ k, v }) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
   const dis = x.locked ? 'disabled' : '';
   return `<article class="acard" id="c-${esc(x.id)}">
-    <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span>${x.kind === 'COMMISSION' ? 'Commission' : 'Catalogue work'}</span>${x.customerCode ? `<span class="mono" title="Customer">${x.customerName ? esc(x.customerName) + ' · ' : ''}${esc(x.customerCode)}</span>` : ''}<span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
+    <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span>${x.kind === 'COMMISSION' ? 'Commission' : 'Catalogue work'}</span>${x.customerCode ? `<span class="mono" title="Customer">${x.customerName ? esc(x.customerName) + ' · ' : ''}${esc(x.customerCode)}</span>` : ''}${x.orderStatus === 'DELIVERED' ? '<span class="stage PAID" title="The customer has received it">Delivered to customer</span>' : ''}<span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
     <h2>${esc(x.title)}</h2>
     ${x.imageKey ? `<img class="opic" alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:220px;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}

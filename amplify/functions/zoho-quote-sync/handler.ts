@@ -1174,6 +1174,7 @@ async function artistRows(enquiries: Img[], admin = false) {
         onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
         rework: reworkForArtist(e, c),
         frameShop: shopOf(c),
+        orderStatus: str(e, 'status'), // the customer's order (e.g. DELIVERED), for the artist's Status filter
         priceBy: str(c, 'artistBy'),
         ...artistStage(e, c),
       };
