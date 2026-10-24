@@ -45,11 +45,11 @@ const DEFAULT_RATES = {
   },
   local: 30, customs: 0.05, fee: 0.03, ins: 0.01, reserve: 0.02, margin: 0.25, vat: 0, fx: 0.042, round9: true, saved: false,
   // Market check: Kalai's target price band per size (simple frame included), and what similar originals list for on
-  // Saatchi Art (watercolour / ink by artists from India, AED, Oct 2026). Edit under Rates.
+  // Saatchi Art (watercolour / ink by artists from India, ⃃, Oct 2026). Edit under Rates.
   market: {
-    S: { sk: [390, 590], wc: [490, 790], saatchi: 'ink 20×15 cm ≈ AED 1,100 · watercolour 30×23 cm ≈ AED 4,300' },
-    M: { sk: [590, 890], wc: [790, 1190], saatchi: 'ink 29×22 cm ≈ AED 1,600–1,900 · watercolour 38×28 cm ≈ AED 3,800–4,300' },
-    L: { sk: [990, 1490], wc: [1290, 1990], saatchi: 'watercolour 51×38 to 56×76 cm ≈ AED 3,900–7,500' },
+    S: { sk: [390, 590], wc: [490, 790], saatchi: 'ink 20×15 cm ≈ ⃃ 1,100 · watercolour 30×23 cm ≈ ⃃ 4,300' },
+    M: { sk: [590, 890], wc: [790, 1190], saatchi: 'ink 29×22 cm ≈ ⃃ 1,600–1,900 · watercolour 38×28 cm ≈ ⃃ 3,800–4,300' },
+    L: { sk: [990, 1490], wc: [1290, 1990], saatchi: 'watercolour 51×38 to 56×76 cm ≈ ⃃ 3,900–7,500' },
   },
 };
 // Sketch (pencil, ink, charcoal) or watercolour/painting, from the order's title and details.
@@ -73,12 +73,14 @@ const CATS = [['collection', 'Collection (artworks on the website)', 'markup on 
 const CAT_OF = { PRICE: 'collection', COMMISSION: 'commission', GIFT: 'gift', MARKET: 'market', PHOTO: 'gift' };
 const marginFor = (kind) => { const m = rates.margins?.[CAT_OF[kind] || 'collection']; return m != null ? m : rates.margin; };
 const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
-const aed = (v, d = 0) => (v == null ? '–' : 'AED ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+// Server notes say "AED 1,175"; show the dirham sign on screen.
+const escSym = (v) => esc(v).replace(/\bAED (?=\d)/g, '\u20C3 ');
+const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 
 /** Cost build-up for one enquiry, the suggested price and the margin at a given price. */
 function calc(c, price) {
   const tier = rates.tiers[c.sizeTier] || null;
-  // Artist price: INR (Siva / artists in India) converted at the master rate, or AED for artists in the UAE.
+  // Artist price: ₹ (Siva / artists in India) converted at the master rate, or ⃃ for artists in the UAE.
   const artistAed = c.artistPriceAed != null ? Number(c.artistPriceAed) : c.artistPriceInr ? c.artistPriceInr * rates.fx : null;
   const framing = c.framingOverride ?? tier?.framing ?? null;
   // An artist in the UAE: no courier from India and no customs.
@@ -327,8 +329,8 @@ function parseCosts(c) {
   return v && typeof v === 'object' ? v : null;
 }
 
-// Actual costs (AED) from the vendors' bills, entered per paid order.
-const ACT_FIELDS = [['artist', 'Artist (paid, AED)'], ['framing', 'Frame shop'], ['india', 'Courier India → Dubai'], ['customs', 'Customs / duty'], ['local', 'Courier to the customer'], ['other', 'Other (packing, etc.)']];
+// Actual costs (⃃) from the vendors' bills, entered per paid order.
+const ACT_FIELDS = [['artist', 'Artist (paid, ⃃)'], ['framing', 'Frame shop'], ['india', 'Courier India → Dubai'], ['customs', 'Customs / duty'], ['local', 'Courier to the customer'], ['other', 'Other (packing, etc.)']];
 function typedOf(c) {
   let v = c?.actual;
   try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
@@ -466,7 +468,7 @@ function renderReport() {
   const tile = (k, v, cls = '') => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
   $('rTiles').innerHTML = [
     tile('Orders', lines.length),
-    tile('Sales (AED)', money(T.sales)),
+    tile('Sales (⃃)', money(T.sales)),
     tile('Refunds', money(T.refund)),
     tile('Net sales', money(T.net)),
     tile('Total cost', money(T.cost)),
@@ -585,7 +587,7 @@ function framesOf(id, style) {
   const sp = suppliers.find((x) => x.id === id); let list = [];
   try { list = JSON.parse(sp?.catalogue || '[]') || []; } catch { list = []; }
   const m = list.filter((f) => f.style === style);
-  return m.length ? `<span class="muted" style="font-size:12px">Their ${esc(style)} frames: ${m.map((f) => `${esc(f.name)}${f.widthMm ? ` ${esc(f.widthMm)} mm` : ''}${f.extra ? ` (+AED ${esc(f.extra)})` : ''}`).join('; ')}</span><br>` : '';
+  return m.length ? `<span class="muted" style="font-size:12px">Their ${esc(style)} frames: ${m.map((f) => `${esc(f.name)}${f.widthMm ? ` ${esc(f.widthMm)} mm` : ''}${f.extra ? ` (+⃃ ${esc(f.extra)})` : ''}`).join('; ')}</span><br>` : '';
 }
 // The frame shop's name, phone and address, as the delivery pickup point.
 function j0(e) { const fj = jobsOf(e).framer; const sp = fj && suppliers.find((x) => x.id === fj.supplierId); return sp ? [sp.business, sp.phone, sp.address].filter(Boolean).join(', ') : ''; }
@@ -611,12 +613,12 @@ function supplierSection(e) {
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc((role === 'printer' && cur.stage === 'READY' ? 'printed, ready to collect' : JOB_STAGE[cur.stage]) || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
-        <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : role === 'printer' ? 'Print shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
-          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'printer' ? `Print ${esc(spec.size)}${copies > 1 ? ` × ${copies}` : ''}, fine-art matte` : role === 'framer' ? `${gift ? `${j.printer ? 'Frame only' : 'Print + frame'}${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
-        <div class="field"><label>Price you pay them (AED)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
+        <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : role === 'printer' ? 'Print shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `⃃ ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
+          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'printer' ? `Print ${esc(spec.size)}${copies > 1 ? ` × ${copies}` : ''}, fine-art matte` : role === 'framer' ? `${gift ? `${j.printer ? 'Frame only' : 'Print + frame'}${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} ⃃ ${best.cost}` : ' · no price lists yet'}</span></div>
+        <div class="field"><label>Price you pay them (⃃)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
         <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
         <div class="field"><label>${role === 'framer' ? 'Note for them (frame style, size, glass, timing…)' : role === 'printer' ? 'Note for them (paper, crop, colour, timing…)' : 'Note for them (pickup time, contact, handling…)'}</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
-        ${role === 'framer' && !j.delivery ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-js="framer-deliver" style="width:auto" ${cur?.canDeliver ? 'checked' : ''}> Ask them to deliver too, for AED <input data-js="framer-dprice" type="number" min="0" step="1" value="${cur?.deliveryPrice ?? ''}" style="width:90px"> (they confirm when accepting)</label>` : ''}
+        ${role === 'framer' && !j.delivery ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-js="framer-deliver" style="width:auto" ${cur?.canDeliver ? 'checked' : ''}> Ask them to deliver too, for ⃃ <input data-js="framer-dprice" type="number" min="0" step="1" value="${cur?.deliveryPrice ?? ''}" style="width:90px"> (they confirm when accepting)</label>` : ''}
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-jobsend="${role}">${cur ? 'Update the job' : 'Send the job'}</button>${cur ? `<button type="button" class="btn small ghost" data-jobremove="${role}">Take it back</button>` : ''}<span class="muted" data-jobmsg="${role}" style="font-size:12px"></span></div>`}
     </div>`;
   };
@@ -662,7 +664,7 @@ function wireSuppliers(e) {
   });
 }
 let codesAsked = false;
-let curAed = false; // the open order's artist prices in AED (artist in the UAE)
+let curAed = false; // the open order's artist prices in ⃃ (artist in the UAE)
 
 async function load() {
   $('rows').innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
@@ -731,7 +733,7 @@ function render() {
       <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}${e.customerCode ? `<br><span class="muted mono" style="font-size:11px">${esc(e.customerCode)}</span>` : ''}</td>
       <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
-      <td class="mono">${e.quotedPrice ? 'AED ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
+      <td class="mono">${e.quotedPrice ? '⃃ ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : `<tr><td colspan="7" class="muted">${$('fFrom').value || $('fTo').value ? 'No orders on these dates. Press <b>Clear</b> to see all dates.' : 'Nothing matches this filter.'}</td></tr>`;
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {
     const pick = () => { const e = all.find((x) => x.id === tr.dataset.id); if (e) { selectedId = e.id; render(); showDetail(e); } };
@@ -757,7 +759,7 @@ function actualSection(e) {
     <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses that' : 'bill amount'}" style="width:110px"></td>
     <td><input data-actref="${f}" maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
   const mv = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : `Planned margin <b>${l.margin == null ? '–' : money(l.margin)}</b>. Enter the bills as they come; costs without a bill stay at the planned figure.`;
-  return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, AED)</legend>
+  return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, ⃃)</legend>
     <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th class="num">From Zoho / job</th><th>Your figure</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="muted" style="font-size:12px">From Zoho: the artist's bill and vendor bills whose Reference# contains ${esc(e.ref)} (press Check Zoho to refresh${z.checkedAt ? `; checked ${esc(when(z.checkedAt))}` : ''}); until the frame shop or courier invoices, the price on their job. Your figure, if typed, is used instead.${z.unmapped.length ? ` <b class="warn-t">Not matched to a cost: ${esc(z.unmapped.join(', '))}</b>: add the vendor under Rates → Zoho vendors.` : ''}</div>
     <div class="marginline" id="actSum">${mv}</div>
@@ -768,7 +770,7 @@ window.kalaiSaveActual = async (id) => {
   const box = $('actualBox'), out = { ref: {} };
   for (const [f, label] of ACT_FIELDS) {
     const raw = box.querySelector(`[data-act="${f}"]`).value.trim();
-    if (raw !== '') { const v = Number(raw); if (!(v >= 0)) { $('actMsg').textContent = `${label}: enter an amount in AED.`; return; } out[f] = Math.round(v * 100) / 100; }
+    if (raw !== '') { const v = Number(raw); if (!(v >= 0)) { $('actMsg').textContent = `${label}: enter an amount in ⃃.`; return; } out[f] = Math.round(v * 100) / 100; }
     const rf = box.querySelector(`[data-actref="${f}"]`).value.trim(); if (rf) out.ref[f] = rf;
   }
   out.at = new Date().toISOString();
@@ -805,16 +807,16 @@ function costingSection(e) {
     <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
       <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Commissions in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">
-      <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? 'AED' : 'INR'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
+      <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? '⃃' : '₹'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select></div>
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
     <div class="muted" style="font-size:12px">${fromSiva}</div>
     <details ${c.framingOverride != null || c.indiaCourierOverride != null || c.localCourierOverride != null ? 'open' : ''}><summary>Overrides for this order (premium frame, oversized, abroad)</summary>
       <div class="three" style="margin-top:8px">
-        <div class="field"><label for="cFr">Framing (AED)</label><input id="cFr" type="number" min="0" step="1" value="${c.framingOverride ?? ''}" ${dis}></div>
-        <div class="field"><label for="cIc">India courier (AED)</label><input id="cIc" type="number" min="0" step="1" value="${c.indiaCourierOverride ?? ''}" ${dis}></div>
-        <div class="field"><label for="cLc">Local courier (AED)</label><input id="cLc" type="number" min="0" step="1" value="${c.localCourierOverride ?? ''}" ${dis}></div>
+        <div class="field"><label for="cFr">Framing (⃃)</label><input id="cFr" type="number" min="0" step="1" value="${c.framingOverride ?? ''}" ${dis}></div>
+        <div class="field"><label for="cIc">India courier (⃃)</label><input id="cIc" type="number" min="0" step="1" value="${c.indiaCourierOverride ?? ''}" ${dis}></div>
+        <div class="field"><label for="cLc">Local courier (⃃)</label><input id="cLc" type="number" min="0" step="1" value="${c.localCourierOverride ?? ''}" ${dis}></div>
       </div>
     </details>
     <div id="costOut"></div>
@@ -859,7 +861,7 @@ function statusBlock(e, k, s) {
 
 function sivaProgress(e) {
   const stopped = String(e.refundAction || '').startsWith('CANCEL') && ['REFUNDED', 'CANCELLED'].includes(e.status) && e.purchaseState !== 'CANCELLED' && e.zohoPOId;
-  if (stopped) return `Stopped: customer cancelled after he started${e.artistStartedAt ? ` (${day(e.artistStartedAt)})` : ''}. He is paid 50% of his price${costings.get(e.id)?.artistPriceInr ? ` (INR ${(costings.get(e.id).artistPriceInr / 2).toLocaleString('en-IN')})` : ''}${e.artistShippedAt ? ' plus the India courier' : ''}: enter his invoice no. and the bill is made for that.`;
+  if (stopped) return `Stopped: customer cancelled after he started${e.artistStartedAt ? ` (${day(e.artistStartedAt)})` : ''}. He is paid 50% of his price${costings.get(e.id)?.artistPriceInr ? ` (₹${(costings.get(e.id).artistPriceInr / 2).toLocaleString('en-IN')})` : ''}${e.artistShippedAt ? ' plus the India courier' : ''}: enter his invoice no. and the bill is made for that.`;
   if (!e.artistStage) return e.zohoPOId ? `${artistOf(e)} hasn't marked this as started yet.` : '';
   return [`Started ${day(e.artistStartedAt)}`, e.artistFinishedAt ? `Finished ${day(e.artistFinishedAt)}` : '', e.artistShippedAt ? `Sent to frame shop ${day(e.artistShippedAt)}${e.artistAwb ? ` (${e.artistCourier} · AWB ${e.artistAwb})` : ''}` : '',
     e.artistBy ? `last update by ${e.artistBy && !String(e.artistBy).startsWith('Kalai Art House') ? e.artistBy : 'you, on their behalf'}` : ''].filter(Boolean).join(' · ');
@@ -871,7 +873,7 @@ function purchaseSection(e) {
   const color = st === 'ARTIST_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
   return `<fieldset class="cost" id="purchase">
     <legend>${esc(e.artistName || 'Siva Raja')} (purchase)</legend>
-    <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage || `${artistOf(e)}'s order is recorded once the customer has paid and the costing has the artist's price.`)}</div>
+    <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.purchaseMessage || `${artistOf(e)}'s order is recorded once the customer has paid and the costing has the artist's price.`)}</div>
     ${sivaProgress(e) ? `<div style="font-size:13px"><b>${esc(e.artistName || 'Siva')}'s progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
     <div class="two">
       <div class="field"><label for="pInv">${esc(e.artistName || 'Siva')}'s invoice no.</label><input id="pInv" value="${esc(e.artistInvoiceNo)}" placeholder="From the artist's invoice" ${!e.zohoPOId || e.zohoBillId ? 'disabled' : ''}></div>
@@ -893,7 +895,7 @@ function marketSection(e) {
     <legend>Crafts shop · ${esc(e.sellerName)}</legend>
     <div style="font-size:14px">${esc(e.title)} × ${e.qty || 1} · customer pays ${aed(e.quotedPrice)} · maker receives <b>${aed(e.sellerAmount, 2)}</b> · Kalai keeps ${aed(kalaiEarns, 2)} (${e.commissionPct ?? 0}%${kalai ? ' + delivery fee' : ''})</div>
     <div style="font-size:13px"><b>${kalai ? 'Kalai collects from the maker and delivers' : 'The maker delivers'}</b> · ${esc(stage)}</div>
-    ${e.purchaseMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.purchaseMessage)}</div>` : ''}
+    ${e.purchaseMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.purchaseMessage)}</div>` : ''}
     <div class="field"><label for="mPaid">Paid to the maker: bank ref</label><input id="mPaid" value="${esc(e.sellerPaidRef)}" placeholder="Transfer reference" ${!e.zohoSellerBillId || e.zohoSellerPaymentId ? 'disabled' : ''}></div>
     <div class="muted" style="font-size:12px">When you mark it Paid the maker gets the order${kalai ? ' (they mark it ready for pickup; you book the courier and mark it Shipped)' : ' (they enter the courier and AWB; the order turns Shipped by itself)'}. When it is Delivered, the maker's payout bill is created in Zoho; enter your bank reference here when you have paid them.</div>
   </fieldset>`;
@@ -939,7 +941,7 @@ function shippingSection(e) {
   const color = st === 'DELIVERED' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'DRAFT' ? 'var(--gold)' : 'var(--muted)';
   return `<fieldset class="cost" id="shipBox" ${SHIP_STATUSES.includes(e.status) ? '' : 'hidden'}>
     <legend>Delivery</legend>
-    ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.deliveryMessage)}</div>` : ''}
+    ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.deliveryMessage)}</div>` : ''}
     <div class="two">
       <div class="field"><label for="eCourierSel">Courier</label>
         <select id="eCourierSel">
@@ -976,7 +978,7 @@ function requestBanner(e) {
   if (e.cancelState === 'DECLINED') return `<div class="muted" style="font-size:13px"><b>Customer request declined:</b> ${esc(REQ_LABEL[e.cancelRequest] || '')}${e.cancelReply ? ` · “${esc(e.cancelReply)}”` : ''}</div>`;
   return `<div class="reqbox">
     <div><b>Customer request · ${esc(when(e.cancelRequestedAt))}</b></div>
-    <div>${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest)}${e.cancelRequest !== 'DAMAGED_REPLACE' ? ` · refund under the policy: <b>AED ${Number(e.cancelRefundDue || 0).toLocaleString('en-US')}</b>` : ''}</div>
+    <div>${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest)}${e.cancelRequest !== 'DAMAGED_REPLACE' ? ` · refund under the policy: <b>⃃ ${Number(e.cancelRefundDue || 0).toLocaleString('en-US')}</b>` : ''}</div>
     ${e.cancelReason ? `<div>Reason: “${esc(e.cancelReason)}”</div>` : ''}
     ${e.cancelPhotos ? `<div class="links" id="reqPhotos"><span class="muted">Loading photos…</span></div>` : ''}
     <div class="muted" style="font-size:12px">${e.cancelRequest === 'CANCEL' && e.zohoPOId ? `${esc(artistOf(e))}'s order is on hold. ` : ''}To accept: ${e.cancelRequest === 'DAMAGED_REPLACE' ? 'tick the box below and save.' : 'pay the refund (Ziina / bank), enter its reference below, tick the box and save.'} The customer is emailed automatically.</div>
@@ -994,7 +996,7 @@ function parseRework(c) {
   try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
   return v && typeof v === 'object' ? v : {};
 }
-/** Extra cost of a replacement (AED) and what the insurer paid back. */
+/** Extra cost of a replacement (⃃) and what the insurer paid back. */
 function reworkCost(e) {
   const c = costings.get(e.id);
   const r = parseRework(c);
@@ -1070,17 +1072,17 @@ function reworkSection(e) {
       <div class="field"><label for="rwType">Fix</label><select id="rwType" ${e.reworkStage ? 'disabled' : ''}><option value="">Choose…</option>${Object.entries(REWORK_TYPE).map(([k, v]) => `<option value="${k}" ${e.reworkType === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="field"><label for="rwNote">Instructions (the artist sees them)</label><input id="rwNote" value="${esc(e.reworkNote)}" placeholder="e.g. glass cracked, painting fine"></div>
     </div>
-    ${siva ? `<div style="font-size:13px"><b>The artist:</b> ${c.reworkPriceInr != null ? `rework price INR ${Number(c.reworkPriceInr).toLocaleString('en-IN')}${c.reworkPriceBy && c.reworkPriceBy !== 'Siva' ? ' (entered by you)' : ''}` : 'no rework price yet'}${sivaSteps ? ` · ${esc(sivaSteps)}` : e.reworkType ? ' · not started (he sees it on his page; you can tick it there for him)' : ''}</div>` : ''}
-    ${e.reworkMessage ? `<div style="font-size:13px;color:${/^Error/.test(e.reworkMessage) ? 'var(--kumkum)' : 'var(--muted)'}">${esc(e.reworkMessage)}</div>` : ''}
+    ${siva ? `<div style="font-size:13px"><b>The artist:</b> ${c.reworkPriceInr != null ? `rework price ₹${Number(c.reworkPriceInr).toLocaleString('en-IN')}${c.reworkPriceBy && c.reworkPriceBy !== 'Siva' ? ' (entered by you)' : ''}` : 'no rework price yet'}${sivaSteps ? ` · ${esc(sivaSteps)}` : e.reworkType ? ' · not started (he sees it on his page; you can tick it there for him)' : ''}</div>` : ''}
+    ${e.reworkMessage ? `<div style="font-size:13px;color:${/^Error/.test(e.reworkMessage) ? 'var(--kumkum)' : 'var(--muted)'}">${escSym(e.reworkMessage)}</div>` : ''}
     ${reworkTimeline(e)}
     ${transportSection(e)}
-    <div class="muted" style="font-size:12px;font-weight:600;margin-top:4px">Extra costs of this replacement (AED, the customer pays nothing)</div>
+    <div class="muted" style="font-size:12px;font-weight:600;margin-top:4px">Extra costs of this replacement (⃃, the customer pays nothing)</div>
     <div class="three">
       ${num('rwFr', 'Frame shop (glass / frame)', r.framing)}
       ${num('rwLc', 'Couriers (pickup, re-delivery)', r.localCourier)}
       ${siva ? num('rwIc', 'India courier (the artist)', r.indiaCourier) : ''}
       ${num('rwOt', 'Other', r.other)}
-      ${siva ? `<div class="field"><label for="rwInr">The artist's rework price (INR)</label><input id="rwInr" type="number" min="0" step="1" value="${c.reworkPriceInr ?? ''}" ${e.zohoReworkBillId ? 'disabled' : ''}></div>` : ''}
+      ${siva ? `<div class="field"><label for="rwInr">The artist's rework price (₹)</label><input id="rwInr" type="number" min="0" step="1" value="${c.reworkPriceInr ?? ''}" ${e.zohoReworkBillId ? 'disabled' : ''}></div>` : ''}
     </div>
     ${siva ? `<div class="two">
       <div class="field"><label for="rwInv">The artist's rework invoice no.</label><input id="rwInv" value="${esc(e.reworkInvoiceNo)}" placeholder="Creates a second bill in Zoho" ${e.zohoReworkBillId ? 'disabled' : ''}></div>
@@ -1147,7 +1149,7 @@ function afterSection(e) {
   return `<fieldset class="cost" id="afterBox">
     <legend>Cancellation, damage or refund</legend>
     ${requestBanner(e)}
-    ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${esc(e.refundMessage)}</div>` : ''}
+    ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.refundMessage)}</div>` : ''}
     ${!done && e.zohoPOId ? `<div style="font-size:13px"><b>${esc(artistOf(e))}:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
     <div class="field"><label for="aAction">What happened?</label><select id="aAction" ${dis}>
       <option value="">Nothing: order is fine</option>
@@ -1155,7 +1157,7 @@ function afterSection(e) {
     </select></div>
     <div class="err" id="aWarn" hidden></div>
     <div id="aMoney" class="two" ${act && act !== 'DAMAGED_REPLACE' ? '' : 'hidden'}>
-      <div class="field"><label for="aAmount">Refund amount (AED)</label><input id="aAmount" type="number" min="0" step="0.01" value="${e.refundAmount ?? (pre ? e.cancelRefundDue ?? '' : '')}" ${dis}></div>
+      <div class="field"><label for="aAmount">Refund amount (⃃)</label><input id="aAmount" type="number" min="0" step="0.01" value="${e.refundAmount ?? (pre ? e.cancelRefundDue ?? '' : '')}" ${dis}></div>
       <div class="field"><label for="aMethod">Refund via</label><select id="aMethod" ${dis}>${[['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${(e.refundMethod || e.paymentMethod || 'ZIINA') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="field"><label for="aRef">Refund reference</label><input id="aRef" value="${esc(e.refundRef)}" placeholder="Ziina / bank transaction ID" ${dis}></div>
     </div>
@@ -1184,7 +1186,7 @@ function renderCost() {
   const row = (k, v, note = '') => `<tr><td>${k}</td><td class="mono num">${v}</td><td class="muted">${note}</td></tr>`;
   const t = rates.tiers[$('cTier').value];
   let html = `<table class="costs"><tbody>
-    ${row('Artist', aed(r.artistAed), r.artistAed != null ? (curAed ? 'artist in the UAE, price in AED' : `INR ${Number($('cInr').value).toLocaleString('en-IN')} × ${rates.fx}`) : 'needs the artist\'s price')}
+    ${row('Artist', aed(r.artistAed), r.artistAed != null ? (curAed ? 'artist in the UAE, price in ⃃' : `₹${Number($('cInr').value).toLocaleString('en-IN')} × ${rates.fx}`) : 'needs the artist\'s price')}
     ${row('Framing', aed(r.framing), $('cFr').value ? 'override' : t ? `master ${$('cTier').value}` : 'choose a size tier')}
     ${row('India courier', aed(r.indiaCourier), $('cIc').value ? 'override' : curAed ? 'none: artist in the UAE' : t ? `master ${$('cTier').value}` : '')}
     ${r.ready ? row('Customs', aed(r.customs, 2), curAed ? 'none: artist in the UAE' : `${(rates.customs * 100).toFixed(1)}% of artist + courier`) : ''}
@@ -1238,14 +1240,14 @@ function showRates() {
     <div><h2 style="font-size:22px">Rates</h2><p class="muted" style="margin:4px 0 0">Master costs used for every price. Only Siva's price changes per order; use the overrides on an enquiry for exceptions.</p></div>
     ${rates.saved ? '' : '<div class="muted warnline">These are placeholders. Replace them with the frame shop and courier quotes, then save.</div>'}
     <form id="ratesForm" novalidate style="display:grid;gap:12px">
-      <div class="tablewrap"><table class="costs"><thead><tr><th>Tier</th><th>Paper sizes</th><th>Framing (AED)</th><th>India courier (AED)</th></tr></thead>
+      <div class="tablewrap"><table class="costs"><thead><tr><th>Tier</th><th>Paper sizes</th><th>Framing (⃃)</th><th>India courier (⃃)</th></tr></thead>
         <tbody>${Object.keys(t).map(tierRow).join('')}</tbody></table></div>
       <div class="two">
-        <div class="field"><label for="rLocal">Local courier (AED)</label><input id="rLocal" type="number" min="0" step="1" value="${rates.local}"></div>
-        <div class="field"><label for="rPr4">Little Artists print, A4 (AED)</label><input id="rPr4" type="number" min="0" step="1" value="${rates.printA4 ?? 25}"></div>
-        <div class="field"><label for="rPr3">Little Artists print, A3 (AED)</label><input id="rPr3" type="number" min="0" step="1" value="${rates.printA3 ?? 40}"></div>
+        <div class="field"><label for="rLocal">Local courier (⃃)</label><input id="rLocal" type="number" min="0" step="1" value="${rates.local}"></div>
+        <div class="field"><label for="rPr4">Little Artists print, A4 (⃃)</label><input id="rPr4" type="number" min="0" step="1" value="${rates.printA4 ?? 25}"></div>
+        <div class="field"><label for="rPr3">Little Artists print, A3 (⃃)</label><input id="rPr3" type="number" min="0" step="1" value="${rates.printA3 ?? 40}"></div>
         <div class="field"><label for="rSivaRoy">Siva's print royalty (%)</label><input id="rSivaRoy" type="number" min="0" max="50" step="0.5" value="${rates.sivaRoyalty ?? 10}"><span class="muted" style="font-size:12px">His share of each framed print of his paintings, added to the print price. Portal artists: set in Artists &amp; sellers.</span></div>
-        <div class="field"><label for="rFx">Exchange rate (AED per INR)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
+        <div class="field"><label for="rFx">Exchange rate (⃃ per ₹)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
         ${pct('rIns', 'Courier insurance (%)', rates.ins || 0, 'declared-value cover bought with each shipment, % of price')}
@@ -1255,7 +1257,7 @@ function showRates() {
       </div>
       <div class="field"><label for="rVendors">Zoho vendors → cost (one per line, "part of the vendor name = cost")</label><textarea id="rVendors" rows="4" placeholder="Al Warda = frame shop&#10;Pickframes = frame shop&#10;Aramex = courier&#10;DHL = india courier&#10;Customs broker = customs">${esc(rates.vendors || '')}</textarea>
         <span class="muted" style="font-size:12px">Costs: frame shop, india courier, customs, courier (to the customer), other. Enter each vendor bill in Zoho Books with the order number (KA-…) in Reference#; a bill for several orders lists all their numbers, with the number in each line's description. The order's Actual costs box and Reports then take the amount from Zoho.</span></div>
-      <div class="tablewrap"><table class="costs"><thead><tr><th>Market check</th><th>Sketch band (AED)</th><th>Watercolour band (AED)</th><th>Saatchi Art reference</th></tr></thead>
+      <div class="tablewrap"><table class="costs"><thead><tr><th>Market check</th><th>Sketch band (⃃)</th><th>Watercolour band (⃃)</th><th>Saatchi Art reference</th></tr></thead>
         <tbody>${Object.keys(t).map((k) => { const m = (rates.market || DEFAULT_RATES.market)[k] || DEFAULT_RATES.market[k]; return `<tr><th>${k}</th>
           <td><input id="mSk1${k}" type="number" min="0" value="${m.sk[0]}" style="width:70px" aria-label="${k} sketch from"> – <input id="mSk2${k}" type="number" min="0" value="${m.sk[1]}" style="width:70px" aria-label="${k} sketch to"></td>
           <td><input id="mWc1${k}" type="number" min="0" value="${m.wc[0]}" style="width:70px" aria-label="${k} watercolour from"> – <input id="mWc2${k}" type="number" min="0" value="${m.wc[1]}" style="width:70px" aria-label="${k} watercolour to"></td>
@@ -1382,7 +1384,7 @@ function zohoPanel(e) {
       <span class="muted" style="font-size:12px;margin-right:auto">${esc(when(e.zohoAt))}</span>
       <button type="button" class="btn" id="checkZoho" style="padding:6px 12px;font-size:13px">Check Zoho</button>
     </div>
-    <div style="font-size:14px;overflow-wrap:anywhere">${esc(e.zohoMessage || 'No reply from Zoho yet. Press Check Zoho to look it up.')}</div>
+    <div style="font-size:14px;overflow-wrap:anywhere">${escSym(e.zohoMessage || 'No reply from Zoho yet. Press Check Zoho to look it up.')}</div>
     ${!isLocked(e) && e.zohoInvoiceId ? `<div class="muted" style="font-size:12px">🔒 Price locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho. To change the price, delete the draft invoice in Zoho, then press <b>Check Zoho</b>.</div>` : ''}
     ${isLocked(e) ? `<div class="muted" style="font-size:12px">🔒 Locked: the payment is in Zoho, so the price can't change and the status can't go back to Received, Price sent or Cancelled. If the payment failed, void invoice ${esc(e.zohoInvoice || '')} or delete its payment in Zoho, then press <b>Check Zoho</b> to unlock.</div>` : ''}
     ${docsList(e)}
@@ -1396,7 +1398,7 @@ function ziinaLine(e) {
   const refund = e.ziinaRefundId ? ` · refund ${esc(e.ziinaRefundState || 'pending')}` : '';
   return `<div class="card" style="padding:10px 14px;display:grid;gap:4px;background:var(--sunk);font-size:13px">
     <b style="color:${paid ? 'var(--ok)' : 'var(--fg)'}">${paid ? '✓ Paid online with Ziina' : 'Ziina payment link'}${e.ziinaTest === 'yes' ? ' <span class="chip">test</span>' : ''}</b>
-    <div>${esc(e.ziinaMessage || '')}${paid ? ` ${esc(when(e.ziinaPaidAt))}${e.ziinaCard ? ` · ${esc(e.ziinaCard)}` : ''}` : e.ziinaAmount ? ` Link for AED ${Number(e.ziinaAmount).toLocaleString('en-US')}; the order turns Paid by itself when the customer pays.` : ''}${refund}</div>
+    <div>${escSym(e.ziinaMessage || '')}${paid ? ` ${esc(when(e.ziinaPaidAt))}${e.ziinaCard ? ` · ${esc(e.ziinaCard)}` : ''}` : e.ziinaAmount ? ` Link for ⃃ ${Number(e.ziinaAmount).toLocaleString('en-US')}; the order turns Paid by itself when the customer pays.` : ''}${refund}</div>
   </div>`;
 }
 
@@ -1483,8 +1485,8 @@ async function showDetail(e) {
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once ${esc(artistOf(e))} marks it <b>Sent to frame shop</b> (you can do it for them in ${artistPage(e)}).</span>` : ''}</div>
-        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^AED \d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^AED [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
-          ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: AED ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : 'AED 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
+        <div class="field"><label for="ePrice">Price (⃃)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^(AED|Dhs) ?\d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^⃃ [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
+          ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: ⃃ ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
       ${addressSection(e)}
       ${shippingSection(e)}
@@ -1578,9 +1580,9 @@ async function showDetail(e) {
     $('cArtist').addEventListener('change', () => {
       const o = $('cArtist').selectedOptions[0];
       curAed = !!$('cArtist').value && (o.dataset.country || 'UAE') !== 'India';
-      $('cInrLabel').textContent = `Artist price (${curAed ? 'AED' : 'INR'})`;
+      $('cInrLabel').textContent = `Artist price (${curAed ? '⃃' : '₹'})`;
       $('cInr').value = '';
-      $('cArtistNote').textContent = $('cArtist').value ? `Save to allocate to ${o.dataset.name}: they get an email and see it under Commissions in their portal (price in ${curAed ? 'AED' : 'INR'}).` : 'Siva sees it on his Artist desk.';
+      $('cArtistNote').textContent = $('cArtist').value ? `Save to allocate to ${o.dataset.name}: they get an email and see it under Commissions in their portal (price in ${curAed ? '⃃' : '₹'}).` : 'Siva sees it on his Artist desk.';
       renderCost();
     });
   }

@@ -15,11 +15,13 @@ window.kalaiToggleTheme=function(){var r=document.documentElement,cur=r.getAttri
 document.addEventListener('DOMContentLoaded',function(){var r=document.documentElement,cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.querySelectorAll('.theme-btn').forEach(function(b){b.textContent=cur==='dark'?'☀️':'🌙';b.setAttribute('aria-label',cur==='dark'?'Switch to light mode':'Switch to dark mode');b.onclick=window.kalaiToggleTheme})});})();
 </script>
 <style>
+@font-face{font-family:"Dirham";src:url("/fonts/dirham.woff2") format("woff2");font-display:swap;unicode-range:U+20C3}
+
 /* Layout: operations desk — enquiry queue on the left, the selected enquiry's editor on the right */
 :root{
   --bg:#f7f6f3; --surface:#ffffff; --sunk:#eeece6; --fg:#1d1b2b; --muted:#5f5b6e; --line:#dedbd2;
   --ink:#232046; --gold:#b0832b; --gold-soft:#f3e7cc; --kumkum:#a3242f; --ok:#2f7d4f; --on-ink:#f6f1e4;
-  --display:"Marcellus",Georgia,serif; --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; --r:6px;
+  --display:"Dirham","Marcellus",Georgia,serif; --body:"Dirham","Figtree",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"Dirham","IBM Plex Mono",ui-monospace,Menlo,monospace; --r:6px;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#13121c;--surface:#1c1a28;--sunk:#232133;--fg:#efedf5;--muted:#a6a2b8;--line:#33304a;--ink:#0d0c16;--gold:#d9ad55;--gold-soft:#3a3020;--kumkum:#e0646e;--ok:#6cc08f;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#13121c;--surface:#1c1a28;--sunk:#232133;--fg:#efedf5;--muted:#a6a2b8;--line:#33304a;--ink:#0d0c16;--gold:#d9ad55;--gold-soft:#3a3020;--kumkum:#e0646e;--ok:#6cc08f;color-scheme:dark}

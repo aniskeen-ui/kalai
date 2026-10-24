@@ -8,7 +8,7 @@ const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '–');
-const aed = (v) => `AED ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const aed = (v) => `⃃ ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 const CLOSED = ['DELIVERED', 'REFUNDED', 'CANCELLED'];
 const STATUS = { RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed', SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled' };
 

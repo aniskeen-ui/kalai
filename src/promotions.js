@@ -39,7 +39,7 @@ function draw() {
   const shown = list.filter((p) => !q || [p.number, p.title, p.code, p.bannerText].some((v) => String(v || '').toLowerCase().includes(q)));
   $('prList').innerHTML = shown.length ? shown.map((p) => {
     const [label, cls] = state(p);
-    const off = p.code ? `${p.discountType === 'AED' ? `AED ${p.discountValue}` : `${p.discountValue}%`} off · ${AREA[p.appliesTo || 'ALL']}${p.minOrder ? ` · min AED ${p.minOrder}` : ''}` : 'No code (banner / page only)';
+    const off = p.code ? `${p.discountType === 'AED' ? `⃃ ${p.discountValue}` : `${p.discountValue}%`} off · ${AREA[p.appliesTo || 'ALL']}${p.minOrder ? ` · min ⃃ ${p.minOrder}` : ''}` : 'No code (banner / page only)';
     return `<article class="mk-card" data-p="${esc(p.id)}">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="mono muted" style="font-size:12px">${esc(p.number || 'PR-…')}</span><h3>${esc(p.title)}</h3><span class="cg-badge ${cls}">${label}</span>${p.showBanner ? '<span class="cg-badge">Banner</span>' : ''}${p.code ? `<span class="cg-badge" style="font-family:var(--mono)">${esc(p.code)}</span>` : ''}
         <span class="muted" style="margin-left:auto">${p.startAt ? esc(day(p.startAt)) : 'now'} → ${p.endAt ? esc(day(p.endAt)) : 'no end'}</span></div>
@@ -76,10 +76,10 @@ function edit(p, reuse = false) {
     <div class="field"><label for="pfBannerText">Banner text (short)</label><input id="pfBannerText" maxlength="120" value="${esc(x.bannerText)}" placeholder="Diwali offer: 10% off all original artworks till 5 Nov"></div>
     <fieldset class="cost"><legend>Discount code (optional)</legend>
       <div class="three"><div class="field"><label for="pfCode">Code</label><input id="pfCode" maxlength="30" value="${esc(x.code)}" placeholder="DIWALI10" style="text-transform:uppercase;font-family:var(--mono)"></div>
-        <div class="field"><label for="pfType">Discount</label><select id="pfType"><option value="PCT" ${x.discountType !== 'AED' ? 'selected' : ''}>% off</option><option value="AED" ${x.discountType === 'AED' ? 'selected' : ''}>AED off</option></select></div>
+        <div class="field"><label for="pfType">Discount</label><select id="pfType"><option value="PCT" ${x.discountType !== 'AED' ? 'selected' : ''}>% off</option><option value="AED" ${x.discountType === 'AED' ? 'selected' : ''}>⃃ off</option></select></div>
         <div class="field"><label for="pfValue">Amount</label><input id="pfValue" type="number" min="0" step="0.5" value="${esc(x.discountValue ?? '')}"></div></div>
       <div class="three"><div class="field"><label for="pfArea">Applies to</label><select id="pfArea">${Object.entries(AREA).map(([k, v]) => `<option value="${k}" ${k === (x.appliesTo || 'ALL') ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-        <div class="field"><label for="pfMin">Minimum order (AED, optional)</label><input id="pfMin" type="number" min="0" step="1" value="${esc(x.minOrder ?? '')}"></div>
+        <div class="field"><label for="pfMin">Minimum order (⃃, optional)</label><input id="pfMin" type="number" min="0" step="1" value="${esc(x.minOrder ?? '')}"></div>
         <div class="field"><label for="pfMax">Max uses (optional)</label><input id="pfMax" type="number" min="0" step="1" value="${esc(x.maxUses ?? '')}"></div></div>
       <div class="muted" style="font-size:12px">Customers type the code under the price in My enquiries &amp; orders (or in the Crafts shop order form). The discount comes off the price, the Ziina link and the Zoho invoice. On Crafts shop items Kalai absorbs the discount: the maker still gets their full price.</div>
     </fieldset>

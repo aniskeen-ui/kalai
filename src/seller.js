@@ -30,7 +30,7 @@ function brand() {
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const aed = (n) => 'AED ' + (Math.round(Number(n || 0) * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const aed = (n) => '⃃ ' + (Math.round(Number(n || 0) * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const r2 = (n) => Math.round(n * 100) / 100;
 const STATUS = { DRAFT: 'Draft', SUBMITTED: 'Waiting for approval', APPROVED: 'Live on the website', REJECTED: 'Changes needed', PAUSED: 'Paused' };
 
@@ -527,10 +527,10 @@ function edit(l) {
       <div class="radio"><span style="font-size:13px;font-weight:700">Who delivers?</span>
         <label><input type="radio" name="eDel" value="SELLER" ${x.deliveryBy !== 'KALAI' ? 'checked' : ''}> I deliver to the customer</label>
         <label><input type="radio" name="eDel" value="KALAI" ${x.deliveryBy === 'KALAI' ? 'checked' : ''}> Kalai collects from me and delivers${fee ? ` (${aed(fee)})` : ''}</label></div>
-      <div class="three"><div class="field"><label for="eCost">Cost price (AED)</label><input id="eCost" type="number" min="0" step="0.01" value="${esc(x.costPrice)}"></div>
+      <div class="three"><div class="field"><label for="eCost">Cost price (⃃)</label><input id="eCost" type="number" min="0" step="0.01" value="${esc(x.costPrice)}"></div>
         <div class="field"><label for="eMark">Your markup %</label><input id="eMark" type="number" min="0" step="0.5" value="${esc(x.markupPct)}"></div>
-        <div class="field"><label for="eOther">Other charges (AED)</label><input id="eOther" type="number" min="0" step="0.01" value="${esc(x.otherCharges)}" title="Packing, gift wrap, etc."></div></div>
-      <div class="field" id="eCourierBox"><label for="eCourier">Your courier charge (AED)</label><input id="eCourier" type="number" min="0" step="0.01" value="${esc(x.courierCharge)}" style="max-width:200px"></div>
+        <div class="field"><label for="eOther">Other charges (⃃)</label><input id="eOther" type="number" min="0" step="0.01" value="${esc(x.otherCharges)}" title="Packing, gift wrap, etc."></div></div>
+      <div class="field" id="eCourierBox"><label for="eCourier">Your courier charge (⃃)</label><input id="eCourier" type="number" min="0" step="0.01" value="${esc(x.courierCharge)}" style="max-width:200px"></div>
       <table class="calc" id="eCalc"></table>
     </fieldset>
     <div class="err" id="eErr" role="alert"></div>

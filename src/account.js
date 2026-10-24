@@ -363,7 +363,7 @@ function wireRate(root, items) {
 }
 
 /* ---------- cancel / report damage (policy mirrored from the server, which has the final say) ---------- */
-const aedTxt = (n) => 'AED ' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const aedTxt = (n) => '⃃ ' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 const DAMAGE_HOURS = 48;
 function cancelTerms(e) {
   const st = e.status || 'RECEIVED';
@@ -590,14 +590,14 @@ function card(e) {
     <div class="enq-top"><span class="enq-title">${esc(e.title)}</span><span class="${pillCls}">${esc(STATUS[st] || st)}</span></div>
     <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')} · ${esc(date)}</div>
     ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true" style="grid-template-columns:repeat(${steps.length},1fr)">${steps.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
-    ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">AED ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">AED ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −AED ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
+    ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">⃃ ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
     ${codeBox(e)}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
     ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
     ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(parseDet(e.details).Maker || e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
     ${e.kind === 'MARKET' && st === 'RECEIVED' ? '<div class="enq-msg">Thank you for your order. We are confirming it with the maker and will send you a secure payment link shortly.</div>' : ''}
     ${e.kind === 'MARKET' && st === 'PAID' ? `<div class="enq-msg">${e.sellerStage === 'READY' ? 'The maker has packed it; our courier is collecting it.' : 'Paid: the maker is preparing your order.'}</div>` : ''}
-    ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded AED ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
+    ${st === 'REFUNDED' && e.refundAmount ? `<div class="enq-msg">Refunded ⃃ ${Number(e.refundAmount).toLocaleString('en-US')}${e.refundRef ? ` · ref ${esc(e.refundRef)}` : ''}</div>` : ''}
     ${replacementTracker(e)}
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${e.zohoInvoiceId || e.zohoChallanId ? `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">${e.zohoInvoiceId ? `<button type="button" class="linkbtn" data-pdf="INVOICE_PDF" data-id="${esc(e.id)}">📄 Invoice${e.zohoInvoice ? ` ${esc(e.zohoInvoice)}` : ''} (PDF)</button>` : ''}${e.zohoChallanId ? `<button type="button" class="linkbtn" data-pdf="CHALLAN_PDF" data-id="${esc(e.id)}">🚚 Delivery note (PDF)</button>` : ''}</div>` : ''}
@@ -794,7 +794,7 @@ async function showOrder(p) {
   const a = lastAddr || {};
   const f = form(`
     <div style="display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:center">${p.img ? `<img src="${esc(p.img)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:4px">` : '<span></span>'}
-      <div><b>${esc(p.title)}</b><div class="acct-info">by ${esc(p.seller)} · AED ${Number(p.price).toLocaleString('en-US')} each, delivery within the UAE included</div></div></div>
+      <div><b>${esc(p.title)}</b><div class="acct-info">by ${esc(p.seller)} · ⃃ ${Number(p.price).toLocaleString('en-US')} each, delivery within the UAE included</div></div></div>
     <form novalidate>
       <div class="field"><label for="moQty">Quantity</label><select id="moQty" name="qty">${Array.from({ length: max }, (_, i) => `<option>${i + 1}</option>`).join('')}</select></div>
       <div class="field"><label for="moName">Receiver's name</label><input id="moName" name="name" autocomplete="name" value="${esc(a.name)}"></div>
@@ -819,9 +819,9 @@ async function showOrder(p) {
     lastAddr = { name: data.name, phone: data.phone, country: data.country, emirate: data.emirate, pin: data.pin, address: data.address, landmark: data.landmark };
     currentTab = 'ENQ';
     await showList();
-    body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Order <b>${esc(out.ref)}</b> placed: AED ${Number(out.total).toLocaleString('en-US')}${data.code ? ` (code ${esc(data.code.toUpperCase())} applied)` : ''}. We'll email you a secure payment link shortly.</p>`);
+    body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Order <b>${esc(out.ref)}</b> placed: ⃃ ${Number(out.total).toLocaleString('en-US')}${data.code ? ` (code ${esc(data.code.toUpperCase())} applied)` : ''}. We'll email you a secure payment link shortly.</p>`);
   });
-  const total = () => { body.querySelector('#moTotal').innerHTML = `Total: <b>AED ${(Number(p.price) * Number(f.qty.value)).toLocaleString('en-US')}</b>`; };
+  const total = () => { body.querySelector('#moTotal').innerHTML = `Total: <b>⃃ ${(Number(p.price) * Number(f.qty.value)).toLocaleString('en-US')}</b>`; };
   f.qty.onchange = total; total();
   wireRegion(f);
   const india = () => { body.querySelector('#moIndia').hidden = f.country.value === 'UAE'; };

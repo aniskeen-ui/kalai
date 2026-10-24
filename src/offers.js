@@ -23,12 +23,12 @@ async function main() {
     const imgs = await Promise.all(live.map((p) => (p.imageKey ? getUrl({ path: p.imageKey, options: { expiresIn: 3600 } }).then((u) => u.url.toString()).catch(() => '') : '')));
     $('offers').style.cssText = 'display:grid;gap:22px';
     $('offers').innerHTML = live.map((p, i) => {
-      const off = p.code && p.discountValue ? (p.discountType === 'AED' ? `AED ${p.discountValue} off` : `${p.discountValue}% off`) : '';
+      const off = p.code && p.discountValue ? (p.discountType === 'AED' ? `⃃ ${p.discountValue} off` : `${p.discountValue}% off`) : '';
       const area = p.appliesTo === 'CRAFTS' ? '/#market' : p.appliesTo === 'GIFT' ? '/#little' : '/#collection';
       return `<article class="offer ${imgs[i] ? '' : 'noimg'}" id="o-${esc(p.id)}">${imgs[i] ? `<img src="${esc(imgs[i])}" alt="">` : ''}
         <div class="body"><h2>${esc(p.title)}</h2>
           ${p.details ? `<p class="details">${esc(p.details)}</p>` : ''}
-          ${p.code ? `<div class="code"><b>${esc(p.code)}</b><button type="button" data-copy="${esc(p.code)}">Copy code</button><span class="small">${esc(off)} on ${esc(AREA[p.appliesTo || 'ALL'])}${p.minOrder ? ` over AED ${p.minOrder}` : ''}</span></div>` : ''}
+          ${p.code ? `<div class="code"><b>${esc(p.code)}</b><button type="button" data-copy="${esc(p.code)}">Copy code</button><span class="small">${esc(off)} on ${esc(AREA[p.appliesTo || 'ALL'])}${p.minOrder ? ` over ⃃ ${p.minOrder}` : ''}</span></div>` : ''}
           ${p.endAt ? `<div class="small">Valid until ${esc(day(p.endAt))}</div>` : ''}
           <div class="ctas"><a class="primary" href="${area}">${p.appliesTo === 'CRAFTS' ? 'Shop crafts' : p.appliesTo === 'GIFT' ? 'Send a Little Artists gift' : 'Browse the collection'}</a>${p.appliesTo === 'ART' || !p.appliesTo || p.appliesTo === 'ALL' ? '<a href="/#commission">Commission a painting</a>' : ''}</div>
         </div></article>`;

@@ -5,7 +5,7 @@ import { getUrl, uploadData } from 'aws-amplify/storage';
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const aed = (n) => 'AED ' + (Math.round(Number(n || 0) * 100) / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 });
+const aed = (n) => '⃃ ' + (Math.round(Number(n || 0) * 100) / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 });
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 const r2 = (n) => Math.round(n * 100) / 100;
 const SUP = (s) => ['FRAMER', 'COURIER', 'PRINTER'].includes(s.type);
@@ -105,7 +105,7 @@ function prospectsView() {
   const ps = sellers.filter((s) => s.status === 'PROSPECT').sort((a, b) => OUTREACH.indexOf(a.outreach || 'To contact') - OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
   const counts = OUTREACH.map((o) => `${o}: <b>${ps.filter((p) => (p.outreach || 'To contact') === o).length}</b>`).join(' · ');
   return `<div class="mk-card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Artists you are inviting</b><span class="muted" style="font-size:12px">${counts}</span>
-      <label class="btn small ghost" style="margin-left:auto;cursor:pointer">Import outreach sheet (.xlsx)<input type="file" accept=".xlsx" id="prImport" hidden></label><span class="muted" id="prMsg" style="font-size:12px"></span></div>
+      <button class="btn small" type="button" id="prSeed" style="margin-left:auto">Add the 26 researched artists</button><label class="btn small ghost" style="cursor:pointer">Import outreach sheet (.xlsx)<input type="file" accept=".xlsx" id="prImport" hidden></label><span class="muted" id="prMsg" style="font-size:12px"></span></div>
     <div class="muted" style="font-size:12px">Prospects are not artists yet: they are not on the website and not in “To approve”. When one signs up with the same email, they finish the artist application and appear under To approve. Send each invitation yourself, one at a time.</div></div>
     ${ps.length ? `<div class="tablewrap"><table><thead><tr><th>Artist</th><th>Based in</th><th>Work</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>${ps.map((p) => {
       const wa = waLink(p.phone, artistInvite(p));
@@ -144,7 +144,7 @@ const inviteText = (s) => `Hello${s.contactName ? ` ${s.contactName}` : ''}, Ani
 function frameStrip(s) {
   let list = []; try { list = JSON.parse(s.catalogue || '[]') || []; } catch { list = []; }
   if (!list.length) return '<div class="muted">No frames in their catalogue yet (“Open their portal” → My frames).</div>';
-  return `<div><b>Frames (${list.length}):</b><div class="mk-imgs">${list.map((f) => `<figure style="margin:0;width:96px;font-size:11px">${f.photoKey ? `<a data-key="${esc(f.photoKey)}" target="_blank" rel="noopener"><img alt="${esc(f.name)}" data-key="${esc(f.photoKey)}" style="width:96px;height:96px;object-fit:cover"></a>` : '<div style="width:96px;height:96px;background:var(--sunk)"></div>'}<figcaption>${esc(f.name)}${f.widthMm ? ` · ${esc(f.widthMm)} mm` : ''}${f.extra ? ` · +AED ${esc(f.extra)}` : ''}</figcaption></figure>`).join('')}</div></div>`;
+  return `<div><b>Frames (${list.length}):</b><div class="mk-imgs">${list.map((f) => `<figure style="margin:0;width:96px;font-size:11px">${f.photoKey ? `<a data-key="${esc(f.photoKey)}" target="_blank" rel="noopener"><img alt="${esc(f.name)}" data-key="${esc(f.photoKey)}" style="width:96px;height:96px;object-fit:cover"></a>` : '<div style="width:96px;height:96px;background:var(--sunk)"></div>'}<figcaption>${esc(f.name)}${f.widthMm ? ` · ${esc(f.widthMm)} mm` : ''}${f.extra ? ` · +⃃ ${esc(f.extra)}` : ''}</figcaption></figure>`).join('')}</div></div>`;
 }
 function addSupplierForm() {
   const f = (id, label, attrs = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" ${attrs}></div>`;
@@ -202,7 +202,7 @@ function sellerCard(s) {
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     <div class="mk-act">
       ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? DEF_PCT)}"></label>
-      <label>Kalai delivery fee (AED)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
+      <label>Kalai delivery fee (⃃)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
       ${s.type === 'ARTIST' ? `<label title="The artist's share of each framed print sold of their works, added to the print price">Print royalty %<input type="number" min="0" max="50" step="0.5" data-f="royalty" value="${esc(s.royaltyPct ?? 10)}"></label>
       <label title="Shown on their artist bio on the website">Artist photo<input type="file" accept="image/*" data-f="photofile"><input type="hidden" data-f="photo" value=""></label>` : ''}` : ''}
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
@@ -286,6 +286,11 @@ function wireCards() {
       } catch (ex) { msg.textContent = ex.message; }
     };
   });
+  if ($('prSeed')) $('prSeed').onclick = async () => {
+    const b = $('prSeed'), msg = $('prMsg'); b.disabled = true; msg.textContent = 'Adding…';
+    try { const { RESEARCHED_ARTISTS } = await import('./prospects-seed.js'); const r = await act('addProspects', { items: RESEARCHED_ARTISTS }); msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} already there` : ''}.`; await load(); }
+    catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+  };
   $('prImport')?.addEventListener('change', (e) => { const f = e.target.files?.[0]; if (f) importProspects(f); });
   document.querySelectorAll('#mkBody [data-pr]').forEach((el) => {
     const row = el.closest('[data-seller]'), id = row.dataset.seller, msg = row.querySelector('[data-msg]'), p = sellers.find((s) => s.id === id);

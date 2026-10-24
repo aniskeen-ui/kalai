@@ -12,7 +12,7 @@ const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // The UAE dirham sign, drawn (fonts don't have it yet).
-export const DHS = '<svg class="dhs" viewBox="0 0 24 20" role="img" aria-label="Dhs"><g fill="currentColor"><rect x="5.2" y="2" width="2.8" height="16"/><rect x="3.4" y="2" width="5" height="1.3"/><rect x="3.4" y="16.7" width="5" height="1.3"/><path d="M7.6 2h3.2a8 8 0 0 1 0 16H7.6v-1.3h3.2a6.6 6.6 0 0 0 0-13.4H7.6z"/><path d="M1.2 7.7q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/><path d="M1.2 11.1q1.6-.7 3 0h15.6q1.7 0 2.8-1v1.5q-1 1-2.8 1H4.2q-1.4-.6-3 0z"/></g></svg>';
+export const DHS = '<i class="dhs" aria-label="Dhs">⃃</i>';
 const aed = (v) => (v == null || !Number.isFinite(v) ? '–' : DHS + Math.round(v).toLocaleString('en-US'));
 const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
@@ -43,9 +43,9 @@ const DEFAULT_P = {
   extra: { none: 0, black: 0, white: 0, oak: 0.2, walnut: 0.3, gold: 0.5 },
 };
 const DEFAULT_MARKET = {
-  S: { sk: [390, 590], wc: [490, 790], saatchi: 'ink 20×15 cm ≈ AED 1,100 · watercolour 30×23 cm ≈ AED 4,300' },
-  M: { sk: [590, 890], wc: [790, 1190], saatchi: 'ink 29×22 cm ≈ AED 1,600–1,900 · watercolour 38×28 cm ≈ AED 3,800–4,300' },
-  L: { sk: [990, 1490], wc: [1290, 1990], saatchi: 'watercolour 51×38 to 56×76 cm ≈ AED 3,900–7,500' },
+  S: { sk: [390, 590], wc: [490, 790], saatchi: 'ink 20×15 cm ≈ ⃃ 1,100 · watercolour 30×23 cm ≈ ⃃ 4,300' },
+  M: { sk: [590, 890], wc: [790, 1190], saatchi: 'ink 29×22 cm ≈ ⃃ 1,600–1,900 · watercolour 38×28 cm ≈ ⃃ 3,800–4,300' },
+  L: { sk: [990, 1490], wc: [1290, 1990], saatchi: 'watercolour 51×38 to 56×76 cm ≈ ⃃ 3,900–7,500' },
 };
 
 // Frame costs can come from a frame shop's own price list (supplier portal → My price list), per size and style:
@@ -85,10 +85,10 @@ export function tierOf(size) {
 const mediumOf = (w) => (w.kind === 'sketch' || /pencil|ink|charcoal|graphite|chalk|sketch/i.test(`${w.medium} ${w.title}`) ? 'sk' : 'wc');
 
 /** One price build-up per frame style. o = per-work overrides {artist, tier, fsize, courier, margin}. */
-// Works by portal artists in the UAE: priced in AED, no India courier and no customs.
+// Works by portal artists in the UAE: priced in ⃃, no India courier and no customs.
 const isLocalArt = (w) => !!w.artistId && (w.artistCountry || 'UAE') === 'UAE';
 const curOf = (w) => (prices.get(w.id)?.currency === 'AED' || isLocalArt(w) ? 'AED' : 'INR');
-const artistPrice = (w, v) => (v == null ? '–' : curOf(w) === 'AED' ? `AED ${Number(v).toLocaleString('en-US')}` : '₹' + Number(v).toLocaleString('en-IN'));
+const artistPrice = (w, v) => (v == null ? '–' : curOf(w) === 'AED' ? `⃃ ${Number(v).toLocaleString('en-US')}` : '₹' + Number(v).toLocaleString('en-IN'));
 // Website products made from an artist's listing stay hidden (DRAFT) until their prices are approved here.
 const goLive = (w) => (w.status === 'DRAFT' ? { status: 'PUBLISHED' } : {});
 function build(w, o = {}) {
@@ -159,20 +159,20 @@ function masterHtml() {
   const tierRow = (k, label) => `<tr><th>${label}</th>${TIERS.map((t) => `<td><input data-pt="${k}.${t}" type="number" min="0" step="1" value="${P[k][t]}" style="width:80px"></td>`).join('')}</tr>`;
   return `<details class="pc-master"><summary><b>Master inputs</b> <span class="muted">(used for every work; change, then Save master)</span></summary>
     <div class="pc-grid">
-      <label>₹ → AED <input data-p="fx" type="number" step="0.0001" min="0" value="${P.fx}" style="width:90px"></label>
+      <label>₹ → ⃃ <input data-p="fx" type="number" step="0.0001" min="0" value="${P.fx}" style="width:90px"></label>
       ${pct('customs', 'Customs')}
-      <label>Courier Dubai → customer <input data-p="local" type="number" min="0" step="1" value="${P.local}" style="width:70px"> AED</label>
+      <label>Courier Dubai → customer <input data-p="local" type="number" min="0" step="1" value="${P.local}" style="width:70px"> ⃃</label>
       ${pct('margin', 'Margin (Collection)')}${pct('fee', 'Card charges (Ziina)')}${pct('ins', 'Courier insurance')}${pct('reserve', 'Breakage reserve')}
       <label><input type="checkbox" data-p="round25" ${P.round25 !== false ? 'checked' : ''} style="width:auto"> Round up to the nearest Dhs 25</label>
     </div>
-    <table class="costs" style="max-width:420px"><thead><tr><th>AED by artwork size</th>${TIERS.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
+    <table class="costs" style="max-width:420px"><thead><tr><th>⃃ by artwork size</th>${TIERS.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
       ${tierRow('courier', 'Courier India → Dubai')}</tbody></table>
     <div class="pc-grid"><label>Frame costs from <select id="pcFrameSrc" style="width:auto">
       <option value="">The master table below (my own figures)</option>
       <option value="cheapest" ${P.frameSource === 'cheapest' ? 'selected' : ''}>Cheapest frame shop, per size and style</option>
       ${framers.map((f) => `<option value="${esc(f.id)}" ${P.frameSource === f.id ? 'selected' : ''}>${esc(f.business)}'s price list</option>`).join('')}
     </select></label><span class="muted" style="font-size:12px">${framers.length ? 'A frame shop\'s price per size and style (frame + fixing). Any size or style missing from its list uses the master table.' : 'No approved frame shops yet: add them under Artists & sellers → Frame shops & delivery.'}</span></div>
-    <table class="costs" style="max-width:720px"><thead><tr><th>AED by frame size (cm)</th>${FRAME_SIZES.map(([f]) => `<th>${f}</th>`).join('')}</tr></thead><tbody>
+    <table class="costs" style="max-width:720px"><thead><tr><th>⃃ by frame size (cm)</th>${FRAME_SIZES.map(([f]) => `<th>${f}</th>`).join('')}</tr></thead><tbody>
       ${['frameWork', 'moulding'].map((k) => `<tr><th>${k === 'frameWork' ? 'Frame work (mount, glass, labour)' : 'Frame, plain style'}</th>${FRAME_SIZES.map(([f]) => `<td><input data-pf="${k}|${f}" type="number" min="0" step="1" value="${P[k][f]}" style="width:72px"></td>`).join('')}</tr>`).join('')}</tbody></table>
     <div class="pc-grid">${STYLES.filter((s) => s.k !== 'none').map((s) => `<label>${s.n} <input data-px="${s.k}" type="number" min="0" step="5" value="${Math.round((P.extra[s.k] || 0) * 100)}" style="width:60px">% more</label>`).join('')}</div>
     <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="button" id="pcSaveMaster">Save master</button><span class="muted" id="pcMasterMsg" style="font-size:12px">Artwork sizes: S up to A4 (30 cm), M up to 45 cm, L larger. Each work gets the smallest frame that fits with a 4 cm mount; customers can choose bigger ones.</span></div>
@@ -297,7 +297,7 @@ function drawCalc(w) {
         <label>Artist price ${curOf(w) === 'AED' ? 'AED' : '₹'} <input id="pcA" type="number" min="0" step="${curOf(w) === 'AED' ? 1 : 50}" value="${o.artist ?? ''}" style="width:100px"></label>
         <label>Artwork size <select id="pcT">${TIERS.map((t) => `<option ${t === b.tier ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Base frame size <select id="pcF">${FRAME_SIZES.map(([f]) => `<option ${f === b.fsize ? 'selected' : ''}>${f}</option>`).join('')}</select> cm</label>
-        <label>${isLocalArt(w) ? 'Pickup from the artist' : 'Courier India → Dubai'} <input id="pcC" type="number" min="0" step="1" value="${o.courier ?? ''}" placeholder="${isLocalArt(w) ? 0 : P.courier[b.tier]}" style="width:80px"> AED</label>
+        <label>${isLocalArt(w) ? 'Pickup from the artist' : 'Courier India → Dubai'} <input id="pcC" type="number" min="0" step="1" value="${o.courier ?? ''}" placeholder="${isLocalArt(w) ? 0 : P.courier[b.tier]}" style="width:80px"> ⃃</label>
         <label>Margin <input id="pcM" type="number" min="0" step="1" value="${o.margin != null ? Math.round(o.margin * 100) : ''}" placeholder="${Math.round(P.margin * 100)}" style="width:60px">%</label>
         <span class="muted" style="font-size:12px">${ap?.artistPriceAt ? `Artist's price given ${new Date(ap.artistPriceAt).toLocaleDateString('en-GB')}` : 'No price from the artist yet: type one to simulate.'}</span>
       </div>
@@ -322,7 +322,7 @@ function drawCalc(w) {
       <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>Bigger frames (customer's choice), ${DHS}</th>${STYLES.filter((s) => s.k !== 'none').map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody id="pcSizes"></tbody></table></div>
       <div class="muted" style="font-size:12px;margin-top:-6px">A bigger frame adds its extra frame cost, with your margin and card charges, rounded up to Dhs 25. "No frame" has one price.</div>
       <div class="marketline">Market check (${b.tier}, ${md === 'sk' ? 'sketch' : 'watercolour'}): Kalai band <b>${aed(band[0])}–${aed(band[1])}</b> · <span id="pcVerdict"></span><br>
-        <span class="muted">Competitors, similar originals: Saatchi Art ${esc(mk?.saatchi || '')} · Dubai print shops (copies, not originals) AED 125–400.</span>
+        <span class="muted">Competitors, similar originals: Saatchi Art ${esc(mk?.saatchi || '')} · Dubai print shops (copies, not originals) ⃃ 125–400.</span>
         <div style="margin-top:4px"><button type="button" class="linkbtn" id="pcBand">Set the black-frame price to the middle of the band</button></div></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn" type="button" id="pcApprove">${m ? 'Update prices on the website' : 'Approve and show on the website'}</button>

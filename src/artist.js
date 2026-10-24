@@ -175,9 +175,9 @@ function card(x) {
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
     ${reworkBlock(x)}
     ${progressBlock(x)}
-    ${x.locked ? `<div class="pricefix">Your price: <b>INR ${Number(x.artistPriceInr || 0).toLocaleString('en-IN')}</b>${x.artistReadyBy ? ` · ready by ${esc(x.artistReadyBy)}` : ''}${x.artistNote ? ` · “${esc(x.artistNote)}”` : ''} <span class="muted">· fixed: order placed${x.priceBy && x.priceBy !== 'Siva' ? ' (entered for you by Kalai Art House)' : ''}</span></div>` : ''}
+    ${x.locked ? `<div class="pricefix">Your price: <b>₹${Number(x.artistPriceInr || 0).toLocaleString('en-IN')}</b>${x.artistReadyBy ? ` · ready by ${esc(x.artistReadyBy)}` : ''}${x.artistNote ? ` · “${esc(x.artistNote)}”` : ''} <span class="muted">· fixed: order placed${x.priceBy && x.priceBy !== 'Siva' ? ' (entered for you by Kalai Art House)' : ''}</span></div>` : ''}
     <form class="aform" data-id="${esc(x.id)}" novalidate ${x.locked ? 'hidden' : ''}>
-      <div class="field"><label for="p-${esc(x.id)}">Your price (INR)</label><input id="p-${esc(x.id)}" type="number" min="1" step="1" inputmode="numeric" value="${x.artistPriceInr ?? ''}" ${dis} required></div>
+      <div class="field"><label for="p-${esc(x.id)}">Your price (₹)</label><input id="p-${esc(x.id)}" type="number" min="1" step="1" inputmode="numeric" value="${x.artistPriceInr ?? ''}" ${dis} required></div>
       <div class="field"><label for="r-${esc(x.id)}">Ready to ship by</label><input id="r-${esc(x.id)}" type="date" value="${esc(x.artistReadyBy)}" ${dis}></div>
       <div class="field"><label for="n-${esc(x.id)}">Note (optional)</label><input id="n-${esc(x.id)}" value="${esc(x.artistNote)}" placeholder="e.g. needs 5 days" ${dis}></div>
       <div class="field wide"><button class="btn" type="submit" ${dis}>${x.artistPriceInr ? 'Update price' : 'Send price'}</button></div>
@@ -194,7 +194,7 @@ function progressBlock(x) {
   if (x.rework) return '';
   if (x.stopped) {
     const done = [x.startedAt && `started ${esc(day(x.startedAt))}`, x.finishedAt && `finished ${esc(day(x.finishedAt))}`, x.shippedAt && `sent ${esc(day(x.shippedAt))}`].filter(Boolean).join(', ');
-    return `<div class="progress"><div class="err" style="font-size:13px">The customer cancelled this order${done ? ` (you had ${done})` : ''}. Please stop work. You are paid <b>50% of your price${x.artistPriceInr ? `: INR ${(x.artistPriceInr / 2).toLocaleString('en-IN')}` : ''}</b>${x.shippedAt ? ', plus the courier' : ''}. Send your invoice for that amount.</div></div>`;
+    return `<div class="progress"><div class="err" style="font-size:13px">The customer cancelled this order${done ? ` (you had ${done})` : ''}. Please stop work. You are paid <b>50% of your price${x.artistPriceInr ? `: ₹${(x.artistPriceInr / 2).toLocaleString('en-IN')}` : ''}</b>${x.shippedAt ? ', plus the courier' : ''}. Send your invoice for that amount.</div></div>`;
   }
   if (x.onHold) return `<div class="progress"><div class="err" style="font-size:14px">On hold: the customer has asked to cancel. Please don't continue with this work until Kalai Art House confirms.</div></div>`;
   const p = x.progress || '';
@@ -282,7 +282,7 @@ function reworkBlock(x) {
   return `<div class="progress rework" id="rw-${id}">
     <div><b>Rework needed:</b> the work arrived damaged at the customer. Kalai Art House asks you for ${kind}.${r.note ? ` <span class="muted">“${esc(r.note)}”</span>` : ''}</div>
     <div class="aform">
-      <div class="field"><label for="rp-${id}">Your rework price (INR, 0 if no charge)</label><input id="rp-${id}" type="number" min="0" step="1" inputmode="numeric" value="${r.priceInr ?? ''}" ${priceLocked ? 'disabled' : ''}></div>
+      <div class="field"><label for="rp-${id}">Your rework price (₹, 0 if no charge)</label><input id="rp-${id}" type="number" min="0" step="1" inputmode="numeric" value="${r.priceInr ?? ''}" ${priceLocked ? 'disabled' : ''}></div>
       <div class="field"><button type="button" class="btn" data-rw="PRICE" ${priceLocked ? 'disabled' : ''}>${r.priceInr != null ? 'Update rework price' : 'Send rework price'}</button></div>
     </div>
     ${r.priceBy && r.priceBy !== 'Siva' && r.priceInr != null ? '<div class="muted" style="font-size:12px">Rework price entered for you by Kalai Art House.</div>' : ''}
@@ -309,7 +309,7 @@ function wireRework(x) {
       const args = { id: x.id, step };
       if (step === 'PRICE') {
         const v = document.getElementById('rp-' + x.id).value;
-        if (v === '' || !(Number(v) >= 0)) { msg.insertAdjacentHTML('afterend', '<div class="err">Enter your rework price in INR (0 if there is no charge).</div>'); return; }
+        if (v === '' || !(Number(v) >= 0)) { msg.insertAdjacentHTML('afterend', '<div class="err">Enter your rework price in ₹ (0 if there is no charge).</div>'); return; }
         args.priceInr = Number(v);
       }
       if (step === 'SENT') {
@@ -348,14 +348,14 @@ function wire(x) {
     const msg = $('m-' + x.id);
     form.querySelectorAll('.err').forEach((e) => e.remove());
     const price = Number($('p-' + x.id).value);
-    if (!(price > 0)) { msg.insertAdjacentHTML('afterend', '<div class="wide err">Enter your price in INR.</div>'); return; }
+    if (!(price > 0)) { msg.insertAdjacentHTML('afterend', '<div class="wide err">Enter your price in ₹.</div>'); return; }
     const b = form.querySelector('button'); b.disabled = true; msg.textContent = 'Sending…';
     try {
       const { errors } = await client.mutations.artistQuote({ id: x.id, priceInr: price, readyBy: $('r-' + x.id).value || null, note: $('n-' + x.id).value.trim() || null });
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(x, { artistPriceInr: price, artistReadyBy: $('r-' + x.id).value, artistNote: $('n-' + x.id).value.trim() });
       if (x.stage === 'NEEDED') Object.assign(x, { stage: 'PRICED', label: 'Price given · waiting for customer' });
-      msg.textContent = `Sent: INR ${price.toLocaleString('en-IN')}. Kalai Art House can see it now.`;
+      msg.textContent = `Sent: ₹${price.toLocaleString('en-IN')}. Kalai Art House can see it now.`;
       b.textContent = 'Update price';
       const pill = document.querySelector(`#c-${CSS.escape(x.id)} .stage`);
       if (pill) { pill.className = `stage ${x.stage}`; pill.textContent = x.label; }

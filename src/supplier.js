@@ -18,7 +18,7 @@ autoPhones();
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const aed = (n) => (n == null || n === '' ? '–' : 'AED ' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 2 }));
+const aed = (n) => (n == null || n === '' ? '–' : '⃃ ' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 2 }));
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
 
 let profile = null;
@@ -221,7 +221,7 @@ function jobCard(j) {
         : `<div class="inline"><div class="field"><label>Tracking / AWB (optional)</label><input data-awb maxlength="60"></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
     } else if (!fr && !pr && j.stage === 'PICKED') act = '<button class="btn small" data-a="jobDelivered">Delivered to the customer</button>';
     const canInvoice = fr || pr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
-    if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (AED)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
+    if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (⃃)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
   }
   return `<article class="job" data-key="${esc(key)}">
     <div class="row"><h3>${pr ? 'Printing' : fr ? (j.printJob ? 'Print & frame' : 'Framing') : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
@@ -291,11 +291,11 @@ function openRates(back) {
   const card = parseCard(profile), fr = profile.type === 'FRAMER';
   const pr = profile.type === 'PRINTER';
   $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
-  $('rNote').textContent = pr ? 'Your price in AED to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don\'t print that size). A4 = 21×30 cm, A3 = 30×42 cm.' : fr
-    ? "Your price per frame, in AED, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
-    : 'Your charge in AED to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional.';
+  $('rNote').textContent = pr ? 'Your price in ⃃ to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don\'t print that size). A4 = 21×30 cm, A3 = 30×42 cm.' : fr
+    ? "Your price per frame, in ⃃, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
+    : 'Your charge in ⃃ to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional.';
   $('rGrid').innerHTML = pr
-    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (AED)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (⃃)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
     : fr
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
@@ -322,7 +322,7 @@ function openRates(back) {
         const inp = $('rGrid').querySelector(`[data-n="uae.${em}.${k}"]`);
         if (inp) inp.value = (['Dubai', 'Sharjah', 'Ajman'].includes(em) ? near : far)[i];
       }));
-      if (!$('rNotes').value.trim()) $('rNotes').value = 'Estimates only, until business rates. Charged on volumetric weight (L×W×H ÷ 5000). Remote areas (Liwa, Ruwais, Western Region, RAK mountains) add about AED 20+. 70×100 may need freight handling. Glass is fragile: pack well or use acrylic for large sizes. Artworks may be excluded from courier cover.';
+      if (!$('rNotes').value.trim()) $('rNotes').value = 'Estimates only, until business rates. Charged on volumetric weight (L×W×H ÷ 5000). Remote areas (Liwa, Ruwais, Western Region, RAK mountains) add about ⃃ 20+. 70×100 may need freight handling. Glass is fragile: pack well or use acrylic for large sizes. Artworks may be excluded from courier cover.';
       $('rMsg').textContent = 'Estimates filled in. Check them, then press Save my price list.';
     };
     $('rGrid').before(b);
@@ -342,7 +342,7 @@ $('rateForm').addEventListener('submit', async (ev) => {
     path.slice(0, -1).forEach((k) => { o = o[k] ??= {}; });
     o[path[path.length - 1]] = v;
   });
-  if (bad) { $('rErr').textContent = 'Enter amounts in AED from 0 to 5,000.'; return; }
+  if (bad) { $('rErr').textContent = 'Enter amounts in ⃃ from 0 to 5,000.'; return; }
   if ($('rIncl')) data.fixingIncluded = $('rIncl').checked;
   const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';
   try { profile = (await call('saveRates', data)).profile; $('rMsg').textContent = 'Saved. Kalai Art House sees your prices when giving out jobs.'; } catch (ex) { $('rErr').textContent = ex.message; } finally { b.disabled = false; }
@@ -374,7 +374,7 @@ function drawFrames() {
       <div class="field"><label>Material</label><input data-k="material" maxlength="40" value="${esc(f.material)}" placeholder="Wood, aluminium…"></div>
       <div class="field"><label>Colour / finish</label><input data-k="colour" maxlength="40" value="${esc(f.colour)}"></div>
       <div class="field"><label>Width (mm)</label><input data-k="widthMm" type="number" min="0" max="300" value="${f.widthMm ?? ''}"></div>
-      <div class="field"><label>Extra over price list (AED)</label><input data-k="extra" type="number" min="0" step="0.5" value="${f.extra ?? ''}" placeholder="0"></div>
+      <div class="field"><label>Extra over price list (⃃)</label><input data-k="extra" type="number" min="0" step="0.5" value="${f.extra ?? ''}" placeholder="0"></div>
       <div class="field" style="grid-column:1/-1"><label>Note</label><input data-k="note" maxlength="200" value="${esc(f.note)}"></div>
       <button type="button" class="linkbtn" data-del style="justify-self:start">Remove</button>
     </div></div>`).join('') : '<p class="muted" style="margin:0">No frames yet. Click “Add a frame”.</p>';
