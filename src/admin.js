@@ -1667,15 +1667,18 @@ function offerPanel(e) {
       <label class="field" style="gap:2px;margin:0"><span style="font-size:11px;font-weight:700">Revised price (⃃)</span><input id="ofCounter" type="number" min="1" step="1" style="width:120px" value="${q != null && q !== o ? q : ''}"></label>
       <button type="button" class="btn small ghost" id="ofCounterBtn">Send revised price</button>
       <button type="button" class="btn small ghost" id="ofDecline" style="color:var(--kumkum)">Decline</button></div>
-      <div class="muted" style="font-size:12px;margin-top:6px">Each button fills the price, status and message below. Check them, then press <b>Save</b>: the customer is emailed and can pay the agreed price.</div>` : ''}
+      <div class="muted" style="font-size:12px;margin-top:6px">Each button fills the price, status and message below. Check them, then press <b>Save</b>: the customer is emailed and can pay the agreed price. The customer's standard discount is not added on top of an offer.</div>` : ''}
   </fieldset>`;
 }
 function wireOffer(e) {
   const o = offerOf(e);
   if (o == null || !$('ofAccept')) return;
   const first = String(e.customerName || '').split(' ')[0];
+  // An offer is already the negotiated price: the customer's standard discount is not added on top.
+  const noDisc = () => { const t = $('eDiscT'); if (t && t.value) { t.value = ''; ['input', 'change'].forEach((k) => t.dispatchEvent(new Event(k))); } };
+  if (!e.discountType) noDisc();
   const fill = (price, status, msg) => {
-    if (price != null && !$('ePrice').readOnly) { $('ePrice').value = price; ['input', 'change'].forEach((t) => $('ePrice').dispatchEvent(new Event(t))); }
+    if (price != null && !$('ePrice').readOnly) { noDisc(); $('ePrice').value = price; ['input', 'change'].forEach((t) => $('ePrice').dispatchEvent(new Event(t))); }
     if (status && [...$('eStatus').options].some((x) => x.value === status && !x.disabled)) { $('eStatus').value = status; $('eStatus').dispatchEvent(new Event('change')); }
     $('eMsg').value = msg; $('eMsg').dispatchEvent(new Event('input'));
     $('eMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
