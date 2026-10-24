@@ -11,6 +11,7 @@ import { showMarket } from './market.js';
 import { showPromotions } from './promotions.js';
 import { showSettings } from './settings.js';
 import { showPricing } from './pricing.js';
+import { showPrintsMaster, showLicMaster } from './pricemasters.js';
 import { showCustomers } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import outputs from '../amplify_outputs.json';
@@ -77,7 +78,7 @@ const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Numb
 const escSym = (v) => esc(v).replace(/\bAED (?=\d)/g, '\u20C3 ');
 const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 
-// Costs from the supplier price lists (Settings → Kalai margin & charges picks the default supplier, or the cheapest):
+// Costs from the supplier price lists (Pricing → Margin & charges picks the default supplier, or the cheapest):
 // the supplier on the order's job if one is assigned, else the default one's price for this size / style / address.
 // No silent fallback: a missing price stays null and the costing says "no supplier price".
 function pickSupplier(types, pref, costFn) {
@@ -221,7 +222,21 @@ $('loginForm').addEventListener('submit', async (e) => {
 });
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; show('loginView'); };
 $('reload').onclick = load;
-// "Kalai margin & charges" (the old Rates tab) now lives in Settings.
+// Pricing tab: all the price masters in one place — Paintings (website prices per artwork), Framed prints and Image
+// licences (selling prices), and Margin & charges (Kalai's own figures and the default suppliers; the old Rates tab).
+let priceTab = 'paint';
+function showPriceTab(t) {
+  priceTab = t;
+  document.querySelectorAll('#pmTabs [data-pm]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pm === t)));
+  $('pmPaint').hidden = t !== 'paint'; $('pmPrints').hidden = t !== 'prints'; $('pmLic').hidden = t !== 'lic'; $('chargesBox').hidden = t !== 'charges';
+  if (t === 'paint') showPricing();
+  if (t === 'prints') showPrintsMaster($('pmPrints'));
+  if (t === 'lic') showLicMaster($('pmLic'));
+  if (t === 'charges') loadArtists().catch(() => {}).then(() => showRates());
+}
+document.querySelectorAll('#pmTabs [data-pm]').forEach((b) => { b.onclick = () => showPriceTab(b.dataset.pm); });
+window.kalaiPriceTab = showPriceTab;
+// "Kalai margin & charges" (the old Rates tab) now lives in Pricing → Margin & charges.
 window.kalaiShowCharges = () => showRates();
 $('tabOrders').onclick = () => showPane('orders', 'tabOrders');
 $('tabReports').onclick = () => showPane('reports', 'tabReports');
@@ -255,8 +270,8 @@ function showPane(pane, tabId) {
   if (pane === 'messages') showMessages();
   if (pane === 'sellers') showMarket();
   if (pane === 'offers') showPromotions();
-  if (pane === 'settings') { showSettings(); loadArtists().catch(() => {}).then(() => showRates()); }
-  if (pane === 'pricing') showPricing();
+  if (pane === 'settings') showSettings();
+  if (pane === 'pricing') showPriceTab(priceTab);
   if (pane === 'customers') showCustomers();
 }
 
@@ -852,7 +867,7 @@ function costingSection(e) {
     : `${esc(who)} hasn't priced this yet (${e.artistId ? 'artist portal → Commissions' : 'Artist desk'}). You can also type the price here.`;
   return `<fieldset class="cost" id="costing">
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
-    ${rates.saved ? '' : '<div class="muted warnline">Margin &amp; charges are not saved yet: set them under <b>Settings → Kalai margin &amp; charges</b>.</div>'}
+    ${rates.saved ? '' : '<div class="muted warnline">Margin &amp; charges are not saved yet: set them under <b>Pricing → Margin &amp; charges</b>.</div>'}
     <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
       <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Commissions in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">

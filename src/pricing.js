@@ -146,7 +146,7 @@ async function loadAll() {
   P = { ...structuredClone(DEFAULT_P), fx: base.fx ?? DEFAULT_P.fx, customs: base.customs ?? DEFAULT_P.customs, local: base.local ?? DEFAULT_P.local, margin: base.margins?.collection ?? base.margin ?? DEFAULT_P.margin,
     fee: base.fee ?? DEFAULT_P.fee, ins: base.ins ?? DEFAULT_P.ins, reserve: base.reserve ?? DEFAULT_P.reserve, round9: base.round9 ?? false, round25: base.round25 ?? true,
     courier: Object.fromEntries(TIERS.map((t) => [t, base.tiers?.[t]?.courier ?? base.pricing?.courier?.[t] ?? DEFAULT_P.courier[t]])),
-    // Default suppliers (Settings → Kalai margin & charges); older Pricing pages saved the frame shop here.
+    // Default suppliers (Pricing → Margin & charges); older Pricing pages saved the frame shop here.
     frameSource: base.defaults?.framer || base.pricing?.frameSource || 'cheapest', deliverySource: base.defaults?.delivery || 'cheapest' };
   market = { ...structuredClone(DEFAULT_MARKET), ...(base.market || {}) };
   try {
@@ -195,7 +195,7 @@ function masterHtml() {
     <span>Margin ${pc(P.margin)}</span><span>Ziina ${pc(P.fee)}</span><span>Insurance ${pc(P.ins)}</span><span>Reserve ${pc(P.reserve)}</span><span>Customs ${pc(P.customs)}</span><span>₹ → ⃃ ${P.fx}</span>
     <span>India courier ${TIERS.map((t) => `${t} ${P.courier[t]}`).join(' / ')}</span>
     <span>Frames: ${esc(fr || 'cheapest frame shop')}</span><span>Delivery: ${esc(dl || 'cheapest delivery partner')} (Dubai)</span>
-    <button type="button" class="btn small ghost" id="pcToSettings" style="margin-left:auto">Change in Settings → Kalai margin &amp; charges</button>
+    <button type="button" class="btn small ghost" id="pcToSettings" style="margin-left:auto">Change in Margin &amp; charges</button>
     <span class="muted" id="pcMasterMsg" style="font-size:12px;flex-basis:100%">Frame and delivery costs come from the suppliers' price lists. A work whose frame or delivery price is missing from every list shows "no supplier price" and can't be approved until the price list is filled in.</span>
   </div>`;
 }
@@ -444,6 +444,6 @@ export async function showPricing() {
   try { await loadAll(); } catch (ex) { $('pcList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; return; }
   upgradeOld().then((n) => { if (n) { $('pcMasterMsg') && ($('pcMasterMsg').textContent = `${n} earlier price list(s) now have frame sizes and Dhs 25 rounding.`); drawList(); } });
   $('pcMaster').innerHTML = masterHtml();
-  $('pcToSettings').onclick = () => document.getElementById('tabSettings')?.click();
+  $('pcToSettings').onclick = () => window.kalaiPriceTab?.('charges');
   drawList();
 }
