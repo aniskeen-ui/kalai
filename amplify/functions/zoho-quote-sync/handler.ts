@@ -53,7 +53,7 @@ type ZohoBody = {
   vendorpayment?: { payment_id: string; payment_number?: string };
 };
 
-const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order', PHOTO: 'Photo framing' };
+const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order', PHOTO: 'Framed print' };
 const INVOICE_PREFIX = 'KAH-INV-';
 // Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
 // so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
@@ -2158,7 +2158,7 @@ function giftPrintSpec(det: Record<string, string>) {
 /** Photo framing: the print the frame shop makes from the customer's photo. */
 function photoPrintSpec(det: Record<string, string>) {
   const n = Math.max(1, Number(det['Copies']) || 1);
-  return `${n === 1 ? '1 copy' : `${n} copies`}, ${det['Size'] || 'A4'}, fine-art matte print from the customer's photo (download the full-size file below)${/print only/i.test(String(det['Frame'] ?? '')) ? '. Print only: no frame, pack flat' : ''}.${det['Note'] ? ` Customer's note: ${String(det['Note']).slice(0, 200)}` : ''}`;
+  return `${n === 1 ? '1 copy' : `${n} copies`}, ${det['Size'] || 'A4'}, fine-art matte print of ${det['Print'] ? `"${String(det['Print']).slice(0, 80)}"${det['Artwork no.'] ? ` (${det['Artwork no.']})` : ''} from our file` : "the customer's photo"} (download the full-size file below)${/print only/i.test(String(det['Frame'] ?? '')) ? '. Print only: no frame, pack flat' : ''}.${det['Note'] ? ` Customer's note: ${String(det['Note']).slice(0, 200)}` : ''}`;
 }
 function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile: Dict | null) {
   const j = jobs[role]!;
@@ -2171,7 +2171,7 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
     specs: role === 'framer' ? [...(str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
     printJob: role === 'framer' && ['GIFT', 'PHOTO'].includes(str(e, 'kind')),
-    hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || str(e, 'kind') === 'PRICE'),
+    hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || ['PRICE', 'PHOTO'].includes(str(e, 'kind'))),
     to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
     from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
       : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'Studio, Dubai (we confirm the pickup point)', ready: true }) : null,
@@ -2225,9 +2225,9 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     const bucket = process.env.UPLOADS_BUCKET;
     if (!bucket) throw new Error('Not configured');
     let key = str(e, 'fileKey');
-    if (!key.startsWith('uploads/') && str(e, 'kind') === 'PRICE' && process.env.PRODUCT_TABLE) {
+    if (!key.startsWith('uploads/') && ['PRICE', 'PHOTO'].includes(str(e, 'kind')) && process.env.PRODUCT_TABLE) {
       const det = parseDetails(str(e, 'details'));
-      const name = String(det['Artwork'] || str(e, 'title')).split(' (')[0].trim().toLowerCase();
+      const name = String(det['Artwork'] || det['Print'] || str(e, 'title')).split(' (')[0].trim().toLowerCase();
       const pr = (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'title').trim().toLowerCase() === name || (str(x, 'code') && String(det['Code'] ?? det['Artwork no.'] ?? '').includes(str(x, 'code'))));
       key = str(pr, 'imageKey');
     }
@@ -3536,7 +3536,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
     key = 'RECEIVED';
     cust(`We've received your enquiry ${ref}`, [
       kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
-        : kind === 'PHOTO' ? `Thank you for your photo. We'll check it prints sharply, then send you a secure payment link; once paid we print, frame and deliver it.`
+        : kind === 'PHOTO' ? `Thank you for your order. We'll send you a secure payment link and ask for your delivery address; once paid we print, frame and deliver it.`
         : kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
         : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
@@ -3576,8 +3576,8 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
-    if (st === 'FRAMING') cust(kind === 'PHOTO' ? `We're printing and framing your photo (${ref})` : kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
-      kind === 'PHOTO' ? 'Your photo is now with our framer in Dubai: printed on fine-art paper, then mounted and framed.' : kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> has reached our framer in Dubai and is being framed now.`,
+    if (st === 'FRAMING') cust(kind === 'PHOTO' ? `We're printing and framing your order (${ref})` : kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
+      kind === 'PHOTO' ? 'Your print is now with our framer in Dubai: printed on fine-art paper, then mounted and framed.' : kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> has reached our framer in Dubai and is being framed now.`,
       msgLine, "We'll email you the courier and tracking number as soon as it ships."]);
     if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries & orders within 48 hours.']);
     if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,

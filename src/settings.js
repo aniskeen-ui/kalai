@@ -8,7 +8,7 @@ const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Little Artists shipping zones outside the UAE (the website maps each country to one).
-// Photo framing sizes and starting prices (AED, delivered in the UAE): framed, and print only.
+// Framed prints: sizes and starting prices (AED, delivered in the UAE): framed, and print only.
 export const PHOTO_SIZES = [['A4', 'A4 (21 × 30 cm)', 169, 59], ['A3', 'A3 (30 × 42 cm)', 249, 79], ['40×50', '40 × 50 cm', 299, 99], ['50×70', '50 × 70 cm', 399, 139], ['60×80', '60 × 80 cm', 499, 179]];
 const SHIP_ZONES = [['A', 'GCC (Saudi Arabia, Oman, Qatar, Bahrain, Kuwait)'], ['B', 'South Asia (India, Sri Lanka, Pakistan, Bangladesh, Nepal, Maldives, Bhutan)'], ['C', 'UK and Europe'], ['D', 'USA, Canada, Australia, New Zealand'], ['E', 'Rest of the world']];
 // Customer emails by event (the website emails the customer at each step; untick to stop one).
@@ -77,8 +77,8 @@ export async function showSettings() {
       <h3 style="margin:0;font-size:17px">Little Artists: shipping outside the UAE</h3>
       <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">Dhs per parcel, added to the customer's total on the form (framing stays free for ages 3 to 10). Leave a zone blank to show "we quote before you pay". UAE delivery stays Dhs 25 / 35.</div>
         <div style="display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;margin-top:6px">${SHIP_ZONES.map(([z, n]) => `<label for="st-zone${z}" style="font-weight:400;font-size:13px">${z}. ${n}</label><input id="st-zone${z}" type="number" min="0" max="2000" step="5" placeholder="quote">`).join('')}</div></div>
-      <h3 style="margin:0;font-size:17px">Photo framing prices</h3>
-      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">What the customer pays per photo, in Dhs, including UAE delivery (delivery outside the UAE uses the zones above). Framed = print, mount, glass and frame.</div>
+      <h3 style="margin:0;font-size:17px">Framed prints: prices per size</h3>
+      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">What the customer pays for one print from the Framed Prints catalogue (Catalogue → type “Framed print”), in Dhs, UAE delivery included. Framed = print, mount, glass and frame.</div>
         <div style="display:grid;grid-template-columns:1fr 110px 110px;gap:6px 10px;align-items:center;margin-top:6px"><b style="font-size:12px">Size</b><b style="font-size:12px">Framed</b><b style="font-size:12px">Print only</b>${PHOTO_SIZES.map(([k, n, f, p]) => `<span style="font-size:13px">${n}</span><input id="st-pf-${k}" type="number" min="0" max="20000" step="1" placeholder="${f}"><input id="st-pp-${k}" type="number" min="0" max="20000" step="1" placeholder="${p}">`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Customer emails</h3>
       <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">The customer gets an email at each step, from kalaiarthouse@pranixtechno.com (replies come to the studio mailbox). Untick any you don't want sent. Studio notifications always go.</div>

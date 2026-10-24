@@ -13,7 +13,6 @@ import { autoPhones, countryRegionHtml, wireRegion, addressLine, COUNTRIES } fro
 // Every country for the Little Artists form (index.html).
 window.kalaiCountries = COUNTRIES;
 window.kalaiKidsCountries?.(COUNTRIES);
-window.kalaiPhotoCountries?.(COUNTRIES);
 import { cleanTitle } from './title.js';
 
 autoPhones();
@@ -89,7 +88,7 @@ export const STATUS = {
   CANCELLED: 'Cancelled',
 };
 const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
-const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Photo framing' };
+const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Framed print' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
 
 /* ---------- styles ---------- */
@@ -349,7 +348,7 @@ function wireRate(root, items) {
         const { data, errors } = await client.models.Review.create({
           enquiryId: e.id, ref: e.ref, firstName, rating,
           // Only a general label goes with the review (no child's name or commission details).
-          title: e.kind === 'GIFT' ? 'Little Artists framed gift' : e.kind === 'PHOTO' ? 'Framed photo print' : e.kind === 'COMMISSION' ? 'Commissioned painting' : e.title,
+          title: e.kind === 'GIFT' ? 'Little Artists framed gift' : e.kind === 'PHOTO' ? 'Framed print' : e.kind === 'COMMISSION' ? 'Commissioned painting' : e.title,
           comment: String(f.comment.value || '').trim().slice(0, 600), consent: f.consent.checked,
         });
         if (errors?.length) throw new Error(errors[0].message);
@@ -729,7 +728,7 @@ async function save({ ref, subject, fields, files }) {
   const kind = subject.startsWith('Price') || subject.startsWith('Artwork order') ? 'PRICE' : subject.startsWith('Commission') ? 'COMMISSION' : subject.startsWith('Photo framing') ? 'PHOTO' : 'GIFT';
   const title = kind === 'PRICE' ? (fields['Artwork'] || 'Price enquiry').split(' (')[0]
     : kind === 'COMMISSION' ? `Commission: ${fields['Subject'] || ''} (${fields['Style'] || ''})`
-    : kind === 'PHOTO' ? `Photo framing: ${fields['Size'] || ''}${fields['Frame'] ? `, ${fields['Frame']}` : ''}`
+    : kind === 'PHOTO' ? `Framed print: ${fields['Print'] || 'photo'} (${String(fields['Size'] || '').split(' (')[0]})`
     : `Little Artists gift for ${fields['Gift for'] || ''}`;
   const { errors } = await client.models.Enquiry.create({
     ref, kind, title,
@@ -960,9 +959,12 @@ async function showCatalogue() {
     const list = await Promise.all(live.map(async (p) => {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
+      if (p.kind === 'photo') return { id: p.id, print: true, name: p.named ? p.title : cleanTitle(p.title), code: p.code || '', desc: p.description || '', img };
       return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}) };
     }));
-    window.kalaiShowCatalogue(list.filter((x) => x.img));
+    // Framed prints (Catalogue type "Framed print") have their own section; paintings go to the collection.
+    window.kalaiShowPrints?.(list.filter((x) => x.img && x.print));
+    window.kalaiShowCatalogue(list.filter((x) => x.img && !x.print));
   } catch (ex) { console.warn('Catalogue not loaded; showing the built-in collection.', ex); }
 }
 showCatalogue();

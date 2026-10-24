@@ -8,9 +8,9 @@ const client = generateClient();
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const KINDS = { water: 'Watercolour', sketch: 'Pencil sketch' };
+const KINDS = { water: 'Watercolour', sketch: 'Pencil sketch', photo: 'Framed print (photo)' };
 const SUBJECTS = { land: 'Landscapes & water', village: 'Village life', nature: 'Trees & nature', arch: 'Buildings & places', people: 'Portraits' };
-const MEDIUM = { water: 'Watercolour on paper', sketch: 'Graphite on paper' };
+const MEDIUM = { water: 'Watercolour on paper', sketch: 'Graphite on paper', photo: 'Fine-art photographic print' };
 
 let items = [];
 const selected = new Set();

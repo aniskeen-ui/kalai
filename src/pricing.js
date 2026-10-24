@@ -135,7 +135,7 @@ async function loadAll() {
   works = [];
   let nextToken = null;
   do { const x = await client.models.Product.list({ limit: 500, nextToken }); works.push(...(x.data || [])); nextToken = x.nextToken; } while (nextToken);
-  works = works.filter((w) => w.imageKey && w.status !== 'HIDDEN');
+  works = works.filter((w) => w.imageKey && w.status !== 'HIDDEN' && w.kind !== 'photo'); // framed prints use the size prices in Settings
   prices = new Map();
   nextToken = null;
   do { const x = await client.models.ArtworkPrice.list({ limit: 500, nextToken }); (x.data || []).forEach((p) => prices.set(p.productId, p)); nextToken = x.nextToken; } while (nextToken);
