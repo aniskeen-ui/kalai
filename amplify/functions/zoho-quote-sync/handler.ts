@@ -1142,7 +1142,10 @@ async function artistRows(enquiries: Img[], admin = false) {
   const onlyShop = defShop ?? (shops.size === 1 ? [...shops.values()][0] : undefined);
   const shopOf = (c: Img | undefined) => {
     const fj = parseJobs(str(c, 'supplierJobs')).framer;
-    const p = (fj?.supplierId && shops.get(fj.supplierId)) || (fj ? undefined : onlyShop);
+    // The frame shop on the order page (saved with the costing), else the default / only frame shop.
+    let picked: Img | undefined;
+    try { let cs: unknown = str(c, 'costs'); for (let i = 0; i < 2 && typeof cs === 'string'; i++) cs = JSON.parse(cs || '{}'); const fid = String((cs as { framerId?: string } | null)?.framerId ?? ''); picked = fid ? shops.get(fid) : undefined; } catch { picked = undefined; }
+    const p = (fj?.supplierId && shops.get(fj.supplierId)) || (fj ? undefined : picked ?? onlyShop);
     if (!p) return fj ? { name: fj.name, contact: '', phone: '', address: '', assigned: true } : null;
     return { name: str(p, 'business'), contact: str(p, 'contactName'), phone: str(p, 'phone'),
       address: [str(p, 'address'), str(p, 'city'), str(p, 'emirate'), str(p, 'country') || 'UAE'].filter(Boolean).join(', '), assigned: !!fj };

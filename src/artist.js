@@ -242,7 +242,7 @@ function progressBlock(x) {
     : p === 'STARTED' ? `<button type="button" class="btn" data-step="FINISHED">It's finished</button>`
     : '';
   const lockedShip = p === 'SHIPPED' && !x.editShip;
-  const shop = p === 'FINISHED' || p === 'SHIPPED' ? shopBox(x.frameShop) : '';
+  const shop = p ? shopBox(x.frameShop) : ''; // from the moment the artist confirms (Started)
   const ship = lockedShip ? (isAdmin ? `<div><button type="button" class="linkbtn" data-fixship="${esc(x.id)}">Correct courier / AWB (Kalai Art House only)</button></div>` : '')
     : p === 'FINISHED' || p === 'SHIPPED' ? `<div class="aform">
       <div class="field"><label for="sc-${esc(x.id)}">Courier to the frame shop</label><select id="sc-${esc(x.id)}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${x.artistCourier === c || (c === 'Other' && x.artistCourier && !COURIERS.includes(x.artistCourier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>

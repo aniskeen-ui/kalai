@@ -85,15 +85,15 @@ function pickSupplier(types, pref, costFn) {
   const list = suppliers.filter((s) => types.includes(s.type)).map((s) => ({ s, c: costFn(parseCard(s)) })).filter((x) => x.c != null);
   const mine = pref && pref !== 'cheapest' ? list.find((x) => x.s.id === pref) : null;
   const x = mine || list.sort((a, b) => a.c - b.c)[0];
-  return x ? { cost: x.c, name: x.s.business } : null;
+  return x ? { cost: x.c, name: x.s.business, id: x.s.id } : null;
 }
 function estCosts(e) {
   if (!e) return {};
   const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
-  const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name } : pickSupplier(['FRAMER'], d.framer, (card) => frameCost(card, spec));
+  const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name, id: j.framer.supplierId } : pickSupplier(['FRAMER'], d.framer, (card) => frameCost(card, spec));
   const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, { ...e, deliveryEmirate: e.deliveryEmirate || 'Dubai' }, spec, zoneOf));
   const pr = j.printer?.price != null ? { cost: Number(j.printer.price), name: j.printer.name } : pickSupplier(['PRINTER'], d.printer, (card) => printCost(card, spec));
-  return { spec, framing: fr?.cost ?? null, framingFrom: fr?.name || '', local: dl?.cost ?? null, localFrom: dl?.name || '', print: pr?.cost ?? null, printFrom: pr?.name || '' };
+  return { spec, framing: fr?.cost ?? null, framingFrom: fr?.name || '', framingFromId: fr?.id || '', local: dl?.cost ?? null, localFrom: dl?.name || '', print: pr?.cost ?? null, printFrom: pr?.name || '' };
 }
 
 /** Cost build-up for one enquiry, the suggested price and the margin at a given price. */
@@ -1360,6 +1360,16 @@ function renderCost() {
   if (b) b.onclick = () => { $('ePrice').value = r.suggested; $('ePrice').dispatchEvent(new Event('input')); };
 }
 
+/** The frame shop the order page shows (framing job, default or cheapest): kept on the costing so the artist desk
+ *  shows the same shop as where to send the finished work. Quietly updated when the order is opened. */
+async function syncFramer(e) {
+  if (!hasArtist(e) || ['CANCELLED', 'REFUNDED', 'DELIVERED'].includes(e.status)) return;
+  const id = estCosts(e).framingFromId || null, c = costings.get(e.id);
+  let costs = {}; try { costs = c?.costs ? (typeof c.costs === 'string' ? JSON.parse(c.costs) : c.costs) || {} : {}; } catch { costs = {}; }
+  if ((costs.framerId || null) === id) return;
+  const rec = { enquiryId: e.id, costs: JSON.stringify({ ...costs, framerId: id }) };
+  try { const res = c ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec); if (!res.errors?.length) costings.set(e.id, res.data || { ...c, ...rec }); } catch { /* next time */ }
+}
 async function saveCosting(e) {
   const { local, ...inp } = readCosting();
   const r = calc({ ...inp, local }, n(finalPriceStr()));
@@ -1368,6 +1378,7 @@ async function saveCosting(e) {
     framing: r.framing, indiaCourier: r.indiaCourier, localCourier: r.localCourier,
     customs: r.customs != null ? Math.round(r.customs * 100) / 100 : null, total: r.total ?? null, suggested: r.suggested ?? null,
     price: r.price ?? null, margin: r.margin != null ? Math.round(r.margin * 100) / 100 : null, savedAt: new Date().toISOString(),
+    framerId: estCosts(e).framingFromId || null, // the frame shop on the order page: the artist sends the work there
   };
   const existing = costings.get(e.id);
   const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
@@ -1867,6 +1878,7 @@ async function showDetailBody(e) {
 
   wireDiscount(e);
   wireOffer(e);
+  syncFramer(e);
   // Automatic next status from what was just done on the desk (unless the status was changed by hand):
   // price entered on a new enquiry → Price sent (the customer gets the price and Ziina link);
   // payment method + reference entered while waiting for payment → Paid.
