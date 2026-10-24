@@ -1014,11 +1014,14 @@ const COURIERS = ['Aramex', 'DHL', 'Jeebly', 'Quiqup', 'Emirates Post', 'SMSA', 
 const SHIP_STATUSES = ['SHIPPED', 'DELIVERED'];
 function shippingSection(e) {
   const st = e.deliveryState || '';
+  const dj = jobsOf(e).delivery; // a delivery partner's job: courier and AWB come from its portal
   const color = st === 'DELIVERED' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'DRAFT' ? 'var(--gold)' : 'var(--muted)';
   return `<fieldset class="cost" id="shipBox" ${SHIP_STATUSES.includes(e.status) ? '' : 'hidden'}>
     <legend>Delivery</legend>
     ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.deliveryMessage)}</div>` : ''}
-    <div class="two">
+    ${dj ? `<div style="font-size:14px"><b>${esc(dj.name)}</b> (delivery partner)${dj.awb ? ` · AWB <span class="mono">${esc(dj.awb)}</span>` : ' · waiting for the pickup'}${dj.deliveredAt ? ` · delivered ${esc(day(dj.deliveredAt))}` : dj.pickedAt ? ` · picked up ${esc(day(dj.pickedAt))}` : ''}</div>
+      <div class="muted" style="font-size:12px">Filled in automatically from ${esc(dj.name)}'s portal (Picked up → Shipped, Delivered → Delivered). To use another courier, take the delivery job back under Frame shop &amp; delivery.</div>` : ''}
+    <div class="two" ${dj ? 'hidden' : ''}>
       <div class="field"><label for="eCourierSel">Courier</label>
         <select id="eCourierSel">
           <option value="">Choose…</option>
@@ -1029,7 +1032,7 @@ function shippingSection(e) {
       </div>
       <div class="field"><label for="eAwb">AWB / tracking no.</label><input id="eAwb" value="${esc(e.trackingNo)}" placeholder="e.g. 4489 2201 7731"></div>
     </div>
-    <div class="muted" style="font-size:12px">Saving as <b>Shipped</b> creates the delivery challan in Zoho; <b>Delivered</b> marks it delivered. The customer sees the courier and tracking number under My enquiries & orders.</div>
+    <div class="muted" style="font-size:12px" ${dj ? 'hidden' : ''}>Saving as <b>Shipped</b> creates the delivery challan in Zoho; <b>Delivered</b> marks it delivered. The customer sees the courier and tracking number under My enquiries & orders.</div>
   </fieldset>`;
 }
 
