@@ -598,6 +598,8 @@ const JOB_STAGE = { ASSIGNED: 'sent, waiting to accept', ACCEPTED: 'accepted', R
 /** Frame shop & delivery partner for a paid order (supplier portal). */
 // WhatsApp the job to the supplier (message typed in; you press Send): handy for shops that don't use the portal yet.
 function jobWa(e, cur, role, spec) {
+  // Closed order (or this job finished): nothing left to message the supplier about.
+  if (['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(e.status) || ['DELIVERED', 'COLLECTED'].includes(cur?.stage) && !(role === 'printer' && false)) return '';
   const sp = suppliers.find((x) => x.id === cur.supplierId);
   const n = String(sp?.phone || '').replace(/[^\d]/g, '').replace(/^00/, '').replace(/^0(?=5)/, '971');
   if (n.length < 9) return '';
