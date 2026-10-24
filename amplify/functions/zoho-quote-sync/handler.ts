@@ -1128,7 +1128,18 @@ async function artistRows(enquiries: Img[], admin = false) {
   // Where to send the finished work: the frame shop given the framing job, else (when there is only one) our frame shop.
   const shops = new Map<string, Img>();
   if (process.env.SELLER_TABLE) for (const p of await scanAll(process.env.SELLER_TABLE)) if (str(p, 'type') === 'FRAMER' && str(p, 'status') === 'APPROVED') shops.set(str(p, 'id'), p);
-  const onlyShop = shops.size === 1 ? [...shops.values()][0] : undefined;
+  // No framing job yet: the default frame shop (Pricing → Margin & charges), else the only frame shop.
+  let defShop: Img | undefined;
+  if (process.env.RATES_TABLE) {
+    try {
+      const row = plain(await getRow(process.env.RATES_TABLE, { key: { S: 'default' } }));
+      let rd: unknown = row?.data;
+      for (let i = 0; i < 2 && typeof rd === 'string'; i++) rd = JSON.parse(rd);
+      const fid = String((rd as { defaults?: { framer?: string } } | undefined)?.defaults?.framer ?? '');
+      defShop = fid && fid !== 'cheapest' ? shops.get(fid) : undefined;
+    } catch (err) { console.warn('Default frame shop not read', err); }
+  }
+  const onlyShop = defShop ?? (shops.size === 1 ? [...shops.values()][0] : undefined);
   const shopOf = (c: Img | undefined) => {
     const fj = parseJobs(str(c, 'supplierJobs')).framer;
     const p = (fj?.supplierId && shops.get(fj.supplierId)) || (fj ? undefined : onlyShop);
