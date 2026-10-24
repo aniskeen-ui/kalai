@@ -15,7 +15,7 @@ window.kalaiToggleTheme=function(){var r=document.documentElement,cur=r.getAttri
 document.addEventListener('DOMContentLoaded',function(){var r=document.documentElement,cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.querySelectorAll('.theme-btn').forEach(function(b){b.textContent=cur==='dark'?'☀️':'🌙';b.setAttribute('aria-label',cur==='dark'?'Switch to light mode':'Switch to dark mode');b.onclick=window.kalaiToggleTheme})});})();
 </script>
 <style>
-@font-face{font-family:"Dirham";src:url("/fonts/dirham.woff2") format("woff2");font-display:swap;unicode-range:U+20C3}
+@font-face{font-family:"Dirham";src:url("/fonts/dirham.woff2") format("woff2");font-display:swap;unicode-range:U+20C3;size-adjust:78%}
 
 /* Layout: operations desk — enquiry queue on the left, the selected enquiry's editor on the right */
 :root{
