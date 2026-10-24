@@ -1409,6 +1409,7 @@ function showRates() {
         ${supSel('rDefDl', ['COURIER', 'FRAMER'], d.delivery, 'Default delivery partner', 'Its price to the address and parcel size (Dubai for website prices).')}
         ${supSel('rDefPr', ['PRINTER'], d.printer, 'Default print shop', 'Little Artists and framed prints.')}
       </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:-4px"><button type="button" class="btn small ghost" id="rSample">Fill sample frame prices (market estimate)</button><span class="muted" id="rSampleMsg" style="font-size:12px">Fills the empty cells of every frame shop's price list (not Aramex) with Dubai market prices, a different level per shop. Prices a shop entered itself are kept.</span></div>
       <div class="tablewrap" style="max-width:520px"><table class="costs"><thead><tr><th>Tier</th><th>Paper sizes</th><th>India courier (⃃)</th></tr></thead>
         <tbody>${Object.keys(t).map(tierRow).join('')}</tbody></table></div>
       <div class="muted" style="font-size:12px;margin-top:-6px">India → Dubai courier: the artist books and pays it and it is added to the artist's bill (artwork + courier lines). Change it on an order under Overrides for an oversized or express parcel.</div>
@@ -1438,6 +1439,19 @@ function showRates() {
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="zConnect">Connect payment notifications</button></div>
       <div class="muted" style="font-size:12px">Do this once after saving the Ziina token in CloudShell: Ziina then tells the website when a customer has paid, and the order turns Paid by itself.</div></fieldset>`;
   ziinaStatus();
+  $('rSample').onclick = async () => {
+    const b = $('rSample'), m = $('rSampleMsg');
+    if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Fill them now? Click again'; return; }
+    b.disabled = true; m.textContent = 'Filling…';
+    try {
+      const r = await client.mutations.marketAdmin({ action: 'sampleFrameRates', data: '{}' });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      let o = r.data; try { if (typeof o === 'string') o = JSON.parse(o); } catch { o = {}; }
+      const list = o?.shops || [];
+      m.innerHTML = list.length ? 'Done: ' + list.map((x) => `<b>${esc(x.name)}</b> ${esc(x.level)}${x.filled ? ` (${x.filled} prices)` : ''}`).join(' · ') + '. Check each shop in its portal (Artists &amp; sellers → open portal).' : 'No frame shops found.';
+      await loadArtists(); b.textContent = 'Fill sample frame prices (market estimate)'; delete b.dataset.sure;
+    } catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
+  };
   $('ratesForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const b = ev.target.querySelector('button'); b.disabled = true; $('ratesMsg').textContent = '';

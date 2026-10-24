@@ -2431,6 +2431,43 @@ async function marketAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  // Sample price lists for the frame shops (studio, Pricing → Margin & charges): Dubai trade framing prices, a different
+  // level per shop (so "cheapest" picks one), only in empty cells: prices a shop typed itself are kept. Not couriers.
+  if (action === 'sampleFrameRates') {
+    const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
+    // Black slim moulding incl. glass, AED (Dubai framers, trade); fixing = mount, backing and fitting.
+    const BASE: Record<string, number> = { 'A4': 45, 'A3': 65, '30×40': 75, '40×50': 105, '50×70': 150, '60×80': 195, '70×100': 260 };
+    const FIX: Record<string, number> = { 'A4': 15, 'A3': 20, '30×40': 22, '40×50': 30, '50×70': 40, '60×80': 50, '70×100': 65 };
+    const hash = (t: string) => { let x = 2166136261; for (const ch of t) { x ^= ch.charCodeAt(0); x = Math.imul(x, 16777619); } return (x >>> 0) / 4294967295; };
+    const round5 = (v: number) => Math.max(5, Math.round(v / 5) * 5);
+    const now = new Date().toISOString();
+    const done: { name: string; level: string; filled: number }[] = [];
+    for (const p of (await scanAll(S)).map(plain).filter((x): x is Dict => !!x)) {
+      if (p.type !== 'FRAMER' || /aramex/i.test(String(p.business ?? ''))) continue;
+      const id = String(p.id), r = (k: string) => hash(id + k);
+      const level = 0.85 + r('lvl') * 0.35; // 0.85 … 1.20 of the market
+      const prem = { black: 1, white: 1 + r('w') * 0.08, oak: 1.2 + r('o') * 0.15, walnut: 1.35 + r('n') * 0.15, gold: 1.45 + r('g') * 0.2 };
+      const offers = { walnut: r('nw') > 0.25, gold: r('ng') > 0.35 }; // not every shop stocks walnut or gold
+      const fixLvl = 0.8 + r('f') * 0.4;
+      let card: Dict = {};
+      try { let v: unknown = p.rateCard; for (let i = 0; i < 2 && typeof v === 'string'; i++) v = JSON.parse(v); card = (v && typeof v === 'object' ? v : {}) as Dict; } catch { card = {}; }
+      const frames = (card.frames ?? {}) as Record<string, Record<string, number>>, fixing = (card.fixing ?? {}) as Record<string, number>;
+      let filled = 0;
+      for (const [st, m] of Object.entries(prem)) {
+        if ((st === 'walnut' && !offers.walnut) || (st === 'gold' && !offers.gold)) continue;
+        for (const z of SZ) {
+          if (frames[st]?.[z] != null) continue;
+          (frames[st] ??= {})[z] = round5(BASE[z] * level * m * (0.97 + r(st + z) * 0.06)); filled++;
+        }
+      }
+      if (!card.fixingIncluded) for (const z of SZ) if (fixing[z] == null) { fixing[z] = round5(FIX[z] * fixLvl); filled++; }
+      if (!filled) { done.push({ name: String(p.business ?? ''), level: 'kept (already complete)', filled: 0 }); continue; }
+      const next = { ...card, frames, fixing, fixingIncluded: card.fixingIncluded === true, sample: `Sample market prices filled by Kalai Art House ${now.slice(0, 10)}: please check and correct`, at: now };
+      await putRow(S, { ...p, rateCard: JSON.stringify(next), updatedAt: now });
+      done.push({ name: String(p.business ?? ''), level: `${Math.round(level * 100)}% of market`, filled });
+    }
+    return { shops: done };
+  }
   // The studio adds a frame shop or delivery partner by hand (approved straight away). It works through the studio
   // view of the supplier portal until the shop signs up with the same email and takes the account over.
   // Artist prospects (outreach): not artists yet, never on the website, not in "To approve". If one signs up with the
