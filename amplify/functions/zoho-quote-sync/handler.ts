@@ -2,7 +2,7 @@ import { env } from '$amplify/env/zoho-quote-sync';
 import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ScanCommand, BatchGetItemCommand, PutItemCommand, DeleteItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { KURALS } from './kural-data';
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
@@ -53,7 +53,7 @@ type ZohoBody = {
   vendorpayment?: { payment_id: string; payment_number?: string };
 };
 
-const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order', PHOTO: 'Framed print' };
+const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order', PHOTO: 'Framed print', LICENCE: 'Image licence' };
 const INVOICE_PREFIX = 'KAH-INV-';
 // Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
 // so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
@@ -234,7 +234,7 @@ function quoteParts(img: Img) {
     .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total'].includes(k))
     .map(([k, v]) => `${k}: ${v}`);
   // Price enquiries start at 0. Commissions use the website estimate, gifts the total shown.
-  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' || kind === 'PHOTO' ? amount(details['Total']) : kind === 'MARKET' ? num(img, 'quotedPrice') ?? 0 : 0;
+  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' || kind === 'PHOTO' ? amount(details['Total']) : kind === 'MARKET' || kind === 'LICENCE' ? num(img, 'quotedPrice') ?? 0 : 0;
   return {
     ref,
     name: title.slice(0, 100),
@@ -659,7 +659,7 @@ async function purchaseSteps(start: Img) {
   let img: Img = { ...start };
   const id = str(img, 'id');
   const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
-  if ((!str(img, 'zohoPaymentId') && !testing) || ['GIFT', 'PHOTO'].includes(str(img, 'kind')) || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction') === 'CANCEL_FULL') return;
+  if ((!str(img, 'zohoPaymentId') && !testing) || ['GIFT', 'PHOTO', 'LICENCE'].includes(str(img, 'kind')) || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction') === 'CANCEL_FULL') return;
   try {
     if (!str(img, 'zohoPOId')) {
       const po = await recordArtistOrder(img);
@@ -1580,9 +1580,10 @@ async function onStreamRecord(rec: StreamRecord) {
         zohoPaymentId: null,
         zohoMessage: `Test mode: draft invoice ${r.invoice} · AED ${r.total.toLocaleString('en-US')}. Nothing posted (no payment recorded).`,
       });
-      if (!['GIFT', 'PHOTO'].includes(str(img, 'kind'))) {
+      if (!['GIFT', 'PHOTO', 'LICENCE'].includes(str(img, 'kind'))) {
         await purchaseSteps({ ...img, zohoState: { S: 'TEST' }, zohoInvoiceId: { S: r.invoiceId }, zohoInvoice: { S: r.invoice } });
       }
+      await licenceDelivered(img);
       return;
     }
     await writeBack(id, {
@@ -1593,7 +1594,8 @@ async function onStreamRecord(rec: StreamRecord) {
       zohoPaymentId: r.paymentId,
       zohoMessage: paidMessage(r, img),
     });
-    if (!['GIFT', 'PHOTO'].includes(str(img, 'kind'))) await purchaseSteps({ ...img, zohoPaymentId: { S: r.paymentId } });
+    if (!['GIFT', 'PHOTO', 'LICENCE'].includes(str(img, 'kind'))) await purchaseSteps({ ...img, zohoPaymentId: { S: r.paymentId } });
+    await licenceDelivered(img);
     return;
   }
 
@@ -1932,7 +1934,7 @@ async function sellerAction(ev: ApiEvent) {
       emirate: txt(d.emirate, 60), address: txt(d.address, 300), about: txt(d.about, 2000), categories: txt(d.categories, 200),
       bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
       accountNumber: txt(d.accountNumber, 30).replace(/\s+/g, ''), ifsc: txt(d.ifsc, 20).toUpperCase().replace(/\s+/g, ''),
-      mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', allowPrints: d.allowPrints === 'NO' ? 'NO' : 'YES', portfolio: txt(d.portfolio, 300),
+      mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', allowPrints: d.allowPrints === 'NO' ? 'NO' : 'YES', allowLicences: d.allowLicences === 'YES' ? 'YES' : 'NO', portfolio: txt(d.portfolio, 300),
       training: txt(d.training, 120), city: txt(d.city, 60),
       sampleKeys: '[]', photoKey: '',
     };
@@ -2567,6 +2569,151 @@ async function marketOrder(ev: ApiEvent) {
   return { ok: true, ref, total };
 }
 
+// ---------- Image licences (website → artwork → Licences) ----------
+// Sold from the work's full-size file (Catalogue → Prints → print file). Price = % of the original's price (unframed),
+// set per type in Settings. Paid by Ziina; once paid the order is Delivered and the buyer downloads the file under
+// My enquiries & orders. The artist's royalty % is kept on the order (settled like print royalties).
+const LICENCES: Record<string, { label: string; allows: string; pct: number }> = {
+  WEB: { label: 'Web licence', allows: 'Websites, blogs, social media and online ads, worldwide. No printed copies and no products for sale.', pct: 10 },
+  MEDIA: { label: 'Media licence', allows: 'Print and digital media: magazines, books, brochures, flyers, adverts and TV, worldwide. No products for sale.', pct: 25 },
+  COMMERCIAL: { label: 'Commercial licence', allows: 'Products made for sale (posters, cards, textiles, packaging, merchandise), plus all web and media uses.', pct: 50 },
+};
+async function licencePcts(): Promise<Record<string, number>> {
+  const out: Record<string, number> = Object.fromEntries(Object.entries(LICENCES).map(([k, v]) => [k, v.pct]));
+  const t = process.env.SITE_TABLE;
+  if (!t) return out;
+  try {
+    const st = plain(await getRow(t, { id: { S: 'site' } }));
+    const j = st?.licencePcts ? JSON.parse(String(st.licencePcts)) : {};
+    for (const k of Object.keys(out)) if (Number(j[k]) > 0) out[k] = Number(j[k]);
+  } catch { /* defaults */ }
+  return out;
+}
+/** The original's price on the website: unframed when there is one, otherwise the lowest price shown. */
+function artworkPrice(pr: Dict): number {
+  try {
+    const m = pr.priceMatrix ? JSON.parse(String(pr.priceMatrix)) : null;
+    if (m) {
+      if (Number(m.none) > 0) return Number(m.none);
+      const all: number[] = [];
+      const walk = (o: unknown) => { if (typeof o === 'number' && o > 0) all.push(o); else if (o && typeof o === 'object') Object.values(o as Dict).forEach(walk); };
+      walk(m.v === 2 ? m.sizes : m);
+      if (all.length) return Math.min(...all);
+    }
+  } catch { /* no matrix */ }
+  return Number(pr.priceAed ?? 0) || 0;
+}
+async function licenceOrder(ev: ApiEvent) {
+  const table = process.env.ENQUIRY_TABLE, PT = process.env.PRODUCT_TABLE;
+  if (!table || !PT) throw new Error('Not configured');
+  const me = who(ev);
+  const d = parseData(ev.arguments.data);
+  const type = String(d.type ?? '').toUpperCase();
+  const lic = LICENCES[type];
+  if (!lic) throw new Error('Choose a licence type.');
+  const pr = plain(await getRow(PT, { id: { S: txt(d.productId, 80) } }));
+  if (!pr || !['PUBLISHED', 'SOLD'].includes(String(pr.status)) || !pr.licensable || !pr.printKey) throw new Error('Sorry, licences are not available for this work.');
+  if (pr.artistId && process.env.SELLER_TABLE) {
+    const ap = plain(await getRow(process.env.SELLER_TABLE, { id: { S: String(pr.artistId) } }));
+    if (ap?.allowLicences !== 'YES') throw new Error('Sorry, licences are not available for this work.');
+  }
+  const base = artworkPrice(pr);
+  if (!(base > 0)) throw new Error('Sorry, this work has no price yet: please ask us.');
+  const pct = (await licencePcts())[type];
+  const total = Math.max(25, Math.ceil((base * pct) / 100 / 5) * 5);
+  const ref = newRef();
+  const now = new Date().toISOString();
+  const name = txt(d.name, 80) || me.email.split('@')[0];
+  const title = `Image licence: ${String(pr.title || 'Artwork')} (${lic.label})`;
+  const details = { Artwork: String(pr.title || ''), 'Artwork no.': String(pr.code || ''), Licence: lic.label, Allows: lic.allows, File: 'Full-size image file, downloaded after payment', Price: `AED ${total}` };
+  const row: Dict = {
+    id: crypto.randomUUID(), __typename: 'Enquiry', createdAt: now, updatedAt: now, owner: me.owner,
+    ref, kind: 'LICENCE', title: title.slice(0, 200), details: JSON.stringify(details), status: 'RECEIVED',
+    customerName: name, phone: txt(d.phone, 30), email: me.email, quotedPrice: total,
+    productId: String(pr.id), licenceType: type,
+    artistName: String(pr.artist || 'Siva Raja'), ...(pr.artistId ? { artistId: String(pr.artistId), artistCountry: String(pr.artistCountry || 'UAE') } : {}),
+    royaltyPct: Number(pr.printRoyalty ?? 0),
+  };
+  await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row), ConditionExpression: 'attribute_not_exists(id)' }));
+  // Straight to "Price sent": the stream makes the Ziina link and emails it.
+  await updateEnquiry(String(row.id), { status: 'PRICE_SENT' });
+  console.log(`Licence order ${ref}: ${pr.title} ${type} = AED ${total}`);
+  return { ok: true, ref, id: row.id, total };
+}
+/** Paid licence: nothing to frame or ship, so it is delivered at once (the file is in My enquiries & orders). */
+async function licenceDelivered(img: Img) {
+  if (str(img, 'kind') !== 'LICENCE') return;
+  const now = new Date().toISOString();
+  await writeBack(str(img, 'id'), { status: 'DELIVERED', deliveredAt: now });
+}
+const paidLike = (e: Img) => !!(str(e, 'zohoPaymentId') || str(e, 'ziinaPaidAt') || str(e, 'zohoState') === 'TEST') && !['REFUNDED', 'CANCELLED'].includes(str(e, 'status'))
+  || ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'].includes(str(e, 'status'));
+async function licenceFile(e: Img) {
+  if (str(e, 'kind') !== 'LICENCE') throw new Error('Not a licence order.');
+  if (!paidLike(e)) throw new Error('The file is ready to download once the licence is paid.');
+  const PT = process.env.PRODUCT_TABLE, bucket = process.env.UPLOADS_BUCKET;
+  if (!PT || !bucket) throw new Error('Not configured');
+  const pr = plain(await getRow(PT, { id: { S: str(e, 'productId') } }));
+  const key = String(pr?.printKey || '');
+  if (!key) throw new Error('The file is being prepared: please contact us.');
+  const ext = (key.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+  const name = `${String(pr?.title || 'artwork').replace(/[^A-Za-z0-9 _-]/g, '').trim().replace(/\s+/g, '-').slice(0, 50) || 'artwork'}-${str(e, 'ref')}.${ext}`;
+  return { url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: `attachment; filename="${name}"` }), { expiresIn: 900 }), type: str(e, 'licenceType'), label: LICENCES[str(e, 'licenceType')]?.label ?? 'Licence', allows: LICENCES[str(e, 'licenceType')]?.allows ?? '' };
+}
+
+/** Print files uploaded before licences were sold sit in the public catalogue/ folder: move them to private originals/. */
+async function securePrintFiles() {
+  const PT = process.env.PRODUCT_TABLE, bucket = process.env.UPLOADS_BUCKET;
+  if (!PT || !bucket) return;
+  for (const raw of await scanAll(PT)) {
+    const pr = plain(raw);
+    const key = String(pr?.printKey || '');
+    if (!pr || !key.startsWith('catalogue/print/')) continue;
+    const to = key.replace(/^catalogue\/print\//, 'originals/print/');
+    await s3.send(new CopyObjectCommand({ Bucket: bucket, CopySource: `${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`, Key: to }));
+    await putRow(PT, { ...pr, printKey: to, updatedAt: new Date().toISOString() });
+    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    console.log(`Print file moved to private: ${to}`);
+  }
+}
+
+// ---------- Certificate of authenticity (originals) ----------
+// Number COA-<order ref without KA->. The customer downloads it from My enquiries & orders once paid; anyone can check
+// a number on the website (#verify), which shows the work and the date, never the buyer.
+const coaNumber = (ref: string) => `COA-${ref.replace(/^KA-/, '')}`;
+async function certificateOf(e: Img, forOwner: boolean) {
+  const kind = str(e, 'kind');
+  const det = parseDetails(str(e, 'details'));
+  const original = ['PRICE', 'COMMISSION'].includes(kind) || (kind === 'MARKET' && String(det['Maker'] ?? '') === 'Artist');
+  if (!original) throw new Error('Certificates are for original artworks.');
+  if (!paidLike(e)) throw new Error('The certificate is issued once the order is paid.');
+  const no = String(det['Artwork no.'] ?? '').trim();
+  const pr = no && process.env.PRODUCT_TABLE ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no) : undefined;
+  let showName = true;
+  if (process.env.SITE_TABLE) { const st = plain(await getRow(process.env.SITE_TABLE, { id: { S: 'site' } })); showName = st?.showArtists !== false; }
+  const artist = str(e, 'artistName') || (pr && str(pr, 'artist')) || (kind === 'MARKET' ? str(e, 'sellerName') : 'Siva Raja');
+  return {
+    valid: true,
+    number: coaNumber(str(e, 'ref')),
+    title: (pr && str(pr, 'title')) || str(e, 'title').replace(/^(Artwork order|Commission request|Commission): /i, ''),
+    artist: showName ? artist : 'Kalai Art House studio artist',
+    medium: (pr && str(pr, 'medium')) || String(det['Style'] ?? det['Medium'] ?? ''),
+    size: (pr && str(pr, 'size')) || String(det['Size'] ?? ''),
+    code: no,
+    issued: str(e, 'ziinaPaidAt') || str(e, 'costingAt') || str(e, 'updatedAt'),
+    ...(forOwner ? { ref: str(e, 'ref'), owner: str(e, 'customerName') } : {}),
+  };
+}
+async function verifyCertificate(code: string) {
+  const m = code.toUpperCase().replace(/\s+/g, '').match(/(\d{6}-[A-Z0-9]{4})/);
+  const table = process.env.ENQUIRY_TABLE;
+  if (!m || !table) return { valid: false };
+  const ref = `KA-${m[1]}`;
+  const e = (await scanAll(table)).find((x) => str(x, 'ref') === ref);
+  if (!e) return { valid: false };
+  try { return await certificateOf(e, false); } catch { return { valid: false }; }
+}
+
 /** Update an enquiry as a "desk edit" (no zohoAt), so the stream reacts to it (challan, emails). */
 async function updateEnquiry(id: string, set: Dict) {
   const table = process.env.ENQUIRY_TABLE;
@@ -3188,7 +3335,7 @@ async function assignCodes() {
 // The customer types a code on an order that has a price and isn't paid. The function checks the offer (dates, active,
 // minimum order, what it applies to, uses left), lowers quotedPrice and keeps listPrice + discountAmount. The price
 // change flows on by itself: new Ziina link, Zoho quote updated, invoice at the discounted price.
-const AREA: Record<string, string[]> = { ALL: ['PRICE', 'COMMISSION', 'GIFT', 'MARKET', 'PHOTO'], ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
+const AREA: Record<string, string[]> = { ALL: ['PRICE', 'COMMISSION', 'GIFT', 'MARKET', 'PHOTO', 'LICENCE'], ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
 async function findPromo(code: string) {
   const table = process.env.PROMO_TABLE;
   if (!table || !code) return null;
@@ -3559,6 +3706,7 @@ function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
   if (str(e, 'cancelState') === 'REQUESTED') return t('NONE', 0, 'A request is already open for this order. We will reply by email.', false);
   if (action === 'CANCEL') {
     if (['RECEIVED', 'PRICE_SENT'].includes(status)) return t('FREE', 0, 'Nothing has been paid, so the enquiry is simply cancelled.');
+    if (str(e, 'kind') === 'LICENCE') return t('NONE', 0, 'Image licences are digital: once paid, the file is yours to download and the licence can\'t be cancelled.', false);
     if (['PAID', 'FRAMING'].includes(status)) {
       // Crafts shop: a full refund until it is dispatched (then it is Shipped and can't be cancelled).
       const started = str(e, 'kind') === 'MARKET' ? false : ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
@@ -3610,6 +3758,10 @@ async function customerRequest(ev: ApiEvent) {
     if (!str(e, 'zohoChallanId')) throw new Error('No delivery note yet.');
     return zohoPdf(`/deliverychallans/${str(e, 'zohoChallanId')}`, str(e, 'zohoChallan') || `delivery-${str(e, 'ref')}`);
   }
+  // Image licence: a short-lived download link to the full-size file, once paid.
+  if (action === 'LICENCE_FILE') return licenceFile(e);
+  // Certificate of authenticity for an original (the website draws the PDF).
+  if (action === 'COA') return certificateOf(e, true);
   const terms = cancelTerms(e, action);
   if (!terms.allowed) throw new Error(terms.note);
   const reason = String(a.reason ?? '').trim().slice(0, 1000);
@@ -3715,6 +3867,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
     key = 'RECEIVED';
     cust(`We've received your enquiry ${ref}`, [
       kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
+        : kind === 'LICENCE' ? `Thank you for your licence order: <b>${h(title)}</b>, <b>${aed(price)}</b>. The secure payment link follows in a moment; once paid you can download the full-size file under My enquiries & orders.`
         : kind === 'PHOTO' ? `Thank you for your order. We'll send you a secure payment link and ask for your delivery address; once paid we print, frame and deliver it.`
         : kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
         : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
@@ -3744,13 +3897,22 @@ function mailsFor(rec: StreamRecord): Mail[] {
   const statusChanged = st !== ost && !staleBack;
   if (statusChanged) {
     key = st;
-    if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
+    if (st === 'PRICE_SENT' && kind === 'LICENCE') cust(`Pay for your licence: ${title} (${ref})`, [
+      `Your <b>${h(title.replace(/^Image licence:\s*/i, ''))}</b> costs <b>${aed(price)}</b>.`,
+      str(img, 'paymentLink') ? 'Pay securely with the button below. As soon as it is paid, the full-size file is ready to download under My enquiries & orders.' : 'We will send the payment link shortly.',
+      `What the licence allows: ${h(String(parseDetails(str(img, 'details'))['Allows'] ?? ''))} The artist keeps the copyright; please credit "Artwork © the artist / Kalai Art House".`,
+      `By paying you agree to our <a href="${SITE}/#terms">terms</a>. Licences are digital and can't be cancelled once paid.`],
+      str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
+    else if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
       price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>, including framing, ${(str(img, 'deliveryCountry') || 'UAE') === 'UAE' ? 'delivery in the UAE' : `shipping to ${h(str(img, 'deliveryCountry'))}`} and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
       msgLine, str(img, 'paymentLink') ? 'You can pay securely with the button below. The price is held for 7 days.' : 'The price is held for 7 days. Reply to this email or message us on WhatsApp to go ahead.',
       str(img, 'deliveryAddress') ? '' : 'Please also add your <b>delivery address</b> under My enquiries & orders, so we can ship it as soon as it is ready.',
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>, including the cancellation policy.`],
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
-    if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
+    if (st === 'PAID' && kind === 'LICENCE') cust(`Your licensed file is ready (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>.`,
+      'Download the full-size file under <b>My enquiries & orders</b> (button below): sign in with this email address. You can download it again any time.',
+      str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', 'Thank you for supporting the artist.']);
+    else if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
@@ -3860,6 +4022,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     const st = process.env.SITE_TABLE ? (await ddb.send(new GetItemCommand({ TableName: process.env.SITE_TABLE, Key: { id: { S: 'site' } } })).catch(() => null))?.Item : undefined;
     const hour = Number(st?.kuralHour?.N ?? 6), dubaiHour = new Date(Date.now() + 4 * 3600_000).getUTCHours();
     if (dubaiHour < hour) return { skipped: 'not yet' };
+    await securePrintFiles().catch((e) => console.log('Print files not moved', e));
     const r = await dailyKural(false);
     if (!(r as { skipped?: string }).skipped) await refreshInr().catch((e) => console.log('INR rate not updated', e));
     return r;
@@ -3869,6 +4032,8 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
+    if (field === 'licenceOrder') return JSON.stringify(await licenceOrder(event));
+    if (field === 'verifyCertificate') return JSON.stringify(await verifyCertificate(String(event.arguments.code ?? '')));
     if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
     if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));

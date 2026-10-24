@@ -30,6 +30,8 @@ let kuralSec = 10;
     window.kalaiRound = { usd: Number(st.usdRound) || 5, inr: Number(st.inrRound) || 50, up: st.roundUp === true, approx: st.approxSign !== false };
     try { window.kalaiShipZones = JSON.parse(st.shipZones || '{}') || {}; } catch { window.kalaiShipZones = {}; }
     try { window.kalaiPhotoPrices = JSON.parse(st.photoPrices || '{}') || {}; } catch { window.kalaiPhotoPrices = {}; }
+    try { window.kalaiLicencePcts = JSON.parse(st.licencePcts || '{}') || {}; } catch { window.kalaiLicencePcts = {}; }
+    window.kalaiInstalments = st.instalments || '';
     window.kalaiPhotoFee?.();
     window.kalaiLeadDefault = st.leadDefault || '';
     window.kalaiRedrawPrices?.();
@@ -88,8 +90,9 @@ export const STATUS = {
   CANCELLED: 'Cancelled',
 };
 const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
-const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Framed print' };
+const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Framed print', LICENCE: 'Image licence' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
+const LICENCE_STEPS = ['RECEIVED', 'PRICE_SENT', 'DELIVERED'];
 
 /* ---------- styles ---------- */
 const css = `
@@ -383,6 +386,7 @@ function damageOpen(e) {
   return !Number.isFinite(at) || Date.now() - at <= DAMAGE_HOURS * 3600_000;
 }
 function requestBlock(e) {
+  if (e.kind === 'LICENCE' && !['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED')) return ''; // digital: no cancellation once paid
   const when = e.cancelRequestedAt ? new Date(e.cancelRequestedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
   if (e.cancelState === 'REQUESTED') {
     return `<div class="enq-msg warn">${e.cancelRequest === 'CANCEL' ? `Cancellation requested on ${esc(when)}. Refund due: <b>${aedTxt(e.cancelRefundDue)}</b>, sent within 7 working days. We'll email you when it's done.`
@@ -423,7 +427,109 @@ function requestForm(e, which) {
     <div class="row"><button class="btn primary" type="submit">Send report</button><button class="btn" type="button" data-close>Close</button></div>
   </form>`;
 }
+// Image licence: download the full-size file once paid (a fresh 15-minute link each time).
+function licenceBlock(e) {
+  if (e.kind !== 'LICENCE') return '';
+  const d = parseDet(e.details), st = e.status || 'RECEIVED';
+  const paid = ['PAID', 'DELIVERED'].includes(st);
+  return `<div class="enq-msg"><b>${esc(d.Licence || 'Licence')}</b>: ${esc(d.Allows || '')}${paid ? '' : ' The file is ready to download as soon as it is paid.'}</div>
+    ${paid ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button type="button" class="btn primary" data-licfile="${esc(e.id)}">⬇ Download the full-size file</button><span class="acct-info" style="font-size:12px">Credit: “Artwork © the artist / Kalai Art House”. The artist keeps the copyright.</span></div>` : ''}`;
+}
+// Certificate of authenticity for an original, once paid.
+const COA_KINDS = ['PRICE', 'COMMISSION', 'MARKET'];
+function coaBlock(e) {
+  const st = e.status || 'RECEIVED';
+  if (!COA_KINDS.includes(e.kind) || !['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(st)) return '';
+  if (e.kind === 'MARKET' && parseDet(e.details).Maker !== 'Artist') return '';
+  return `<div style="font-size:13px"><button type="button" class="linkbtn" data-coa="${esc(e.id)}">🏅 Certificate of authenticity (PDF)</button></div>`;
+}
+let jsPdfLoad = null;
+const loadJsPdf = () => (jsPdfLoad ||= new Promise((ok, no) => { if (window.jspdf) return ok(window.jspdf); const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; sc.onload = () => ok(window.jspdf); sc.onerror = () => { jsPdfLoad = null; no(new Error('Could not load the PDF maker. Check your connection and try again.')); }; document.head.appendChild(sc); }));
+async function certificatePdf(c) {
+  const { jsPDF } = await loadJsPdf();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297, H = 210, gold = [154, 117, 46], ink = [40, 32, 24];
+  doc.setDrawColor(...gold); doc.setLineWidth(1.2); doc.rect(10, 10, W - 20, H - 20); doc.setLineWidth(0.3); doc.rect(14, 14, W - 28, H - 28);
+  doc.setTextColor(...gold); doc.setFont('times', 'normal'); doc.setFontSize(13); doc.text('KALAI ART HOUSE  ·  DUBAI', W / 2, 32, { align: 'center' });
+  doc.setTextColor(...ink); doc.setFont('times', 'bold'); doc.setFontSize(30); doc.text('Certificate of Authenticity', W / 2, 50, { align: 'center' });
+  doc.setFont('times', 'normal'); doc.setFontSize(12); doc.text('This certifies that the artwork described below is an original work, made by hand and signed by the artist.', W / 2, 62, { align: 'center' });
+  const rows = [['Title', c.title], ['Artist', c.artist], ['Medium', c.medium], ['Size', c.size], ['Artwork no.', c.code], ['Order', c.ref], ['Issued', c.issued ? new Date(c.issued).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''], ['Collector', c.owner]].filter((r) => r[1]);
+  let y = 80; doc.setFontSize(13);
+  rows.forEach(([k, v]) => { doc.setFont('times', 'bold'); doc.text(k, 80, y); doc.setFont('times', 'normal'); doc.text(String(v).slice(0, 80), 125, y); y += 9; });
+  doc.setDrawColor(...gold); doc.setLineWidth(0.4); doc.line(195, 172, 265, 172); doc.setFontSize(10); doc.text('For Kalai Art House', 230, 178, { align: 'center' });
+  doc.setTextColor(...gold); doc.setFont('courier', 'bold'); doc.setFontSize(12); doc.text(`Certificate no. ${c.number}`, 32, 170);
+  doc.setFont('times', 'normal'); doc.setTextColor(...ink); doc.setFontSize(10); doc.text(`Check it at ${location.origin}/#verify (enter the certificate number).`, 32, 177);
+  doc.save(`${c.number}.pdf`);
+}
+// Anyone: check a certificate number (website → #verify).
+window.kalaiVerifyCoa = async (code) => {
+  const { data, errors } = await client.mutations.verifyCertificate({ code }, { authMode: 'apiKey' });
+  if (errors?.length) throw new Error(errors[0].message);
+  return typeof data === 'string' ? JSON.parse(data) : data;
+};
+// Website → artwork → Licences → Buy: sign in, the function prices it and makes the Ziina link, then we go to it.
+let pendingLicence = null;
+async function buyLicence(pl) {
+  title.textContent = 'Image licence';
+  body.innerHTML = `<p>Preparing your secure payment for the <b>${esc(pl.label)}</b> of <b>${esc(pl.name)}</b>…</p><p class="acct-info" id="licWait"></p>`;
+  open();
+  try {
+    const { data, errors } = await client.mutations.licenceOrder({ data: JSON.stringify({ productId: pl.productId, type: pl.type, name: state.name || '' }) });
+    if (errors?.length) throw new Error(errors[0].message);
+    const r = typeof data === 'string' ? JSON.parse(data) : data;
+    const w = body.querySelector('#licWait');
+    for (let i = 0; i < 12; i++) {
+      await new Promise((ok) => setTimeout(ok, 1500));
+      const g = await client.models.Enquiry.get({ id: r.id }).catch(() => null);
+      const link = g?.data?.paymentLink;
+      if (link) {
+        body.innerHTML = `<p>Your <b>${esc(pl.label)}</b> for <b>${esc(pl.name)}</b>: <b>⃃ ${Number(r.total).toLocaleString('en-US')}</b> (order ${esc(r.ref)}).</p>
+          <a class="btn primary" style="text-decoration:none;text-align:center;display:block" href="${esc(link)}">Pay ⃃ ${Number(r.total).toLocaleString('en-US')} securely</a>
+          <p class="acct-info">After paying you come back here and the full-size file is ready to download under My enquiries &amp; orders.</p>`;
+        location.href = link;
+        return;
+      }
+      if (w) w.textContent = 'Creating the payment link…';
+    }
+    body.innerHTML = `<p>Order <b>${esc(r.ref)}</b> is saved (⃃ ${Number(r.total).toLocaleString('en-US')}). We've emailed you the payment link; it is also under My enquiries &amp; orders.</p><button class="btn primary" type="button" id="licList">My enquiries &amp; orders</button>`;
+    body.querySelector('#licList').onclick = showList;
+  } catch (ex) {
+    body.innerHTML = `<p class="acct-err">${esc(ex.message || 'Could not start the licence order.')}</p>`;
+  }
+}
+window.kalaiBuyLicence = (pl) => {
+  if (state.user) { buyLicence(pl); return; }
+  pendingLicence = pl;
+  showSignIn('Sign in or create a free account to buy a licence, so you can pay securely and download the file.');
+  open();
+};
+
 function wireRequests(root, items) {
+  root.querySelectorAll('[data-licfile]').forEach((b) => {
+    b.onclick = async () => {
+      b.disabled = true; const t0 = b.textContent; b.textContent = 'Preparing the download…';
+      try {
+        const { data, errors } = await client.mutations.customerRequest({ id: b.dataset.licfile, action: 'LICENCE_FILE' });
+        if (errors?.length) throw new Error(errors[0].message);
+        const r = typeof data === 'string' ? JSON.parse(data) : data;
+        location.href = r.url;
+        b.textContent = t0;
+      } catch (ex) { b.textContent = ex.message || 'Could not get the file.'; }
+      finally { b.disabled = false; }
+    };
+  });
+  root.querySelectorAll('[data-coa]').forEach((b) => {
+    b.onclick = async () => {
+      const t0 = b.textContent; b.disabled = true; b.textContent = 'Making the certificate…';
+      try {
+        const { data, errors } = await client.mutations.customerRequest({ id: b.dataset.coa, action: 'COA' });
+        if (errors?.length) throw new Error(errors[0].message);
+        await certificatePdf(typeof data === 'string' ? JSON.parse(data) : data);
+        b.textContent = t0;
+      } catch (ex) { b.textContent = ex.message || 'Could not make the certificate.'; }
+      finally { b.disabled = false; }
+    };
+  });
   root.querySelectorAll('[data-pdf]').forEach((b) => {
     b.onclick = () => openPdf(async () => {
       const { data, errors } = await client.mutations.customerRequest({ id: b.dataset.id, action: b.dataset.pdf });
@@ -580,7 +686,7 @@ function wireCodes(root) {
 }
 function card(e) {
   const st = e.status || 'RECEIVED';
-  const steps = e.kind === 'MARKET' ? MARKET_STEPS : STEPS;
+  const steps = e.kind === 'MARKET' ? MARKET_STEPS : e.kind === 'LICENCE' ? LICENCE_STEPS : STEPS;
   const idx = steps.indexOf(st);
   const pillCls = st === 'DELIVERED' ? 'pill done' : st === 'CANCELLED' || st === 'REFUNDED' ? 'pill stop' : 'pill';
   const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
@@ -602,7 +708,9 @@ function card(e) {
     ${(st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? `<div class="enq-msg">${st === 'DELIVERED' ? 'Delivered' : 'Shipped'} with <b>${esc(e.courierName)}</b>${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}</div>` : ''}
     ${e.zohoInvoiceId || e.zohoChallanId ? `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">${e.zohoInvoiceId ? `<button type="button" class="linkbtn" data-pdf="INVOICE_PDF" data-id="${esc(e.id)}">📄 Invoice${e.zohoInvoice ? ` ${esc(e.zohoInvoice)}` : ''} (PDF)</button>` : ''}${e.zohoChallanId ? `<button type="button" class="linkbtn" data-pdf="CHALLAN_PDF" data-id="${esc(e.id)}">🚚 Delivery note (PDF)</button>` : ''}</div>` : ''}
     ${pay}
-    ${addressBlock(e)}
+    ${licenceBlock(e)}
+    ${coaBlock(e)}
+    ${e.kind === 'LICENCE' ? '' : addressBlock(e)}
     ${requestBlock(e)}
     ${rateBlock(e)}
   </article>`;
@@ -778,7 +886,7 @@ async function save({ ref, subject, fields, files }) {
 
 /* ---------- Crafts shop: order an item (signed in; the price comes from the listing on the server) ---------- */
 let pendingOrder = null;
-function afterSignIn() { if (pendingOrder) { const p = pendingOrder; pendingOrder = null; showOrder(p); } else showList(); }
+function afterSignIn() { if (pendingLicence) { const pl = pendingLicence; pendingLicence = null; buyLicence(pl); return; } if (pendingOrder) { const p = pendingOrder; pendingOrder = null; showOrder(p); } else showList(); }
 let lastAddr = null;
 async function showOrder(p) {
   title.textContent = 'Order';
@@ -994,7 +1102,7 @@ async function showCatalogue() {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
       if (p.kind === 'photo') return { id: p.id, print: true, name: p.named ? p.title : cleanTitle(p.title), code: p.code || '', desc: p.description || '', img };
-      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}), ...(p.printable ? { printable: true, printMax: p.printMax || 'A3', printRoyalty: Number(p.printRoyalty || 0) } : {}) };
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}), ...(p.printable ? { printable: true, printMax: p.printMax || 'A3', printRoyalty: Number(p.printRoyalty || 0) } : {}), ...(p.licensable && p.printKey ? { licensable: true } : {}) };
     }));
     // Framed prints (Catalogue type "Framed print") have their own section; paintings go to the collection.
     // Framed Prints: our photos, then paintings with prints switched on (Catalogue → Sell framed prints).

@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Little Artists shipping zones outside the UAE (the website maps each country to one).
 // Framed prints: sizes and starting prices (⃃, delivered in the UAE): framed, and print only.
+export const LIC_TYPES = [['WEB', 'Web licence', 'websites and social media', 10], ['MEDIA', 'Media licence', 'print and digital media, adverts', 25], ['COMMERCIAL', 'Commercial licence', 'products for sale', 50]];
 export const PHOTO_SIZES = [['A4', 'A4 (21 × 30 cm)', 169, 59], ['A3', 'A3 (30 × 42 cm)', 249, 79], ['40×50', '40 × 50 cm', 299, 99], ['50×70', '50 × 70 cm', 399, 139], ['60×80', '60 × 80 cm', 499, 179]];
 const SHIP_ZONES = [['A', 'GCC (Saudi Arabia, Oman, Qatar, Bahrain, Kuwait)'], ['B', 'South Asia (India, Sri Lanka, Pakistan, Bangladesh, Nepal, Maldives, Bhutan)'], ['C', 'UK and Europe'], ['D', 'USA, Canada, Australia, New Zealand'], ['E', 'Rest of the world']];
 // Customer emails by event (the website emails the customer at each step; untick to stop one).
@@ -80,6 +81,12 @@ export async function showSettings() {
       <h3 style="margin:0;font-size:17px">Framed prints: prices per size</h3>
       <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">What the customer pays for one print from the Framed Prints catalogue (Catalogue → type “Framed print”), in Dhs, UAE delivery included. Framed = print, mount, glass and frame.</div>
         <div style="display:grid;grid-template-columns:1fr 110px 110px;gap:6px 10px;align-items:center;margin-top:6px"><b style="font-size:12px">Size</b><b style="font-size:12px">Framed</b><b style="font-size:12px">Print only</b>${PHOTO_SIZES.map(([k, n, f, p]) => `<span style="font-size:13px">${n}</span><input id="st-pf-${k}" type="number" min="0" max="20000" step="1" placeholder="${f}"><input id="st-pp-${k}" type="number" min="0" max="20000" step="1" placeholder="${p}">`).join('')}</div></div>
+      <h3 style="margin:0;font-size:17px">Image licences: price as % of the artwork</h3>
+      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">On each artwork's Licences tab (works ticked “Sell licences” in Catalogue, with a print file). Price = this % of the original's unframed price, rounded up to Dhs 5 (minimum Dhs 25). The artist's royalty % is kept on the order.</div>
+        <div style="display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;margin-top:6px">${LIC_TYPES.map(([k, n, d, def]) => `<label for="st-lic-${k}" style="font-weight:400;font-size:13px"><b>${n}</b> · ${d}</label><input id="st-lic-${k}" type="number" min="1" max="300" step="1" placeholder="${def}">`).join('')}</div></div>
+      <h3 style="margin:0;font-size:17px">Pay in instalments</h3>
+      <div class="field" style="max-width:640px"><label for="st-inst">Show “4 interest-free payments” on artworks</label><select id="st-inst" style="max-width:220px"><option value="">Off</option><option>Tabby</option><option>Tamara</option></select>
+        <div class="muted" style="font-size:12px">Turn on only once your Tabby or Tamara merchant account is open. Customers who want it tick “Pay in 4 instalments” when they order, and you send them the Tabby / Tamara payment link instead of Ziina.</div></div>
       <h3 style="margin:0;font-size:17px">Customer emails</h3>
       <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">The customer gets an email at each step, from kalaiarthouse@pranixtechno.com (replies come to the studio mailbox). Untick any you don't want sent. Studio notifications always go.</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 14px;margin-top:6px">${MAILS.map(([k, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-mail="${k}" style="width:auto"> ${l}</label>`).join('')}</div></div>
@@ -134,6 +141,9 @@ export async function showSettings() {
     document.querySelectorAll('[data-mail]').forEach((c) => { c.checked = !off.includes(c.dataset.mail); });
     let zones = {}; try { zones = JSON.parse(row?.shipZones || '{}') || {}; } catch { zones = {}; }
     SHIP_ZONES.forEach(([z]) => { $('st-zone' + z).value = zones[z] ?? ''; });
+    let lp = {}; try { lp = JSON.parse(row?.licencePcts || '{}') || {}; } catch { lp = {}; }
+    LIC_TYPES.forEach(([k]) => { $('st-lic-' + k).value = lp[k] ?? ''; });
+    $('st-inst').value = row?.instalments || '';
     let pp = {}; try { pp = JSON.parse(row?.photoPrices || '{}') || {}; } catch { pp = {}; }
     PHOTO_SIZES.forEach(([k]) => { $('st-pf-' + k).value = pp[k]?.framed ?? ''; $('st-pp-' + k).value = pp[k]?.print ?? ''; });
     $('stInrAt').textContent = row?.inrRateAt ? `Rate from the European Central Bank (via Frankfurter), updated ${new Date(row.inrRateAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Updated automatically each morning at 06:05 Dubai time, from the European Central Bank rate.';
@@ -184,6 +194,10 @@ async function save() {
     if (f || p) pp[k] = { ...(f ? { framed: Number(f) } : {}), ...(p ? { print: Number(p) } : {}) };
   }
   rec.photoPrices = Object.keys(pp).length ? JSON.stringify(pp) : null;
+  const lp = {};
+  for (const [k, n] of LIC_TYPES) { const v = $('st-lic-' + k).value.trim(); if (!v) continue; if (!(Number(v) >= 1 && Number(v) <= 300)) { $('stMsg').textContent = `${n}: enter a % from 1 to 300, or leave it blank.`; return; } lp[k] = Number(v); }
+  rec.licencePcts = Object.keys(lp).length ? JSON.stringify(lp) : null;
+  rec.instalments = $('st-inst').value || null;
   rec.mailOff = [...document.querySelectorAll('[data-mail]')].filter((c) => !c.checked).map((c) => c.dataset.mail).join(',') || null;
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;

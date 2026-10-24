@@ -10,7 +10,7 @@ const schema = a.schema({
   Enquiry: a
     .model({
       ref: a.string().required(),
-      kind: a.enum(['PRICE', 'COMMISSION', 'GIFT', 'MARKET', 'PHOTO']),
+      kind: a.enum(['PRICE', 'COMMISSION', 'GIFT', 'MARKET', 'PHOTO', 'LICENCE']),
       title: a.string().required(),
       details: a.json(),
       customerName: a.string(),
@@ -120,6 +120,9 @@ const schema = a.schema({
       addressBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Crafts shop (marketplace) orders: kind MARKET, created by the marketOrder mutation at the listing's price.
       listingId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Image licence orders (kind LICENCE, made by licenceOrder): the catalogue work and the licence type WEB | MEDIA | COMMERCIAL.
+      productId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      licenceType: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       sellerName: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       qty: a.integer().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       unitPrice: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -259,6 +262,8 @@ const schema = a.schema({
       printMax: a.string(),
       printKey: a.string(),
       printRoyalty: a.float(),
+      // Image licences of this work (website → Licences tab): sold from the same full-size file (printKey).
+      licensable: a.boolean(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
@@ -334,6 +339,7 @@ const schema = a.schema({
       outreach: a.string(), // artist prospects (status PROSPECT): To contact | Contacted | Replied | Not interested | No reply
       outreachAt: a.string(),
       allowPrints: a.string(), // artists: YES = they agree to framed prints of their works being sold (royalty below)
+      allowLicences: a.string(), // artists: YES = they agree to image licences of their works being sold (same royalty %)
       royaltyPct: a.float(), // artists: their share of each print sold of their works (% of the print price)
       catalogue: a.string(), // frame shops: their frames (JSON [{name, style, material, colour, widthMm, extra, photoKey, note}])
     })
@@ -436,6 +442,8 @@ const schema = a.schema({
       heroLines: a.string(), // several headlines, one per line, "plain part | gold part"; they take turns
       kidsTitle: a.string(),
       kidsText: a.string(), // paragraphs separated by a blank line
+      licencePcts: a.string(), // JSON {WEB, MEDIA, COMMERCIAL}: image licence price as % of the artwork's price
+      instalments: a.string(), // '' (off) | Tabby | Tamara: shows "4 interest-free payments" on the website
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
@@ -579,6 +587,22 @@ const schema = a.schema({
   guestEnquiry: a
     .mutation()
     .arguments({ ref: a.string().required(), title: a.string().required(), details: a.string(), customerName: a.string().required(), phone: a.string().required(), email: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Signed-in customer buys an image licence of a catalogue work: the function prices it and sends the Ziina link.
+  licenceOrder: a
+    .mutation()
+    .arguments({ data: a.string().required() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
+  // Anyone: check a certificate of authenticity number (website → #verify).
+  verifyCertificate: a
+    .mutation()
+    .arguments({ code: a.string().required() })
     .returns(a.string())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(zohoQuoteSync)),

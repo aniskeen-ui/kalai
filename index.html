@@ -284,6 +284,15 @@ footer p{margin:2px 0}
 .dhs{font-style:normal;margin-right:.12em}
 .cur-sel{white-space:nowrap;background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-pick{position:relative}.cur-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.18);display:grid;min-width:120px;overflow:hidden;z-index:30}.cur-menu button{background:none;border:0;color:inherit;font:inherit;font-size:14px;text-align:left;padding:9px 14px;cursor:pointer;white-space:nowrap}.cur-menu button:hover{background:var(--sunk)}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
+.otabs,.itabs-bar{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.otabs button,.itabs-bar button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:8px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
+.otabs button[aria-selected="true"],.itabs-bar button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--gold)}
+.otabs button:focus-visible,.itabs-bar button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.itabs-bar button{font-size:13px;padding:6px 10px}.itabs-pane{margin:8px 0 0;font-size:14px;color:var(--muted);line-height:1.5}
+#paneLic{gap:12px}.lic-ticks{margin:0;padding:0;list-style:none;font-size:14px;display:grid;gap:4px}.lic-ticks li::before{content:"✓ ";color:var(--gold);font-weight:700}
+.lic-usage{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px 14px;font-size:14px}
+.inst-note{font-size:13px;color:var(--muted);margin-top:-6px}
+
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 .badge b{display:block;font-size:13px}
 .badge i{font-style:normal;color:var(--gold);font-size:15px;line-height:1}
@@ -587,7 +596,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <section id="terms"><div class="wrap" style="max-width:820px">
   <div class="sec-head"><div><h2>Terms &amp; conditions</h2></div></div>
   <div class="terms" style="display:grid;gap:14px;color:var(--muted)">
-    <p class="note" style="margin:0">Last updated 21 October 2026. By placing an order or enquiry on art.pranixtechno.com you agree to these terms.</p>
+    <p class="note" style="margin:0">Last updated 24 October 2026. By placing an order or enquiry on art.pranixtechno.com you agree to these terms.</p>
     <div><b style="color:var(--fg)">1. Who we are.</b> Kalai Art House is an online art gallery operated by Pranix Technologies FZCO, Dubai Silicon Oasis, Dubai, UAE (trade licence 92974). Contact: kalaiarthouse@pranixtechno.com · +971 55 299 6626 (WhatsApp).</div>
     <div><b style="color:var(--fg)">2. Enquiries, quotes and orders.</b> Most works are priced on request. An enquiry is not an order. We send you a quote by WhatsApp or email; your order is confirmed when you accept the quote and your payment is received. We may decline an order, for example if a work has already been sold, and will refund any payment in full.</div>
     <div><b style="color:var(--fg)">3. Prices.</b> Prices are in UAE dirhams and include delivery within the UAE, import customs duty and any VAT that applies, unless the quote says otherwise. A quote is valid for 7 days.</div>
@@ -604,13 +613,14 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
     <div><b style="color:var(--fg)">14. Law.</b> These terms are governed by the laws of the United Arab Emirates as applied in the Emirate of Dubai, and the courts of Dubai have jurisdiction.</div>
     <div><b style="color:var(--fg)">15. Changes.</b> We may update these terms; the version on this page at the time of your order applies to that order.</div>
     <div><b style="color:var(--fg)">16. Crafts shop.</b> Items in the Crafts shop are made and sold by independent makers we have checked; the maker's name is shown on each item. You order and pay through Kalai Art House, which handles your payment, delivery updates, cancellations and refunds under these terms. Until an item is dispatched you can cancel it for a full refund; after delivery, report damage with photos within 48 hours. Prices include delivery within the UAE; delivery to India is confirmed before you pay.</div>
+    <div><b style="color:var(--fg)">17. Image licences.</b> A licence lets you use the picture of a work for the purpose of the type you buy (Web: websites, social media and online ads; Media: print and digital media, adverts and TV; Commercial: products made for sale, plus web and media), worldwide and without time limit. The artist keeps the copyright and the original; the licence is not exclusive and can't be transferred, and you may not resell or share the file itself. Light cropping and resizing are fine; changes that alter the work (colours, shapes, adding text over the artwork) need the artist's written permission. Please credit "Artwork © the artist / Kalai Art House" where practical. Licences are digital: the file is available as soon as you have paid, so a paid licence can't be cancelled or refunded.</div>
   </div>
 </div></section>
 
 <footer><div class="wrap">
   <div><b>Kalai Art House</b><p>An online gallery of Pranix Technologies FZCO.</p><p>Dubai Silicon Oasis, Dubai, UAE</p><p>Trade licence 92974 (DIEZA)</p></div>
   <div><b>Contact</b><p class="mono">+971 55 299 6626</p><p>kalaiarthouse@pranixtechno.com</p></div>
-  <div><b>Policies</b><p><a href="#policies" style="color:inherit">Delivery, returns and privacy</a></p><p><a href="#terms" style="color:inherit">Terms &amp; conditions</a></p><p><a href="/seller.html?as=artist" style="color:inherit">Become an artist</a> · <a href="/seller.html" style="color:inherit">Sell with us</a></p><p>Payments by secure card link</p></div>
+  <div><b>Policies</b><p><a href="#policies" style="color:inherit">Delivery, returns and privacy</a></p><p><a href="#terms" style="color:inherit">Terms &amp; conditions</a></p><p><a href="#verify" style="color:inherit">Check a certificate of authenticity</a></p><p><a href="/seller.html?as=artist" style="color:inherit">Become an artist</a> · <a href="/seller.html" style="color:inherit">Sell with us</a></p><p>Payments by secure card link</p></div>
 </div></footer>
 
 <div class="scrim" id="scrim" hidden></div>
@@ -756,6 +766,44 @@ function drawGrid(){
 }
 function orderWork(p){const item={id:p.id,title:p.name,seller:SHOW_ARTIST_NAMES?p.artist:"our artist",price:p.price,stock:p.stock,img:p.img};
   if(window.kalaiMarketOrder){window.kalaiMarketOrder(item);return}sendEnquiry("Artwork order: "+p.name,{"Item":p.name,"Artist":p.artist,"Price":"AED "+p.price,"Listing":p.id});}
+/* Check a certificate of authenticity (footer link, or …/#verify) */
+function openVerify(){const box=document.getElementById("modalBox");box.className="box";
+  box.innerHTML=`<button class="x xtop" id="mClose" aria-label="Close">×</button><div class="info" style="padding:28px"><h2 style="font-size:26px">Check a certificate</h2>
+   <p class="note" style="margin:0">Every original sold by Kalai Art House comes with a numbered certificate of authenticity. Enter the number printed on it.</p>
+   <form id="vfForm" novalidate style="display:grid;gap:10px"><div class="field"><label for="vfCode">Certificate no.</label><input id="vfCode" placeholder="COA-261024-AB12" autocomplete="off"></div><button class="btn primary" type="submit">Check</button></form><div id="vfOut" aria-live="polite"></div></div>`;
+  modal.hidden=false;scrim.hidden=false;document.getElementById("mClose").onclick=closeAll;
+  document.getElementById("vfForm").onsubmit=async e=>{e.preventDefault();const out=document.getElementById("vfOut"),c=document.getElementById("vfCode").value.trim();if(!c){out.textContent="Enter the certificate number.";return}
+    out.textContent="Checking…";try{const r=await window.kalaiVerifyCoa(c);
+      out.innerHTML=r&&r.valid?`<div class="lic-usage"><b style="color:var(--gold)">✓ Genuine certificate ${esc2(r.number)}</b><dl class="spec" style="margin:8px 0 0"><dt>Title</dt><dd>${esc2(r.title)}</dd><dt>Artist</dt><dd>${esc2(r.artist)}</dd>${r.medium?`<dt>Medium</dt><dd>${esc2(r.medium)}</dd>`:""}${r.size?`<dt>Size</dt><dd>${esc2(r.size)}</dd>`:""}${r.issued?`<dt>Issued</dt><dd>${new Date(r.issued).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</dd>`:""}</dl></div>`
+        :`<p style="color:var(--kumkum)">We couldn't find certificate ${esc2(c)}. Check the number, or message us on WhatsApp.</p>`}catch(ex){out.textContent="Could not check right now. Please try again."}};}
+document.addEventListener("click",e=>{const a=e.target.closest('a[href="#verify"]');if(a){e.preventDefault();openVerify()}});
+addEventListener("hashchange",()=>{if(location.hash==="#verify")openVerify()});if(location.hash==="#verify"){let n=0;const t=setInterval(()=>{if(window.kalaiVerifyCoa||++n>40){clearInterval(t);openVerify()}},150)}
+/* Shipping · Warranty · Payment · Returns tabs on an artwork's page */
+const INFO_TABS=[["ship","Shipping","Framed in Dubai and delivered by insured courier to all seven emirates in 3 to 7 days, customs duty and VAT included. We also ship worldwide by express courier: the shipping charge is confirmed before you pay, and import duty abroad is paid by the receiver. Every parcel is packed with corner guards and tracked; you get the tracking number by email."],
+  ["warranty","Warranty","Every original is made by hand and signed by the artist, and comes with a certificate of authenticity you can download under My enquiries & orders (each certificate has a number anyone can check on this website). Frames are guaranteed for one year against defects in workmanship. If the work arrives damaged, we repair, replace or refund it."],
+  ["pay","Payment","Pay securely by card, Apple Pay or Google Pay through Ziina, in UAE dirhams; we never see your card details. You pay only once we have confirmed the work is ready, and the artist is paid after delivery. Bank transfer is also possible: ask us."],
+  ["returns","Returns","Each original is one of a kind, so we can't take change-of-mind returns, but you can cancel for a full refund before the artist starts. If it arrives damaged, send photos within 48 hours of delivery under My enquiries & orders and we replace or refund it, return transport included. Image licences are digital and can't be returned once paid."]];
+function infoTabs(){return `<div class="itabs"><div class="itabs-bar" role="tablist">${INFO_TABS.map(([k,n],i)=>`<button type="button" role="tab" data-it="${k}" aria-selected="${i===0}">${n}</button>`).join("")}</div>${INFO_TABS.map(([k,,t],i)=>`<p class="itabs-pane" data-itp="${k}" ${i?"hidden":""}>${esc2(t)}</p>`).join("")}</div>`}
+function wireInfoTabs(box){box.querySelectorAll(".itabs").forEach(w=>w.querySelectorAll("[data-it]").forEach(b=>b.onclick=()=>{w.querySelectorAll("[data-it]").forEach(x=>x.setAttribute("aria-selected",x===b));w.querySelectorAll("[data-itp]").forEach(x=>x.hidden=x.dataset.itp!==b.dataset.it)}))}
+/* Pay in instalments (Settings → Tabby / Tamara): a line under the price */
+function instNote(el,pr){if(!el)return;const v=window.kalaiInstalments;if(!v||!(pr>0)){el.hidden=true;return}el.hidden=false;el.innerHTML=`or 4 interest-free payments of <b>${moneyH(Math.ceil(pr/4))}</b> with ${esc2(v)} · tick it when you order`}
+/* Image licences of a work (Catalogue → Sell licences): price = % of the original's unframed price (Settings) */
+const LIC=[["WEB","Web licence","Websites, blogs, social media and online ads, worldwide.","No printed copies, no products for sale.",10],
+  ["MEDIA","Media licence","Print and digital media: magazines, books, brochures, flyers, adverts and TV, worldwide.","No products for sale.",25],
+  ["COMMERCIAL","Commercial licence","Products made for sale (posters, cards, textiles, packaging, merchandise), plus all web and media uses.","The artist keeps the copyright; reselling the file itself is not allowed.",50]];
+function licBase(p){const n=priceOf(p,"none");if(n>0)return n;const m=p.prices;if(!m)return 0;const all=[];const w=o=>{if(typeof o==="number"&&o>0)all.push(o);else if(o&&typeof o==="object")Object.values(o).forEach(w)};w(m.v===2?m.sizes:m);return all.length?Math.min(...all):0}
+function licPrice(p,k){const base=licBase(p),l=LIC.find(x=>x[0]===k);const pct=Number((window.kalaiLicencePcts||{})[k])||l[4];return base>0?Math.max(25,Math.ceil(base*pct/100/5)*5):0}
+function licencePane(p){return `<p style="margin:0;font-size:15px">Buy a licence to use this image on your website, in your publications or on products for sale. The artist receives a royalty on each licence.</p>
+  <div class="field"><label for="licType">Type</label><select id="licType">${LIC.map(l=>`<option value="${l[0]}">${l[1]}</option>`).join("")}</select></div>
+  <ul class="lic-ticks"><li>Download the full-size file as soon as you have paid</li><li>Artists get paid their royalties for each sale</li></ul>
+  <div class="pprice"><b id="licPrice"></b> <span class="note">one-off fee, worldwide, no time limit</span></div>
+  <button class="btn primary" type="button" id="licBuy">Buy and download</button><div class="ok-msg" id="licMsg" hidden></div>
+  <div class="lic-usage"><b id="licName"></b><p id="licAllows" style="margin:4px 0"></p><p id="licNot" class="note" style="margin:0"></p></div>`}
+function wireOtabs(box,p){if(!p.licensable)return;const orig=box.querySelector("#paneOrig"),lic=box.querySelector("#paneLic");
+  box.querySelectorAll("[data-ot]").forEach(b=>b.onclick=()=>{box.querySelectorAll("[data-ot]").forEach(x=>x.setAttribute("aria-selected",x===b));const L=b.dataset.ot==="lic";orig.style.display=L?"none":"contents";lic.style.display=L?"grid":"none"});
+  const sel=box.querySelector("#licType"),upd=()=>{const l=LIC.find(x=>x[0]===sel.value),pr=licPrice(p,sel.value);box.querySelector("#licPrice").innerHTML=pr?moneyH(pr)+moneyNote(pr):"Ask us";box.querySelector("#licName").textContent="Usage: "+l[1];box.querySelector("#licAllows").textContent=l[2];box.querySelector("#licNot").textContent=l[3];box.querySelector("#licBuy").disabled=!pr};
+  sel.onchange=upd;upd();
+  box.querySelector("#licBuy").onclick=()=>{const l=LIC.find(x=>x[0]===sel.value);if(window.kalaiBuyLicence){closeAll();window.kalaiBuyLicence({productId:p.id,type:l[0],label:l[1],name:p.name})}else{const m=box.querySelector("#licMsg");m.hidden=false;m.textContent="Please try again in a moment."}}}
 /* Detail page for a work listed by an artist from the artist portal: all photos, description, price and Order. */
 function openWork(p){
   const box=document.getElementById("modalBox");box.className="box wide";
@@ -770,19 +818,20 @@ function openWork(p){
      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${esc2(p.category||"Original artwork")} · One of a kind</div>
      <h2 style="font-size:30px">${esc2(p.name)}</h2>
      <p class="byline">${SHOW_ARTIST_NAMES?"by "+esc2(p.artist):"Hand-made by our artist"}</p>
-     <div class="pprice"><b>${moneyH(p.price)}</b> <span class="note">${p.stock>0?"delivered in the UAE":"Sold"}</span></div>
+     <div class="pprice"><b>${moneyH(p.price)}</b> <span class="note">${p.stock>0?"delivered in the UAE":"Sold"}</span></div>${p.stock>0?`<div class="inst-note" id="wInst" hidden></div>`:""}
      ${p.desc?`<p class="note" style="font-size:15px;margin:0;white-space:pre-wrap">${esc2(p.desc)}</p>`:""}
      <div class="badges">
        <div class="badge"><i>✦</i><div><b>Original &amp; signed</b>Hand-made by the artist, not a print</div></div>
        <div class="badge"><i>⛟</i><div><b>Delivered worldwide</b>UAE: insured courier · abroad: shipping quoted before you pay</div></div>
        <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
      </div>
+     ${infoTabs()}
      <div class="acts">${p.stock>0?`<button class="btn primary" type="button" id="wOrder">Order this work</button>`:`<button class="btn primary" data-jump="commission">Commission similar</button>`}<button class="btn ghost-dark" type="button" id="wBack">See the collection</button></div>
      ${sim.length?`<div id="mSimilar"><div style="font-weight:600;font-size:15px;margin:6px 0 10px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view-art="${esc2(x.id)}"><img src="${esc2(x.img)}" alt=""><span>${esc2(x.name)}</span></button>`).join("")}</div></div>`:""}
     </div>`;
   box.querySelectorAll("[data-wimg]").forEach(b=>b.onclick=()=>{box.querySelector("#vStage img").src=imgs[+b.dataset.wimg]});
   box.querySelectorAll("#mSimilar [data-view-art]").forEach(b=>b.onclick=()=>{const q=ARTWORKS.find(x=>x.id===b.dataset.viewArt);if(q)openWork(q)});
-  const o=box.querySelector("#wOrder");if(o)o.onclick=()=>{closeAll();orderWork(p)};
+  const o=box.querySelector("#wOrder");if(o)o.onclick=()=>{closeAll();orderWork(p)};instNote(box.querySelector("#wInst"),p.price);wireInfoTabs(box);
   {const ms=box.querySelector('#mSimilar');if(ms&&ms.parentElement!==box)box.appendChild(ms);}
   modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("wBack").onclick=closeAll;document.getElementById("mClose").focus();
   try{if(location.hash!=="#art-"+p.id)history.pushState({art:p.id},"","#art-"+p.id)}catch(e){}
@@ -866,6 +915,7 @@ function openAsk(p,offer){
      ${p.prices&&!offer?`<div class="field"><label for="aFrame">Frame</label><select id="aFrame">${FRAMES.map(f=>`<option value="${f.k}" ${f.k===(window.kalaiPriceStyle||"black")?"selected":""}>${f.n}${f.k!=="none"&&(window.kalaiPriceSize||baseSize(p))?` ${window.kalaiPriceSize||baseSize(p)} cm`:""} · ${money(priceOf(p,f.k,window.kalaiPriceSize||baseSize(p)))}</option>`).join("")}</select><span class="note" style="font-size:12px">Price includes the white mount and glass, and delivery in the UAE.</span></div>`
      :`<div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>`}
      <div class="field"><label for="aMsg">Anything else? (optional)</label><textarea id="aMsg" placeholder="Is it available? Can it be delivered before the 28th?"></textarea></div>
+     ${!offer&&window.kalaiInstalments?`<label class="check"><input type="checkbox" id="aInst"><span>Pay in 4 interest-free instalments with ${esc2(window.kalaiInstalments)}</span></label>`:""}
      <button class="btn primary" type="submit">${offer?"Send my offer":p.prices?"Send my order":"Ask for price"}</button>
      <div class="ok-msg" id="askOk" hidden></div>
    </form></div>`);
@@ -878,7 +928,7 @@ function openAsk(p,offer){
     const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")","Artwork no.":p.code||(p.untitled?String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
     if(offer)fields["Offer"]="AED "+off;
     if(p.prices&&!offer){const k=document.getElementById("aFrame").value,f=FRAMES.find(x=>x.k===k);const fs=window.kalaiPriceSize||baseSize(p);fields["Framing"]=k==="none"?"Unframed":f.n+" frame"+(fs?" "+fs+" cm":"")+", white mount";fields["Price"]="AED "+priceOf(p,k,fs)+" (website price)";}
-    else fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();
+    else fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();if(document.getElementById("aInst")?.checked)fields["Payment"]="4 instalments with "+window.kalaiInstalments;
     const url=sendEnquiry((offer?"Price enquiry (offer): ":p.prices?"Artwork order: ":"Price enquiry: ")+p.name,fields);
     ok.style.color="var(--fg)";ok.textContent=offer
       ?`Thank you, ${n}. We'll check your offer of AED ${off} for "${p.name}" with the artist and reply on WhatsApp within one working day. If WhatsApp didn't open, tap here: `
@@ -1038,8 +1088,9 @@ function openModal(p){
      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · ${p.ai?"Hand-painted to order":"One"} of a kind</div>
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
+     ${p.licensable?`<div class="otabs" role="tablist"><button type="button" role="tab" data-ot="orig" aria-selected="true">Original</button><button type="button" role="tab" data-ot="lic" aria-selected="false">Licences</button></div><div id="paneLic" style="display:none">${licencePane(p)}</div>`:""}<div id="paneOrig" style="display:contents">
      ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; ${p.leadDays!=null?`it is ready in about ${p.leadDays}${p.leadMax&&p.leadMax!==p.leadDays?`–${p.leadMax}`:""} days, delivered about a week later`:"allow about 2–3 weeks before dispatch"}.</div>`:""}
-     ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div>
+     ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div><div class="inst-note" id="mInst" hidden></div>
      <div class="pick-row"><label>Frame<select id="pkStyle">${FRAMES.map(f=>`<option value="${f.k}">${f.n}</option>`).join("")}</select></label>
        ${sizesFor(p).length>1?`<label id="pkSizeL">Frame size<select id="pkSize">${sizesFor(p).map(f=>`<option value="${f}">${f} cm</option>`).join("")}</select></label>`:""}</div>`:""}
      <p class="note" style="font-size:15px;margin:0">${p.desc}</p>
@@ -1055,7 +1106,7 @@ function openModal(p){
      <div class="acts">${p.printable?`<button class="btn ghost-dark" type="button" data-buyprint="${p.id}">Buy a framed print</button>`:""}${p.price?`<button class="btn primary" data-ask="${p.id}">${p.prices?"Order this work":"Ask for price"}</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
      <p class="note" style="margin:0">${p.prices?"The price changes with the frame and size you choose. It includes the mount, glass and insured delivery in the UAE; for other countries we quote the shipping before you pay.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
      ${p.artist&&p.artist!=="Siva Raja"?`<details><summary>About the artist</summary><p>${SHOW_ARTIST_NAMES?esc2(p.artist):"Our artist"} is one of the artists who work with Kalai Art House. Every work here is made by hand and signed by the artist; we frame it in Dubai and deliver it.</p></details>`:`<details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>`}
-     <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. We also ship worldwide: the shipping charge is confirmed before you pay. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
+     ${infoTabs()}</div>
      ${sim.length?`<div id="mSimilar"><div style="font-weight:600;font-size:15px;margin:6px 0 10px">You may also like</div><div class="similar">${sim.map(x=>`<button type="button" data-view="${x.id}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join("")}</div></div>`:""}
     </div>`);
   const stage=box.querySelector("#vStage"),cap=box.querySelector("#vCap");
@@ -1072,7 +1123,7 @@ function openModal(p){
       [...(ps?ps.options:[])].forEach(o=>{o.textContent=`${(FRAMES.find(f=>f.k===o.value)||{}).n} · ${money(priceOf(p,o.value,FSIZE||baseSize(p)))}`});
       if(pz)[...pz.options].forEach(o=>{o.textContent=`${o.value} cm · ${money(priceOf(p,st==="none"?"black":st,o.value))}`});
       const fs=FSIZE||baseSize(p),pr=priceOf(p,st,fs);window.kalaiPriceSize=st==="none"?"":fs;
-      document.getElementById("mPrice").innerHTML=moneyH(pr)+moneyNote(pr);
+      document.getElementById("mPrice").innerHTML=moneyH(pr)+moneyNote(pr);instNote(document.getElementById("mInst"),pr);
       document.getElementById("mPriceNote").textContent=st==="none"?"unframed":(FRAMES.find(f=>f.k===st)||{}).n.toLowerCase()+" frame"+(fs?` ${fs} cm`:"")+(MOUNT?", white mount":"")+" · delivered in the UAE";}};
   window.kalaiRefreshPrice=()=>show(cur);
   box.querySelectorAll(".vtabs [data-v]").forEach(b=>b.onclick=()=>show(b.dataset.v));
@@ -1083,7 +1134,7 @@ function openModal(p){
   if(pkZ)pkZ.onchange=()=>{FSIZE=pkZ.value;box.querySelectorAll("[data-fs]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.fs===FSIZE));show(cur==="art"?"frame":cur)};
   box.querySelectorAll("[data-fs]").forEach(b=>b.onclick=()=>{FSIZE=b.dataset.fs;box.querySelectorAll("[data-fs]").forEach(x=>x.setAttribute("aria-pressed",x===b));show(cur)});
   box.querySelector("#vLens").onclick=e=>{LENS=!LENS;e.currentTarget.setAttribute("aria-pressed",LENS);lensEl.style.display="none";show(cur)};
-  window.kalaiFrameChoice="";window.kalaiPriceStyle="";FSIZE="";wireLens(stage);show("art");
+  window.kalaiFrameChoice="";window.kalaiPriceStyle="";FSIZE="";wireLens(stage);show("art");wireOtabs(box,p);wireInfoTabs(box);
   {const ms=box.querySelector('#mSimilar');if(ms&&ms.parentElement!==box)box.appendChild(ms);}modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;document.getElementById("mClose").focus();
   // Each artwork has its own link (…/#art-ID): shareable, and the phone's Back button closes it.
   try{if(location.hash!=="#art-"+p.id)history.pushState({art:p.id},"","#art-"+p.id)}catch(e){}

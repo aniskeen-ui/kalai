@@ -23,7 +23,7 @@ const STATUS = {
   RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed',
   SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
-const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed print' };
+const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed print', LICENCE: 'Image licence' };
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
@@ -70,7 +70,7 @@ const hasArtist = (e) => e.kind === 'PRICE' || e.kind === 'COMMISSION';
 // default commission % when approving a seller. Each category's margin is also its target in Reports.
 const CATS = [['collection', 'Collection (artworks on the website)', 'markup on cost: Pricing tab and artwork price enquiries'], ['commission', 'Commissions (paintings and sketches to order)', 'markup on cost: commission price calculator'],
   ['gift', 'Little Artists', 'target margin, checked in Reports'], ['market', 'Crafts shop', 'default commission % for a new seller']];
-const CAT_OF = { PRICE: 'collection', COMMISSION: 'commission', GIFT: 'gift', MARKET: 'market', PHOTO: 'gift' };
+const CAT_OF = { PRICE: 'collection', COMMISSION: 'commission', GIFT: 'gift', MARKET: 'market', PHOTO: 'gift', LICENCE: 'collection' };
 const marginFor = (kind) => { const m = rates.margins?.[CAT_OF[kind] || 'collection']; return m != null ? m : rates.margin; };
 const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 // Server notes say "AED 1,175"; show the dirham sign on screen.
@@ -401,6 +401,10 @@ function reportLine(e) {
     // Crafts shop: the maker's payout is the cost (shown in the Artist column); Kalai's courier when Kalai delivers.
     k = { artist: e.purchaseState === 'CANCELLED' ? 0 : Number(e.sellerAmount || 0), framing: 0, india: 0, customs: 0, local: e.deliveryBy === 'KALAI' && !String(e.refundAction || '').startsWith('CANCEL') ? Number(rates.local || 0) : 0 };
     note = 'crafts shop: maker payout in Artist';
+  } else if (e.kind === 'LICENCE') {
+    // Image licence: nothing to make or ship; the artist's royalty (% of the price) is the only cost.
+    k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: 0, india: 0, customs: 0, local: 0 };
+    note = `image licence${e.royaltyPct ? `: ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''}`;
   } else if (e.kind === 'PHOTO') {
     // Photo framing: print (+ frame unless print only) per copy, from Rates; UAE delivery included in the price.
     const gd = parseDetails(e.details), sp = specOf(e, gd), big = !['A4', 'A3'].includes(sp.size);
@@ -591,8 +595,18 @@ function framesOf(id, style) {
 }
 // The frame shop's name, phone and address, as the delivery pickup point.
 function j0(e) { const fj = jobsOf(e).framer; const sp = fj && suppliers.find((x) => x.id === fj.supplierId); return sp ? [sp.business, sp.phone, sp.address].filter(Boolean).join(', ') : ''; }
+// Image licence order: what was licensed. The customer downloads the file themselves once paid (no address, no shipping).
+function licenceSection(e) {
+  const d = parseDetails(e.details);
+  return `<fieldset class="cost"><legend>Image licence</legend><div style="display:grid;gap:4px;font-size:13px">
+    <div><b>${esc(d.Licence || e.licenceType || '')}</b> · ${esc(d.Artwork || '')} <span class="mono muted">${esc(d['Artwork no.'] || '')}</span></div>
+    <div class="muted">${esc(d.Allows || '')}</div>
+    <div>${['PAID', 'DELIVERED'].includes(e.status) ? 'Paid: the customer downloads the full-size file under My enquiries &amp; orders.' : 'The Ziina link was sent automatically; once paid the order is marked Delivered and the file can be downloaded.'}</div>
+    <div class="muted">Artist: ${esc(e.artistName || 'Siva Raja')}${e.royaltyPct ? ` · royalty ${e.royaltyPct}%` : ''}</div></div></fieldset>`;
+}
+
 function supplierSection(e) {
-  if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
+  if (!SOLD.includes(e.status || '') || e.kind === 'MARKET' || e.kind === 'LICENCE') return '';
   const j = jobsOf(e);
   // Each supplier's price for this order from their price list (frame style + size; destination and parcel size).
   const spec = specOf(e, parseDetails(e.details));
@@ -1488,9 +1502,9 @@ async function showDetail(e) {
         <div class="field"><label for="ePrice">Price (⃃)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^(AED|Dhs) ?\d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^⃃ [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
           ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: ⃃ ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
-      ${addressSection(e)}
+      ${e.kind === 'LICENCE' ? licenceSection(e) : `${addressSection(e)}
       ${shippingSection(e)}
-      ${costingSection(e)}
+      ${costingSection(e)}`}
       ${supplierSection(e)}
       ${actualSection(e)}
       <div class="two">

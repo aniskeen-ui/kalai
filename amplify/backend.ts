@@ -75,6 +75,10 @@ backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambd
 backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'catalogue/*'); // frame shops download the artwork / print file // portal artists' works in the collection
 // Catalogue import from links: the function saves the downloaded pictures here.
 backend.storage.resources.bucket.grantPut(backend.zohoQuoteSync.resources.lambda, 'catalogue/*');
+// Full-size print / licence files: private (studio only); the function moves old ones here and makes download links.
+backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'originals/*');
+backend.storage.resources.bucket.grantPut(backend.zohoQuoteSync.resources.lambda, 'originals/*');
+backend.storage.resources.bucket.grantDelete(backend.zohoQuoteSync.resources.lambda, 'catalogue/print/*');
 
 // VAT switch (/kalai/zoho/vat_tax_id).
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(

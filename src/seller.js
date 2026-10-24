@@ -221,7 +221,7 @@ $('authForm').addEventListener('submit', async (e) => {
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
 
 // ---------- application (artists and sellers) ----------
-const AF = { pTrain: 'training', pBorn: 'bornYear', pCity: 'city', pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pPrints: 'allowPrints', pLink: 'portfolio' };
+const AF = { pTrain: 'training', pBorn: 'bornYear', pCity: 'city', pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pPrints: 'allowPrints', pLicences: 'allowLicences', pLink: 'portfolio' };
 let samples = [];
 let photoKey = '';
 async function drawPhoto() {
@@ -259,7 +259,7 @@ function fillApply() {
   $('pWhere').innerHTML = countryRegionHtml({ country: profile?.country || 'UAE', region: profile?.emirate, prefix: 'p', names: false, only: null }).replace(/<div class="field" data-pin-box[\s\S]*$/, '');
   wireRegion($('pWhere'));
   $('pCountry').addEventListener('change', bankKind);
-  for (const [id, k] of Object.entries(AF)) $(id).value = profile?.[k] ?? (id === 'pComm' || id === 'pPrints' ? 'YES' : '');
+  for (const [id, k] of Object.entries(AF)) $(id).value = profile?.[k] ?? (id === 'pComm' || id === 'pPrints' ? 'YES' : id === 'pLicences' ? 'NO' : '');
   if ($('pPrintsNote') && Number(profile?.royaltyPct)) $('pPrintsNote').textContent = `Your royalty: ${Number(profile.royaltyPct)}% of each print sold. Prints are fine-art copies, framed in Dubai and clearly sold as prints. You can change this any time.`;
   const typeNow = profile?.type || (wantArtist ? 'ARTIST' : 'SELLER');
   document.querySelectorAll('input[name="pType"]').forEach((r) => { r.checked = r.value === typeNow; r.onchange = () => { applyKind(); drawSamples(); }; });

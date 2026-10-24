@@ -102,7 +102,8 @@ function row(p) {
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Also sell framed prints of this painting (Framed Prints, and a button on its page)"><input data-f="printable" type="checkbox" style="width:auto" ${p.printable ? 'checked' : ''}> Sell framed prints</label>
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap">up to <select data-f="printMax" aria-label="Largest print size" style="width:auto">${PRINT_MAX.map((z) => `<option ${z === (p.printMax || 'A3') ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
         <label class="linkbtn" style="cursor:pointer" title="High-quality scan or photo for printing (the website picture is used if none)">${p.printKey ? '✓ Print file uploaded · change' : 'Upload print file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
-        <span class="muted">${p.printable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
+        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Sell image licences (web, media, commercial) of this work from the print file: Licences tab on its page"><input data-f="licensable" type="checkbox" style="width:auto" ${p.licensable ? 'checked' : ''}> Sell licences</label>
+        <span class="muted">${p.printable || p.licensable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
       <span class="cg-saved muted" aria-live="polite"></span>
     </div>
   </article>`;
@@ -141,6 +142,15 @@ function wireRows(list) {
           if (ap?.allowPrints === 'NO') { inp.checked = false; el.querySelector('.cg-saved').textContent = `${ap.business} hasn't agreed to prints (their portal → My details).`; return; }
           if (ap && p.printRoyalty == null) patch.printRoyalty = Number(ap.royaltyPct ?? 10);
         }
+        // Licences: from the full-size file, and only with the artist's agreement (artist portal → My details → licences).
+        if (f === 'licensable' && v) {
+          if (!p.printKey) { inp.checked = false; el.querySelector('.cg-saved').textContent = 'Upload the full-size print file first: the licence buyer downloads that file.'; return; }
+          if (p.artistId) {
+            const ap = await artistProfile(p.artistId);
+            if (ap?.allowLicences !== 'YES') { inp.checked = false; el.querySelector('.cg-saved').textContent = `${ap?.business || 'The artist'} hasn't agreed to image licences (their portal → My details).`; return; }
+            if (ap && p.printRoyalty == null) patch.printRoyalty = Number(ap.royaltyPct ?? 10);
+          } else if (p.printRoyalty == null) patch.printRoyalty = await sivaRoyaltyPct();
+        }
         const msg = el.querySelector('.cg-saved'); msg.textContent = 'Saving…';
         const r = await client.models.Product.update(patch);
         if (r.errors?.length) { msg.textContent = 'Not saved: ' + r.errors[0].message; return; }
@@ -157,7 +167,7 @@ function wireRows(list) {
       if (file.size > 200 * 1024 * 1024) { msg.textContent = 'The print file is larger than 200 MB.'; return; }
       msg.textContent = 'Uploading the print file…';
       try {
-        const res = await uploadData({ path: `catalogue/print/${p.id}-${file.name.replace(/[^\w.-]+/g, '-')}`, data: file, options: { contentType: file.type || 'image/jpeg' } }).result;
+        const res = await uploadData({ path: `originals/print/${p.id}-${file.name.replace(/[^\w.-]+/g, '-')}`, data: file, options: { contentType: file.type || 'image/jpeg' } }).result;
         const r = await client.models.Product.update({ id: p.id, printKey: res.path });
         if (r.errors?.length) throw new Error(r.errors[0].message);
         p.printKey = res.path; pf.parentElement.firstChild.textContent = '✓ Print file uploaded · change'; msg.textContent = 'Print file saved';
