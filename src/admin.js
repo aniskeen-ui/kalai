@@ -459,7 +459,14 @@ function reportLines() {
     .map(reportLine);
 }
 
+// Reports currency (top of Reports): figures are kept in dirhams and converted for display / CSV.
+// US$ at the fixed peg; ₹ at the Rates exchange rate (dirhams per rupee).
+const RCUR_SYM = { AED: '⃃', USD: '$', INR: '₹' };
+const RCUR = () => $('rCur')?.value || 'AED';
+const rFactor = () => (RCUR() === 'USD' ? 1 / 3.6725 : RCUR() === 'INR' ? 1 / (Number(rates.fx) || 0.044) : 1);
+try { const c = localStorage.getItem('kalaiReportCur'); if (c && $('rCur')) $('rCur').value = c; } catch { /* storage blocked */ }
 function renderReport() {
+  const f = rFactor(), rmon = (v) => (v == null ? '–' : (Number(v) * f).toLocaleString(RCUR() === 'INR' ? 'en-IN' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const lines = reportLines();
   const sum = (f) => lines.reduce((a, l) => a + (f(l) || 0), 0);
   const costed = lines.filter((l) => l.k);
@@ -472,17 +479,17 @@ function renderReport() {
   const tile = (k, v, cls = '') => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
   $('rTiles').innerHTML = [
     tile('Orders', lines.length),
-    tile('Sales (⃃)', money(T.sales)),
-    tile('Refunds', money(T.refund)),
-    tile('Net sales', money(T.net)),
-    tile('Total cost', money(T.cost)),
-    tile('Planned margin', `${money(T.margin)} · ${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}`, T.margin < 0 ? 'neg' : ''),
-    tile(`Actual margin (${withAct.length} of ${costed.length} with bills)`, withAct.length ? `${money(T.actA)} · ${pctA == null ? '–' : (pctA * 100).toFixed(1) + '%'}` : '–', T.actA < 0 ? 'neg' : ''),
-    tile('Variance on those orders', withAct.length ? money(T.actA - T.planA) : '–', T.actA - T.planA < 0 ? 'neg' : ''),
-    (() => { const loss = sum((l) => l.rc.cost), rec = sum((l) => l.rc.received), res = sum((l) => l.reserve); return loss || rec ? tile('Damage: cost / insurance / reserve', `${money(loss)} / ${money(rec)} / ${money(res)}`, loss - rec > res ? 'neg' : '') : ''; })(),
+    tile(`Sales (${RCUR_SYM[RCUR()]})`, rmon(T.sales)),
+    tile('Refunds', rmon(T.refund)),
+    tile('Net sales', rmon(T.net)),
+    tile('Total cost', rmon(T.cost)),
+    tile('Planned margin', `${rmon(T.margin)} · ${pct == null ? '–' : (pct * 100).toFixed(1) + '%'}`, T.margin < 0 ? 'neg' : ''),
+    tile(`Actual margin (${withAct.length} of ${costed.length} with bills)`, withAct.length ? `${rmon(T.actA)} · ${pctA == null ? '–' : (pctA * 100).toFixed(1) + '%'}` : '–', T.actA < 0 ? 'neg' : ''),
+    tile('Variance on those orders', withAct.length ? rmon(T.actA - T.planA) : '–', T.actA - T.planA < 0 ? 'neg' : ''),
+    (() => { const loss = sum((l) => l.rc.cost), rec = sum((l) => l.rc.received), res = sum((l) => l.reserve); return loss || rec ? tile('Damage: cost / insurance / reserve', `${rmon(loss)} / ${rmon(rec)} / ${rmon(res)}`, loss - rec > res ? 'neg' : '') : ''; })(),
     (() => { const rv = lines.map((l) => reviews.get(l.e.id)).filter(Boolean); const a = avgRating(rv); return tile('Customer rating', a == null ? '–' : `${a.toFixed(1)} ★ (${rv.length})`, a != null && a < 4 ? 'neg' : ''); })(),
   ].join('') + (lines.length - costed.length ? `<div class="tile"><div class="k">Without costing</div><div class="v neg">${lines.length - costed.length}</div></div>` : '');
-  const td = (v, cls = '') => `<td class="num ${cls}">${money(v)}</td>`;
+  const td = (v, cls = '') => `<td class="num ${cls}">${rmon(v)}</td>`;
   $('rRows').innerHTML = lines.length ? lines.map((l) => {
     const d = l.e.createdAt ? new Date(l.e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
     return `<tr data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(d)}</td><td class="mono">${esc(l.e.ref)}</td>
@@ -501,7 +508,8 @@ function renderReport() {
   });
 }
 
-['rFrom', 'rTo', 'rKind', 'rBasis'].forEach((id) => $(id).addEventListener('change', renderReport));
+['rFrom', 'rTo', 'rKind', 'rBasis', 'rCur'].forEach((id) => $(id).addEventListener('change', renderReport));
+$('rCur').addEventListener('change', () => { try { localStorage.setItem('kalaiReportCur', RCUR()); } catch { /* storage blocked */ } });
 // Read the bills in Zoho for every order in the report (Check Zoho for each), then redraw with the actual costs.
 $('rZoho').onclick = async () => {
   const lines = reportLines().filter((l) => l.e.kind !== 'MARKET'), b = $('rZoho');
@@ -518,11 +526,13 @@ $('rZoho').onclick = async () => {
 $('rCsv').onclick = () => {
   const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Planned total cost', 'Planned margin', 'Planned margin %', 'Actual artist', 'Actual framing', 'Actual India courier', 'Actual customs', 'Actual local courier', 'Actual other', 'Actual total cost (planned where no bill)', 'Actual margin', 'Actual margin %', 'Variance', 'Note'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const fx = rFactor(), cv = (v) => (v === '' || v == null || typeof v !== 'number' ? v : Math.round(v * fx * 100) / 100);
   const rows = reportLines().map((l) => [String(l.e.createdAt || '').slice(0, 10), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
     l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '', l.k ? r2(l.k.rework) : '',
     l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%',
     ...['artist', 'framing', 'india', 'customs', 'local', 'other'].map((f) => { const a = actualOf(costings.get(l.e.id), l.e); return a && a[f] != null && a[f] !== '' ? r2(Number(a[f])) : ''; }),
-    l.haveAct ? l.totalA : '', l.marginA ?? '', l.pctA == null ? '' : (l.pctA * 100).toFixed(1) + '%', l.marginA == null ? '' : r2(l.marginA - l.margin), l.note]);
+    l.haveAct ? l.totalA : '', l.marginA ?? '', l.pctA == null ? '' : (l.pctA * 100).toFixed(1) + '%', l.marginA == null ? '' : r2(l.marginA - l.margin), l.note].map((v, i) => (i >= 5 ? cv(v) : v)));
+  head.push(`Currency: ${RCUR()}`);
   const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
