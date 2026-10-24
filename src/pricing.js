@@ -5,7 +5,7 @@
 // on the website.
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
-import { parseCard } from './ratecard.js';
+import { parseCard, parcelPrice } from './ratecard.js';
 import { cleanTitle } from './title.js';
 
 const client = generateClient();
@@ -53,9 +53,14 @@ const DEFAULT_MARKET = {
 let framers = [];
 /** {frame, fixing, from} for a style and frame size from the chosen frame shop(s), or null → master table. */
 function supplierFrame(style, fsize) {
-  const src = P.frameSource || '';
-  if (!src || style === 'none') return null;
-  const list = src === 'cheapest' ? framers : framers.filter((f) => f.id === src);
+  const src = P.frameSource || 'cheapest';
+  if (style === 'none') return null;
+  // The default frame shop first; where it has no price for this size / style, the cheapest one that has.
+  const mine = src !== 'cheapest' ? framers.filter((f) => f.id === src) : [];
+  const pick = (list) => { let best = null; for (const f of list) { const card = parseCard(f); const fr = card.frames?.[style]?.[fsize]; if (fr == null || fr === '') continue; const fix = card.fixingIncluded ? 0 : Number(card.fixing?.[fsize] || 0); if (!best || Number(fr) + fix < best.frame + best.fixing) best = { frame: Number(fr), fixing: fix, from: f.business }; } return best; };
+  const got = pick(mine) || pick(framers);
+  if (got) return got;
+  const list = [];
   let best = null;
   for (const f of list) {
     const card = parseCard(f);
@@ -65,6 +70,16 @@ function supplierFrame(style, fsize) {
     if (!best || Number(fr) + fix < best.frame + best.fixing) best = { frame: Number(fr), fixing: fix, from: f.business };
   }
   return best;
+}
+// Delivery partner's price to Dubai for this frame size (website prices are for UAE delivery).
+let couriers = [];
+function supplierLocal(fsize) {
+  const src = P.deliverySource || 'cheapest';
+  const priceOf = (s) => parcelPrice(parseCard(s).uae?.Dubai, fsize);
+  const mine = src !== 'cheapest' ? couriers.find((c) => c.id === src) : null;
+  if (mine && priceOf(mine) != null) return { cost: priceOf(mine), from: mine.business };
+  const all = couriers.map((c) => ({ cost: priceOf(c), from: c.business })).filter((x) => x.cost != null).sort((a, b) => a.cost - b.cost);
+  return all[0] || null;
 }
 let ratesRow = null; // the whole Rates JSON (other tabs' fields kept as they are)
 let P = structuredClone(DEFAULT_P);
@@ -100,16 +115,21 @@ function build(w, o = {}) {
   const courier = o.courier ?? (isLocalArt(w) ? 0 : P.courier[tier] ?? 0);
   const margin = o.margin ?? P.margin;
   const pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0);
-  const out = { tier, fsize, inr, artistAed, courier, margin, local: P.local, styles: {} };
+  const sl = supplierLocal(fsize);
+  const out = { tier, fsize, inr, artistAed, courier, margin, local: sl?.cost ?? null, localFrom: sl?.from || '', styles: {}, missing: [] };
   if (artistAed == null) return out;
+  // No silent fallback: a frame or delivery price missing from every supplier's list blocks the price.
+  if (sl == null) out.missing.push(`delivery to Dubai, ${fsize}`);
+  for (const s of STYLES) if (s.k !== 'none' && !supplierFrame(s.k, fsize)) out.missing.push(`${s.n.toLowerCase()} frame ${fsize}`);
+  if (out.missing.length) { out.blocked = true; return out; }
   out.customs = isLocalArt(w) ? 0 : (artistAed + courier) * P.customs;
   out.from = {};
   for (const s of STYLES) {
     const sf = supplierFrame(s.k, fsize);
-    out.from[s.k] = sf ? sf.from : s.k === 'none' ? '' : 'master';
-    const frameWork = s.k === 'none' ? 0 : sf ? sf.fixing : P.frameWork[fsize] ?? 0;
-    const frame = s.k === 'none' ? 0 : sf ? sf.frame : (P.moulding[fsize] ?? 0) * (1 + (P.extra[s.k] ?? 0));
-    const cost = artistAed + courier + out.customs + frameWork + frame + P.local;
+    out.from[s.k] = sf ? sf.from : '';
+    const frameWork = s.k === 'none' ? 0 : sf.fixing;
+    const frame = s.k === 'none' ? 0 : sf.frame;
+    const cost = artistAed + courier + out.customs + frameWork + frame + out.local;
     const raw = (cost * (1 + margin)) / (1 - pct);
     const price = rnd(raw);
     out.styles[s.k] = { frameWork, frame, cost, marginAmt: cost * margin, cardAmt: price * pct, price };
@@ -125,13 +145,15 @@ async function loadAll() {
   const base = ratesRow || {};
   P = { ...structuredClone(DEFAULT_P), fx: base.fx ?? DEFAULT_P.fx, customs: base.customs ?? DEFAULT_P.customs, local: base.local ?? DEFAULT_P.local, margin: base.margins?.collection ?? base.margin ?? DEFAULT_P.margin,
     fee: base.fee ?? DEFAULT_P.fee, ins: base.ins ?? DEFAULT_P.ins, reserve: base.reserve ?? DEFAULT_P.reserve, round9: base.round9 ?? false, round25: base.round25 ?? true,
-    courier: Object.fromEntries(TIERS.map((t) => [t, base.tiers?.[t]?.courier ?? DEFAULT_P.courier[t]])), ...(base.pricing || {}) };
-  for (const k of ['courier', 'frameWork', 'moulding', 'extra']) {
-    const saved = Object.fromEntries(Object.entries(base.pricing?.[k] || {}).filter(([key]) => key in DEFAULT_P[k])); // drop old S/M/L frame keys
-    P[k] = { ...DEFAULT_P[k], ...saved };
-  }
+    courier: Object.fromEntries(TIERS.map((t) => [t, base.tiers?.[t]?.courier ?? base.pricing?.courier?.[t] ?? DEFAULT_P.courier[t]])),
+    // Default suppliers (Settings → Kalai margin & charges); older Pricing pages saved the frame shop here.
+    frameSource: base.defaults?.framer || base.pricing?.frameSource || 'cheapest', deliverySource: base.defaults?.delivery || 'cheapest' };
   market = { ...structuredClone(DEFAULT_MARKET), ...(base.market || {}) };
-  try { framers = ((await client.models.SellerProfile.list({ limit: 500 })).data || []).filter((p) => p.type === 'FRAMER' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business))); } catch { framers = []; }
+  try {
+    const sp = ((await client.models.SellerProfile.list({ limit: 500 })).data || []).filter((p) => p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
+    framers = sp.filter((p) => p.type === 'FRAMER');
+    couriers = sp.filter((p) => p.type === 'COURIER' || (p.type === 'FRAMER' && Object.keys(parseCard(p).uae || {}).length));
+  } catch { framers = []; couriers = []; }
   works = [];
   let nextToken = null;
   do { const x = await client.models.Product.list({ limit: 500, nextToken }); works.push(...(x.data || [])); nextToken = x.nextToken; } while (nextToken);
@@ -149,43 +171,35 @@ const stateOf = (w) => {
   // Changed = the artist's price now differs from the one the website price was approved with.
   let used = null; try { used = ap?.calc ? JSON.parse(ap.calc).artistUsed ?? null : null; } catch { used = null; }
   if (m && used != null && ap?.artistPrice != null && Number(ap.artistPrice) !== Number(used)) return ['CHANGED', `Artist changed his price (was ₹${Number(used).toLocaleString('en-IN')})`];
+  // Supplier price lists changed since approval (frame, delivery) or the India courier / exchange rate: cost moved.
+  if (m) {
+    let sv = {}; try { sv = ap?.calc ? JSON.parse(ap.calc) : {}; } catch { sv = {}; }
+    if (sv.costUsed != null) {
+      const b = build(w, { tier: sv.tier || tierOf(w.size), fsize: (m.v === 2 && m.base) || sv.fsize || fitFrame(w.size), courier: sv.courier ?? null, margin: sv.margin ?? null });
+      if (b.blocked) return ['CHANGED', 'No supplier price any more: check the price lists'];
+      const now = b.styles.black?.cost;
+      if (now != null && Math.abs(now - sv.costUsed) >= 1) return ['CHANGED', `Cost changed (was ⃃${Math.round(sv.costUsed)}, now ⃃${Math.round(now)})`];
+    }
+  }
   if (m) return ['LIVE', 'Price on website'];
   if (ap?.artistPrice != null) return ['TODO', 'To approve'];
   return ['WAIT', 'Waiting for artist price'];
 };
 
 function masterHtml() {
-  const pct = (k, label) => `<label>${label} <input data-p="${k}" type="number" step="0.1" min="0" value="${+(P[k] * 100).toFixed(2)}" style="width:70px">%</label>`;
-  const tierRow = (k, label) => `<tr><th>${label}</th>${TIERS.map((t) => `<td><input data-pt="${k}.${t}" type="number" min="0" step="1" value="${P[k][t]}" style="width:80px"></td>`).join('')}</tr>`;
-  return `<details class="pc-master"><summary><b>Master inputs</b> <span class="muted">(used for every work; change, then Save master)</span></summary>
-    <div class="pc-grid">
-      <label>₹ → ⃃ <input data-p="fx" type="number" step="0.0001" min="0" value="${P.fx}" style="width:90px"></label>
-      ${pct('customs', 'Customs')}
-      <label>Courier Dubai → customer <input data-p="local" type="number" min="0" step="1" value="${P.local}" style="width:70px"> ⃃</label>
-      ${pct('margin', 'Margin (Collection)')}${pct('fee', 'Card charges (Ziina)')}${pct('ins', 'Courier insurance')}${pct('reserve', 'Breakage reserve')}
-      <label><input type="checkbox" data-p="round25" ${P.round25 !== false ? 'checked' : ''} style="width:auto"> Round up to the nearest Dhs 25</label>
-    </div>
-    <table class="costs" style="max-width:420px"><thead><tr><th>⃃ by artwork size</th>${TIERS.map((t) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
-      ${tierRow('courier', 'Courier India → Dubai')}</tbody></table>
-    <div class="pc-grid"><label>Frame costs from <select id="pcFrameSrc" style="width:auto">
-      <option value="">The master table below (my own figures)</option>
-      <option value="cheapest" ${P.frameSource === 'cheapest' ? 'selected' : ''}>Cheapest frame shop, per size and style</option>
-      ${framers.map((f) => `<option value="${esc(f.id)}" ${P.frameSource === f.id ? 'selected' : ''}>${esc(f.business)}'s price list</option>`).join('')}
-    </select></label><span class="muted" style="font-size:12px">${framers.length ? 'A frame shop\'s price per size and style (frame + fixing). Any size or style missing from its list uses the master table.' : 'No approved frame shops yet: add them under Artists & sellers → Frame shops & delivery.'}</span></div>
-    <table class="costs" style="max-width:720px"><thead><tr><th>⃃ by frame size (cm)</th>${FRAME_SIZES.map(([f]) => `<th>${f}</th>`).join('')}</tr></thead><tbody>
-      ${['frameWork', 'moulding'].map((k) => `<tr><th>${k === 'frameWork' ? 'Frame work (mount, glass, labour)' : 'Frame, plain style'}</th>${FRAME_SIZES.map(([f]) => `<td><input data-pf="${k}|${f}" type="number" min="0" step="1" value="${P[k][f]}" style="width:72px"></td>`).join('')}</tr>`).join('')}</tbody></table>
-    <div class="pc-grid">${STYLES.filter((s) => s.k !== 'none').map((s) => `<label>${s.n} <input data-px="${s.k}" type="number" min="0" step="5" value="${Math.round((P.extra[s.k] || 0) * 100)}" style="width:60px">% more</label>`).join('')}</div>
-    <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="button" id="pcSaveMaster">Save master</button><span class="muted" id="pcMasterMsg" style="font-size:12px">Artwork sizes: S up to A4 (30 cm), M up to 45 cm, L larger. Each work gets the smallest frame that fits with a 4 cm mount; customers can choose bigger ones.</span></div>
-  </details>`;
+  const pc = (v) => `${+(Number(v || 0) * 100).toFixed(2)}%`;
+  const fr = P.frameSource && P.frameSource !== 'cheapest' ? framers.find((f) => f.id === P.frameSource)?.business : '';
+  const dl = P.deliverySource && P.deliverySource !== 'cheapest' ? couriers.find((c) => c.id === P.deliverySource)?.business : '';
+  return `<div class="pc-master" style="display:flex;gap:6px 18px;flex-wrap:wrap;align-items:center;font-size:13px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)">
+    <b>Figures used</b>
+    <span>Margin ${pc(P.margin)}</span><span>Ziina ${pc(P.fee)}</span><span>Insurance ${pc(P.ins)}</span><span>Reserve ${pc(P.reserve)}</span><span>Customs ${pc(P.customs)}</span><span>₹ → ⃃ ${P.fx}</span>
+    <span>India courier ${TIERS.map((t) => `${t} ${P.courier[t]}`).join(' / ')}</span>
+    <span>Frames: ${esc(fr || 'cheapest frame shop')}</span><span>Delivery: ${esc(dl || 'cheapest delivery partner')} (Dubai)</span>
+    <button type="button" class="btn small ghost" id="pcToSettings" style="margin-left:auto">Change in Settings → Kalai margin &amp; charges</button>
+    <span class="muted" id="pcMasterMsg" style="font-size:12px;flex-basis:100%">Frame and delivery costs come from the suppliers' price lists. A work whose frame or delivery price is missing from every list shows "no supplier price" and can't be approved until the price list is filled in.</span>
+  </div>`;
 }
-
-function readMaster() {
-  document.querySelectorAll('[data-p]').forEach((i) => { const k = i.dataset.p; P[k] = i.type === 'checkbox' ? i.checked : ['fx', 'local'].includes(k) ? num(i.value) ?? 0 : (num(i.value) ?? 0) / 100; });
-  document.querySelectorAll('[data-pt]').forEach((i) => { const [k, t] = i.dataset.pt.split('.'); P[k][t] = num(i.value) ?? 0; });
-  document.querySelectorAll('[data-px]').forEach((i) => { P.extra[i.dataset.px] = (num(i.value) ?? 0) / 100; });
-  document.querySelectorAll('[data-pf]').forEach((i) => { const [k, f] = i.dataset.pf.split('|'); P[k][f] = num(i.value) ?? 0; });
-  if ($('pcFrameSrc')) P.frameSource = $('pcFrameSrc').value;
-}
+function readMaster() {}
 
 // Market check for one work: Kalai's band for its size and medium; the proposed price lifts a cost-based price that
 // is below the band to the middle of the band (rounded up to Dhs 25). Above the band it stays, flagged.
@@ -202,6 +216,7 @@ function matrixFor(w, o, fin) {
   const b = build(w, o), pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0), out = {};
   for (const fs of sizesFrom(b.fsize)) {
     const bb = build(w, { ...o, fsize: fs });
+    if (bb.blocked) continue; // a bigger frame size no supplier prices: not offered on the website
     out[fs] = Object.fromEntries(STYLES.filter((x) => x.k !== 'none').map((x) => {
       const extra = (bb.styles[x.k].cost - b.styles[x.k].cost) * (1 + b.margin) / (1 - pct);
       return [x.k, fs === b.fsize ? fin[x.k] : fin[x.k] + Math.ceil(extra / 25) * 25];
@@ -233,12 +248,12 @@ function drawList() {
     <div class="tablewrap"><table class="pc-table"><thead><tr><th></th><th></th><th>Work</th><th>Size</th><th>Artist</th><th>Ready in</th><th>Cost-based (black frame)</th><th>Market check</th><th>Proposed price</th><th>On website</th><th></th></tr></thead><tbody>
     ${rows.map((w) => {
       const b = build(w), m = matrixOf(w), [st, label] = stateOf(w), mc = marketOf(w, b);
-      return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><input type="checkbox" data-pick="${esc(w.id)}" ${picked.has(w.id) ? 'checked' : ''} ${b.artistAed == null ? 'disabled title="No artist price yet"' : ''}></td><td><img data-key="${esc(w.imageKey)}" alt=""></td>
+      return `<tr data-id="${esc(w.id)}" class="${w.id === openId ? 'sel' : ''}"><td><input type="checkbox" data-pick="${esc(w.id)}" ${picked.has(w.id) ? 'checked' : ''} ${b.artistAed == null ? 'disabled title="No artist price yet"' : b.blocked ? 'disabled title="No supplier price"' : ''}></td><td><img data-key="${esc(w.imageKey)}" alt=""></td>
         <td><b>${esc(w.named ? w.title : cleanTitle(w.title))}</b><br><span class="muted mono" style="font-size:11px">${esc(w.code || '')}</span></td>
         <td>${esc(w.size || '–')}<br><span class="muted" style="font-size:11px">${b.tier} · ${mediumOf(w) === 'sk' ? 'sketch' : 'watercolour'}</span></td>
         <td class="mono">${artistPrice(w, b.inr)}${w.artist ? `<br><span class="muted" style="font-size:11px;font-family:inherit">${esc(w.artist)}</span>` : ''}</td>
         <td style="font-size:12px">${w.leadDays != null ? (w.leadDays === 0 && !w.leadMax ? 'ready now' : `${w.leadDays}${w.leadMax && w.leadMax !== w.leadDays ? `–${w.leadMax}` : ''} days`) : '<span class="muted">–</span>'}</td>
-        <td class="mono">${aed(b.styles.black?.price)}</td>
+        <td class="mono">${b.blocked ? `<span class="pc-st TODO" title="${esc(b.missing.join(', '))}">no supplier price</span><br><span class="muted" style="font-size:11px;font-family:inherit;white-space:normal">${esc(b.missing.slice(0, 2).join(', '))}${b.missing.length > 2 ? '…' : ''}</span>` : aed(b.styles.black?.price)}</td>
         <td style="font-size:12px">${mc.cost == null ? '–' : `${aed(mc.band[0])}–${aed(mc.band[1])}<br><span class="pc-st ${mc.verdict === 'inside' ? 'LIVE' : 'TODO'}">${mc.verdict === 'below' ? 'below the band' : mc.verdict === 'above' ? 'above the band' : 'inside the band'}</span>`}</td>
         <td class="mono"><b>${aed(mc.proposed)}</b></td>
         <td class="mono">${m ? aed(basePrice(m, 'black')) : '–'}${m?.v === 2 ? ` <span class="muted" style="font-size:11px">${esc(m.base)}</span>` : ''}<br><span class="pc-st ${st}">${label}</span></td>
@@ -249,7 +264,7 @@ function drawList() {
   $('pcList').querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { openId = openId === b.dataset.open ? null : b.dataset.open; drawList(); }; });
   const countPick = () => { $('pcPickN').textContent = `${picked.size} selected`; };
   $('pcList').querySelectorAll('[data-pick]').forEach((c) => { c.onchange = () => { c.checked ? picked.add(c.dataset.pick) : picked.delete(c.dataset.pick); countPick(); }; });
-  $('pcAll').onchange = () => { rows.forEach((w) => { if (build(w).artistAed == null) return; $('pcAll').checked ? picked.add(w.id) : picked.delete(w.id); }); drawList(); };
+  $('pcAll').onchange = () => { rows.forEach((w) => { const bb = build(w); if (bb.artistAed == null || bb.blocked) return; $('pcAll').checked ? picked.add(w.id) : picked.delete(w.id); }); drawList(); };
   const bulk = async (useMarket) => {
     bulkNote = '';
     const list = rows.filter((w) => picked.has(w.id));
@@ -260,7 +275,7 @@ function drawList() {
       const ap = prices.get(w.id); let saved = {}; try { saved = ap?.calc ? JSON.parse(ap.calc) : {}; } catch { saved = {}; }
       const o = { tier: saved.tier || tierOf(w.size), fsize: saved.fsize || fitFrame(w.size), courier: saved.courier ?? null, margin: saved.margin ?? null };
       const b = build(w, o);
-      if (b.artistAed == null) { bad.push(w.code); continue; }
+      if (b.artistAed == null || b.blocked) { bad.push(w.code); continue; }
       const mc = marketOf(w, b), diff = useMarket ? mc.proposed - b.styles.black.price : 0;
       const fin = Object.fromEntries(STYLES.map((x) => [x.k, Math.ceil((b.styles[x.k].price + diff) / 25) * 25]));
       const matrix = matrixFor(w, o, fin), now = new Date().toISOString();
@@ -268,7 +283,7 @@ function drawList() {
         const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
         if (r1.errors?.length) throw new Error(r1.errors[0].message);
         Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
-        const rec = { productId: w.id, calc: JSON.stringify({ ...o, artistUsed: ap?.artistPrice ?? null, master: P, at: now, bulk: useMarket ? 'market' : 'cost' }), approvedAt: now };
+        const rec = { productId: w.id, calc: JSON.stringify({ ...o, artistUsed: ap?.artistPrice ?? null, costUsed: b.styles.black.cost, master: P, at: now, bulk: useMarket ? 'market' : 'cost' }), approvedAt: now };
         const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: curOf(w), ...rec });
         if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });
         ok++; picked.delete(w.id);
@@ -292,7 +307,7 @@ function drawCalc(w) {
   let fresh = stateOf(w)[0] !== 'CHANGED'; // first view: show the prices now on the website; after any change: the recalculated ones
   const render = () => {
     const b = build(w, o);
-    const lift = b.artistAed == null ? 0 : marketOf(w, b).proposed - b.styles.black.price; // market lift on every style
+    const lift = b.artistAed == null || b.blocked ? 0 : marketOf(w, b).proposed - b.styles.black.price; // market lift on every style
     const md = mediumOf(w), mk = market[b.tier] || DEFAULT_MARKET[b.tier], band = mk?.[md] || [0, 0];
     const cell = (fn) => STYLES.map((s) => `<td class="num mono">${b.styles[s.k] ? fn(b.styles[s.k], s) : '–'}</td>`).join('');
     box.innerHTML = `<div class="pc-calc">
@@ -304,15 +319,15 @@ function drawCalc(w) {
         <label>Margin <input id="pcM" type="number" min="0" step="1" value="${o.margin != null ? Math.round(o.margin * 100) : ''}" placeholder="${Math.round(P.margin * 100)}" style="width:60px">%</label>
         <span class="muted" style="font-size:12px">${ap?.artistPriceAt ? `Artist's price given ${new Date(ap.artistPriceAt).toLocaleDateString('en-GB')}` : 'No price from the artist yet: type one to simulate.'}</span>
       </div>
-      ${b.artistAed == null ? '<p class="muted">Enter the artist\'s price to see the calculation.</p>' : `
+      ${b.artistAed == null ? '<p class="muted">Enter the artist\'s price to see the calculation.</p>' : b.blocked ? `<p class="err">No supplier price for: ${esc(b.missing.join(', '))}. Add it to a frame shop's / delivery partner's price list (Artists &amp; sellers → Frame, print &amp; delivery → their price list), or pick another frame size above.</p>` : `
       <div class="tablewrap"><table class="costs pc-break"><thead><tr><th>${DHS} · frame ${esc(b.fsize)} cm</th>${STYLES.map((s) => `<th class="num">${s.n}</th>`).join('')}</tr></thead><tbody>
         <tr><td>${curOf(w) === 'AED' ? `Artist${w.artist ? ` (${esc(w.artist)})` : ''}` : `Artist (₹${Number(b.inr).toLocaleString('en-IN')} × ${P.fx})`}</td>${cell(() => Math.round(b.artistAed))}</tr>
         <tr><td>${isLocalArt(w) ? 'Pickup from the artist' : 'Courier India → Dubai'}</td>${cell(() => Math.round(b.courier))}</tr>
         <tr><td>Customs ${isLocalArt(w) ? '(none: made in the UAE)' : `${(P.customs * 100).toFixed(1)}%`}</td>${cell(() => Math.round(b.customs))}</tr>
-        <tr><td>${P.frameSource ? 'Fixing (mount, glass, fitting)' : 'Frame work (mount, glass, labour)'}</td>${cell((x) => Math.round(x.frameWork))}</tr>
+        <tr><td>Fixing (mount, glass, fitting)</td>${cell((x) => Math.round(x.frameWork))}</tr>
         <tr><td>Frame</td>${cell((x) => Math.round(x.frame))}</tr>
-        ${P.frameSource ? `<tr><td class="muted" style="font-size:12px">Frame price from</td>${STYLES.map((s) => `<td class="num muted" style="font-size:11px">${esc(b.from?.[s.k] === 'master' ? 'master table' : b.from?.[s.k] || '–')}</td>`).join('')}</tr>` : ''}
-        <tr><td>Courier Dubai → customer</td>${cell(() => Math.round(b.local))}</tr>
+        ${true ? `<tr><td class="muted" style="font-size:12px">Frame price from</td>${STYLES.map((s) => `<td class="num muted" style="font-size:11px">${esc(b.from?.[s.k] === 'master' ? 'master table' : b.from?.[s.k] || '–')}</td>`).join('')}</tr>` : ''}
+        <tr><td>Courier Dubai → customer${b.localFrom ? ` <span class="muted" style="font-size:11px">${esc(b.localFrom)}</span>` : ''}</td>${cell(() => Math.round(b.local))}</tr>
         <tr class="tot"><td>Total cost</td>${cell((x) => Math.round(x.cost))}</tr>
         <tr><td>Margin ${Math.round(b.margin * 100)}%</td>${cell((x) => Math.round(x.marginAmt))}</tr>
         <tr><td>Card charges, insurance, reserve ${(((P.fee || 0) + (P.ins || 0) + (P.reserve || 0)) * 100).toFixed(1)}%</td>${cell((x) => Math.round(x.cardAmt))}</tr>
@@ -334,7 +349,7 @@ function drawCalc(w) {
     </div>`;
     const re = () => { fresh = false; o.artist = num($('pcA').value); o.tier = $('pcT').value; o.fsize = $('pcF').value; o.courier = num($('pcC').value); o.margin = num($('pcM').value) != null ? num($('pcM').value) / 100 : null; render(); };
     ['pcA', 'pcC', 'pcM'].forEach((id) => $(id).addEventListener('change', re)); $('pcT').addEventListener('change', re); $('pcF').addEventListener('change', re);
-    if (b.artistAed == null) return;
+    if (b.artistAed == null || b.blocked) return;
     // Prices for every frame size from the base one: base final price + (extra frame cost × margin ÷ card share), to Dhs 25.
     const pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0);
     const sizesMatrix = () => {
@@ -342,6 +357,7 @@ function drawCalc(w) {
       const out = {};
       for (const fs of sizesFrom(b.fsize)) {
         const bb = build(w, { ...o, fsize: fs });
+        if (bb.blocked) continue;
         out[fs] = Object.fromEntries(STYLES.filter((s) => s.k !== 'none').map((s) => {
           const extra = (bb.styles[s.k].cost - b.styles[s.k].cost) * (1 + b.margin) / (1 - pct);
           return [s.k, fs === b.fsize ? fin[s.k] : fin[s.k] + Math.ceil(extra / 25) * 25];
@@ -381,7 +397,7 @@ function drawCalc(w) {
         const r1 = await client.models.Product.update({ id: w.id, priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
         if (r1.errors?.length) throw new Error(r1.errors[0].message);
         Object.assign(w, { priceMatrix: JSON.stringify(matrix), priceApprovedAt: now, ...goLive(w) });
-        const rec = { productId: w.id, calc: JSON.stringify({ artistUsed: o.artist ?? ap?.artistPrice ?? null, tier: o.tier, fsize: o.fsize, courier: o.courier, margin: o.margin, master: P, at: now }), approvedAt: now,
+        const rec = { productId: w.id, calc: JSON.stringify({ artistUsed: o.artist ?? ap?.artistPrice ?? null, costUsed: build(w, o).styles.black?.cost ?? null, tier: o.tier, fsize: o.fsize, courier: o.courier, margin: o.margin, master: P, at: now }), approvedAt: now,
           ...(o.artist != null && o.artist !== ap?.artistPrice ? { artistPrice: o.artist, currency: curOf(w), artistNote: 'Entered by the studio' } : {}) };
         const r2 = ap ? await client.models.ArtworkPrice.update(rec) : await client.models.ArtworkPrice.create({ currency: curOf(w), ...rec });
         if (!r2.errors?.length) prices.set(w.id, { ...(ap || {}), ...r2.data });
@@ -405,11 +421,12 @@ async function upgradeOld() {
     const m = matrixOf(w);
     if (!m || m.v === 2) continue;
     const b = build(w);
-    if (b.artistAed == null) continue;
+    if (b.artistAed == null || b.blocked) continue;
     const pct = (P.fee || 0) + (P.ins || 0) + (P.reserve || 0), up = (x) => Math.ceil(x / 25) * 25;
     const sizes = {};
     for (const fs of sizesFrom(b.fsize)) {
       const bb = build(w, { fsize: fs });
+      if (bb.blocked) continue;
       sizes[fs] = Object.fromEntries(STYLES.filter((s) => s.k !== 'none').map((s) => [s.k, up(m[s.k] ?? b.styles[s.k].price) + (fs === b.fsize ? 0 : up((bb.styles[s.k].cost - b.styles[s.k].cost) * (1 + b.margin) / (1 - pct)))]));
     }
     const matrix = { v: 2, base: b.fsize, none: up(m.none ?? b.styles.none.price), sizes };
@@ -427,22 +444,6 @@ export async function showPricing() {
   try { await loadAll(); } catch (ex) { $('pcList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; return; }
   upgradeOld().then((n) => { if (n) { $('pcMasterMsg') && ($('pcMasterMsg').textContent = `${n} earlier price list(s) now have frame sizes and Dhs 25 rounding.`); drawList(); } });
   $('pcMaster').innerHTML = masterHtml();
-  $('pcMaster').querySelectorAll('input, select').forEach((i) => i.addEventListener('change', () => { readMaster(); drawList(); }));
-  $('pcSaveMaster').onclick = async () => {
-    readMaster();
-    $('pcMasterMsg').textContent = 'Saving…';
-    try {
-      const data = { ...(ratesRow || {}), pricing: { courier: P.courier, frameWork: P.frameWork, moulding: P.moulding, extra: P.extra, frameSource: P.frameSource || '' },
-        fx: P.fx, customs: P.customs, local: P.local, margin: P.margin, margins: { ...(ratesRow?.margins || {}), collection: P.margin }, fee: P.fee, ins: P.ins, reserve: P.reserve, round9: P.round9, round25: P.round25,
-        tiers: Object.fromEntries(TIERS.map((t) => { const f = { S: '30×40', M: '40×50', L: '50×70' }[t]; return [t, { ...(ratesRow?.tiers?.[t] || {}), courier: P.courier[t], framing: Math.round((P.frameWork[f] || 0) + (P.moulding[f] || 0)) }]; })),
-        updatedAt: new Date().toISOString() };
-      const rec = { key: 'default', data: JSON.stringify(data) };
-      let r = ratesRow ? await client.models.Rates.update(rec) : await client.models.Rates.create(rec);
-      if (r.errors?.length && !ratesRow) r = await client.models.Rates.update(rec);
-      if (r.errors?.length) throw new Error(r.errors[0].message);
-      ratesRow = data;
-      $('pcMasterMsg').textContent = 'Saved. The order price calculator (Rates) uses the same figures.';
-    } catch (ex) { $('pcMasterMsg').textContent = ex.message; }
-  };
+  $('pcToSettings').onclick = () => document.getElementById('tabSettings')?.click();
   drawList();
 }

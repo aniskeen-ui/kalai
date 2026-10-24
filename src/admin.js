@@ -77,18 +77,37 @@ const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Numb
 const escSym = (v) => esc(v).replace(/\bAED (?=\d)/g, '\u20C3 ');
 const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 
+// Costs from the supplier price lists (Settings → Kalai margin & charges picks the default supplier, or the cheapest):
+// the supplier on the order's job if one is assigned, else the default one's price for this size / style / address.
+// No silent fallback: a missing price stays null and the costing says "no supplier price".
+function pickSupplier(types, pref, costFn) {
+  const list = suppliers.filter((s) => types.includes(s.type)).map((s) => ({ s, c: costFn(parseCard(s)) })).filter((x) => x.c != null);
+  const mine = pref && pref !== 'cheapest' ? list.find((x) => x.s.id === pref) : null;
+  const x = mine || list.sort((a, b) => a.c - b.c)[0];
+  return x ? { cost: x.c, name: x.s.business } : null;
+}
+function estCosts(e) {
+  if (!e) return {};
+  const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
+  const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name } : pickSupplier(['FRAMER'], d.framer, (card) => frameCost(card, spec));
+  const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, { ...e, deliveryEmirate: e.deliveryEmirate || 'Dubai' }, spec, zoneOf));
+  const pr = j.printer?.price != null ? { cost: Number(j.printer.price), name: j.printer.name } : pickSupplier(['PRINTER'], d.printer, (card) => printCost(card, spec));
+  return { spec, framing: fr?.cost ?? null, framingFrom: fr?.name || '', local: dl?.cost ?? null, localFrom: dl?.name || '', print: pr?.cost ?? null, printFrom: pr?.name || '' };
+}
+
 /** Cost build-up for one enquiry, the suggested price and the margin at a given price. */
 function calc(c, price) {
+  const est = estCosts(curEnq);
   const tier = rates.tiers[c.sizeTier] || null;
   // Artist price: ₹ (Siva / artists in India) converted at the master rate, or ⃃ for artists in the UAE.
   const artistAed = c.artistPriceAed != null ? Number(c.artistPriceAed) : c.artistPriceInr ? c.artistPriceInr * rates.fx : null;
-  const framing = c.framingOverride ?? tier?.framing ?? null;
+  const framing = c.framingOverride ?? est.framing ?? null;
   // An artist in the UAE: no courier from India and no customs.
   const indiaCourier = c.indiaCourierOverride ?? (c.local ? 0 : tier?.courier ?? null);
-  const localCourier = c.localCourierOverride ?? rates.local;
+  const localCourier = c.localCourierOverride ?? est.local ?? null;
   const vat = c.delivery === 'OUTSIDE' ? 0 : rates.vat;
-  if (artistAed == null || framing == null || indiaCourier == null) {
-    return { artistAed, framing, indiaCourier, localCourier, ready: false };
+  if (artistAed == null || framing == null || indiaCourier == null || localCourier == null) {
+    return { artistAed, framing, indiaCourier, localCourier, ready: false, est };
   }
   const customs = c.local ? 0 : (artistAed + indiaCourier) * rates.customs;
   const total = artistAed + framing + indiaCourier + customs + localCourier;
@@ -97,7 +116,7 @@ function calc(c, price) {
   const mg = marginFor(curEnq?.kind);
   const raw = (total * (1 + mg)) / (1 / (1 + vat) - pctOfPrice);
   const suggested = rates.round25 !== false ? Math.ceil(raw / 25) * 25 : rates.round9 ? Math.ceil((raw + 1) / 10) * 10 - 1 : Math.round(raw);
-  const out = { artistAed, framing, indiaCourier, localCourier, customs, total, suggested, vatRate: vat, ready: true, mg };
+  const out = { artistAed, framing, indiaCourier, localCourier, customs, total, suggested, vatRate: vat, ready: true, mg, est };
   if (price > 0) {
     out.price = price;
     out.vatAmt = price - price / (1 + vat);
@@ -202,7 +221,8 @@ $('loginForm').addEventListener('submit', async (e) => {
 });
 $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; show('loginView'); };
 $('reload').onclick = load;
-$('ratesBtn').onclick = () => { showPane('orders', 'ratesBtn'); selectedId = null; render(); showRates(); };
+// "Kalai margin & charges" (the old Rates tab) now lives in Settings.
+window.kalaiShowCharges = () => showRates();
 $('tabOrders').onclick = () => showPane('orders', 'tabOrders');
 $('tabReports').onclick = () => showPane('reports', 'tabReports');
 $('tabFeedback').onclick = () => showPane('feedback', 'tabFeedback');
@@ -227,7 +247,7 @@ function showPane(pane, tabId) {
   $('settingsPane').hidden = pane !== 'settings';
   $('pricingPane').hidden = pane !== 'pricing';
   $('customersPane').hidden = pane !== 'customers';
-  ['tabOrders', 'tabCustomers', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'tabSettings', 'tabPricing', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  ['tabOrders', 'tabCustomers', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'tabSettings', 'tabPricing'].forEach((t) => $(t)?.setAttribute('aria-selected', String(t === tabId)));
   try { history.replaceState(null, '', ['customers', 'reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers', 'settings', 'pricing'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
@@ -235,7 +255,7 @@ function showPane(pane, tabId) {
   if (pane === 'messages') showMessages();
   if (pane === 'sellers') showMarket();
   if (pane === 'offers') showPromotions();
-  if (pane === 'settings') showSettings();
+  if (pane === 'settings') { showSettings(); loadArtists().catch(() => {}).then(() => showRates()); }
   if (pane === 'pricing') showPricing();
   if (pane === 'customers') showCustomers();
 }
@@ -406,19 +426,18 @@ function reportLine(e) {
     k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: 0, india: 0, customs: 0, local: 0 };
     note = `image licence${e.royaltyPct ? `: ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''}`;
   } else if (e.kind === 'PHOTO') {
-    // Photo framing: print (+ frame unless print only) per copy, from Rates; UAE delivery included in the price.
-    const gd = parseDetails(e.details), sp = specOf(e, gd), big = !['A4', 'A3'].includes(sp.size);
-    const print = Number(sp.size === 'A4' ? rates.printA4 : rates.printA3) * (big ? 2 : 1);
-    const frm = sp.style === 'none' ? 0 : Number((sp.size === 'A4' ? rates.tiers.S : sp.size === 'A3' ? rates.tiers.M : rates.tiers.L)?.framing || 0);
+    // Photo framing: print (+ frame unless print only) per copy, from the supplier price lists; UAE delivery included.
+    const gd = parseDetails(e.details), sp = specOf(e, gd);
+    const es = estCosts(e), print = Number(es.print || 0), frm = sp.style === 'none' ? 0 : Number(es.framing || 0);
     // A print of a painting: the artist's royalty (% of the price) is their share, shown under Artist.
-    k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(rates.local || 0) };
-    note = `est. from Rates (print + frame${e.royaltyPct ? ` + ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''})`;
+    k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(es.local || 0) };
+    note = `est. from supplier prices (print + frame${e.royaltyPct ? ` + ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''})${es.framing == null || es.print == null ? ' · some supplier prices missing' : ''}`;
   } else if (e.kind === 'GIFT') {
     // Print (from the photo) + framing, per copy; A3 when the customer chose the large size.
-    const gd = parseDetails(e.details), big = /A3|Large size/i.test(String(gd.Extras || ''));
-    const per = Number((big ? rates.tiers.M?.framing : rates.tiers.S?.framing) || 0) + Number((big ? rates.printA3 : rates.printA4) || 0);
-    k = { artist: 0, framing: per * copiesOf(gd), india: 0, customs: 0, local: Number(rates.local || 0) };
-    note = 'est. from Rates (print + frame)';
+    const gd = parseDetails(e.details), es = estCosts(e);
+    const per = Number(es.framing || 0) + Number(es.print || 0);
+    k = { artist: 0, framing: per * copiesOf(gd), india: 0, customs: 0, local: Number(es.local || 0) };
+    note = `est. from supplier prices (print + frame)${es.framing == null || es.print == null || es.local == null ? ' · some supplier prices missing' : ''}`;
   } else {
     note = 'no costing';
   }
@@ -831,7 +850,7 @@ function costingSection(e) {
     : `${esc(who)} hasn't priced this yet (${e.artistId ? 'artist portal → Commissions' : 'Artist desk'}). You can also type the price here.`;
   return `<fieldset class="cost" id="costing">
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
-    ${rates.saved ? '' : '<div class="muted warnline">Rates are placeholders. Set the real ones under <b>Rates</b>.</div>'}
+    ${rates.saved ? '' : '<div class="muted warnline">Margin &amp; charges are not saved yet: set them under <b>Settings → Kalai margin &amp; charges</b>.</div>'}
     <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
       <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Commissions in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">
@@ -1299,10 +1318,10 @@ function renderCost() {
   const t = rates.tiers[$('cTier').value];
   let html = `<table class="costs"><tbody>
     ${row('Artist', aed(r.artistAed), r.artistAed != null ? (curAed ? 'artist in the UAE, price in ⃃' : `₹${Number($('cInr').value).toLocaleString('en-IN')} × ${rates.fx}`) : 'needs the artist\'s price')}
-    ${row('Framing', aed(r.framing), $('cFr').value ? 'override' : t ? `master ${$('cTier').value}` : 'choose a size tier')}
+    ${row('Framing', aed(r.framing), $('cFr').value ? 'override' : r.est?.framing != null ? `${esc(r.est.framingFrom)} · ${esc(r.est.spec?.style || '')} ${esc(r.est.spec?.size || '')}` : '<b class="neg">no supplier price</b> for this size / style: add it to a frame shop\'s price list, or type an override')}
     ${row('India courier', aed(r.indiaCourier), $('cIc').value ? 'override' : curAed ? 'none: artist in the UAE' : t ? `master ${$('cTier').value}` : '')}
     ${r.ready ? row('Customs', aed(r.customs, 2), curAed ? 'none: artist in the UAE' : `${(rates.customs * 100).toFixed(1)}% of artist + courier`) : ''}
-    ${row('Local courier', aed(r.localCourier), $('cLc').value ? 'override' : 'master')}
+    ${row('Local courier', aed(r.localCourier), $('cLc').value ? 'override' : r.est?.local != null ? esc(r.est.localFrom) : '<b class="neg">no supplier price</b> for this address / size: add it to a delivery partner\'s price list, or type an override')}
     ${r.ready ? `<tr class="tot"><td>Total cost</td><td class="mono num">${aed(r.total)}</td><td></td></tr>` : ''}
   </tbody></table>`;
   if (r.ready) {
@@ -1345,19 +1364,23 @@ function showRates() {
   const t = rates.tiers;
   const tierRow = (k) => `<tr><th>${k}</th>
     <td><input id="rL${k}" value="${esc(t[k].label)}" aria-label="${k} sizes"></td>
-    <td><input id="rF${k}" type="number" min="0" step="1" value="${t[k].framing}" aria-label="${k} framing"></td>
     <td><input id="rC${k}" type="number" min="0" step="1" value="${t[k].courier}" aria-label="${k} India courier"></td></tr>`;
+  const host = $('chargesBox') || $('detail');
+  const d = rates.defaults || {};
+  const supSel = (id, types, cur, label, note) => { const list = suppliers.filter((x) => types.includes(x.type)); return `<div class="field"><label for="${id}">${label}</label><select id="${id}"><option value="cheapest">Cheapest for each order (from the price lists)</option>${list.map((x) => `<option value="${esc(x.id)}" ${cur === x.id ? 'selected' : ''}>${esc(x.business)}</option>`).join('')}</select><span class="muted" style="font-size:12px">${list.length ? note : 'None approved yet: add them under Artists & sellers → Frame, print &amp; delivery.'}</span></div>`; };
   const pct = (id, label, v, note) => `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="number" min="0" step="0.1" value="${+(v * 100).toFixed(2)}"><span class="muted" style="font-size:12px">${note}</span></div>`;
-  $('detail').innerHTML = `
-    <div><h2 style="font-size:22px">Rates</h2><p class="muted" style="margin:4px 0 0">Master costs used for every price. Only Siva's price changes per order; use the overrides on an enquiry for exceptions.</p></div>
-    ${rates.saved ? '' : '<div class="muted warnline">These are placeholders. Replace them with the frame shop and courier quotes, then save.</div>'}
+  host.innerHTML = `
+    <div><h2 style="font-size:22px">Kalai margin &amp; charges</h2><p class="muted" style="margin:4px 0 0">Kalai's own figures, used by Pricing (website prices) and by each order's costing. Frame, print and delivery costs come from the suppliers' price lists, from the default supplier below (or the cheapest); the artist's price comes from the artist.</p></div>
     <form id="ratesForm" novalidate style="display:grid;gap:12px">
-      <div class="tablewrap"><table class="costs"><thead><tr><th>Tier</th><th>Paper sizes</th><th>Framing (⃃)</th><th>India courier (⃃)</th></tr></thead>
+      <div class="three">
+        ${supSel('rDefFr', ['FRAMER'], d.framer, 'Default frame shop', 'Its price for the frame size and style. On an order with a frame shop job, that job\'s price is used.')}
+        ${supSel('rDefDl', ['COURIER', 'FRAMER'], d.delivery, 'Default delivery partner', 'Its price to the address and parcel size (Dubai for website prices).')}
+        ${supSel('rDefPr', ['PRINTER'], d.printer, 'Default print shop', 'Little Artists and framed prints.')}
+      </div>
+      <div class="tablewrap" style="max-width:520px"><table class="costs"><thead><tr><th>Tier</th><th>Paper sizes</th><th>India courier (⃃)</th></tr></thead>
         <tbody>${Object.keys(t).map(tierRow).join('')}</tbody></table></div>
+      <div class="muted" style="font-size:12px;margin-top:-6px">India → Dubai courier: the artist books and pays it and it is added to the artist's bill (artwork + courier lines). Change it on an order under Overrides for an oversized or express parcel.</div>
       <div class="two">
-        <div class="field"><label for="rLocal">Local courier (⃃)</label><input id="rLocal" type="number" min="0" step="1" value="${rates.local}"></div>
-        <div class="field"><label for="rPr4">Little Artists print, A4 (⃃)</label><input id="rPr4" type="number" min="0" step="1" value="${rates.printA4 ?? 25}"></div>
-        <div class="field"><label for="rPr3">Little Artists print, A3 (⃃)</label><input id="rPr3" type="number" min="0" step="1" value="${rates.printA3 ?? 40}"></div>
         <div class="field"><label for="rSivaRoy">Siva's print royalty (%)</label><input id="rSivaRoy" type="number" min="0" max="50" step="0.5" value="${rates.sivaRoyalty ?? 10}"><span class="muted" style="font-size:12px">His share of each framed print of his paintings, added to the print price. Portal artists: set in Artists &amp; sellers.</span></div>
         <div class="field"><label for="rFx">Exchange rate (⃃ per ₹)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
@@ -1377,7 +1400,7 @@ function showRates() {
       <div class="muted" style="font-size:12px;margin-top:-6px">Kalai's target price bands (simple frame included). Each order's price is checked against them, with Saatchi Art's prices for similar originals as the upper reference.</div>
       <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="rRound" style="width:auto" ${rates.round25 !== false ? 'checked' : ''}> Round suggested prices up to the nearest Dhs 25</label>
       <div class="ok" id="ratesMsg" role="status"></div>
-      <button class="btn" type="submit">Save rates</button>
+      <button class="btn" type="submit">Save margin &amp; charges</button>
     </form>
     <fieldset class="cost" id="ziinaBox"><legend>Online payments (Ziina)</legend><div id="zStatus" class="muted" style="font-size:13px">Checking…</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="zConnect">Connect payment notifications</button></div>
@@ -1386,12 +1409,14 @@ function showRates() {
   $('ratesForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const b = ev.target.querySelector('button'); b.disabled = true; $('ratesMsg').textContent = '';
-    $('detail').querySelectorAll('.err').forEach((x) => x.remove());
+    host.querySelectorAll('.err').forEach((x) => x.remove());
     const tiers = {};
-    Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
-    const data = { tiers, local: n($('rLocal').value) ?? 0, printA4: n($('rPr4').value) ?? 0, printA3: n($('rPr3').value) ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, fx: n($('rFx').value) ?? 0,
+    Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: t[k].framing ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
+    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
-      vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
+      vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(),
+      // The old Pricing master copies (courier, frame table, frame source) are dropped: one set of figures now.
+      ...(rates.pricing ? { pricing: Object.fromEntries(Object.entries(rates.pricing).filter(([k]) => !['courier', 'frameWork', 'moulding', 'extra', 'frameSource'].includes(k))) } : {}),
       market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };
     try {
       const rec = { key: 'default', data: JSON.stringify(data) };
@@ -1403,8 +1428,7 @@ function showRates() {
       }
       if (res.errors?.length) throw new Error(res.errors[0].message);
       rates = { ...data, saved: true };
-      $('ratesMsg').textContent = 'Rates saved. New prices use them straight away.';
-      showRates(); $('ratesMsg').textContent = 'Rates saved. New prices use them straight away.';
+      showRates(); $('ratesMsg').textContent = 'Saved. Pricing and new order costings use these figures straight away.';
     } catch (ex) {
       $('ratesMsg').insertAdjacentHTML('afterend', `<div class="err">Could not save rates: ${esc(ex.message)}</div>`);
     } finally { b.disabled = false; }
