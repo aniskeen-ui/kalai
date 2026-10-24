@@ -1285,7 +1285,8 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
       {const zw=String(z[0]).match(/^(\d+)×(\d+)/),cm=z[0]==="A4"?[21,30]:z[0]==="A3"?[30,42]:zw?[+zw[1],+zw[2]]:[30,42];const px=Math.round(420*Math.pow(cm[0]/60,0.7));
        box.querySelector("#prFrame").style.width=px+"px";box.querySelector("#prCap").textContent=`Shown to scale against the other sizes: ${cm[0]} × ${cm[1]} cm${f==="none"?" print":" framed"}. A preview of the look, printed on matte fine-art paper from our full-size file.`;}box.querySelector("#prFrame").className="kframe "+(f==="wood"?"":f==="none"?"white":f);
       box.querySelector("#prMount").style.padding=f==="none"?"0":box.querySelector("#prMat").checked?"":"0";
-      [...box.querySelector("#prSize").options].forEach(o=>{const zz=SZ.find(x=>x[0]===o.value);o.textContent=`${zz[1]} · ${price(zz,f,p)} Dhs`});};
+      [...box.querySelector("#prSize").options].forEach(o=>{const zz=SZ.find(x=>x[0]===o.value);o.textContent=`${zz[1]} · ${CUR==="AED"?price(zz,f,p)+" Dhs":money(price(zz,f,p))}`});};
+    window.kalaiRefreshPrintModal=()=>{if(box.querySelector("#prSize"))upd()};
     ["prSize","prFr","prQty","prMat"].forEach(id=>box.querySelector("#"+id).addEventListener("change",upd));upd();
     box.querySelector("#prForm").onsubmit=e=>{e.preventDefault();const ok=box.querySelector("#prOk");ok.hidden=false;ok.style.color="var(--kumkum)";
       const n=box.querySelector("#prName").value.trim(),ph=box.querySelector("#prPhone").value.trim();
@@ -1353,7 +1354,7 @@ drawChips();drawGrid();updateCount();
 (function(){const btn=document.getElementById("curBtn"),menu=document.getElementById("curMenu");if(!btn)return;
   const label=k=>k==="USD"?"$ USD":k==="INR"?"₹ INR":DHS_SIGN+" AED";
   const paint=()=>{btn.innerHTML=label(CUR)+" ▾";menu.querySelector('[data-cur="AED"]').innerHTML=DHS_SIGN+" AED";};paint();
-  window.kalaiRedrawPrices=()=>{drawGrid();window.kalaiKidsFee?.();if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
+  window.kalaiRedrawPrices=()=>{drawGrid();window.kalaiKidsFee?.();window.kalaiPhotoFee?.();window.kalaiRefreshPrintModal?.();if(!modal.hidden&&window.kalaiRefreshPrice)window.kalaiRefreshPrice()};
   btn.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden;btn.setAttribute("aria-expanded",String(!menu.hidden))};
   document.addEventListener("click",()=>{menu.hidden=true;btn.setAttribute("aria-expanded","false")});
   menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();
