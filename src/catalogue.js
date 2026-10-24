@@ -101,7 +101,7 @@ function row(p) {
       ${p.kind !== 'photo' ? `<div class="cg-prints" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px">
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Also sell framed prints of this painting (Framed Prints, and a button on its page)"><input data-f="printable" type="checkbox" style="width:auto" ${p.printable ? 'checked' : ''}> Sell framed prints</label>
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap">up to <select data-f="printMax" aria-label="Largest print size" style="width:auto">${PRINT_MAX.map((z) => `<option ${z === (p.printMax || 'A3') ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
-        <label class="linkbtn" style="cursor:pointer" title="High-quality scan or photo for printing (the website picture is used if none)">${p.printKey ? '✓ Print file uploaded · change' : 'Upload print file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
+        <label class="btn small ${p.printKey ? 'ghost' : ''}" style="cursor:pointer" title="High-quality scan or photo of the work (JPG, PNG or TIFF, up to 200 MB): used for framed prints and sent to licence buyers">${p.printKey ? `✓ Full-size file uploaded${p.printW ? ` (${p.printW} × ${p.printH} px)` : ''} · change` : '⬆ Upload full-size file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Sell image licences (web, media, commercial) of this work from the print file: Licences tab on its page"><input data-f="licensable" type="checkbox" style="width:auto" ${p.licensable ? 'checked' : ''}> Sell licences</label>
         <span class="muted">${p.printable || p.licensable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
       <span class="cg-saved muted" aria-live="polite"></span>
@@ -144,7 +144,7 @@ function wireRows(list) {
         }
         // Licences: from the full-size file, and only with the artist's agreement (artist portal → My details → licences).
         if (f === 'licensable' && v) {
-          if (!p.printKey) { inp.checked = false; el.querySelector('.cg-saved').textContent = 'Upload the full-size print file first: the licence buyer downloads that file.'; return; }
+          if (!p.printKey) { inp.checked = false; el.querySelector('.cg-saved').textContent = 'First upload the full-size file (the “⬆ Upload full-size file” button in this row): the licence buyer downloads that file.'; el.querySelector('[data-print-file]')?.click(); return; }
           if (p.artistId) {
             const ap = await artistProfile(p.artistId);
             if (ap?.allowLicences !== 'YES') { inp.checked = false; el.querySelector('.cg-saved').textContent = `${ap?.business || 'The artist'} hasn't agreed to image licences (their portal → My details).`; return; }
@@ -172,7 +172,7 @@ function wireRows(list) {
         let dims = {}; try { const bm = await createImageBitmap(file); dims = { printW: bm.width, printH: bm.height }; bm.close?.(); } catch { dims = { printW: null, printH: null }; }
         const r = await client.models.Product.update({ id: p.id, printKey: res.path, ...dims });
         if (r.errors?.length) throw new Error(r.errors[0].message);
-        p.printKey = res.path; pf.parentElement.firstChild.textContent = '✓ Print file uploaded · change'; msg.textContent = 'Print file saved';
+        p.printKey = res.path; pf.parentElement.firstChild.textContent = `✓ Full-size file uploaded${dims.printW ? ` (${dims.printW} × ${dims.printH} px)` : ''} · change`; pf.parentElement.classList.add('ghost'); msg.textContent = 'Full-size file saved: you can tick Sell licences now.';
       } catch (ex) { msg.textContent = 'Not saved: ' + ex.message; }
     };
   });
