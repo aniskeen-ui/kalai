@@ -924,6 +924,14 @@ function statusBlock(e, k, s) {
   const fixUnpaid = k === 'PRICE_SENT' && !isLocked(e) && ['FRAMING', 'SHIPPED'].includes(s);
   if (!fixUnpaid && !(NEXT[s] || []).includes(k)) return s === 'DELIVERED' ? 'already delivered' : ['REFUNDED', 'CANCELLED'].includes(s) && !(NEXT[s] || []).length ? 'order closed' : WHY[k] || 'not now';
   if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return `waiting for ${artistOf(e)}`;
+  // The artist's steps set these statuses: not back behind what the artist marked, and not ahead of it by hand
+  // (mark the step on the artist page instead, so the AWB and dates are recorded).
+  const ART = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'];
+  if (ART.includes(k) && hasArtist(e)) {
+    const at = ART.indexOf({ STARTED: 'ARTIST_WORKING', FINISHED: 'ARTIST_DONE', SHIPPED: 'ARTIST_SENT' }[e.artistStage] || 'PAID');
+    if (ART.indexOf(k) < at) return `${artistOf(e)} already marked ${String(e.artistStage).toLowerCase()}`;
+    if (ART.indexOf(k) > at) return `set by ${artistOf(e)}'s step`;
+  }
   return '';
 }
 
