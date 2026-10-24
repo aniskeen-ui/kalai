@@ -344,7 +344,7 @@ function zohoActual(e) {
   const who = (e.artistName || 'Siva').split(/\s+/)[0].toLowerCase(), rules = vendorRules();
   // Frame shop and delivery partner invoices from the supplier portal (also Zoho bills, counted once here).
   const sj = jobsOf(e), seen = new Set();
-  for (const [role, f] of [['framer', 'framing'], ['delivery', 'local']]) {
+  for (const [role, f] of [['printer', 'framing'], ['framer', 'framing'], ['delivery', 'local']]) {
     const jb = sj[role];
     // No invoice yet: the price agreed on the job stands in until their invoice (Zoho bill) comes.
     if (jb && jb.invoiceAmt == null && jb.price != null && jb.price !== '') {
@@ -548,7 +548,7 @@ let artists = [];
 async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
-  suppliers = (r.data || []).filter((p) => (p.type === 'FRAMER' || p.type === 'COURIER') && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
+  suppliers = (r.data || []).filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type) && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
 }
 let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COURIER)
 // Price lists change in the supplier portal (often in another tab): reload when coming back to this tab.
@@ -563,7 +563,11 @@ function jobWa(e, cur, role, spec) {
   if (n.length < 9) return '';
   const det = parseDetails(e.details);
   const to = [e.deliveryName || e.customerName, e.deliveryPhone || e.phone, [e.deliveryAddress, e.deliveryEmirate, e.deliveryCountry && e.deliveryCountry !== 'UAE' ? e.deliveryCountry : ''].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
-  const lines = role === 'framer'
+  const fj = jobsOf(e).framer, fsp = fj && suppliers.find((x) => x.id === fj.supplierId);
+  const lines = role === 'printer'
+    ? [`Kalai Art House printing job ${e.ref}: ${e.title}`, `Print: ${spec.size}${Number(det.Copies) > 1 ? ` × ${det.Copies}` : ''}, fine-art matte paper`, cur.price != null ? `Agreed price: AED ${cur.price}` : '', cur.due ? `Please finish by ${cur.due}` : '', cur.note ? `Note: ${cur.note}` : '',
+      `Hand the print to: ${fsp ? [fsp.business, fsp.phone, fsp.address].filter(Boolean).join(', ') : 'Kalai Art House (we confirm where)'}`, sp?.owner ? 'Full-size file: art.pranixtechno.com/supplier.html' : 'I will send you the full-size file here.']
+    : role === 'framer'
     ? [`Kalai Art House framing job ${e.ref}: ${e.title}`, `Frame: ${(RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style])[1]}, ${spec.size}${det.Framing ? ` (${det.Framing})` : ''}`, det['Card message'] ? `Card message: ${det['Card message']}` : '',
       cur.price != null ? `Agreed price: AED ${cur.price}` : '', cur.due ? `Please finish by ${cur.due}` : '', cur.note ? `Note: ${cur.note}` : '', cur.canDeliver ? `Please also deliver to: ${to}${cur.deliveryPrice != null ? ` (AED ${cur.deliveryPrice})` : ''}` : '',
       sp?.owner ? 'Details and photo: art.pranixtechno.com/supplier.html' : 'I will send you the photo here.']
@@ -587,8 +591,10 @@ function supplierSection(e) {
   const spec = specOf(e, parseDetails(e.details));
   // Little Artists: the frame shop prints the drawing too (print + frame, per copy).
   const gift = e.kind === 'GIFT' || e.kind === 'PHOTO', copies = gift ? copiesOf(parseDetails(e.details)) : 1;
-  const framerCost = (card) => { const f = frameCost(card, spec); if (!gift) return f; const p = printCost(card, spec); return f == null || p == null ? null : Math.round((f + p) * copies * 100) / 100; };
-  const costFor = (s, role) => (role === 'framer' ? framerCost(parseCard(s)) : deliveryCost(parseCard(s), e, spec, zoneOf));
+  // With a print shop on the job, the frame shop only frames; otherwise it prints too.
+  const framerCost = (card) => { const f = frameCost(card, spec); if (!gift) return f; if (j.printer) return f == null ? null : Math.round(f * copies * 100) / 100; const p = printCost(card, spec); return f == null || p == null ? null : Math.round((f + p) * copies * 100) / 100; };
+  const printerCost = (card) => { const p = printCost(card, spec); return p == null ? null : Math.round(p * copies * 100) / 100; };
+  const costFor = (s, role) => (role === 'framer' ? framerCost(parseCard(s)) : role === 'printer' ? printerCost(parseCard(s)) : deliveryCost(parseCard(s), e, spec, zoneOf));
   const row = (role, label, type) => {
     const cur = j[role];
     // Delivery: delivery partners, and frame shops that deliver (delivery charges in their price list).
@@ -598,25 +604,25 @@ function supplierSection(e) {
     const locked = cur && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage);
     const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc(JOB_STAGE[cur.stage] || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc((role === 'printer' && cur.stage === 'READY' ? 'printed, ready to collect' : JOB_STAGE[cur.stage]) || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
-        <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
-          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'framer' ? `${gift ? `Print + frame${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
+        <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : role === 'printer' ? 'Print shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `AED ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
+          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'printer' ? `Print ${esc(spec.size)}${copies > 1 ? ` × ${copies}` : ''}, fine-art matte` : role === 'framer' ? `${gift ? `${j.printer ? 'Frame only' : 'Print + frame'}${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} AED ${best.cost}` : ' · no price lists yet'}</span></div>
         <div class="field"><label>Price you pay them (AED)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? ''}"></div>
         <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
-        <div class="field"><label>${role === 'framer' ? 'Note for them (frame style, size, glass, timing…)' : 'Note for them (pickup time, contact, handling…)'}</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
+        <div class="field"><label>${role === 'framer' ? 'Note for them (frame style, size, glass, timing…)' : role === 'printer' ? 'Note for them (paper, crop, colour, timing…)' : 'Note for them (pickup time, contact, handling…)'}</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
         ${role === 'framer' && !j.delivery ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-js="framer-deliver" style="width:auto" ${cur?.canDeliver ? 'checked' : ''}> Ask them to deliver too, for AED <input data-js="framer-dprice" type="number" min="0" step="1" value="${cur?.deliveryPrice ?? ''}" style="width:90px"> (they confirm when accepting)</label>` : ''}
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-jobsend="${role}">${cur ? 'Update the job' : 'Send the job'}</button>${cur ? `<button type="button" class="btn small ghost" data-jobremove="${role}">Take it back</button>` : ''}<span class="muted" data-jobmsg="${role}" style="font-size:12px"></span></div>`}
     </div>`;
   };
   return `<fieldset class="cost" id="supplierBox"><legend>Frame shop &amp; delivery</legend>
     <div class="muted" style="font-size:12px">They see this order in their supplier portal: the photo, frame spec and size, your price, and the pickup and delivery addresses. Their steps update the order (Being framed, Shipped, Delivered) and their invoice becomes a Zoho bill.</div>
-    ${row('framer', 'Framing', 'FRAMER')}${row('delivery', 'Delivery', 'COURIER')}</fieldset>`;
+    ${gift ? row('printer', 'Printing', 'PRINTER') : ''}${row('framer', 'Framing', 'FRAMER')}${row('delivery', 'Delivery', 'COURIER')}</fieldset>`;
 }
 function wireSuppliers(e) {
   const box = $('supplierBox'); if (!box) return;
   const v = (k) => box.querySelector(`[data-js="${k}"]`);
-  ['framer', 'delivery'].forEach((role) => {
+  ['printer', 'framer', 'delivery'].forEach((role) => {
     const sel = v(`${role}-sid`), pr = v(`${role}-price`);
     if (sel && pr) sel.onchange = () => {
       const c = sel.selectedOptions[0]?.dataset.cost; if (c) pr.value = c;

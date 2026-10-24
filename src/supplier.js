@@ -1,5 +1,5 @@
 import { openPdf } from './pdf.js';
-// Supplier portal: frame shops (FRAMER) and delivery partners (COURIER).
+// Supplier portal: frame shops (FRAMER), delivery partners (COURIER) and print shops (PRINTER).
 // They apply, and once approved see the jobs Kalai Art House gives them: the work's photo, frame spec and size,
 // the agreed price, pickup and delivery addresses. They update each step and enter their invoice (a Zoho bill).
 // A frame shop can also take the delivery of its own job when we ask (it confirms when accepting).
@@ -63,8 +63,8 @@ async function adminBar() {
   try {
     const list = ((await client.mutations.sellerAction({ action: 'portals' })).data);
     const all = (typeof list === 'string' ? JSON.parse(list) : list).portals || [];
-    const sup = all.filter((p) => p.type === 'FRAMER' || p.type === 'COURIER');
-    const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)} · ${p.type === 'FRAMER' ? 'frame shop' : 'delivery'} · ${esc({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' }[p.status] || p.status)}</option>`;
+    const sup = all.filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type));
+    const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)} · ${p.type === 'FRAMER' ? 'frame shop' : p.type === 'PRINTER' ? 'print shop' : 'delivery'} · ${esc({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' }[p.status] || p.status)}</option>`;
     $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${sup.map(opt).join('')}`;
     $('viewAs').value = sup.some((p) => p.id === viewAs) ? viewAs : '';
     if (!$('viewAs').value) viewAs = '';
@@ -82,7 +82,7 @@ function route() {
   const s = profile?.status;
   // The studio login itself: pick a supplier above (its own account may be an artist/seller test account).
   if (isAdmin() && !viewAs) { show('statusView'); $('statusBox').innerHTML = '<h2>Studio view</h2><p>Choose a frame shop or delivery partner above to see and work in their portal, exactly as they see it.</p>'; return; }
-  if (profile && !['FRAMER', 'COURIER'].includes(profile.type)) {
+  if (profile && !['FRAMER', 'COURIER', 'PRINTER'].includes(profile.type)) {
     show('statusView');
     $('statusBox').innerHTML = `<h2>This is the supplier portal</h2><p>Your account is an ${profile.type === 'ARTIST' ? 'artist' : 'seller'} account. <a href="/seller.html">Open the artist &amp; seller portal</a>.</p>`;
     return;
@@ -96,7 +96,7 @@ function route() {
   if (s === 'APPLIED') {
     show('statusView');
     $('statusBox').innerHTML = `<h2>Application received</h2><p>Thank you, ${esc(profile.contactName)}. We'll check your details and email you, usually within a few days. Once approved, the jobs we give you appear here.</p>
-      <p><b>Please add your price list</b> (${profile.type === 'FRAMER' ? 'frame prices by style and size, and the fixing charge' : 'delivery charges by emirate'}): we compare suppliers on it.</p>
+      <p><b>Please add your price list</b> (${profile.type === 'FRAMER' ? 'frame prices by style and size, and the fixing charge' : profile.type === 'PRINTER' ? 'your print price per size' : 'delivery charges by emirate'}): we compare suppliers on it.</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn" id="goRates" type="button">My price list</button>${profile.type === 'FRAMER' ? '<button class="btn ghost" id="goFrames" type="button">My frames</button>' : ''}<button class="linkbtn" id="editApp" type="button">Edit my application</button></div>`;
     $('editApp').onclick = () => { show('applyView'); fillApply(); };
     $('goRates').onclick = () => openRates('statusView');
@@ -107,7 +107,9 @@ function route() {
   show('jobsView');
   $('tabFrames').hidden = profile.type !== 'FRAMER';
   $('jBiz').textContent = profile.business;
-  $('jNote').textContent = profile.type === 'FRAMER'
+  $('jNote').textContent = profile.type === 'PRINTER'
+    ? 'Printing jobs from Kalai Art House: accept, download the full-size file, print, mark it printed (the frame shop collects it), then enter your invoice.'
+    : profile.type === 'FRAMER'
     ? 'Framing jobs from Kalai Art House: accept, frame, mark ready for pickup (or deliver it yourself when we ask), then enter your invoice.'
     : 'Delivery jobs from Kalai Art House: accept, pick up (from the frame shop shown), deliver, then enter your invoice.';
   loadJobs();
@@ -167,15 +169,16 @@ $('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = 
 const AF = { sWeb: 'portfolio', sBiz: 'business', sName: 'contactName', sPhone: 'phone', sEmirate: 'emirate', sAddr: 'address', sLic: 'tradeLicence', sAbout: 'about', sBank: 'bankName', sAcc: 'accountName', sIban: 'iban' };
 function fillApply() {
   Object.entries(AF).forEach(([id, k]) => { if (profile?.[k] != null) $(id).value = profile[k]; });
-  const t = profile?.type === 'COURIER' ? 'COURIER' : new URLSearchParams(location.search).get('as') === 'courier' ? 'COURIER' : 'FRAMER';
+  const as = new URLSearchParams(location.search).get('as');
+  const t = ['COURIER', 'PRINTER'].includes(profile?.type) ? profile.type : as === 'courier' ? 'COURIER' : as === 'printer' ? 'PRINTER' : 'FRAMER';
   document.querySelector(`input[name="sType"][value="${t}"]`).checked = true;
   document.querySelectorAll('input[name="sType"]').forEach((r) => { r.disabled = !!profile?.type && profile.status !== 'REJECTED'; r.onchange = typeText; });
   typeText();
 }
 function typeText() {
-  const fr = document.querySelector('input[name="sType"]:checked').value === 'FRAMER';
-  $('sAddrL').textContent = fr ? 'Workshop address (where works are dropped off and collected)' : 'Your address / base';
-  $('sAboutL').textContent = fr ? 'Your services: frame styles and mouldings, glass/acrylic, mount, usual turnaround, and whether you deliver' : 'Your services: vehicles, areas you cover (emirates), same-day or next-day, and your usual rates';
+  const ty = document.querySelector('input[name="sType"]:checked').value, fr = ty === 'FRAMER';
+  $('sAddrL').textContent = fr ? 'Workshop address (where works are dropped off and collected)' : ty === 'PRINTER' ? 'Shop address (where prints are collected)' : 'Your address / base';
+  $('sAboutL').textContent = fr ? 'Your services: frame styles and mouldings, glass/acrylic, mount, usual turnaround, and whether you deliver' : ty === 'PRINTER' ? 'Your services: printers and papers (matte / fine-art / photo), largest size, colour calibration, usual turnaround' : 'Your services: vehicles, areas you cover (emirates), same-day or next-day, and your usual rates';
 }
 $('applyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -189,6 +192,7 @@ $('applyForm').addEventListener('submit', async (e) => {
 
 // ---------- jobs ----------
 const FR_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['READY', 'Framed, ready'], ['COLLECTED', 'Collected']];
+const PR_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['READY', 'Printed, ready'], ['COLLECTED', 'Collected']];
 const DL_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['PICKED', 'Picked up'], ['DELIVERED', 'Delivered']];
 const isDone = (j) => j.cancelled || !!j.invoiceNo;
 async function loadJobs() {
@@ -200,8 +204,8 @@ $('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if 
 
 function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
 function jobCard(j) {
-  const fr = j.role === 'framer';
-  const steps = fr ? FR_STEPS : DL_STEPS;
+  const fr = j.role === 'framer', pr = j.role === 'printer';
+  const steps = fr ? FR_STEPS : pr ? PR_STEPS : DL_STEPS;
   const at = steps.findIndex((s) => s[0] === j.stage);
   const label = j.cancelled ? 'Cancelled: please stop' : j.invoiceNo ? `Invoiced ${j.invoiceNo}` : steps[Math.max(0, at)][1];
   const key = `${j.id}:${j.role}`;
@@ -210,16 +214,17 @@ function jobCard(j) {
     if (j.stage === 'ASSIGNED') {
       act = `${fr && j.canDeliver ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-deliver style="width:auto"> We will also deliver it to the customer${j.deliveryPrice != null ? ` (${aed(j.deliveryPrice)})` : ''}</label>` : ''}
         <button class="btn small" data-a="jobAccept">Accept the job</button>`;
-    } else if (fr && j.stage === 'ACCEPTED') act = '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
-    else if (!fr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
+    } else if (pr && j.stage === 'ACCEPTED') act = '<button class="btn small" data-a="jobPrinted">Printed, ready to collect</button>';
+    else if (fr && j.stage === 'ACCEPTED') act = j.collectFrom && !j.collectFrom.ready ? `<span class="muted">Waiting: ${esc(j.collectFrom.name)} hasn't printed it yet.</span>` : '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
+    else if (!fr && !pr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
       act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't finished framing yet.</span>`
         : `<div class="inline"><div class="field"><label>Tracking / AWB (optional)</label><input data-awb maxlength="60"></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
-    } else if (!fr && j.stage === 'PICKED') act = '<button class="btn small" data-a="jobDelivered">Delivered to the customer</button>';
-    const canInvoice = fr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
+    } else if (!fr && !pr && j.stage === 'PICKED') act = '<button class="btn small" data-a="jobDelivered">Delivered to the customer</button>';
+    const canInvoice = fr || pr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
     if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (AED)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
   }
   return `<article class="job" data-key="${esc(key)}">
-    <div class="row"><h3>${fr ? (j.printJob ? 'Print & frame' : 'Framing') : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
+    <div class="row"><h3>${pr ? 'Printing' : fr ? (j.printJob ? 'Print & frame' : 'Framing') : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
       <span class="muted" style="margin-left:auto">Order ${esc(j.ref)} · ${esc(j.kind)} · given ${esc(day(j.assignedAt))}</span></div>
     <div class="steps">${steps.map((s, i) => `<i class="${i <= at ? 'on' : ''}" title="${esc(s[1])}"></i>`).join('')}</div>
     <div class="grid2">
@@ -233,8 +238,7 @@ function jobCard(j) {
         ${j.invoiceNo ? `<dt>Your invoice</dt><dd>${esc(j.invoiceNo)} · ${aed(j.invoiceAmt)}${j.bill ? ' · received' : ''}${j.hasBill ? ' · <button type="button" class="linkbtn" data-invpdf>📄 Open invoice</button>' : ''}</dd>` : ''}
       </dl>
       <dl>
-        ${!fr ? `<dt>Pick up from</dt><dd>${addr(j.from)}</dd>` : ''}
-        <dt>Deliver to</dt><dd>${addr(j.to)}</dd>
+        ${pr ? `<dt>Hand the print to</dt><dd>${addr(j.handTo)}</dd>` : fr ? `${j.collectFrom ? `<dt>Collect the print from</dt><dd>${addr(j.collectFrom)}${j.collectFrom.ready ? ' · <b>ready</b>' : ''}</dd>` : ''}<dt>Deliver to</dt><dd>${addr(j.to)}</dd>` : `<dt>Pick up from</dt><dd>${addr(j.from)}</dd><dt>Deliver to</dt><dd>${addr(j.to)}</dd>`}
       </dl>
     </div>
     ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? 'drawing' : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
@@ -285,11 +289,14 @@ const pRow = (path, row) => RC_PARCELS.map(([k]) => `<td>${cell(`${path}.${k}`, 
 function openRates(back) {
   ratesBack = back;
   const card = parseCard(profile), fr = profile.type === 'FRAMER';
-  $('rTitle').textContent = fr ? 'My frame price list' : 'My delivery charges';
-  $('rNote').textContent = fr
+  const pr = profile.type === 'PRINTER';
+  $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
+  $('rNote').textContent = pr ? 'Your price in AED to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don\'t print that size). A4 = 21×30 cm, A3 = 30×42 cm.' : fr
     ? "Your price per frame, in AED, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
     : 'Your charge in AED to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional.';
-  $('rGrid').innerHTML = fr
+  $('rGrid').innerHTML = pr
+    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (AED)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
+    : fr
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
        <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin-top:8px"><input type="checkbox" id="rIncl" style="width:auto" ${card.fixingIncluded ? 'checked' : ''}> Fixing (mount, glass, fitting) is included in my frame prices</label>

@@ -8,7 +8,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const aed = (n) => 'AED ' + (Math.round(Number(n || 0) * 100) / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 });
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 const r2 = (n) => Math.round(n * 100) / 100;
-const SUP = (s) => s.type === 'FRAMER' || s.type === 'COURIER';
+const SUP = (s) => ['FRAMER', 'COURIER', 'PRINTER'].includes(s.type);
 const SST = { APPLIED: 'New application', APPROVED: 'Approved', REJECTED: 'Rejected', SUSPENDED: 'Suspended' };
 const LST = { DRAFT: 'Draft', SUBMITTED: 'To approve', APPROVED: 'Live', REJECTED: 'Changes asked', PAUSED: 'Paused' };
 
@@ -99,7 +99,7 @@ function draw() {
 const samplesOf = (s) => { try { return JSON.parse(s.sampleKeys || '[]'); } catch { return []; } };
 // WhatsApp link with the message typed in (opens WhatsApp on this device; you press Send).
 const waLink = (phone, text) => { const n = String(phone || '').replace(/[^\d]/g, '').replace(/^00/, '').replace(/^0(?=5)/, '971'); return n.length >= 9 ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : ''; };
-const inviteText = (s) => `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and would like to work with ${s.business} as our ${s.type === 'FRAMER' ? 'framing' : 'delivery'} partner. Please create an account on our supplier portal with ${s.email ? `your email ${s.email}` : 'your email'}: art.pranixtechno.com/supplier.html. Your business is already set up there; please add your ${s.type === 'FRAMER' ? 'price list (frame price per style and size, fixing charge, and delivery charge if you deliver)' : 'delivery charges to each emirate'}. Thank you!`;
+const inviteText = (s) => `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and would like to work with ${s.business} as our ${s.type === 'FRAMER' ? 'framing' : s.type === 'PRINTER' ? 'printing' : 'delivery'} partner. Please create an account on our supplier portal with ${s.email ? `your email ${s.email}` : 'your email'}: art.pranixtechno.com/supplier.html. Your business is already set up there; please add your ${s.type === 'FRAMER' ? 'price list (frame price per style and size, fixing charge, and delivery charge if you deliver)' : 'delivery charges to each emirate'}. Thank you!`;
 // A frame shop's catalogue: photos and names of their frames (supplier portal → My frames).
 function frameStrip(s) {
   let list = []; try { list = JSON.parse(s.catalogue || '[]') || []; } catch { list = []; }
@@ -108,9 +108,9 @@ function frameStrip(s) {
 }
 function addSupplierForm() {
   const f = (id, label, attrs = '') => `<div class="field"><label for="${id}">${label}</label><input id="${id}" ${attrs}></div>`;
-  return `<details class="mk-card" id="addSup"><summary style="cursor:pointer;font-weight:600">+ Add a frame shop or delivery partner yourself</summary>
+  return `<details class="mk-card" id="addSup"><summary style="cursor:pointer;font-weight:600">+ Add a frame shop, print shop or delivery partner yourself</summary>
     <form id="addSupForm" novalidate style="display:grid;gap:8px;margin-top:10px">
-      <div class="field"><label for="asType">Type</label><select id="asType"><option value="FRAMER">Frame shop</option><option value="COURIER">Delivery partner / courier</option></select></div>
+      <div class="field"><label for="asType">Type</label><select id="asType"><option value="FRAMER">Frame shop</option><option value="COURIER">Delivery partner / courier</option><option value="PRINTER">Print shop</option></select></div>
       ${f('asBiz', 'Business name', 'maxlength="120"')}${f('asName', 'Contact person', 'maxlength="80"')}${f('asPhone', 'Mobile / WhatsApp', 'maxlength="30" placeholder="+971 50 123 4567"')}
       ${f('asEmail', 'Email (they sign up with it to use the portal; optional)', 'type="email" maxlength="120"')}
       <div class="field"><label for="asEm">Emirate</label><select id="asEm">${['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'].map((x) => `<option>${x}</option>`).join('')}</select></div>
@@ -119,18 +119,20 @@ function addSupplierForm() {
       <div class="muted" style="font-size:12px">Then use “Open their portal” to enter their price list, and send them the WhatsApp or email invite so they can sign in themselves.</div>
     </form></details>`;
 }
-const priceText = (s) => s.type === 'FRAMER'
+const priceText = (s) => s.type === 'PRINTER'
+  ? `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and are choosing our printing partners now. We need fine-art prints (matte archival / photo paper, true colours) from files we send: customers' photos, children's drawings and our own prints. Could you share your trade price per print for A4, A3, 30×40, 40×50, 50×70, 60×80 and 70×100 cm, your usual turnaround, and whether a frame shop can collect from you? You can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`
+  : s.type === 'FRAMER'
   ? `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and are choosing our framing partners now. We frame original artworks and children's drawings for our customers and would like your trade prices for regular orders:\n\n• Sizes: A4, A3, 30×40, 40×50, 50×70, 60×80, 70×100 cm\n• Styles: black slim, white, natural oak, walnut, gold\n• With white mount and glass or acrylic: fixing charge per size, or included?\n• Delivery to the customer within Dubai and other emirates: your charge?\n\nYou can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`
   : `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and are choosing our delivery partners now. We deliver framed artworks to customers and would like your rates for regular jobs: one framed work picked up in Dubai, delivered to each emirate, by frame size (30×40, 40×50, 50×70, 60×80 and 70×100 cm, packed with glass), and same-day if available. You can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`;
 function supplierCard(s) {
   const fr = s.type === 'FRAMER';
   return `<article class="mk-card" data-seller="${esc(s.id)}">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge SCHEDULED">${fr ? 'Frame shop' : 'Delivery partner'}</span>${!s.owner ? '<span class="cg-badge DRAFT" title="Added by you; they have not signed in yet">No login yet</span>' : ''}<span class="cg-badge ${esc(s.status)}">${esc(SST[s.status] || s.status)}</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(s.business)}</h3><span class="cg-badge SCHEDULED">${fr ? 'Frame shop' : s.type === 'PRINTER' ? 'Print shop' : 'Delivery partner'}</span>${!s.owner ? '<span class="cg-badge DRAFT" title="Added by you; they have not signed in yet">No login yet</span>' : ''}<span class="cg-badge ${esc(s.status)}">${esc(SST[s.status] || s.status)}</span>
       <span class="muted" style="margin-left:auto">Applied ${esc(day(s.appliedAt))}</span></div>
     <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
     <div style="white-space:pre-wrap"><b>Services:</b> ${esc(s.about)}${s.portfolio ? ` · <a href="${esc(s.portfolio)}" target="_blank" rel="noopener noreferrer">website</a>` : ''}</div>
     ${fr ? frameStrip(s) : ''}
-    <div class="muted">${fr ? 'Workshop' : 'Base'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
+    <div class="muted">${fr ? 'Workshop' : s.type === 'PRINTER' ? 'Shop' : 'Base'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     <div class="mk-act">
       <label>Note to ${fr ? 'frame shop' : 'delivery partner'}<input class="note" data-f="note" maxlength="500" value=""></label>

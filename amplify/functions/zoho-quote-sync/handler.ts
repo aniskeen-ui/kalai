@@ -1356,7 +1356,7 @@ async function checkZoho(id: string) {
     const who = (str(img, 'artistName') || 'Siva').split(/\s+/)[0].toLowerCase();
     const bills = docs.filter((d) => d.type === 'Bill' && d.status !== 'void');
     const sj = await jobsOf(id).catch(() => ({} as Jobs));
-    const supplierBills = new Set([sj.framer?.billId, sj.delivery?.billId].filter(Boolean));
+    const supplierBills = new Set([sj.framer?.billId, sj.delivery?.billId, sj.printer?.billId].filter(Boolean));
     const artistBills = ['PRICE', 'COMMISSION'].includes(str(img, 'kind')) ? bills.filter((d) => !supplierBills.has(d.id)) : [];
     const bill = artistBills.find((d) => String(d.vendor ?? '').toLowerCase().includes(who)) ?? (artistBills.length === 1 ? artistBills[0] : undefined);
     const fill: Record<string, string | null> = {};
@@ -1907,7 +1907,7 @@ async function sellerAction(ev: ApiEvent) {
       if (ct) for (const c of await scanAll(ct)) {
         const js = parseJobs(c.supplierJobs?.S);
         let changed = false;
-        for (const r of ['framer', 'delivery'] as const) if (js[r]?.supplierId === added.id) { js[r]!.supplierId = me.sub; changed = true; }
+        for (const r of ['framer', 'delivery', 'printer'] as const) if (js[r]?.supplierId === added.id) { js[r]!.supplierId = me.sub; changed = true; }
         if (changed) await saveJobs(str(c, 'enquiryId'), js);
       }
       await delRow(S, { id: { S: String(added.id) } });
@@ -1922,8 +1922,8 @@ async function sellerAction(ev: ApiEvent) {
 
   if (action === 'apply') {
     // Artists and sellers apply the same way; the type is fixed once approved.
-    const type = profile?.type && profile.status !== 'REJECTED' ? String(profile.type) : d.type === 'ARTIST' ? 'ARTIST' : d.type === 'FRAMER' || d.type === 'COURIER' ? String(d.type) : 'SELLER';
-    const supplier = type === 'FRAMER' || type === 'COURIER';
+    const type = profile?.type && profile.status !== 'REJECTED' ? String(profile.type) : d.type === 'ARTIST' ? 'ARTIST' : d.type === 'FRAMER' || d.type === 'COURIER' || d.type === 'PRINTER' ? String(d.type) : 'SELLER';
+    const supplier = type === 'FRAMER' || type === 'COURIER' || type === 'PRINTER';
     const country = d.country === 'India' ? 'India' : 'UAE';
     const f = {
       type, country,
@@ -1959,7 +1959,7 @@ async function sellerAction(ev: ApiEvent) {
     if (row.status === 'APPROVED' && type === 'ARTIST') await publishArtist(row);
     if (!profile || profile.status === 'REJECTED') {
       await sendMail({
-        to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : type === 'FRAMER' ? 'frame shop' : type === 'COURIER' ? 'delivery partner' : 'seller'} application: ${f.business}`,
+        to: STUDIO_EMAIL, subject: `New ${artist ? 'artist' : type === 'FRAMER' ? 'frame shop' : type === 'COURIER' ? 'delivery partner' : type === 'PRINTER' ? 'print shop' : 'seller'} application: ${f.business}`,
         lines: [`<b>${h(f.business)}</b> · ${h(f.contactName)} · ${h(f.phone)} · ${h(me.email)} · ${h(f.emirate)}${country === 'India' ? ', India' : ''}`,
           artist ? `Mediums: ${h(f.mediums)} · ${h(f.experience || 'experience not given')} · commissions: ${f.commissions === 'YES' ? 'yes' : 'no'} · ${samples.length} sample photos` : `Sells: ${h(f.about)} · ${samples.length} product photos`,
           artist ? `About: ${h(f.about)}` : f.tradeLicence ? `Trade licence: ${h(f.tradeLicence)}` : 'No trade licence given.',
@@ -1982,7 +1982,10 @@ async function sellerAction(ev: ApiEvent) {
     };
     const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
     const PARCELS = ['s1', '40×50', '50×70', '60×80', '70×100']; // delivery partners: price by parcel (frame) size
-    const card = profile.type === 'FRAMER'
+    const PSZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
+    const card = profile.type === 'PRINTER'
+      ? { print: grid({ x: d.print }, ['x'], PSZ).x ?? {}, notes: txt(d.notes, 500), at: now }
+      : profile.type === 'FRAMER'
       ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']).x ?? {},
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
       : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), notes: txt(d.notes, 500), at: now };
@@ -2073,9 +2076,14 @@ async function sellerAction(ev: ApiEvent) {
 // (order Shipped, tracking no.) → Delivered (order Delivered) → its invoice (Zoho bill).
 type Job = { supplierId: string; name: string; price: number | null; due: string; note: string; stage: string; assignedAt: string; acceptedAt?: string; readyAt?: string; canDeliver?: boolean; deliveryPrice?: number | null; byFramer?: boolean;
   pickedAt?: string; deliveredAt?: string; awb?: string; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
-type Jobs = { framer?: Job; delivery?: Job };
-const ROLE_OF: Record<string, 'framer' | 'delivery'> = { FRAMER: 'framer', COURIER: 'delivery' };
-const ROLE_LABEL = { framer: 'frame shop', delivery: 'delivery partner' };
+// Print shops print the customer's photo / child's drawing / our print file (Little Artists, Framed Prints) and hand
+// the print to the frame shop. Without a print job, the frame shop prints it itself.
+type Role = 'framer' | 'delivery' | 'printer';
+type Jobs = { framer?: Job; delivery?: Job; printer?: Job };
+const ROLE_OF: Record<string, Role> = { FRAMER: 'framer', COURIER: 'delivery', PRINTER: 'printer' };
+const ROLE_LABEL = { framer: 'frame shop', delivery: 'delivery partner', printer: 'print shop' };
+const ROLE_WORD = { framer: 'framing', delivery: 'delivery', printer: 'printing' };
+const asRole = (v: unknown): Role => (v === 'delivery' ? 'delivery' : v === 'printer' ? 'printer' : 'framer');
 
 async function jobsOf(enquiryId: string): Promise<Jobs> {
   const t = process.env.COSTING_TABLE;
@@ -2104,7 +2112,7 @@ async function enquiryRow(id: string) {
 /** Studio (ADMINS): give an order's framing or delivery to a supplier, or take it back. */
 async function assignJob(action: string, d: Dict) {
   const { S } = mtables();
-  const id = txt(d.id, 80), role = d.role === 'delivery' ? 'delivery' : 'framer';
+  const id = txt(d.id, 80), role = asRole(d.role);
   const e = await enquiryRow(id);
   if (!e) throw new Error('Order not found');
   const jobs = await jobsOf(id);
@@ -2116,7 +2124,7 @@ async function assignJob(action: string, d: Dict) {
     delete jobs[role];
     await saveJobs(id, jobs);
     const p = plain(await getRow(S, { id: { S: cur.supplierId } }));
-    if (p?.email) await sendMail({ to: String(p.email), subject: `Job withdrawn: ${str(e, 'ref')}`, lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has withdrawn the ${role === 'framer' ? 'framing' : 'delivery'} job for order <b>${h(str(e, 'ref'))}</b>. Please don't start it. Sorry for any inconvenience.`] }).catch(() => {});
+    if (p?.email) await sendMail({ to: String(p.email), subject: `Job withdrawn: ${str(e, 'ref')}`, lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has withdrawn the ${ROLE_WORD[role]} job for order <b>${h(str(e, 'ref'))}</b>. Please don't start it. Sorry for any inconvenience.`] }).catch(() => {});
     return { jobs };
   }
   const sid = txt(d.supplierId, 80);
@@ -2135,8 +2143,8 @@ async function assignJob(action: string, d: Dict) {
   jobs[role] = job;
   await saveJobs(id, jobs);
   if ((!cur || cur.supplierId !== sid) && p.email) {
-    await sendMail({ to: String(p.email), subject: `New ${role === 'framer' ? 'framing' : 'delivery'} job: ${str(e, 'ref')}`,
-      lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has a ${role === 'framer' ? 'framing' : 'delivery'} job for you: <b>${h(str(e, 'title'))}</b> (order ${h(str(e, 'ref'))}).`,
+    await sendMail({ to: String(p.email), subject: `New ${ROLE_WORD[role]} job: ${str(e, 'ref')}`,
+      lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has a ${ROLE_WORD[role]} job for you: <b>${h(str(e, 'title'))}</b> (order ${h(str(e, 'ref'))}).`,
         job.price != null ? `Agreed price: <b>${aed(job.price)}</b>.` : '', job.canDeliver ? `We'd also like you to deliver it to the customer${job.deliveryPrice != null ? ` for <b>${aed(job.deliveryPrice)}</b>` : ''}: please confirm when you accept.` : '', job.due ? `Please complete it by <b>${h(job.due)}</b>.` : '', job.note ? `Note: ${h(job.note)}` : '',
         'Open your supplier portal to see the details and accept the job.'],
       button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } }).catch((err) => console.warn('Supplier email failed', err));
@@ -2169,8 +2177,9 @@ function photoPrintSpec(det: Record<string, string>) {
   const n = Math.max(1, Number(det['Copies']) || 1);
   return `${n === 1 ? '1 copy' : `${n} copies`}, ${det['Size'] || 'A4'}, fine-art matte print of ${det['Print'] ? `"${String(det['Print']).slice(0, 80)}"${det['Artwork no.'] ? ` (${det['Artwork no.']})` : ''} from our file` : "the customer's photo"} (download the full-size file below)${/print only/i.test(String(det['Frame'] ?? '')) ? '. Print only: no frame, pack flat' : ''}.${det['Note'] ? ` Customer's note: ${String(det['Note']).slice(0, 200)}` : ''}`;
 }
-function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile: Dict | null) {
+function jobView(e: Img, jobs: Jobs, role: Role, framerProfile: Dict | null, printerProfile: Dict | null = null) {
   const j = jobs[role]!;
+  const printed = ['GIFT', 'PHOTO'].includes(str(e, 'kind'));
   const selfDelivery = role === 'delivery' && !!jobs.framer && jobs.framer.supplierId === j.supplierId;
   const det = parseDetails(str(e, 'details'));
   return {
@@ -2178,9 +2187,13 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
     stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null, hasBill: !!j.billId,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
-    specs: role === 'framer' ? [...(str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
-    printJob: role === 'framer' && ['GIFT', 'PHOTO'].includes(str(e, 'kind')),
-    hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || ['PRICE', 'PHOTO'].includes(str(e, 'kind'))),
+    specs: role === 'printer' ? [['Print', str(e, 'kind') === 'GIFT' ? giftPrintSpec(det) : photoPrintSpec(det)]]
+      : role === 'framer' ? [...(printed && jobs.printer ? [['Print', `Printed by ${jobs.printer.name}: collect it from them (see below), then frame it.`]] : str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
+    printJob: role === 'printer' || (role === 'framer' && printed && !jobs.printer),
+    hasPhoto: role === 'printer' || (role === 'framer' && (!!str(e, 'fileKey') || ['PRICE', 'PHOTO'].includes(str(e, 'kind')))),
+    // Print shop: where the print goes (the frame shop). Frame shop: where to collect the print.
+    handTo: role === 'printer' ? (jobs.framer && framerProfile ? { name: String(framerProfile.business ?? jobs.framer.name), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? '') } : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'We confirm where to send the print' }) : null,
+    collectFrom: role === 'framer' && jobs.printer && printerProfile ? { name: String(printerProfile.business ?? jobs.printer.name), phone: String(printerProfile.phone ?? ''), address: String(printerProfile.address ?? ''), ready: ['READY', 'COLLECTED'].includes(jobs.printer.stage) } : null,
     to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
     from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
       : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'Studio, Dubai (we confirm the pickup point)', ready: true }) : null,
@@ -2189,8 +2202,8 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
 }
 
 let supplierAccounts: Record<string, string | null> = {};
-async function supplierAccount(role: 'framer' | 'delivery') {
-  if (!(role in supplierAccounts)) supplierAccounts[role] = (await optionalParam(role === 'framer' ? '/kalai/zoho/frame_account_id' : '/kalai/zoho/delivery_account_id')) ?? (await optionalParam('/kalai/zoho/market_account_id')) ?? (await artistAccountId());
+async function supplierAccount(role: Role) {
+  if (!(role in supplierAccounts)) supplierAccounts[role] = (role === 'printer' ? await optionalParam('/kalai/zoho/print_account_id') : null) ?? (await optionalParam(role === 'delivery' ? '/kalai/zoho/delivery_account_id' : '/kalai/zoho/frame_account_id')) ?? (await optionalParam('/kalai/zoho/market_account_id')) ?? (await artistAccountId());
   return supplierAccounts[role];
 }
 
@@ -2199,8 +2212,14 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   const own = ROLE_OF[String(profile.type)];
   if (!own) throw new Error('Jobs are for frame shops and delivery partners.');
   // A frame shop can also hold the delivery of its own orders; a delivery partner only deliveries.
-  const roles: ('framer' | 'delivery')[] = own === 'framer' ? ['framer', 'delivery'] : ['delivery'];
-  const role: 'framer' | 'delivery' = d.role === 'delivery' && roles.includes('delivery') ? 'delivery' : own;
+  const roles: Role[] = own === 'framer' ? ['framer', 'delivery'] : [own];
+  const role: Role = d.role === 'delivery' && roles.includes('delivery') ? 'delivery' : own;
+  // The other party a job needs to know: delivery/print → the frame shop; frame shop → the print shop.
+  const profilesFor = async (js: Jobs, r: Role) => {
+    const fp = (r === 'delivery' || r === 'printer') && js.framer ? plain(await getRow(S, { id: { S: js.framer.supplierId } })) : null;
+    const pp = r === 'framer' && js.printer ? plain(await getRow(S, { id: { S: js.printer.supplierId } })) : null;
+    return [fp, pp] as const;
+  };
   const ct = process.env.COSTING_TABLE;
   if (!ct) throw new Error('Not configured');
   const { S } = mtables();
@@ -2211,8 +2230,8 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
       const e = await enquiryRow(x.id);
       if (!e) continue;
       for (const r of roles.filter((r) => x.jobs[r]?.supplierId === sub)) {
-        const fp = r === 'delivery' && x.jobs.framer ? plain(await getRow(S, { id: { S: x.jobs.framer.supplierId } })) : null;
-        out.push(jobView(e, x.jobs, r, fp));
+        const [fp, pp] = await profilesFor(x.jobs, r);
+        out.push(jobView(e, x.jobs, r, fp, pp));
       }
     }
     return { role: own, jobs: out.sort((a, b) => String(b.assignedAt).localeCompare(String(a.assignedAt))) };
@@ -2223,14 +2242,14 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   const j = jobs[role];
   if (!e || !j || j.supplierId !== sub) throw new Error('Job not found');
   const ref = str(e, 'ref'), now = new Date().toISOString(), by = String(profile.business || profile.contactName);
-  const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const fp = role === 'delivery' && js.framer ? plain(await getRow(S, { id: { S: js.framer.supplierId } })) : null; return { job: jobView(fresh!, js, role, fp) }; };
+  const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const [fp, pp] = await profilesFor(js, role); return { job: jobView(fresh!, js, role, fp, pp) }; };
   // Their invoice as recorded with us (our Zoho bill), as a PDF.
   if (action === 'jobInvoicePdf') {
     if (!j.billId) throw new Error('Your invoice is not recorded yet.');
     return zohoPdf(`/bills/${j.billId}`, `invoice-${j.invoiceNo || ref}`);
   }
   if (action === 'jobPhoto') {
-    if (role !== 'framer') throw new Error('The artwork photo is for the frame shop.');
+    if (role === 'delivery') throw new Error('The artwork photo is for the frame shop and print shop.');
     const bucket = process.env.UPLOADS_BUCKET;
     if (!bucket) throw new Error('Not configured');
     let key = str(e, 'fileKey');
@@ -2256,11 +2275,25 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     await saveJobs(id, jobs);
     // The frame shop has it: the order is "Being framed" (the customer is emailed). Siva's works only once he has sent them.
     if (role === 'framer' && str(e, 'status') === 'PAID' && (['GIFT', 'PHOTO'].includes(str(e, 'kind')) || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
-    await studio(`${by} accepted ${ref}`, [`${h(by)} accepted the ${role === 'framer' ? 'framing' : 'delivery'} of <b>${h(str(e, 'title'))}</b> (${h(ref)})${role === 'framer' && j.canDeliver ? (delivering ? ' <b>and will deliver it too</b>' : '. They will <b>not</b> deliver it: please assign a delivery partner') : ''}.`]);
+    await studio(`${by} accepted ${ref}`, [`${h(by)} accepted the ${ROLE_WORD[role]} of <b>${h(str(e, 'title'))}</b> (${h(ref)})${role === 'framer' && j.canDeliver ? (delivering ? ' <b>and will deliver it too</b>' : '. They will <b>not</b> deliver it: please assign a delivery partner') : ''}.`]);
+    return view();
+  }
+  // Print shop: printed and ready → the frame shop is told where to collect it.
+  if (role === 'printer' && action === 'jobPrinted') {
+    if (j.stage !== 'ACCEPTED') throw new Error(j.stage === 'ASSIGNED' ? 'Accept the job first.' : 'Already marked printed.');
+    j.stage = 'READY'; j.readyAt = now; await saveJobs(id, jobs);
+    await studio(`Printed: ${ref}`, [`${h(by)} has printed <b>${h(str(e, 'title'))}</b> (${h(ref)}). Ready to collect at ${h(String(profile.address ?? ''))}.`]);
+    const fj = jobs.framer;
+    if (fj) {
+      const fp = plain(await getRow(S, { id: { S: fj.supplierId } }));
+      if (fp?.email) await sendMail({ to: String(fp.email), subject: `Print ready to collect: ${ref}`, lines: [`Hello ${h(fp.contactName)},`, `The print for order <b>${h(ref)}</b> is ready at <b>${h(by)}</b>, ${h(String(profile.address ?? ''))} (${h(String(profile.phone ?? ''))}).`, 'Please collect it and frame it as in the job.'], button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } }).catch(() => {});
+    }
     return view();
   }
   if (role === 'framer' && action === 'jobReady') {
     if (j.stage !== 'ACCEPTED') throw new Error(j.stage === 'ASSIGNED' ? 'Accept the job first.' : 'Already marked ready.');
+    if (jobs.printer && !['READY', 'COLLECTED'].includes(jobs.printer.stage)) throw new Error(`${jobs.printer.name} hasn't marked the print ready yet.`);
+    if (jobs.printer) jobs.printer.stage = 'COLLECTED';
     j.stage = 'READY'; j.readyAt = now; j.note = j.note; await saveJobs(id, jobs);
     await studio(`Framed and ready: ${ref}`, [`${h(by)} has framed <b>${h(str(e, 'title'))}</b> (${h(ref)}). It is ready for pickup at ${h(String(profile.address ?? ''))}.`]);
     const dj = jobs.delivery;
@@ -2289,8 +2322,8 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     return view();
   }
   if (action === 'jobInvoice') {
-    const ok = role === 'framer' ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
-    if (!ok) throw new Error(role === 'framer' ? 'Mark it framed and ready first.' : 'Mark it delivered first.');
+    const ok = role === 'delivery' ? j.stage === 'DELIVERED' : ['READY', 'COLLECTED'].includes(j.stage);
+    if (!ok) throw new Error(role === 'framer' ? 'Mark it framed and ready first.' : role === 'printer' ? 'Mark it printed first.' : 'Mark it delivered first.');
     if (j.billId) throw new Error(`Invoice ${j.invoiceNo} is already with us.`);
     const no = txt(d.invoiceNo, 40), amt = numIn(d.amount, 100000);
     if (!no) throw new Error('Enter your invoice number.');
@@ -2302,8 +2335,8 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
       const account = await supplierAccount(role);
       const r = await zoho('/bills', { method: 'POST', body: JSON.stringify({
         vendor_id: vendor.id, bill_number: no, reference_number: ref, date: dubaiToday(),
-        line_items: [{ name: `${role === 'framer' ? 'Framing' : 'Delivery'} · ${ref}`.slice(0, 100), description: `${role === 'framer' ? 'Framing' : 'Delivery'} of ${str(e, 'title')} (${ref})${j.price != null ? ` · agreed AED ${j.price}` : ''}`, rate: r2(amt), quantity: 1, ...(account ? { account_id: account } : {}) }],
-        notes: `Kalai Art House ${role === 'framer' ? 'framing' : 'delivery'} job ${ref}, invoice entered by ${by} in the supplier portal.` }) });
+        line_items: [{ name: `${ROLE_WORD[role][0].toUpperCase()}${ROLE_WORD[role].slice(1)} · ${ref}`.slice(0, 100), description: `${ROLE_WORD[role][0].toUpperCase()}${ROLE_WORD[role].slice(1)} of ${str(e, 'title')} (${ref})${j.price != null ? ` · agreed AED ${j.price}` : ''}`, rate: r2(amt), quantity: 1, ...(account ? { account_id: account } : {}) }],
+        notes: `Kalai Art House ${ROLE_WORD[role]} job ${ref}, invoice entered by ${by} in the supplier portal.` }) });
       if (!r.ok || !r.body.bill) throw new Error(`Zoho bill failed (${r.status}): ${r.body.message}`);
       const bill = r.body.bill;
       const state = testing ? await keepAsDraft(`/bills/${bill.bill_id}`, bill.status) : 'open';
@@ -2313,7 +2346,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
       console.warn(`Supplier bill for ${ref} failed`, err);
     }
     await saveJobs(id, jobs);
-    await studio(`Invoice from ${by}: ${ref}`, [`${h(by)} sent invoice <b>${h(no)}</b> for <b>${aed(j.invoiceAmt)}</b> (${role === 'framer' ? 'framing' : 'delivery'} of ${h(ref)})${j.price != null ? `, agreed ${aed(j.price)}` : ''}.`,
+    await studio(`Invoice from ${by}: ${ref}`, [`${h(by)} sent invoice <b>${h(no)}</b> for <b>${aed(j.invoiceAmt)}</b> (${ROLE_WORD[role]} of ${h(ref)})${j.price != null ? `, agreed ${aed(j.price)}` : ''}.`,
       j.billId ? `Zoho bill ${h(j.bill)} ${j.billState === 'open' ? 'created' : `created as ${h(j.billState)} (test mode)`}.` : h(j.message ?? '')]);
     return view();
   }
@@ -2343,7 +2376,7 @@ async function marketAdmin(ev: ApiEvent) {
     return { sent: true };
   }
   if (action === 'addSupplier') {
-    const type = d.type === 'COURIER' ? 'COURIER' : 'FRAMER';
+    const type = d.type === 'COURIER' ? 'COURIER' : d.type === 'PRINTER' ? 'PRINTER' : 'FRAMER';
     const f = { business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), email: txt(d.email, 120).toLowerCase(), emirate: txt(d.emirate, 60) || 'Dubai',
       address: txt(d.address, 300), about: txt(d.about, 2000), tradeLicence: txt(d.tradeLicence, 60), bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
       portfolio: txt(d.website, 300) && !/^https?:\/\//i.test(txt(d.website, 300)) ? `https://${txt(d.website, 300)}` : txt(d.website, 300) };
@@ -2381,8 +2414,8 @@ async function marketAdmin(ev: ApiEvent) {
       }
       if (wasApproved) return { profile: row }; // saving rates: no welcome email again
       if (ROLE_OF[String(p.type)]) {
-        await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'FRAMER' ? 'frame shop' : 'delivery partner'} account is approved`, lines: [`Hello ${h(p.contactName)},`,
-          `Welcome to Kalai Art House as a ${p.type === 'FRAMER' ? 'frame shop' : 'delivery partner'}. When we have a ${p.type === 'FRAMER' ? 'framing' : 'delivery'} job for you, you get an email and it appears under My jobs in your supplier portal, with the agreed price.`,
+        await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${ROLE_LABEL[ROLE_OF[String(p.type)]]} account is approved`, lines: [`Hello ${h(p.contactName)},`,
+          `Welcome to Kalai Art House as a ${ROLE_LABEL[ROLE_OF[String(p.type)]]}. When we have a ${ROLE_WORD[ROLE_OF[String(p.type)]]} job for you, you get an email and it appears under My jobs in your supplier portal, with the agreed price.`,
           'Accept it there, update each step, and enter your invoice when done: we pay against it.'], button: { label: 'Open the supplier portal', url: `${SITE}/supplier.html` } }).catch(() => {});
       } else
       await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'ARTIST' ? 'artist' : 'seller'} account is approved`, lines: [`Hello ${h(p.contactName)},`, p.type === 'ARTIST' ? 'Welcome to Kalai Art House as one of our artists. You receive your full price for each work sold; we frame, price and deliver it.' : `Welcome to Kalai Art House. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, p.type === 'ARTIST' ? 'You can now list your artworks with their price. Each one is checked by us before it goes live.' : 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
