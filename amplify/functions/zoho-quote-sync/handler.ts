@@ -1089,7 +1089,33 @@ async function artistList(admin = false) {
   if (!table) throw new Error('ENQUIRY_TABLE is not configured');
   // Siva's desk: orders not allocated to another artist.
   const enquiries = (await scanAll(table)).filter((e) => ['PRICE', 'COMMISSION'].includes(str(e, 'kind')) && !str(e, 'artistId'));
+  // Collection orders already have his price (My works & prices): fill it in where it is still missing, so only
+  // commissions wait for a price on his desk.
+  const open = enquiries.filter((e) => str(e, 'kind') === 'PRICE' && !str(e, 'zohoPOId'));
+  if (open.length) {
+    const cost = await costingFor(open.map((e) => str(e, 'id')));
+    for (const e of open) {
+      const c = cost.get(str(e, 'id'));
+      if (num(c, 'artistPriceInr') == null && num(c, 'artistPriceAed') == null) await useCataloguePrice(str(e, 'id'), e).catch(() => {});
+    }
+  }
   return artistRows(enquiries, admin);
+}
+
+/** A collection order: the artist's price for that work (ArtworkPrice, from "My works & prices") becomes the order's artist price. */
+async function useCataloguePrice(id: string, e: Img) {
+  const PT = process.env.PRODUCT_TABLE, AT = process.env.ARTPRICE_TABLE;
+  if (!PT || !AT) return false;
+  const no = String(parseDetails(str(e, 'details'))['Artwork no.'] ?? '').trim();
+  if (!no) return false;
+  const pr = (await scanAll(PT)).find((x) => str(x, 'code') === no);
+  if (!pr) return false;
+  const ap = await getRow(AT, { productId: { S: str(pr, 'id') } });
+  const price = num(ap, 'artistPrice');
+  if (!price) return false;
+  const cur = str(ap, 'currency') === 'AED' ? 'AED' : 'INR';
+  await artistQuote({ id, priceInr: price, note: 'Catalogue price (My works & prices)' } as ApiEvent['arguments'], `${str(pr, 'artist') || 'Siva Raja'} · catalogue price`, cur);
+  return true;
 }
 
 async function artistRows(enquiries: Img[], admin = false) {
@@ -1494,6 +1520,9 @@ async function onStreamRecord(rec: StreamRecord) {
         const ap = process.env.ARTPRICE_TABLE ? await getRow(process.env.ARTPRICE_TABLE, { productId: { S: str(pr, 'id') } }) : undefined;
         const ae = num(ap, 'artistPrice');
         if (ae) await artistQuote({ id, priceInr: ae, note: 'Catalogue price from the artist portal' } as ApiEvent['arguments'], str(pr, 'artist') || 'Artist', 'AED').catch(() => {});
+      } else {
+        // Siva's collection work: his price is the one he gave under "My works & prices", so the order doesn't ask him again.
+        await useCataloguePrice(id, img).catch((err) => console.warn('Catalogue price not used', err));
       }
     }
     const quote = await createQuote(img);

@@ -154,7 +154,8 @@ function render() {
   $('finder').hidden = filter === 'WORKS';
   if (filter === 'WORKS') { renderWorks(); return; }
   fillFinder();
-  const needed = items.filter((x) => x.stage === 'NEEDED' || reworkPriceNeeded(x));
+  // Collection works already have his price (My works & prices): only commissions (and rework) wait for a price here.
+  const needed = items.filter((x) => (x.stage === 'NEEDED' && x.kind !== 'PRICE') || reworkPriceNeeded(x));
   $('cNeeded').textContent = needed.length ? `(${needed.length})` : '';
   const list = (filter === 'NEEDED' ? needed
     : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage))
@@ -362,7 +363,7 @@ function wire(x) {
       b.textContent = 'Update price';
       const pill = document.querySelector(`#c-${CSS.escape(x.id)} .stage`);
       if (pill) { pill.className = `stage ${x.stage}`; pill.textContent = x.label; }
-      { const k = items.filter((i) => i.stage === 'NEEDED' || reworkPriceNeeded(i)).length; $('cNeeded').textContent = k ? `(${k})` : ''; }
+      { const k = items.filter((i) => (i.stage === 'NEEDED' && i.kind !== 'PRICE') || reworkPriceNeeded(i)).length; $('cNeeded').textContent = k ? `(${k})` : ''; }
     } catch (ex) {
       msg.textContent = '';
       msg.insertAdjacentHTML('afterend', `<div class="wide err">Could not send: ${esc(ex.message)}</div>`);
