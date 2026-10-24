@@ -111,6 +111,11 @@ function row(p) {
 // Largest print size the print file allows (A3 is safe for a good web photo; bigger needs a proper scan).
 const PRINT_MAX = ['A4', 'A3', '40×50', '50×70', '60×80'];
 let sivaRoyalty = null;
+let artistProfiles = null;
+async function artistProfile(id) {
+  if (!artistProfiles) { try { artistProfiles = (await client.models.SellerProfile.list({ limit: 500 })).data || []; } catch { artistProfiles = []; } }
+  return artistProfiles.find((p) => p.id === id);
+}
 async function sivaRoyaltyPct() {
   if (sivaRoyalty == null) { try { const r = await client.models.Rates.get({ key: 'default' }); const d = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : {}; sivaRoyalty = Number(d.sivaRoyalty ?? 10); } catch { sivaRoyalty = 10; } }
   return sivaRoyalty;
@@ -130,6 +135,12 @@ function wireRows(list) {
         if (f === 'kind' && (!p.medium || Object.values(MEDIUM).includes(p.medium))) patch.medium = MEDIUM[v];
         // Prints switched on for one of Siva's works: his royalty from Rates (portal artists' comes from their profile).
         if (f === 'printable' && v && !p.artistId && p.printRoyalty == null) patch.printRoyalty = await sivaRoyaltyPct();
+        // Only with the artist's agreement (artist portal → My details → prints).
+        if (f === 'printable' && v && p.artistId) {
+          const ap = await artistProfile(p.artistId);
+          if (ap?.allowPrints === 'NO') { inp.checked = false; el.querySelector('.cg-saved').textContent = `${ap.business} hasn't agreed to prints (their portal → My details).`; return; }
+          if (ap && p.printRoyalty == null) patch.printRoyalty = Number(ap.royaltyPct ?? 10);
+        }
         const msg = el.querySelector('.cg-saved'); msg.textContent = 'Saving…';
         const r = await client.models.Product.update(patch);
         if (r.errors?.length) { msg.textContent = 'Not saved: ' + r.errors[0].message; return; }

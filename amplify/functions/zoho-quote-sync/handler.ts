@@ -1202,7 +1202,7 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const target = PROGRESS.indexOf(step);
   if (target < current) throw new Error(`Already marked ${str(e, 'artistStage').toLowerCase()}.`);
   // Artists in the UAE usually hand the work over (or the frame shop collects it): courier and AWB optional.
-  const local = !!str(e, 'artistId') && str(e, 'artistCountry') !== 'India';
+  const local = !!str(e, 'artistId') && (str(e, 'artistCountry') || 'UAE') === 'UAE';
   const courier = String(args.courier ?? '').trim().slice(0, 60) || (local && step === 'SHIPPED' ? 'Handed over' : '');
   const awb = String(args.awb ?? '').trim().slice(0, 60) || (local && step === 'SHIPPED' ? '–' : '');
   if (step === 'SHIPPED' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
@@ -1924,14 +1924,14 @@ async function sellerAction(ev: ApiEvent) {
     // Artists and sellers apply the same way; the type is fixed once approved.
     const type = profile?.type && profile.status !== 'REJECTED' ? String(profile.type) : d.type === 'ARTIST' ? 'ARTIST' : d.type === 'FRAMER' || d.type === 'COURIER' || d.type === 'PRINTER' ? String(d.type) : 'SELLER';
     const supplier = type === 'FRAMER' || type === 'COURIER' || type === 'PRINTER';
-    const country = d.country === 'India' ? 'India' : 'UAE';
+    const country = txt(d.country, 60) || 'UAE';
     const f = {
       type, country,
       business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), tradeLicence: txt(d.tradeLicence, 60),
       emirate: txt(d.emirate, 60), address: txt(d.address, 300), about: txt(d.about, 2000), categories: txt(d.categories, 200),
       bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
       accountNumber: txt(d.accountNumber, 30).replace(/\s+/g, ''), ifsc: txt(d.ifsc, 20).toUpperCase().replace(/\s+/g, ''),
-      mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', portfolio: txt(d.portfolio, 300),
+      mediums: txt(d.mediums, 200), experience: txt(d.experience, 40), commissions: d.commissions === 'NO' ? 'NO' : 'YES', allowPrints: d.allowPrints === 'NO' ? 'NO' : 'YES', portfolio: txt(d.portfolio, 300),
       training: txt(d.training, 120), city: txt(d.city, 60),
       sampleKeys: '[]', photoKey: '',
     };

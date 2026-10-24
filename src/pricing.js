@@ -86,7 +86,7 @@ const mediumOf = (w) => (w.kind === 'sketch' || /pencil|ink|charcoal|graphite|ch
 
 /** One price build-up per frame style. o = per-work overrides {artist, tier, fsize, courier, margin}. */
 // Works by portal artists in the UAE: priced in AED, no India courier and no customs.
-const isLocalArt = (w) => !!w.artistId && w.artistCountry !== 'India';
+const isLocalArt = (w) => !!w.artistId && (w.artistCountry || 'UAE') === 'UAE';
 const curOf = (w) => (prices.get(w.id)?.currency === 'AED' || isLocalArt(w) ? 'AED' : 'INR');
 const artistPrice = (w, v) => (v == null ? '–' : curOf(w) === 'AED' ? `AED ${Number(v).toLocaleString('en-US')}` : '₹' + Number(v).toLocaleString('en-IN'));
 // Website products made from an artist's listing stay hidden (DRAFT) until their prices are approved here.

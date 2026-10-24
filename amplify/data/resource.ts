@@ -331,6 +331,7 @@ const schema = a.schema({
       bornYear: a.integer(), // artists, optional (shown as "b. India, 1985")
       city: a.string(),
       rateCard: a.string(), // frame shops / delivery partners: their price list (JSON, supplier portal → My rates)
+      allowPrints: a.string(), // artists: YES = they agree to framed prints of their works being sold (royalty below)
       royaltyPct: a.float(), // artists: their share of each print sold of their works (% of the print price)
       catalogue: a.string(), // frame shops: their frames (JSON [{name, style, material, colour, widthMm, extra, photoKey, note}])
     })
