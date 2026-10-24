@@ -74,7 +74,7 @@ nav.links a:hover{opacity:1;color:#e8c77f}
 :root[data-theme="dark"] .btn.primary{background:var(--gold);color:#1d1b2b}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{background:var(--gold);color:#1d1b2b}}
 .hero-art{display:grid;grid-template-columns:1fr;gap:18px;max-width:440px;justify-self:end;width:100%}
-.hero-art img{width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:3px;box-shadow:0 18px 40px rgba(0,0,0,.45);background:#2a2640}
+.hero-art img{width:100%;height:auto;aspect-ratio:4/3;object-fit:contain;display:block;border-radius:3px;box-shadow:0 18px 40px rgba(0,0,0,.45);background:#fbfaf6;padding:10px;box-sizing:border-box} /* whole artwork shown, never cropped */
 .hero-art{position:relative}
 .hero-art img{border:6px solid #fbfaf6;transition:opacity 1.2s ease}
 .hero-art .next{position:absolute;inset:0;opacity:0}
