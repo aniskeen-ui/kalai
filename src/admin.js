@@ -1821,8 +1821,8 @@ async function showDetailBody(e) {
     <h2 style="font-size:22px;margin-top:4px">${esc(e.title)}</h2></div>
     <dl class="kv">
       <dt>Customer</dt><dd>${esc(e.customerName)}${e.customerCode ? ` · <button type="button" class="linkbtn mono" style="font-size:11px;padding:0 3px;border:0;background:none;text-decoration:underline;color:var(--muted)" data-cust="${esc(e.customerCode)}" title="Show all orders of this customer">${esc(e.customerCode)}</button>` : ''}</dd>
-      <dt>Email</dt><dd>${esc(e.email)}</dd>
-      ${Object.entries(det).filter(([k, v]) => v !== '' && v != null && !['Reference', 'Name', 'Mobile', 'Parent'].includes(k)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
+      <dt>Email</dt><dd>${e.email ? esc(e.email) : '<span class="muted" style="font-size:12px">none: sent without signing in, so no emails reach the customer. Reply on WhatsApp.</span>'}</dd>
+      ${Object.entries(det).filter(([k, v]) => v !== '' && v != null && !['Reference', 'Name', 'Mobile', 'Parent', 'Email'].includes(k)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
     </dl></div>
     <a class="dthumb" id="dThumb" hidden target="_blank" rel="noopener" title="Open the full picture"><img alt=""><span></span></a></div>
     <div class="links" id="fileLinks">${e.fileKey ? '<span class="muted">Loading upload…</span>' : '<span class="muted">No upload attached.</span>'}</div>

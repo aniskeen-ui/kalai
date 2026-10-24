@@ -3392,6 +3392,12 @@ async function assignCodes() {
       if (code !== have) { await writeBack(str(e, 'id'), { customerCode: code }); out.customers++; }
       (byCode.get(code) ?? byCode.set(code, []).get(code)!).push(e);
     }
+    // A guest order (sent without signing in, no email) from a known customer (same mobile): use the email from their
+    // other orders, so they get the status emails too.
+    for (const list of byCode.values()) {
+      const mail = [...list].reverse().map((e) => str(e, 'email').trim()).find((m) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m));
+      if (mail) for (const e of list) if (!str(e, 'email').trim()) await writeBack(str(e, 'id'), { email: mail }).catch(() => {});
+    }
     await syncCustomers(byCode).catch((err) => console.warn('Customer master not updated', err));
   }
   // Offer master numbers PR-0000001… (in order of creation).

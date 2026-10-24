@@ -938,6 +938,7 @@ function openAsk(p,offer){
    <form id="askForm" novalidate style="display:grid;gap:12px">
      <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
+     ${!(window.kalaiAccount&&window.kalaiAccount.user)?`<div class="field"><label for="aEmail">Email <span class="note" style="font-weight:400">(for the price and updates)</span></label><input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com"></div>`:""}
      ${offer?`<div class="field"><label for="aOffer">Your offer (⃃)</label><input id="aOffer" inputmode="numeric" placeholder="e.g. 350"></div>`:""}
      ${p.prices&&!offer?`<div class="field"><label for="aFrame">Frame</label><select id="aFrame">${FRAMES.map(f=>`<option value="${f.k}" ${f.k===(window.kalaiPriceStyle||"black")?"selected":""}>${f.n}${f.k!=="none"&&(window.kalaiPriceSize||baseSize(p))?` ${window.kalaiPriceSize||baseSize(p)} cm`:""} · ${money(priceOf(p,f.k,window.kalaiPriceSize||baseSize(p)))}</option>`).join("")}</select><span class="note" style="font-size:12px">Price includes the white mount and glass, and delivery in the UAE.</span></div>`
      :`<div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>`}
@@ -953,6 +954,7 @@ function openAsk(p,offer){
     if(!n||!ph){ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can reply.";return}
     if(offer&&!off){ok.style.color="var(--kumkum)";ok.textContent="Please enter your offer in AED.";return}
     const fields={"Artwork":p.name+" ("+[p.medium,p.size].filter(Boolean).join(", ")+")","Artwork no.":p.code||(p.untitled?String(p.id).slice(0,8):""),"Name":n,"Mobile":ph};
+    const em=(document.getElementById("aEmail")?.value||"").trim();if(em){if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ok.style.color="var(--kumkum)";ok.textContent="Please check your email address.";return}fields["Email"]=em}
     if(offer)fields["Offer"]="AED "+off;
     if(p.prices&&!offer){const k=document.getElementById("aFrame").value,f=FRAMES.find(x=>x.k===k);const fs=window.kalaiPriceSize||baseSize(p);fields["Framing"]=k==="none"?"Unframed":f.n+" frame"+(fs?" "+fs+" cm":"")+", white mount";fields["Price"]="AED "+priceOf(p,k,fs)+" (website price)";}
     else fields["Framing"]=document.getElementById("aFrame").value;if(window.kalaiFrameChoice)fields["Frame tried on the website"]=window.kalaiFrameChoice;fields["Message"]=document.getElementById("aMsg").value.trim();if(document.getElementById("aInst")?.checked)fields["Payment"]="4 instalments with "+window.kalaiInstalments;
