@@ -155,10 +155,12 @@ main{max-width:var(--deskw);margin:0 auto;padding-left:max(16px,env(safe-area-in
 html.embed main{padding-left:0;padding-right:0}
 .tabs,.finder,.alist,main > p.muted,#desk > p.muted,section > p.muted{max-width:none!important;margin-left:0!important;margin-right:0!important}
 .tabs{align-items:center;padding-bottom:8px;border-bottom:1px solid var(--line)}
-.finder{display:grid!important;grid-template-columns:minmax(220px,1fr) minmax(160px,240px) auto auto auto;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+.finder{display:grid!important;grid-template-columns:minmax(200px,1fr) minmax(150px,220px) minmax(150px,220px) auto auto auto;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
 .finder input[type=search],.finder select{width:100%;max-width:none!important}
 .finder label{white-space:nowrap}
 .finder #qClear{justify-self:start}
+.finder[hidden],.finder [hidden]{display:none!important}
+.alist > div:not(.acard):not(article){grid-column:1/-1}
 @media (max-width:820px){.finder{grid-template-columns:1fr 1fr}.finder input[type=search]{grid-column:1/-1}}
 .alist{grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));align-items:start;gap:12px!important}
 .alist > p{grid-column:1/-1}

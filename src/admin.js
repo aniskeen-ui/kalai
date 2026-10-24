@@ -792,7 +792,7 @@ function render() {
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
       <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}${e.customerCode ? `<br><span class="muted mono" style="font-size:11px">${esc(e.customerCode)}</span>` : ''}</td>
-      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
+      <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${offerOf(e) != null && ['RECEIVED', 'PRICE_SENT'].includes(s) ? ` <span class="chip req" title="The customer made an offer">Offer ⃃ ${offerOf(e).toLocaleString('en-US')}</span>` : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? '⃃ ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : `<tr><td colspan="7" class="muted">${$('fFrom').value || $('fTo').value ? 'No orders on these dates. Press <b>Clear</b> to see all dates.' : 'Nothing matches this filter.'}</td></tr>`;
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -1652,6 +1652,44 @@ function readDiscount() {
     discountCode: `Studio discount ${d.t === 'PCT' ? `${d.v}%` : `⃃ ${d.v}`}` };
 }
 let currentDiscountType = '';
+/* ---------- Customer's offer ("Make an offer" on the website): accept, counter or decline ---------- */
+function offerOf(e) { const m = String(parseDetails(e.details).Offer || '').replace(/,/g, '').match(/\d+(\.\d+)?/); return m ? Number(m[0]) : null; }
+function offerPanel(e) {
+  const o = offerOf(e);
+  if (o == null) return '';
+  const open = ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED');
+  const q = e.quotedPrice != null ? Number(e.quotedPrice) : null;
+  const state = !open ? '' : q == null ? '<b style="color:var(--kumkum)">Waiting for your answer</b>' : q === o ? '<b style="color:var(--ok)">Accepted: price set to the offer</b>' : `Your answer: <b>⃃ ${q.toLocaleString('en-US')}</b> (counter offer)`;
+  return `<fieldset class="cost" id="offerBox" style="border-color:var(--gold)"><legend>Customer's offer</legend>
+    <div style="display:flex;gap:14px;align-items:baseline;flex-wrap:wrap"><span style="font-size:22px;font-weight:700">⃃ ${o.toLocaleString('en-US')}</span><span class="muted">offered for ${esc(e.title)}</span><span style="font-size:13px">${state}</span></div>
+    ${open ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px">
+      <button type="button" class="btn small" id="ofAccept">Accept ⃃ ${o.toLocaleString('en-US')}</button>
+      <label class="field" style="gap:2px;margin:0"><span style="font-size:11px;font-weight:700">Revised price (⃃)</span><input id="ofCounter" type="number" min="1" step="1" style="width:120px" value="${q != null && q !== o ? q : ''}"></label>
+      <button type="button" class="btn small ghost" id="ofCounterBtn">Send revised price</button>
+      <button type="button" class="btn small ghost" id="ofDecline" style="color:var(--kumkum)">Decline</button></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Each button fills the price, status and message below. Check them, then press <b>Save</b>: the customer is emailed and can pay the agreed price.</div>` : ''}
+  </fieldset>`;
+}
+function wireOffer(e) {
+  const o = offerOf(e);
+  if (o == null || !$('ofAccept')) return;
+  const first = String(e.customerName || '').split(' ')[0];
+  const fill = (price, status, msg) => {
+    if (price != null && !$('ePrice').readOnly) { $('ePrice').value = price; ['input', 'change'].forEach((t) => $('ePrice').dispatchEvent(new Event(t))); }
+    if (status && [...$('eStatus').options].some((x) => x.value === status && !x.disabled)) { $('eStatus').value = status; $('eStatus').dispatchEvent(new Event('change')); }
+    $('eMsg').value = msg; $('eMsg').dispatchEvent(new Event('input'));
+    $('eMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  const aed = (n) => `AED ${Number(n).toLocaleString('en-US')}`;
+  $('ofAccept').onclick = () => fill(o, null, `Hello ${first}, good news: the artist has accepted your offer of ${aed(o)} for "${e.title}". You can pay with the link below to confirm your order.`);
+  $('ofCounterBtn').onclick = () => {
+    const c = Number($('ofCounter').value);
+    if (!(c > 0)) { $('ofCounter').focus(); return; }
+    fill(c, null, `Hello ${first}, thank you for your offer of ${aed(o)} for "${e.title}". The best price we can offer is ${aed(c)}. If that works for you, pay with the link below to confirm your order.`);
+  };
+  $('ofDecline').onclick = () => fill(null, 'CANCELLED', `Hello ${first}, thank you for your offer of ${aed(o)} for "${e.title}". We're sorry, the artist can't accept it this time. You're welcome to make a new offer or ask us for the price.`);
+}
+
 async function wireDiscount(e) {
   currentDiscountType = e.discountType || '';
   if (!$('eDiscT')) return;
@@ -1787,6 +1825,7 @@ async function showDetailBody(e) {
     <div class="links" id="fileLinks">${e.fileKey ? '<span class="muted">Loading upload…</span>' : '<span class="muted">No upload attached.</span>'}</div>
     ${zohoPanel(e)}
     ${reviews.has(e.id) ? `<fieldset class="cost" id="reviewBox"><legend>Customer review</legend>${reviewCard(reviews.get(e.id), false)}</fieldset>` : e.status === 'DELIVERED' ? '<div class="muted" style="font-size:13px">Delivered: the customer can now rate this order under My enquiries & orders.</div>' : ''}
+    ${offerPanel(e)}
     <form id="editForm" novalidate style="display:grid;gap:12px">
       <div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
         <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
@@ -1824,6 +1863,7 @@ async function showDetailBody(e) {
     <div class="links" id="waLinks"></div>`;
 
   wireDiscount(e);
+  wireOffer(e);
   // Automatic next status from what was just done on the desk (unless the status was changed by hand):
   // price entered on a new enquiry → Price sent (the customer gets the price and Ziina link);
   // payment method + reference entered while waiting for payment → Paid.
