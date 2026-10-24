@@ -410,6 +410,7 @@ function drawComms() {
     const canWork = x.ordered && !x.stopped && !x.onHold && x.progress !== 'SHIPPED';
     return `<article class="ocard" data-c="${esc(x.id)}">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(x.title)}</h3><span class="st ${x.stage === 'NEEDED' ? 'SUBMITTED' : x.stage === 'PAID' ? 'APPROVED' : ''}">${esc(x.label)}</span><span class="muted" style="margin-left:auto;font-family:var(--mono)">${esc(x.ref)} · ${esc(dd(x.createdAt))}</span></div>
+      ${x.imageKey ? `<img alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:200px;max-height:200px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
       ${x.brief?.length ? `<div class="to">${x.brief.map((b) => `<div><b>${esc(b.k)}:</b> ${esc(b.v)}</div>`).join('')}</div>` : ''}
       ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo>View the customer's reference photo</button> <span class="muted" data-pm></span></div>` : ''}
       ${p != null ? `<div>Your price: <b>${commCur} ${Number(p).toLocaleString('en-IN')}</b>${x.artistReadyBy ? ` · ready by ${esc(x.artistReadyBy)}` : ''}${x.locked ? ' · fixed (order placed)' : ''}</div>` : ''}
@@ -619,3 +620,11 @@ function edit(l) {
 }
 
 start();
+
+// Commission cards: load the catalogue work's picture.
+new MutationObserver(() => {
+  document.querySelectorAll('img[data-okey]:not([src])').forEach(async (img) => {
+    img.setAttribute('src', '');
+    try { img.src = (await getUrl({ path: img.dataset.okey, options: { expiresIn: 3600 } })).url.toString(); } catch { img.remove(); }
+  });
+}).observe(document.body, { childList: true, subtree: true });

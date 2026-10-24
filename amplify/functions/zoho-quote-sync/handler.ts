@@ -1094,6 +1094,11 @@ async function artistList(admin = false) {
 
 async function artistRows(enquiries: Img[], admin = false) {
   const costing = await costingFor(enquiries.map((e) => str(e, 'id')));
+  // The catalogue work's picture (by its artwork no.), so the artist sees which drawing it is.
+  const pics = new Map<string, string>();
+  if (process.env.PRODUCT_TABLE && enquiries.some((e) => str(e, 'kind') === 'PRICE')) {
+    for (const p of await scanAll(process.env.PRODUCT_TABLE)) if (str(p, 'code') && str(p, 'imageKey')) pics.set(str(p, 'code'), str(p, 'imageKey'));
+  }
   return enquiries
     .map((e) => {
       const c = costing.get(str(e, 'id'));
@@ -1110,6 +1115,7 @@ async function artistRows(enquiries: Img[], admin = false) {
         customerName: admin ? str(e, 'customerName') : '',
         brief,
         hasPhoto: str(e, 'kind') === 'COMMISSION' && !!str(e, 'fileKey'),
+        imageKey: str(e, 'kind') === 'PRICE' ? pics.get(String(parseDetails(str(e, 'details'))['Artwork no.'] ?? '').trim()) ?? '' : '',
         artistPriceInr: num(c, 'artistPriceInr'),
         artistPriceAed: num(c, 'artistPriceAed'),
         artistReadyBy: str(c, 'artistReadyBy'),

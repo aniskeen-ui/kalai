@@ -171,6 +171,7 @@ function card(x) {
   return `<article class="acard" id="c-${esc(x.id)}">
     <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span>${x.kind === 'COMMISSION' ? 'Commission' : 'Catalogue work'}</span>${x.customerCode ? `<span class="mono" title="Customer">${x.customerName ? esc(x.customerName) + ' · ' : ''}${esc(x.customerCode)}</span>` : ''}<span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
     <h2>${esc(x.title)}</h2>
+    ${x.imageKey ? `<img class="opic" alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:220px;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
     ${reworkBlock(x)}
@@ -378,3 +379,11 @@ function wire(x) {
 }
 
 start();
+
+// Order cards: load the catalogue work's picture.
+new MutationObserver(() => {
+  document.querySelectorAll('img[data-okey]:not([src])').forEach(async (img) => {
+    img.setAttribute('src', '');
+    try { img.src = (await getUrl({ path: img.dataset.okey, options: { expiresIn: 3600 } })).url.toString(); } catch { img.remove(); }
+  });
+}).observe(document.body, { childList: true, subtree: true });
