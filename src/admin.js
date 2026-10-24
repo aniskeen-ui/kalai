@@ -768,16 +768,19 @@ function actualSection(e) {
   if (!SOLD.includes(e.status || '') || e.kind === 'MARKET') return '';
   const l = reportLine(e), a = typedOf(costings.get(e.id)) || {}, ref = a.ref || {}, z = zohoActual(e);
   const plan = (f) => (l.k && f !== 'other' ? r2(l.k[f] || 0) : null);
+  // Closed order whose actual costs were saved: read-only until "Edit actual costs" (a late bill can still be added).
+  const lockA = ['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(e.status) && !!a.at;
+  const dA = lockA ? 'disabled' : '';
   const rows = ACT_FIELDS.map(([f, label]) => `<tr><td>${label}</td><td class="num mono">${plan(f) == null ? '–' : money(plan(f))}</td>
     <td class="num mono" title="${esc(z.ref[f] || '')}">${z.out[f] != null ? money(z.out[f]) : '–'}${z.ref[f] ? `<div class="muted" style="font-size:10px;font-family:inherit;white-space:normal">${esc(z.ref[f])}</div>` : ''}</td>
-    <td><input data-act="${f}" type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses that' : 'bill amount'}" style="width:110px"></td>
-    <td><input data-actref="${f}" maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
+    <td><input data-act="${f}" ${dA} type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses that' : 'bill amount'}" style="width:110px"></td>
+    <td><input data-actref="${f}" ${dA} maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
   const mv = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : `Planned margin <b>${l.margin == null ? '–' : money(l.margin)}</b>. Enter the bills as they come; costs without a bill stay at the planned figure.`;
   return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, ⃃)</legend>
     <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th class="num">From Zoho / job</th><th>Your figure</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="muted" style="font-size:12px">From Zoho: the artist's bill and vendor bills whose Reference# contains ${esc(e.ref)} (press Check Zoho to refresh${z.checkedAt ? `; checked ${esc(when(z.checkedAt))}` : ''}); until the frame shop or courier invoices, the price on their job. Your figure, if typed, is used instead.${z.unmapped.length ? ` <b class="warn-t">Not matched to a cost: ${esc(z.unmapped.join(', '))}</b>: add the vendor under Rates → Zoho vendors.` : ''}</div>
     <div class="marginline" id="actSum">${mv}</div>
-    <div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn small" onclick="window.kalaiSaveActual('${esc(e.id)}')">Save actual costs</button><span class="muted" id="actMsg" style="font-size:12px">${a.at ? `Last saved ${esc(when(a.at))}` : ''}</span></div></fieldset>`;
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${lockA ? `<span class="muted" style="font-size:12px">🔒 ${esc(STATUS[e.status] || e.status)}: actual costs are saved and locked.</span><button type="button" class="btn small ghost" id="actEdit" onclick="document.querySelectorAll('#actualBox [data-act],#actualBox [data-actref]').forEach((i)=>{i.disabled=false});this.hidden=true;document.getElementById('actSaveBtn').hidden=false">Edit actual costs (late bill)</button>` : ''}<button type="button" class="btn small" id="actSaveBtn" ${lockA ? 'hidden' : ''} onclick="window.kalaiSaveActual('${esc(e.id)}')">Save actual costs</button><span class="muted" id="actMsg" style="font-size:12px">${a.at ? `Last saved ${esc(when(a.at))}` : ''}</span></div></fieldset>`;
 }
 window.kalaiSaveActual = async (id) => {
   const e = all.find((x) => x.id === id); if (!e) return;
@@ -798,6 +801,7 @@ window.kalaiSaveActual = async (id) => {
     const l = reportLine(e);
     $('actSum').innerHTML = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : 'Saved.';
     $('actMsg').textContent = 'Saved. Reports show plan vs actual.';
+    if (['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(e.status)) { await showDetail(e); $('actualBox')?.scrollIntoView({ block: 'center' }); }
   } catch (ex) { $('actMsg').textContent = ex.message; }
 };
 
