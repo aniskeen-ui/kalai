@@ -82,6 +82,9 @@ export const STATUS = {
   RECEIVED: 'Received',
   PRICE_SENT: 'Price sent',
   PAID: 'Paid',
+  ARTIST_WORKING: 'Being painted',
+  ARTIST_DONE: 'Painting finished',
+  ARTIST_SENT: 'On its way to the framer',
   FRAMING: 'Being framed',
   SHIPPED: 'Shipped',
   DELIVERED: 'Delivered',
@@ -89,7 +92,7 @@ export const STATUS = {
   REFUNDED: 'Refunded',
   CANCELLED: 'Cancelled',
 };
-const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
 const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Framed print', LICENCE: 'Image licence' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
 const LICENCE_STEPS = ['RECEIVED', 'PRICE_SENT', 'DELIVERED'];
@@ -372,7 +375,7 @@ function cancelTerms(e) {
   const st = e.status || 'RECEIVED';
   const price = Number(e.quotedPrice || 0);
   if (['RECEIVED', 'PRICE_SENT'].includes(st)) return { type: 'FREE', due: 0, text: "Nothing has been paid, so there's nothing to refund. Your enquiry is cancelled straight away." };
-  if (['PAID', 'FRAMING'].includes(st)) {
+  if (['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING'].includes(st)) {
     const started = e.kind === 'GIFT' || e.kind === 'PHOTO' ? st === 'FRAMING' : !!e.artistStartedAt || st === 'FRAMING';
     return started
       ? { type: 'HALF', due: Math.round(price * 50) / 100, text: e.kind === 'GIFT' || e.kind === 'PHOTO' ? `Framing has started, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>.` : `The artist started your work${e.artistStartedAt ? ` on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>. The rest covers the artist's time.` }
@@ -446,7 +449,7 @@ function licenceBlock(e) {
 const COA_KINDS = ['PRICE', 'COMMISSION', 'MARKET'];
 function coaBlock(e) {
   const st = e.status || 'RECEIVED';
-  if (!COA_KINDS.includes(e.kind) || !['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(st)) return '';
+  if (!COA_KINDS.includes(e.kind) || !['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(st)) return '';
   if (e.kind === 'MARKET' && parseDet(e.details).Maker !== 'Artist') return '';
   return `<div style="font-size:13px"><button type="button" class="linkbtn" data-coa="${esc(e.id)}">🏅 Certificate of authenticity (PDF)</button></div>`;
 }
@@ -626,7 +629,7 @@ function replacementTracker(e) {
 }
 
 /* ---------- delivery address (from the price onwards, until it ships) ---------- */
-const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'FRAMING', 'REPLACEMENT'];
+const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'REPLACEMENT'];
 function addressBlock(e) {
   if (!(ADDR_OPEN.includes(e.status) || (e.kind === 'MARKET' && (e.status || 'RECEIVED') === 'RECEIVED')) || e.cancelState === 'REQUESTED') return '';
   if (e.deliveryAddress) {
@@ -718,7 +721,7 @@ function card(e) {
     ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">⃃ ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
     ${codeBox(e)}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
-    ${['PAID', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
+    ${['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
     ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(parseDet(e.details).Maker || e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
     ${e.kind === 'MARKET' && st === 'RECEIVED' ? '<div class="enq-msg">Thank you for your order. We are confirming it with the maker and will send you a secure payment link shortly.</div>' : ''}
     ${e.kind === 'MARKET' && st === 'PAID' ? `<div class="enq-msg">${e.sellerStage === 'READY' ? 'The maker has packed it; our courier is collecting it.' : 'Paid: the maker is preparing your order.'}</div>` : ''}
@@ -735,7 +738,7 @@ function card(e) {
   </article>`;
 }
 
-const ORDER_ST = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+const ORDER_ST = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
 const TABS = [
   ['ORDERS', 'Orders', (e) => ORDER_ST.includes(e.status) && e.cancelState !== 'REQUESTED'],
   ['ENQ', 'Enquiries', (e) => ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED')],

@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const STATUS = {
-  RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed',
+  RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', ARTIST_WORKING: 'Artist working', ARTIST_DONE: 'Artist finished', ARTIST_SENT: 'Sent by artist', FRAMING: 'Being framed',
   SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
 const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed print', LICENCE: 'Image licence' };
@@ -355,7 +355,7 @@ function renderFeedback() {
 $('fbFilter').addEventListener('change', renderFeedback);
 
 // ---------- Reports: sales, cost and margin per order ----------
-const SOLD = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT', 'REFUNDED'];
+const SOLD = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT', 'REFUNDED'];
 const r2 = (n) => Math.round(n * 100) / 100;
 const money = (v) => (v == null ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 function parseCosts(c) {
@@ -903,8 +903,12 @@ const artistPage = (e) => (e.artistId ? `<a href="/seller.html?view=${encodeURIC
 const NEXT = {
   RECEIVED: ['PRICE_SENT', 'CANCELLED'],
   PRICE_SENT: ['RECEIVED', 'PAID', 'CANCELLED'],
-  PAID: ['PRICE_SENT', 'FRAMING', 'SHIPPED', 'REFUNDED'],
-  FRAMING: ['PAID', 'SHIPPED', 'REFUNDED'],
+  PAID: ['PRICE_SENT', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'REFUNDED'],
+  // The artist's steps (set automatically from the artist's desk; can be set by hand too).
+  ARTIST_WORKING: ['PAID', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'REFUNDED'],
+  ARTIST_DONE: ['ARTIST_WORKING', 'ARTIST_SENT', 'FRAMING', 'REFUNDED'],
+  ARTIST_SENT: ['ARTIST_DONE', 'FRAMING', 'SHIPPED', 'REFUNDED'],
+  FRAMING: ['PAID', 'ARTIST_SENT', 'SHIPPED', 'REFUNDED'],
   SHIPPED: ['FRAMING', 'DELIVERED', 'REFUNDED'],
   DELIVERED: ['REPLACEMENT', 'REFUNDED'],
   REPLACEMENT: ['FRAMING', 'SHIPPED', 'REFUNDED'],
@@ -974,7 +978,7 @@ function giftAddress(e) {
 function addressSection(e) {
   const g = giftAddress(e);
   const has = !!e.deliveryAddress;
-  const need = !has && !g && ['PAID', 'FRAMING', 'REPLACEMENT'].includes(e.status);
+  const need = !has && !g && ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'REPLACEMENT'].includes(e.status);
   const emi = e.deliveryEmirate || (g && EMIRATES.find((x) => g.emirate.includes(x))) || '';
   return `<fieldset class="cost" id="addrBox" ${need ? 'style="border-color:var(--kumkum)"' : ''}>
     <legend>Delivery address ${has ? `<span class="muted">· ${esc(e.addressBy === 'Customer' ? 'from the customer' : 'entered by you')} ${esc(when(e.addressAt))}</span>` : ''}</legend>

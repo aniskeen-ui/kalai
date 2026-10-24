@@ -10,7 +10,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '–');
 const aed = (v) => `⃃ ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 const CLOSED = ['DELIVERED', 'REFUNDED', 'CANCELLED'];
-const STATUS = { RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed', SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled' };
+const STATUS = { RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', ARTIST_WORKING: 'Artist working', ARTIST_DONE: 'Artist finished', ARTIST_SENT: 'Sent by artist', FRAMING: 'Being framed', SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled' };
 
 let customers = [];
 let orders = [];

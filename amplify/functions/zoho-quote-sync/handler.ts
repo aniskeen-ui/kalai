@@ -1080,7 +1080,7 @@ function artistStage(e: Img, c: Img | undefined) {
   }
   const status = str(e, 'status') || 'RECEIVED';
   if (status === 'CANCELLED') return { stage: 'CLOSED', label: 'Not going ahead' };
-  if (num(c, 'artistPriceInr') || num(c, 'artistPriceAed')) return { stage: 'PRICED', label: status === 'PAID' ? 'Customer paid · order coming' : 'Price given · waiting for customer' };
+  if (num(c, 'artistPriceInr') || num(c, 'artistPriceAed')) return { stage: 'PRICED', label: PAID_LIKE.includes(status) ? 'Customer paid · order coming' : 'Price given · waiting for customer' };
   return { stage: 'NEEDED', label: 'Price needed' };
 }
 
@@ -1256,9 +1256,12 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
   console.log(`Artist progress ${set.artistStage} for ${str(e, 'ref')}`);
   // Sent to the frame shop and the frame shop has already accepted the job: the order is now "Being framed".
-  if (target >= 2 && str(e, 'status') === 'PAID') {
-    const fj = (await jobsOf(id)).framer;
-    if (fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage))) await updateEnquiry(id, { status: 'FRAMING' }).catch((err) => console.warn('Status not moved to FRAMING', err));
+  // The order's status follows the artist: Started → Artist working, Finished → Artist finished, sent with an AWB →
+  // Sent by artist (or straight to Being framed when the frame shop has already accepted the job). Only forward.
+  if (PAID_LIKE.includes(str(e, 'status'))) {
+    const fj = target >= 2 ? (await jobsOf(id)).framer : undefined;
+    const next = target >= 2 ? (fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage)) ? 'FRAMING' : 'ARTIST_SENT') : target === 1 ? 'ARTIST_DONE' : 'ARTIST_WORKING';
+    if (STATUS_RANK.indexOf(next) > STATUS_RANK.indexOf(str(e, 'status'))) await updateEnquiry(id, { status: next }).catch((err) => console.warn(`Status not moved to ${next}`, err));
   }
   return { ok: true, ref: str(e, 'ref'), ...set };
 }
@@ -1639,7 +1642,7 @@ async function onStreamRecord(rec: StreamRecord) {
     return;
   }
 
-  if (price !== null && price > 0 && price !== oldPrice && status !== 'PAID') {
+  if (price !== null && price > 0 && price !== oldPrice && !PAID_LIKE.includes(status)) {
     const quote = await updateQuotePrice(img, price);
     await writeBack(id, { zohoState: 'QUOTED', zohoQuote: quote.number, zohoMessage: `Quote ${quote.number} updated to AED ${price.toLocaleString('en-US')}` });
   }
@@ -2317,7 +2320,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (delivering) jobs.delivery = { supplierId: sub, name: by, price: j.deliveryPrice ?? null, due: j.due, note: '', stage: 'ACCEPTED', assignedAt: now, acceptedAt: now, byFramer: true };
     await saveJobs(id, jobs);
     // The frame shop has it: the order is "Being framed" (the customer is emailed). Siva's works only once he has sent them.
-    if (role === 'framer' && str(e, 'status') === 'PAID' && (['GIFT', 'PHOTO'].includes(str(e, 'kind')) || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
+    if (role === 'framer' && PAID_LIKE.includes(str(e, 'status')) && (['GIFT', 'PHOTO'].includes(str(e, 'kind')) || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
     await studio(`${by} accepted ${ref}`, [`${h(by)} accepted the ${ROLE_WORD[role]} of <b>${h(str(e, 'title'))}</b> (${h(ref)})${role === 'framer' && j.canDeliver ? (delivering ? ' <b>and will deliver it too</b>' : '. They will <b>not</b> deliver it: please assign a delivery partner') : ''}.`]);
     return view();
   }
@@ -2352,7 +2355,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     j.stage = 'PICKED'; j.pickedAt = now; j.acceptedAt = j.acceptedAt ?? now; j.awb = txt(d.awb, 60);
     if (jobs.framer) jobs.framer.stage = 'COLLECTED';
     await saveJobs(id, jobs);
-    if (['PAID', 'FRAMING'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'SHIPPED', courierName: by, trackingNo: j.awb || ref });
+    if ([...PAID_LIKE, 'FRAMING'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'SHIPPED', courierName: by, trackingNo: j.awb || ref });
     await studio(`Picked up: ${ref}`, [`${h(by)} picked up <b>${h(str(e, 'title'))}</b> (${h(ref)})${j.awb ? `, tracking ${h(j.awb)}` : ''}. The order is now Shipped and the customer has been emailed.`]);
     return view();
   }
@@ -2706,7 +2709,7 @@ async function licenceDelivered(img: Img) {
   await writeBack(str(img, 'id'), { status: 'DELIVERED', deliveredAt: now });
 }
 const paidLike = (e: Img) => !!(str(e, 'zohoPaymentId') || str(e, 'ziinaPaidAt') || str(e, 'zohoState') === 'TEST') && !['REFUNDED', 'CANCELLED'].includes(str(e, 'status'))
-  || ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'].includes(str(e, 'status'));
+  || [...PAID_LIKE, 'FRAMING', 'SHIPPED', 'DELIVERED'].includes(str(e, 'status'));
 async function licenceFile(e: Img) {
   if (str(e, 'kind') !== 'LICENCE') throw new Error('Not a licence order.');
   if (!paidLike(e)) throw new Error('The file is ready to download once the licence is paid.');
@@ -2981,6 +2984,9 @@ async function sellerOrders(action: string, d: Dict, sellerId: string, profile: 
 // Price sent → payment link (payment intent) on the order and in the email. Ziina tells us when it is paid →
 // the order turns Paid (method Ziina, reference = payment id) and the usual Zoho invoice follows.
 // A refund approved on the desk with "Refund via Ziina" goes back to the customer's card through Ziina.
+// Paid, then the artist's own steps (status follows the artist's desk): all count as paid orders.
+const PAID_LIKE = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'];
+const STATUS_RANK = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
 const ZIINA_API = 'https://api-v2.ziina.com/api';
 const ZIINA_IPS = ['3.29.184.186', '3.29.190.95', '20.233.47.127', '13.202.161.181'];
 const secureCache = new Map<string, { v: string | null; at: number }>();
@@ -3279,7 +3285,7 @@ const pad = (n: number) => String(n).padStart(7, '0');
 const recode = (prefix: string, c: string) => (c && !c.startsWith(prefix) ? `${prefix}${pad(codeNum(c))}` : c);
 // ---------- Customer master ----------
 const CLOSED_ORDER = ['DELIVERED', 'REFUNDED', 'CANCELLED'];
-const PAID_ORDER = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+const PAID_ORDER = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
 /** One row per customer code: contact and last address from their latest order (unless the studio or the customer
  *  edited it), plus order counts and spend. */
 async function syncCustomers(byCode: Map<string, Img[]>) {
@@ -3793,7 +3799,7 @@ function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
   if (action === 'CANCEL') {
     if (['RECEIVED', 'PRICE_SENT'].includes(status)) return t('FREE', 0, 'Nothing has been paid, so the enquiry is simply cancelled.');
     if (str(e, 'kind') === 'LICENCE') return t('NONE', 0, 'Image licences are digital: once paid, the file is yours to download and the licence can\'t be cancelled.', false);
-    if (['PAID', 'FRAMING'].includes(status)) {
+    if ([...PAID_LIKE, 'FRAMING'].includes(status)) {
       // Crafts shop: a full refund until it is dispatched (then it is Shipped and can't be cancelled).
       const started = str(e, 'kind') === 'MARKET' ? false : ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
       return started
