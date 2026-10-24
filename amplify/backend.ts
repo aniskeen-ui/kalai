@@ -59,11 +59,12 @@ backend.zohoQuoteSync.addEnvironment('ANNOUNCE_TABLE', tableName('Announcement')
 backend.zohoQuoteSync.addEnvironment('PROMO_TABLE', tableName('Promotion'));
 backend.zohoQuoteSync.addEnvironment('ARTPRICE_TABLE', tableName('ArtworkPrice'));
 backend.zohoQuoteSync.addEnvironment('SITE_TABLE', tableName('SiteSetting'));
+backend.zohoQuoteSync.addEnvironment('CUSTOMER_TABLE', tableName('Customer'));
 backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Scan', 'dynamodb:Query', 'dynamodb:BatchGetItem'],
-    resources: [tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile'), tableArn('Announcement'), tableArn('Promotion'), tableArn('ArtworkPrice'), tableArn('SiteSetting')],
+    resources: [tableArn('Customer'), tableArn('Enquiry'), tableArn('Costing'), tableArn('Product'), tableArn('SellerProfile'), tableArn('Listing'), tableArn('MarketItem'), tableArn('ArtistProfile'), tableArn('Announcement'), tableArn('Promotion'), tableArn('ArtworkPrice'), tableArn('SiteSetting')],
   }),
 );
 

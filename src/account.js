@@ -617,6 +617,39 @@ const TABS = [
 let currentTab = null;
 const POLICY_NOTE = `<p class="acct-info" style="margin:0;font-size:13px">To cancel, open the order under <b>Orders</b> or <b>Enquiries</b> and tap “Cancel this order”: you see the refund before you confirm. Before payment it's free; after payment you get a full refund until the artist starts, then 50%. Shipped orders can't be cancelled; damage can be reported with photos within 48 hours of delivery. <a href="#terms" class="acct-terms" style="color:var(--kumkum)">Full terms</a></p>`;
 
+/* ---------- My details: name, mobile and delivery address (the studio's customer master; open orders follow) ---------- */
+async function showDetails() {
+  title.textContent = 'My details';
+  body.innerHTML = '<p class="acct-info">Loading…</p>';
+  let c = {};
+  try { const { data, errors } = await client.mutations.customerProfile({ action: 'get' }); if (errors?.length) throw new Error(errors[0].message); c = typeof data === 'string' ? JSON.parse(data) : data || {}; }
+  catch (ex) { body.innerHTML = `<p class="acct-err">${esc(ex.message)}</p><button class="acct-link" id="back">Back</button>`; body.querySelector('#back').onclick = showList; return; }
+  const f = form(`
+    <p class="acct-info">${c.code ? `Customer no. <b style="font-family:var(--mono)">${esc(c.code)}</b> · ` : ''}${esc(c.email || state.email)}</p>
+    <form novalidate>
+      <div class="field"><label for="mdName">Name</label><input id="mdName" name="name" autocomplete="name" maxlength="80" value="${esc(c.name)}"></div>
+      <div class="field"><label for="mdPhone">Mobile / WhatsApp</label><input id="mdPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" value="${esc(c.phone)}"></div>
+      ${countryRegionHtml({ country: c.country || 'UAE', region: c.emirate, pin: c.pin, prefix: 'md' })}
+      <div class="field"><label for="mdAddr">Delivery address</label><textarea id="mdAddr" name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address">${esc(c.address)}</textarea></div>
+      <div class="field"><label for="mdLand">Landmark (optional)</label><input id="mdLand" name="landmark" value="${esc(c.landmark)}"></div>
+      <p class="acct-info" style="margin:0;font-size:12px">Saving also updates your open orders (orders already shipped keep their address).</p>
+      <div class="acct-err" role="alert"></div>
+      <button class="btn primary" type="submit">Save my details</button>
+      <button class="acct-link" type="button" id="mdBack">Back to my orders</button>
+    </form>`, async (fd) => {
+    const data = Object.fromEntries(fd.entries());
+    const { data: r, errors } = await client.mutations.customerProfile({ action: 'save', data: JSON.stringify(data) });
+    if (errors?.length) throw new Error(errors[0].message);
+    const o = typeof r === 'string' ? JSON.parse(r) : r;
+    toastMsg(`Saved${o?.updatedOrders ? `: ${o.updatedOrders} open order${o.updatedOrders === 1 ? '' : 's'} updated` : ''}.`);
+    showList();
+  });
+  void f;
+  wireRegion(body); autoPhones(body);
+  body.querySelector('#mdBack').onclick = showList;
+}
+const toastMsg = (m) => { try { window.toast ? window.toast(m) : null; } catch { /* no toast */ } };
+
 async function showList() {
   title.textContent = 'My enquiries & orders';
   if (!state.email) {
@@ -629,9 +662,10 @@ async function showList() {
     ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
     <nav class="acct-tabs" role="tablist" id="acctTabs"></nav>
     <div id="enqList" class="acct-info">Loading…</div>
-    <button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;
+    <button class="acct-link" id="myDetails">My details</button><button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;
   body.querySelector('#signOut').onclick = async () => { await signOut(); state.user = null; setButton(); showSignIn('You are signed out.'); };
   body.querySelector('#refresh').onclick = showList;
+  body.querySelector('#myDetails').onclick = showDetails;
   const list = body.querySelector('#enqList');
   try {
     const items = [];

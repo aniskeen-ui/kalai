@@ -11,6 +11,7 @@ import { showMarket } from './market.js';
 import { showPromotions } from './promotions.js';
 import { showSettings } from './settings.js';
 import { showPricing } from './pricing.js';
+import { showCustomers } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import outputs from '../amplify_outputs.json';
 
@@ -177,6 +178,7 @@ async function start() {
   if (location.hash === '#offers') showPane('offers', 'tabOffers');
   if (location.hash === '#settings') showPane('settings', 'tabSettings');
   if (location.hash === '#pricing') showPane('pricing', 'tabPricing');
+  if (location.hash === '#customers') showPane('customers', 'tabCustomers');
   await loadRates();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
@@ -208,6 +210,7 @@ $('tabSellers').onclick = () => showPane('sellers', 'tabSellers');
 $('tabOffers').onclick = () => showPane('offers', 'tabOffers');
 $('tabSettings').onclick = () => showPane('settings', 'tabSettings');
 $('tabPricing').onclick = () => showPane('pricing', 'tabPricing');
+$('tabCustomers').onclick = () => showPane('customers', 'tabCustomers');
 document.addEventListener('click', (ev) => { if (ev.target.closest?.('[data-goprice]')) { ev.preventDefault(); showPane('pricing', 'tabPricing'); } });
 
 // ---------- tabs: Orders · Reports · Rates ----------
@@ -221,8 +224,9 @@ function showPane(pane, tabId) {
   $('offersPane').hidden = pane !== 'offers';
   $('settingsPane').hidden = pane !== 'settings';
   $('pricingPane').hidden = pane !== 'pricing';
-  ['tabOrders', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'tabSettings', 'tabPricing', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
-  try { history.replaceState(null, '', ['reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers', 'settings', 'pricing'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
+  $('customersPane').hidden = pane !== 'customers';
+  ['tabOrders', 'tabCustomers', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'tabSettings', 'tabPricing', 'ratesBtn'].forEach((t) => $(t).setAttribute('aria-selected', String(t === tabId)));
+  try { history.replaceState(null, '', ['customers', 'reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers', 'settings', 'pricing'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
   if (pane === 'reports') renderReport();
   if (pane === 'feedback') renderFeedback();
   if (pane === 'catalogue') showCatalogue();
@@ -231,6 +235,7 @@ function showPane(pane, tabId) {
   if (pane === 'offers') showPromotions();
   if (pane === 'settings') showSettings();
   if (pane === 'pricing') showPricing();
+  if (pane === 'customers') showCustomers();
 }
 
 // ---------- Feedback: customer reviews, publish to the website ----------

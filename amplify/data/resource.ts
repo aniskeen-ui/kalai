@@ -581,6 +581,40 @@ const schema = a.schema({
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Customer, from My enquiries & orders: add or change the delivery address (until it ships).
+  // Customer master (Order Management → Customers): one row per customer code BP-…, kept up to date from their orders;
+  // the studio or the customer (website → My details) can change it, and the change goes to their open orders.
+  Customer: a
+    .model({
+      code: a.string().required(),
+      name: a.string(),
+      email: a.string(),
+      phone: a.string(),
+      owner: a.string(), // their account (when they order signed in)
+      country: a.string(),
+      emirate: a.string(),
+      pin: a.string(),
+      address: a.string(),
+      landmark: a.string(),
+      notes: a.string(), // studio only
+      orderCount: a.integer(),
+      paidCount: a.integer(),
+      totalSpent: a.float(),
+      firstOrderAt: a.string(),
+      lastOrderAt: a.string(),
+      editedBy: a.string(), // studio | customer
+      editedAt: a.string(),
+    })
+    .identifier(['code'])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // The signed-in customer's own details (website → My details): get / save.
+  customerProfile: a
+    .mutation()
+    .arguments({ action: a.string().required(), data: a.string() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
   customerAddress: a
     .mutation()
     .arguments({ id: a.id().required(), name: a.string().required(), phone: a.string().required(), emirate: a.string().required(), address: a.string().required(), landmark: a.string(), country: a.string(), pin: a.string() })

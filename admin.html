@@ -230,6 +230,7 @@ a.df[href]:hover{transform:translateY(-2px)}
   <section id="deskView" hidden>
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button type="button" role="tab" id="tabOrders" aria-selected="true">Orders</button>
+      <button type="button" role="tab" id="tabCustomers" aria-selected="false">Customers</button>
       <button type="button" role="tab" id="tabReports" aria-selected="false">Reports</button>
       <button type="button" role="tab" id="tabFeedback" aria-selected="false">Feedback</button>
       <button type="button" role="tab" id="tabCatalogue" aria-selected="false">Catalogue</button>
@@ -339,6 +340,11 @@ a.df[href]:hover{transform:translateY(-2px)}
       .pc-calc{display:grid;gap:10px;padding:6px 2px}.pc-break td,.pc-break th{white-space:nowrap}.pc-break .num{text-align:right}.pc-final td{background:var(--gold-soft)}
       .pc-bulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px}.pc-bulk label{display:inline-flex;gap:6px;align-items:center;font-weight:400}.pc-bulk input{width:auto}.pc-table input[type=checkbox]{width:auto}
 .pc-st{display:inline-block;font-size:11px;border-radius:999px;padding:1px 8px;border:1px solid var(--line);font-family:var(--body)}.pc-st.LIVE{color:var(--ok);border-color:var(--ok)}.pc-st.TODO,.pc-st.CHANGED{color:var(--kumkum);border-color:var(--kumkum)}</style>
+    </div>
+    <div id="customersPane" hidden>
+      <div class="bar"><h1 style="font-size:28px;margin-right:auto">Customers</h1><input id="cuSearch" type="search" placeholder="Code, name, email, mobile, area" style="max-width:320px"><button class="btn small ghost" id="cuReload" type="button">Refresh from orders</button></div>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">One entry per customer (BP-…), kept up to date from their orders. Change a customer here, or they change their own details on the website (My details): the change goes to their open orders too. <span id="cuCount"></span></p>
+      <div id="cuList"></div>
     </div>
     <div id="settingsPane" hidden>
       <div class="bar"><h1 style="font-size:28px;margin-right:auto">Settings</h1></div>

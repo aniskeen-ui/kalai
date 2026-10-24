@@ -2999,6 +2999,76 @@ const custKey = (e: Img) => {
 const codeNum = (c: string) => Number((c.match(/(\d+)$/) ?? [])[1] ?? 0);
 const pad = (n: number) => String(n).padStart(7, '0');
 const recode = (prefix: string, c: string) => (c && !c.startsWith(prefix) ? `${prefix}${pad(codeNum(c))}` : c);
+// ---------- Customer master ----------
+const CLOSED_ORDER = ['DELIVERED', 'REFUNDED', 'CANCELLED'];
+const PAID_ORDER = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+/** One row per customer code: contact and last address from their latest order (unless the studio or the customer
+ *  edited it), plus order counts and spend. */
+async function syncCustomers(byCode: Map<string, Img[]>) {
+  const T = process.env.CUSTOMER_TABLE;
+  if (!T) return;
+  const now = new Date().toISOString();
+  for (const [code, list] of byCode) {
+    const es = [...list].sort((a, b) => str(a, 'createdAt').localeCompare(str(b, 'createdAt')));
+    const last = es[es.length - 1];
+    const withAddr = [...es].reverse().find((e) => str(e, 'deliveryAddress'));
+    const old = plain(await getRow(T, { code: { S: code } })) || {};
+    const edited = !!old.editedAt;
+    const paid = es.filter((e) => PAID_ORDER.includes(str(e, 'status')));
+    const spent = es.reduce((t, e) => t + (PAID_ORDER.includes(str(e, 'status')) || str(e, 'status') === 'REFUNDED' ? (num(e, 'quotedPrice') ?? 0) - (str(e, 'refundAction') && str(e, 'refundAction') !== 'DAMAGED_REPLACE' ? num(e, 'refundAmount') ?? 0 : 0) : 0), 0);
+    const pick = (k: string, v: string) => (edited && old[k] ? old[k] : v || old[k]);
+    const row: Dict = {
+      ...old, code, __typename: 'Customer', createdAt: old.createdAt ?? str(es[0], 'createdAt') ?? now, updatedAt: now,
+      name: pick('name', str(last, 'customerName')), email: pick('email', [...es].reverse().map((e) => str(e, 'email')).find(Boolean) ?? ''),
+      phone: pick('phone', str(last, 'phone')), owner: old.owner || [...es].reverse().map((e) => str(e, 'owner')).find(Boolean) || undefined,
+      orderCount: es.length, paidCount: paid.length, totalSpent: Math.round(spent * 100) / 100,
+      firstOrderAt: str(es[0], 'createdAt'), lastOrderAt: str(last, 'createdAt'),
+    };
+    if (withAddr && !(edited && old.address)) Object.assign(row, { country: str(withAddr, 'deliveryCountry') || 'UAE', emirate: str(withAddr, 'deliveryEmirate'), pin: str(withAddr, 'deliveryPin'), address: str(withAddr, 'deliveryAddress'), landmark: str(withAddr, 'deliveryLandmark') });
+    await putRow(T, row);
+  }
+}
+/** Their open orders take the new contact details; orders not yet shipped also take the new address. */
+async function pushToOrders(code: string, c: Dict, address: boolean) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) return 0;
+  let n = 0;
+  for (const e of (await scanAll(table)).filter((x) => str(x, 'customerCode') === code && !CLOSED_ORDER.includes(str(x, 'status')))) {
+    const set: Record<string, string | null> = {};
+    if (c.name) set.customerName = String(c.name);
+    if (c.phone) set.phone = String(c.phone);
+    if (address && c.address && !['SHIPPED'].includes(str(e, 'status'))) Object.assign(set, { deliveryName: String(c.name || str(e, 'deliveryName')), deliveryPhone: String(c.phone || str(e, 'deliveryPhone')), deliveryCountry: String(c.country || 'UAE'), deliveryEmirate: String(c.emirate || ''), deliveryAddress: String(c.address), deliveryLandmark: String(c.landmark || '') || null, deliveryPin: String(c.pin || '') || null });
+    if (Object.keys(set).length) { await writeBack(str(e, 'id'), set); n++; }
+  }
+  return n;
+}
+/** Website → My details: the signed-in customer reads or changes their own details. */
+async function customerProfile(ev: ApiEvent) {
+  const T = process.env.CUSTOMER_TABLE, table = process.env.ENQUIRY_TABLE;
+  if (!T || !table) throw new Error('Not configured');
+  const mine = (await scanAll(table)).filter((e) => ownsEnquiry(e, ev)).sort((a, b) => str(b, 'createdAt').localeCompare(str(a, 'createdAt')));
+  const code = mine.map((e) => str(e, 'customerCode')).find(Boolean);
+  const email = String(ev.identity?.claims?.email ?? '');
+  const cur = code ? plain(await getRow(T, { code: { S: code } })) : null;
+  const view = (c: Dict | null) => ({ code: code ?? '', name: c?.name ?? str(mine[0], 'customerName'), email: c?.email || email, phone: c?.phone ?? str(mine[0], 'phone'),
+    country: c?.country ?? 'UAE', emirate: c?.emirate ?? '', pin: c?.pin ?? '', address: c?.address ?? '', landmark: c?.landmark ?? '' });
+  if (ev.arguments.action === 'get') return view(cur);
+  if (ev.arguments.action !== 'save') throw new Error('Unknown action');
+  if (!code) throw new Error('Your details are saved with your first order or enquiry. Send one first, then you can change them here.');
+  const d = parseData(ev.arguments.data);
+  const name = txt(d.name, 80), phone = txt(d.phone, 30);
+  if (!name) throw new Error('Add your name.');
+  if (phone.replace(/\D/g, '').length < 7) throw new Error('Add a valid mobile number.');
+  const hasAddr = !!txt(d.address, 300);
+  const a = hasAddr ? checkAddress({ name, phone, country: d.country, emirate: d.emirate, pin: d.pin, address: d.address, landmark: d.landmark } as ApiEvent['arguments']) : null;
+  const now = new Date().toISOString();
+  const row: Dict = { ...(cur || {}), code, __typename: 'Customer', createdAt: cur?.createdAt ?? now, updatedAt: now, name, phone, email: cur?.email || email,
+    ...(a ? { country: a.country, emirate: a.region, pin: a.pin || undefined, address: a.address, landmark: a.landmark || undefined } : {}), editedBy: 'customer', editedAt: now };
+  await putRow(T, row);
+  const n = await pushToOrders(code, row, !!a);
+  return { ok: true, updatedOrders: n, ...view(row) };
+}
+
 async function assignCodes() {
   const out = { customers: 0, artworks: 0 };
   const table = process.env.ENQUIRY_TABLE;
@@ -3013,6 +3083,7 @@ async function assignCodes() {
       return k.length ? k : [custKey(e)];
     };
     const byKey = new Map<string, string>();
+    const byCode = new Map<string, Img[]>();
     let max = all.reduce((m, e) => Math.max(m, codeNum(str(e, 'customerCode'))), 0);
     for (const e of all) {
       const ks = keysOf(e);
@@ -3020,7 +3091,9 @@ async function assignCodes() {
       const code = ks.map((k) => byKey.get(k)).find(Boolean) ?? (recode('BP-', have) || `BP-${pad(++max)}`);
       ks.forEach((k) => { if (!byKey.has(k)) byKey.set(k, code); });
       if (code !== have) { await writeBack(str(e, 'id'), { customerCode: code }); out.customers++; }
+      (byCode.get(code) ?? byCode.set(code, []).get(code)!).push(e);
     }
+    await syncCustomers(byCode).catch((err) => console.warn('Customer master not updated', err));
   }
   // Offer master numbers PR-0000001… (in order of creation).
   const prtable = process.env.PROMO_TABLE;
@@ -3415,6 +3488,14 @@ async function customerAddress(ev: ApiEvent) {
   const parts = Object.entries(set).map(([k, v], i) => { names[`#d${i}`] = k; values[`:d${i}`] = { S: v }; return `#d${i} = :d${i}`; });
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}${[landmark ? '' : 'deliveryLandmark', pin ? '' : 'deliveryPin'].filter(Boolean).length ? ` REMOVE ${[landmark ? '' : 'deliveryLandmark', pin ? '' : 'deliveryPin'].filter(Boolean).join(', ')}` : ''}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
   console.log(`Delivery address saved for ${str(e, 'ref')} (${set.addressBy})`);
+  // The customer master keeps their latest address.
+  const CT = process.env.CUSTOMER_TABLE, cc = str(e, 'customerCode');
+  if (CT && cc) {
+    try {
+      const row = plain(await getRow(CT, { code: { S: cc } })) || {};
+      await putRow(CT, { ...row, code: cc, __typename: 'Customer', createdAt: row.createdAt ?? now, updatedAt: now, country, emirate: region, pin: pin || undefined, address, landmark: landmark || undefined, ...(row.editedAt ? { editedAt: now } : {}) });
+    } catch (err) { console.warn('Customer address not updated', err); }
+  }
   return { ok: true, ...set };
 }
 
@@ -3751,6 +3832,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
     if (field === 'catalogueImport') return JSON.stringify(await catalogueImport(event.arguments));
     if (field === 'customerAddress') return JSON.stringify(await customerAddress(event));
+    if (field === 'customerProfile') return JSON.stringify(await customerProfile(event));
     if (field === 'guestEnquiry') return JSON.stringify(await guestEnquiry(event.arguments));
     if (field === 'artistRework') return JSON.stringify(await artistRework(event.arguments, actor(event)));
     if (field === 'customerRequest') return JSON.stringify(await customerRequest(event));
