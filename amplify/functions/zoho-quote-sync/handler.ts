@@ -53,7 +53,7 @@ type ZohoBody = {
   vendorpayment?: { payment_id: string; payment_number?: string };
 };
 
-const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order' };
+const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order', PHOTO: 'Photo framing' };
 const INVOICE_PREFIX = 'KAH-INV-';
 // Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
 // so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
@@ -234,7 +234,7 @@ function quoteParts(img: Img) {
     .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total'].includes(k))
     .map(([k, v]) => `${k}: ${v}`);
   // Price enquiries start at 0. Commissions use the website estimate, gifts the total shown.
-  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' ? amount(details['Total']) : kind === 'MARKET' ? num(img, 'quotedPrice') ?? 0 : 0;
+  const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' || kind === 'PHOTO' ? amount(details['Total']) : kind === 'MARKET' ? num(img, 'quotedPrice') ?? 0 : 0;
   return {
     ref,
     name: title.slice(0, 100),
@@ -659,7 +659,7 @@ async function purchaseSteps(start: Img) {
   let img: Img = { ...start };
   const id = str(img, 'id');
   const testing = str(img, 'zohoState') === 'TEST' && !!str(img, 'zohoInvoiceId');
-  if ((!str(img, 'zohoPaymentId') && !testing) || str(img, 'kind') === 'GIFT' || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction') === 'CANCEL_FULL') return;
+  if ((!str(img, 'zohoPaymentId') && !testing) || ['GIFT', 'PHOTO'].includes(str(img, 'kind')) || str(img, 'purchaseState') === 'CANCELLED' || str(img, 'refundAction') === 'CANCEL_FULL') return;
   try {
     if (!str(img, 'zohoPOId')) {
       const po = await recordArtistOrder(img);
@@ -969,11 +969,11 @@ async function afterSales(img: Img) {
     }
 
     // Siva: a cancellation before he started cancels his order (if no bill yet).
-    const sivaCancelled = action === 'CANCEL_FULL' && str(img, 'kind') !== 'GIFT' && !str(img, 'zohoBillId');
+    const sivaCancelled = action === 'CANCEL_FULL' && !['GIFT', 'PHOTO'].includes(str(img, 'kind')) && !str(img, 'zohoBillId');
     const sivaNote =
       action === 'CANCEL_FULL'
         ? sivaCancelled ? " Siva's order cancelled (nothing owed)." : " Siva's bill already exists: agree with him what is owed."
-        : str(img, 'kind') === 'GIFT' ? '' : action === 'CANCEL_HALF' ? " Siva's order stopped: he is paid 50% of his price (his invoice no. → bill)." : ' Siva had started / finished: pay him as agreed.';
+        : ['GIFT', 'PHOTO'].includes(str(img, 'kind')) ? '' : action === 'CANCEL_HALF' ? " Siva's order stopped: he is paid 50% of his price (his invoice no. → bill)." : ' Siva had started / finished: pay him as agreed.';
 
     if (!(amount > 0)) throw new Error('Enter the refund amount.');
     if (testing) {
@@ -1480,7 +1480,7 @@ async function onStreamRecord(rec: StreamRecord) {
     // Little Artists: the form already priced it (framing by age + delivery + extras), so the order starts with that
     // price (the studio checks it before "Price sent"). Not when overseas shipping is still to be quoted.
     const det = parseDetails(str(img, 'details'));
-    const kidsTotal = str(img, 'kind') === 'GIFT' && !/\+/.test(String(det['Total'] ?? '')) ? amount(det['Total']) : 0;
+    const kidsTotal = ['GIFT', 'PHOTO'].includes(str(img, 'kind')) && !/\+/.test(String(det['Total'] ?? '')) ? amount(det['Total']) : 0;
     await writeBack(id, { zohoState: 'QUOTED', zohoQuote: quote.number, zohoMessage: `Quote ${quote.number} created in Zoho${kidsTotal ? ` (AED ${kidsTotal})` : ''}`, ...(kidsTotal > 0 && num(img, 'quotedPrice') == null ? { quotedPrice: kidsTotal } : {}) });
     return;
   }
@@ -1571,7 +1571,7 @@ async function onStreamRecord(rec: StreamRecord) {
         zohoPaymentId: null,
         zohoMessage: `Test mode: draft invoice ${r.invoice} · AED ${r.total.toLocaleString('en-US')}. Nothing posted (no payment recorded).`,
       });
-      if (str(img, 'kind') !== 'GIFT') {
+      if (!['GIFT', 'PHOTO'].includes(str(img, 'kind'))) {
         await purchaseSteps({ ...img, zohoState: { S: 'TEST' }, zohoInvoiceId: { S: r.invoiceId }, zohoInvoice: { S: r.invoice } });
       }
       return;
@@ -1584,7 +1584,7 @@ async function onStreamRecord(rec: StreamRecord) {
       zohoPaymentId: r.paymentId,
       zohoMessage: paidMessage(r, img),
     });
-    if (str(img, 'kind') !== 'GIFT') await purchaseSteps({ ...img, zohoPaymentId: { S: r.paymentId } });
+    if (!['GIFT', 'PHOTO'].includes(str(img, 'kind'))) await purchaseSteps({ ...img, zohoPaymentId: { S: r.paymentId } });
     return;
   }
 
@@ -1974,7 +1974,7 @@ async function sellerAction(ev: ApiEvent) {
     const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
     const PARCELS = ['s1', '40×50', '50×70', '60×80', '70×100']; // delivery partners: price by parcel (frame) size
     const card = profile.type === 'FRAMER'
-      ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3']).x ?? {},
+      ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']).x ?? {},
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
       : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), notes: txt(d.notes, 500), at: now };
     const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
@@ -2155,6 +2155,11 @@ function giftPrintSpec(det: Record<string, string>) {
   const copies = /second framed copy/i.test(String(det['Extras'] ?? '')) ? 2 : 1;
   return `${copies === 2 ? '2 copies' : '1 copy'}, ${size}, on matte / fine-art paper from the photo (download the full-size file below). Crop to the paper edge, keep the colours true.`;
 }
+/** Photo framing: the print the frame shop makes from the customer's photo. */
+function photoPrintSpec(det: Record<string, string>) {
+  const n = Math.max(1, Number(det['Copies']) || 1);
+  return `${n === 1 ? '1 copy' : `${n} copies`}, ${det['Size'] || 'A4'}, fine-art matte print from the customer's photo (download the full-size file below)${/print only/i.test(String(det['Frame'] ?? '')) ? '. Print only: no frame, pack flat' : ''}.${det['Note'] ? ` Customer's note: ${String(det['Note']).slice(0, 200)}` : ''}`;
+}
 function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile: Dict | null) {
   const j = jobs[role]!;
   const selfDelivery = role === 'delivery' && !!jobs.framer && jobs.framer.supplierId === j.supplierId;
@@ -2164,8 +2169,8 @@ function jobView(e: Img, jobs: Jobs, role: 'framer' | 'delivery', framerProfile:
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
     stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null, hasBill: !!j.billId,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
-    specs: role === 'framer' ? [...(str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
-    printJob: role === 'framer' && str(e, 'kind') === 'GIFT',
+    specs: role === 'framer' ? [...(str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
+    printJob: role === 'framer' && ['GIFT', 'PHOTO'].includes(str(e, 'kind')),
     hasPhoto: role === 'framer' && (!!str(e, 'fileKey') || str(e, 'kind') === 'PRICE'),
     to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
     from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
@@ -2241,7 +2246,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (delivering) jobs.delivery = { supplierId: sub, name: by, price: j.deliveryPrice ?? null, due: j.due, note: '', stage: 'ACCEPTED', assignedAt: now, acceptedAt: now, byFramer: true };
     await saveJobs(id, jobs);
     // The frame shop has it: the order is "Being framed" (the customer is emailed). Siva's works only once he has sent them.
-    if (role === 'framer' && str(e, 'status') === 'PAID' && (str(e, 'kind') === 'GIFT' || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
+    if (role === 'framer' && str(e, 'status') === 'PAID' && (['GIFT', 'PHOTO'].includes(str(e, 'kind')) || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
     await studio(`${by} accepted ${ref}`, [`${h(by)} accepted the ${role === 'framer' ? 'framing' : 'delivery'} of <b>${h(str(e, 'title'))}</b> (${h(ref)})${role === 'framer' && j.canDeliver ? (delivering ? ' <b>and will deliver it too</b>' : '. They will <b>not</b> deliver it: please assign a delivery partner') : ''}.`]);
     return view();
   }
@@ -3012,7 +3017,7 @@ async function assignCodes() {
 // The customer types a code on an order that has a price and isn't paid. The function checks the offer (dates, active,
 // minimum order, what it applies to, uses left), lowers quotedPrice and keeps listPrice + discountAmount. The price
 // change flows on by itself: new Ziina link, Zoho quote updated, invoice at the discounted price.
-const AREA: Record<string, string[]> = { ALL: ['PRICE', 'COMMISSION', 'GIFT', 'MARKET'], ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
+const AREA: Record<string, string[]> = { ALL: ['PRICE', 'COMMISSION', 'GIFT', 'MARKET', 'PHOTO'], ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
 async function findPromo(code: string) {
   const table = process.env.PROMO_TABLE;
   if (!table || !code) return null;
@@ -3377,9 +3382,9 @@ function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
     if (['RECEIVED', 'PRICE_SENT'].includes(status)) return t('FREE', 0, 'Nothing has been paid, so the enquiry is simply cancelled.');
     if (['PAID', 'FRAMING'].includes(status)) {
       // Crafts shop: a full refund until it is dispatched (then it is Shipped and can't be cancelled).
-      const started = str(e, 'kind') === 'MARKET' ? false : str(e, 'kind') === 'GIFT' ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
+      const started = str(e, 'kind') === 'MARKET' ? false : ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
       return started
-        ? t('HALF', 0.5, str(e, 'kind') === 'GIFT' ? 'Framing has started, so 50% is refunded.' : 'The artist has started your work, so 50% is refunded to cover the artist\'s time.')
+        ? t('HALF', 0.5, ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? 'Framing has started, so 50% is refunded.' : 'The artist has started your work, so 50% is refunded to cover the artist\'s time.')
         : t('FULL', 1, 'The work has not started yet, so the full amount is refunded.');
     }
     if (status === 'SHIPPED') return t('NONE', 0, 'It has already shipped, so it can no longer be cancelled. If it arrives damaged, report it here within 48 hours of delivery.', false);
@@ -3531,6 +3536,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
     key = 'RECEIVED';
     cust(`We've received your enquiry ${ref}`, [
       kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
+        : kind === 'PHOTO' ? `Thank you for your photo. We'll check it prints sharply, then send you a secure payment link; once paid we print, frame and deliver it.`
         : kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
         : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
@@ -3570,8 +3576,8 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
-    if (st === 'FRAMING') cust(kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
-      kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> has reached our framer in Dubai and is being framed now.`,
+    if (st === 'FRAMING') cust(kind === 'PHOTO' ? `We're printing and framing your photo (${ref})` : kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
+      kind === 'PHOTO' ? 'Your photo is now with our framer in Dubai: printed on fine-art paper, then mounted and framed.' : kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> has reached our framer in Dubai and is being framed now.`,
       msgLine, "We'll email you the courier and tracking number as soon as it ships."]);
     if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries & orders within 48 hours.']);
     if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
@@ -3590,7 +3596,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
   }
 
   // The artist has started the work (the 50% cancellation terms apply from now).
-  if (str(img, 'artistStartedAt') && !str(old, 'artistStartedAt') && kind !== 'MARKET' && kind !== 'GIFT') {
+  if (str(img, 'artistStartedAt') && !str(old, 'artistStartedAt') && kind !== 'MARKET' && kind !== 'GIFT' && kind !== 'PHOTO') {
     key = 'ARTIST_STARTED';
     cust(`The artist has started: ${title} (${ref})`, [`Good news: the artist has started work on <b>${h(title)}</b>.`,
       kind === 'COMMISSION' ? "We'll share the pencil sketch with you for approval before any paint goes on." : "We'll let you know when it moves to the framer.",

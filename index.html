@@ -365,8 +365,8 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <div id="launchBar" class="launch-bar" role="status" hidden></div>
 <header class="top"><div class="wrap">
   <div class="brand"><b>KALAI</b><span>Art House · Dubai</span></div>
-  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
-  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="commission">Commission</button><div class="cur-pick"><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
+  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#photo">Photo Framing</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
+  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="photo">Frame your photo</button><div class="cur-pick"><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
 <section class="hero" style="padding-block:0"><div class="wrap">
@@ -522,6 +522,51 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
   </form>
 </div></section>
 
+<section id="photo" class="studio"><div class="wrap">
+  <div>
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--kumkum);font-weight:700">Photo Framing</div>
+    <h2 style="margin-top:6px">Frame your photo</h2>
+    <p class="lead">Send us a photo you love: family, a wedding, your pet, a holiday. We print it on fine-art paper, mount and frame it in Dubai, and deliver it ready to hang. Or order just the print.</p>
+    <div class="mock" aria-live="polite">
+      <div class="kframe" id="pFrame"><div class="kmount" id="pMount"><div class="ph">Your photo<br>will appear here</div></div></div>
+    </div>
+    <div class="safe">
+      <div><b>Fine-art print.</b> Matte archival paper, true colours, printed from your full-size photo.</div>
+      <div><b>Your photo stays private.</b> Used only to make your order, never shown on the website.</div>
+      <div><b>Your own photos only.</b> Please send photos you took or have permission to print; we can't print images from the internet, logos or celebrities.</div>
+    </div>
+  </div>
+  <form class="panel" id="photoForm" novalidate>
+    <div class="field"><label for="pFile">Your photo</label><input id="pFile" type="file" accept="image/*"><span class="note" id="pRes" hidden></span><span class="note">Send the original file from your phone or camera (not a screenshot or a WhatsApp copy), so it prints sharply.</span></div>
+    <div class="field"><label for="pSize">Size</label><select id="pSize"></select></div>
+    <div class="field"><label>Frame</label>
+      <div class="chips" role="radiogroup" aria-label="Frame">
+        <label><input type="radio" name="pf" value="black" checked><span>Black</span></label>
+        <label><input type="radio" name="pf" value="white"><span>White</span></label>
+        <label><input type="radio" name="pf" value="wood"><span>Natural wood</span></label>
+        <label><input type="radio" name="pf" value="none"><span>Print only</span></label>
+      </div></div>
+    <label class="check" id="pMountBox"><input type="checkbox" id="pMat" checked><span>White mount around the photo (included)</span></label>
+    <div class="two">
+      <div class="field"><label for="pQty">Copies</label><select id="pQty"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+      <div class="field"><label for="pCountry">Delivery country</label><select id="pCountry"><option value="UAE">UAE</option></select></div>
+    </div>
+    <div class="field" id="pEmBox"><label for="pEmirate">Emirate</label>
+      <select id="pEmirate"><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Abu Dhabi</option><option>Ras Al Khaimah</option><option>Umm Al Quwain</option><option>Fujairah</option></select></div>
+    <div class="field" id="pRegBox" hidden><label for="pRegion">State, province or city</label><input id="pRegion" maxlength="60" placeholder="e.g. Kerala, Ontario, London"></div>
+    <div class="field"><label for="pAddr">Delivery address</label><input id="pAddr" placeholder="Villa or flat, building, street, area"></div>
+    <div class="two">
+      <div class="field"><label for="pName">Your name</label><input id="pName" autocomplete="name" placeholder="Priya Raman"></div>
+      <div class="field"><label for="pPhone">Mobile</label><input id="pPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div>
+    </div>
+    <div class="field"><label for="pNote">Note (optional)</label><input id="pNote" maxlength="200" placeholder="e.g. crop to the two of us, keep it in colour"></div>
+    <label class="check"><input type="checkbox" id="pRights"><span>This is my own photo, or I have permission to print it.</span></label>
+    <div id="pBreak" class="note" style="display:grid;gap:4px"></div>
+    <div class="estimate"><span class="note">Total to pay</span><span class="mono" id="pFee">AED 169</span></div>
+    <button class="btn primary" type="submit">Order</button>
+    <div class="ok-msg" id="pOk" hidden></div>
+  </form>
+</div></section>
 <section id="artist"><div class="wrap" style="max-width:1100px">
   <div style="max-width:820px"><div class="kind" id="artistKicker" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">Our artist</div>
   <h2 style="font-size:clamp(28px,3.4vw,38px);margin-top:6px" id="artistH2">Meet the artist</h2>
@@ -1149,6 +1194,47 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
     const extras=[...document.querySelectorAll('[id^="kx-"]:checked')].map(x=>x.parentElement.querySelector("span").firstChild.textContent.trim()).join(", ");
     const url=sendEnquiry("Little Artists gift",{"Child":$("kName").value.trim()+", age "+$("kAge").value,"Gift for":$("kTo").value.trim(),"Country":$("kCountry").value,[uae()?"Emirate":"State / city"]:uae()?$("kEmirate").selectedOptions[0].text:$("kRegion").value.trim(),"Delivery charge":delivery()===null?"to quote ("+ZNAME[zoneOf($("kCountry").value)]+")":"AED "+delivery(),"Address":$("kAddr").value.trim(),"Frame":document.querySelector('input[name="kf"]:checked').value,"Extras":extras,"Card message":$("kMsg").value.trim(),"Parent":$("kParent").value.trim(),"Mobile":$("kPhone").value.trim(),"Total":$("kFee").dataset.aed,"Consent":"Parent/guardian confirmed"},[["Drawing",$("kDraw").files[0]]]);
     ok.style.color="var(--fg)";ok.textContent="Thank you. We've received the drawing, and you can follow this under My enquiries & orders. We'll WhatsApp you a secure payment link for "+$("kFee").dataset.aed+(uae()?", and the framed drawing reaches "+$("kTo").value.trim()+" 5 to 7 days after payment.":", and we'll confirm the shipping and delivery time to "+$("kCountry").value+" with it.")+" If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
+})();
+
+/* photo framing: the customer's own photo, printed and framed (or print only) */
+(function(){
+  const $=id=>document.getElementById(id);
+  const SIZES=[["A4","A4 (21 × 30 cm)",169,59,2500],["A3","A3 (30 × 42 cm)",249,79,3500],["40×50","40 × 50 cm",299,99,4000],["50×70","50 × 70 cm",399,139,5000],["60×80","60 × 80 cm",499,179,6000]];
+  const ZONE={A:["Saudi Arabia","Oman","Qatar","Bahrain","Kuwait"],B:["India","Sri Lanka","Pakistan","Bangladesh","Nepal","Maldives","Bhutan"],D:["United States","Canada","Australia","New Zealand"]};
+  const EU=["United Kingdom","Ireland","France","Germany","Italy","Spain","Portugal","Netherlands","Belgium","Luxembourg","Switzerland","Austria","Denmark","Sweden","Norway","Finland","Poland","Greece","Cyprus","Malta"];
+  const zoneOf=c=>EU.includes(c)?"C":Object.keys(ZONE).find(z=>ZONE[z].includes(c))||"E";
+  const uae=()=>$("pCountry").value==="UAE";
+  const frame=()=>document.querySelector('input[name="pf"]:checked').value;
+  const sz=()=>SIZES.find(x=>x[0]===$("pSize").value)||SIZES[0];
+  const unit=()=>{const p=(window.kalaiPhotoPrices||{})[sz()[0]]||{};return frame()==="none"?(p.print??sz()[3]):(p.framed??sz()[2])};
+  const ship=()=>{if(uae())return 0;const f=(window.kalaiShipZones||{})[zoneOf($("pCountry").value)];return f>0?+f:null};
+  const pm=a=>typeof moneyH==="function"?moneyH(a):"AED "+a;
+  const fee=()=>{const q=+$("pQty").value,u=unit(),sh=ship(),tot=u*q+(sh||0);
+    [...$("pSize").options].forEach(o=>{const z=SIZES.find(x=>x[0]===o.value),p=(window.kalaiPhotoPrices||{})[o.value]||{};o.textContent=`${z[1]} · ${frame()==="none"?"print "+(p.print??z[3]):"framed "+(p.framed??z[2])} Dhs`});
+    $("pBreak").innerHTML=`<div style="display:flex;justify-content:space-between"><span>${frame()==="none"?"Print":"Print + frame"} ${sz()[0]} × ${q}</span><span class="mono">${pm(u*q)}</span></div><div style="display:flex;justify-content:space-between"><span>${uae()?"Delivery in the UAE":"Shipping to "+$("pCountry").value}</span><span class="mono">${uae()?"included":sh===null?"we quote before you pay":pm(sh)}</span></div>`;
+    $("pFee").innerHTML=pm(tot)+(sh===null?" + shipping":"");$("pFee").dataset.aed="AED "+tot.toLocaleString("en-US")+(sh===null?" + shipping":"");
+    $("pMountBox").hidden=frame()==="none";$("pFrame").className="kframe "+(frame()==="wood"?"":frame()==="none"?"white":frame());resCheck()};
+  window.kalaiPhotoFee=fee;
+  $("pSize").innerHTML=SIZES.map(z=>`<option value="${z[0]}">${z[1]}</option>`).join("");
+  window.kalaiPhotoCountries=list=>{const s=$("pCountry"),v=s.value;s.innerHTML=list.map((c,i)=>`${i===2?"<option disabled>──────────</option>":""}<option value="${c.key.replace(/"/g,"&quot;")}">${c.name}</option>`).join("");s.value=v||"UAE";fee()};
+  if(window.kalaiCountries)window.kalaiPhotoCountries(window.kalaiCountries);
+  $("pCountry").addEventListener("change",()=>{$("pEmBox").hidden=!uae();$("pRegBox").hidden=uae();fee()});
+  ["pSize","pQty"].forEach(id=>$(id).addEventListener("change",fee));document.querySelectorAll('input[name="pf"]').forEach(x=>x.addEventListener("change",fee));
+  function resCheck(){const im=$("pMount").querySelector("img"),box=$("pRes");if(!im||!im.naturalWidth){box.hidden=true;return}
+    const long=Math.max(im.naturalWidth,im.naturalHeight),need=sz()[4];box.hidden=false;box.style.color=long>=need*0.7?"var(--ok)":"var(--kumkum)";
+    box.textContent=long>=need*0.7?`✓ Good for ${sz()[0]} (${im.naturalWidth} × ${im.naturalHeight} px).`:`This photo is small for ${sz()[0]} (${long} px; about ${need} is best): it may print soft. Choose a smaller size or send the original file.`}
+  $("pFile").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();
+    r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Your photo";im.onload=resCheck;$("pMount").replaceChildren(im)};r.readAsDataURL(f)});
+  fee();
+  $("photoForm").addEventListener("submit",e=>{e.preventDefault();const ok=$("pOk");ok.hidden=false;ok.style.color="var(--kumkum)";
+    const need=[...(uae()?[]:[["pRegion","the state, province or city"]]),["pFile","your photo"],["pAddr","the delivery address"],["pName","your name"],["pPhone","your mobile"]].filter(([id])=>id==="pFile"?!$(id).files.length:!$(id).value.trim()).map(x=>x[1]);
+    if(need.length){ok.textContent="Please add "+need.join(", ")+".";return}
+    if(!$("pRights").checked){ok.textContent="Please confirm the photo is yours or you have permission to print it.";return}
+    const f=$("pFile").files[0];if(!/^image\//.test(f.type||"image/")||f.size>25*1024*1024){ok.textContent="The photo must be an image (JPG or PNG) up to 25 MB.";return}
+    if(needSignIn(ok))return;
+    const sh=ship(),q=+$("pQty").value,fr=frame();
+    const url=sendEnquiry("Photo framing",{"Size":sz()[1],"Frame":fr==="none"?"Print only (no frame)":{black:"Black",white:"White",wood:"Natural wood"}[fr]+" frame"+($("pMat").checked?", white mount":""),"Copies":String(q),"Country":$("pCountry").value,[uae()?"Emirate":"State / city"]:uae()?$("pEmirate").value:$("pRegion").value.trim(),"Address":$("pAddr").value.trim(),"Delivery charge":uae()?"included":sh===null?"to quote":"AED "+sh,"Total":$("pFee").dataset.aed,"Note":$("pNote").value.trim(),"Name":$("pName").value.trim(),"Mobile":$("pPhone").value.trim(),"Rights":"Customer confirmed own photo / permission"},[["Photo",f]]);
+    ok.style.color="var(--fg)";ok.textContent="Thank you. We've received your photo, and you can follow this under My enquiries & orders. We'll send you a secure payment link for "+$("pFee").dataset.aed+(uae()?"; it's delivered 4 to 6 days after payment.":", with the shipping confirmed.")+" If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
 })();
 
 /* little artists around the world (illustrations) */

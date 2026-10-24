@@ -293,7 +293,7 @@ function openRates(back) {
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
        <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin-top:8px"><input type="checkbox" id="rIncl" style="width:auto" ${card.fixingIncluded ? 'checked' : ''}> Fixing (mount, glass, fitting) is included in my frame prices</label>
-       <h3 style="font-size:15px;margin:14px 0 4px">Printing (children's drawings sent as a photo)</h3>
+       <h3 style="font-size:15px;margin:14px 0 4px">Printing (customers' photos and children's drawings)</h3>
        <p class="muted" style="font-size:12px;margin:0 0 6px">Your price to print one copy on good matte / fine-art paper from the photo we send (we send the full-size file). Leave blank if you don't print.</p>
        <table class="rc"><thead><tr><th>Size</th><th>Print price</th></tr></thead><tbody>${PRINT_SIZES.map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>
        <h3 style="font-size:15px;margin:14px 0 4px">If you also deliver: your delivery charge to each emirate (optional)</h3>

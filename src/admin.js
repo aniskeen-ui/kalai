@@ -22,7 +22,7 @@ const STATUS = {
   RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', FRAMING: 'Being framed',
   SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
-const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop' };
+const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Photo framing' };
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
@@ -69,7 +69,7 @@ const hasArtist = (e) => e.kind === 'PRICE' || e.kind === 'COMMISSION';
 // default commission % when approving a seller. Each category's margin is also its target in Reports.
 const CATS = [['collection', 'Collection (artworks on the website)', 'markup on cost: Pricing tab and artwork price enquiries'], ['commission', 'Commissions (paintings and sketches to order)', 'markup on cost: commission price calculator'],
   ['gift', 'Little Artists', 'target margin, checked in Reports'], ['market', 'Crafts shop', 'default commission % for a new seller']];
-const CAT_OF = { PRICE: 'collection', COMMISSION: 'commission', GIFT: 'gift', MARKET: 'market' };
+const CAT_OF = { PRICE: 'collection', COMMISSION: 'commission', GIFT: 'gift', MARKET: 'market', PHOTO: 'gift' };
 const marginFor = (kind) => { const m = rates.margins?.[CAT_OF[kind] || 'collection']; return m != null ? m : rates.margin; };
 const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 const aed = (v, d = 0) => (v == null ? '–' : 'AED ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -394,6 +394,13 @@ function reportLine(e) {
     // Crafts shop: the maker's payout is the cost (shown in the Artist column); Kalai's courier when Kalai delivers.
     k = { artist: e.purchaseState === 'CANCELLED' ? 0 : Number(e.sellerAmount || 0), framing: 0, india: 0, customs: 0, local: e.deliveryBy === 'KALAI' && !String(e.refundAction || '').startsWith('CANCEL') ? Number(rates.local || 0) : 0 };
     note = 'crafts shop: maker payout in Artist';
+  } else if (e.kind === 'PHOTO') {
+    // Photo framing: print (+ frame unless print only) per copy, from Rates; UAE delivery included in the price.
+    const gd = parseDetails(e.details), sp = specOf(e, gd), big = !['A4', 'A3'].includes(sp.size);
+    const print = Number(sp.size === 'A4' ? rates.printA4 : rates.printA3) * (big ? 2 : 1);
+    const frm = sp.style === 'none' ? 0 : Number((sp.size === 'A4' ? rates.tiers.S : sp.size === 'A3' ? rates.tiers.M : rates.tiers.L)?.framing || 0);
+    k = { artist: 0, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(rates.local || 0) };
+    note = 'est. from Rates (print + frame)';
   } else if (e.kind === 'GIFT') {
     // Print (from the photo) + framing, per copy; A3 when the customer chose the large size.
     const gd = parseDetails(e.details), big = /A3|Large size/i.test(String(gd.Extras || ''));
@@ -578,7 +585,7 @@ function supplierSection(e) {
   // Each supplier's price for this order from their price list (frame style + size; destination and parcel size).
   const spec = specOf(e, parseDetails(e.details));
   // Little Artists: the frame shop prints the drawing too (print + frame, per copy).
-  const gift = e.kind === 'GIFT', copies = gift ? copiesOf(parseDetails(e.details)) : 1;
+  const gift = e.kind === 'GIFT' || e.kind === 'PHOTO', copies = gift ? copiesOf(parseDetails(e.details)) : 1;
   const framerCost = (card) => { const f = frameCost(card, spec); if (!gift) return f; const p = printCost(card, spec); return f == null || p == null ? null : Math.round((f + p) * copies * 100) / 100; };
   const costFor = (s, role) => (role === 'framer' ? framerCost(parseCard(s)) : deliveryCost(parseCard(s), e, spec, zoneOf));
   const row = (role, label, type) => {
@@ -884,7 +891,7 @@ function marketSection(e) {
 const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
 function giftAddress(e) {
   const d = parseDetails(e.details);
-  return e.kind === 'GIFT' && d['Address'] ? { address: d['Address'], emirate: String(d['Emirate'] || '').split(' (')[0] } : null;
+  return (e.kind === 'GIFT' || e.kind === 'PHOTO') && d['Address'] ? { address: d['Address'], emirate: String(d['Emirate'] || '').split(' (')[0] } : null;
 }
 function addressSection(e) {
   const g = giftAddress(e);
@@ -1458,7 +1465,7 @@ async function showDetail(e) {
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once ${esc(artistOf(e))} marks it <b>Sent to frame shop</b> (you can do it for them in ${artistPage(e)}).</span>` : ''}</div>
-        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^AED \d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : e.kind === 'GIFT' && /^AED [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
+        <div class="field"><label for="ePrice">Price (AED)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^AED \d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^AED [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
           ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: AED ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : 'AED 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
       ${addressSection(e)}

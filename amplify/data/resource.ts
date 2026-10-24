@@ -10,7 +10,7 @@ const schema = a.schema({
   Enquiry: a
     .model({
       ref: a.string().required(),
-      kind: a.enum(['PRICE', 'COMMISSION', 'GIFT', 'MARKET']),
+      kind: a.enum(['PRICE', 'COMMISSION', 'GIFT', 'MARKET', 'PHOTO']),
       title: a.string().required(),
       details: a.json(),
       customerName: a.string(),
@@ -414,6 +414,7 @@ const schema = a.schema({
       inrRateAt: a.string(),
       leadDefault: a.string(), // "10-15": ready-to-send days shown for works the artist has not set
       shipZones: a.string(),
+      photoPrices: a.string(), // Photo framing: JSON {size: {framed, print}} in AED (Settings)
       launchNote: a.string(), // pre-launch notice at the top of the website (empty = none)
       mailOff: a.string(), // customer emails switched off, e.g. "FRAMING,ARTIST_STARTED" (Settings → Customer emails) // JSON {A,B,C,D,E}: Little Artists shipping outside the UAE, Dhs per parcel by zone (blank = quoted)
       usdRound: a.integer(), // US$ prices on the website rounded to this many dollars (default 5)

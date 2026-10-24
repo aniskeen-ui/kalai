@@ -30,14 +30,16 @@ export function specOf(e, det) {
   const style = /black/.test(t) ? 'black' : /white/.test(t) ? 'white' : /walnut/.test(t) ? 'walnut' : /gold/.test(t) ? 'gold' : /oak|wood|natural/.test(t) ? 'oak' : /unframed|no frame/.test(t) ? 'none' : 'black';
   const m = String(det.Framing || det['Frame size'] || '').match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/);
   let size = m ? `${m[1]}×${m[2]}` : '';
+  // Photo framing: the size the customer picked ("A4 (21 × 30 cm)", "50 × 70 cm").
+  if (e.kind === 'PHOTO') { const z = String(det.Size || ''); const n = z.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/); size = /^A4/.test(z) ? 'A4' : /^A3/.test(z) ? 'A3' : n ? `${n[1]}×${n[2]}` : 'A4'; }
   if (!RC_SIZES.includes(size)) size = e.kind === 'GIFT' ? (/A3|Large size/i.test(`${det.Extras || ''}`) ? 'A3' : 'A4') : size || '40×50';
   return { style, size, small: SMALL.includes(size) };
 }
 
 // Little Artists: the child's drawing arrives as a photo, so the frame shop prints it (A4 / A3) before framing.
-export const PRINT_SIZES = ['A4', 'A3'];
+export const PRINT_SIZES = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']; // A4/A3: Little Artists; all: Photo Framing
 /** Copies to print and frame: 2 when the customer chose "a second framed copy". */
-export const copiesOf = (det) => (/second framed copy/i.test(`${det?.Extras || ''}`) ? 2 : 1);
+export const copiesOf = (det) => Math.max(1, Math.min(20, Number(det?.Copies) || (/second framed copy/i.test(`${det?.Extras || ''}`) ? 2 : 1)));
 /** Print price for this spec, or null when the card has none (or the size isn't printed). */
 export function printCost(card, spec) {
   const v = card.print?.[spec.size];

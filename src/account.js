@@ -13,6 +13,7 @@ import { autoPhones, countryRegionHtml, wireRegion, addressLine, COUNTRIES } fro
 // Every country for the Little Artists form (index.html).
 window.kalaiCountries = COUNTRIES;
 window.kalaiKidsCountries?.(COUNTRIES);
+window.kalaiPhotoCountries?.(COUNTRIES);
 import { cleanTitle } from './title.js';
 
 autoPhones();
@@ -29,6 +30,8 @@ let kuralSec = 10;
     if (st.inrPerAed) window.kalaiInrPerAed = Number(st.inrPerAed);
     window.kalaiRound = { usd: Number(st.usdRound) || 5, inr: Number(st.inrRound) || 50, up: st.roundUp === true, approx: st.approxSign !== false };
     try { window.kalaiShipZones = JSON.parse(st.shipZones || '{}') || {}; } catch { window.kalaiShipZones = {}; }
+    try { window.kalaiPhotoPrices = JSON.parse(st.photoPrices || '{}') || {}; } catch { window.kalaiPhotoPrices = {}; }
+    window.kalaiPhotoFee?.();
     window.kalaiLeadDefault = st.leadDefault || '';
     window.kalaiRedrawPrices?.();
     // Pre-launch notice (Settings): a quiet bar above the header while the shop is not fully open.
@@ -86,7 +89,7 @@ export const STATUS = {
   CANCELLED: 'Cancelled',
 };
 const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
-const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop' };
+const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Photo framing' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
 
 /* ---------- styles ---------- */
@@ -314,9 +317,9 @@ function rateBlock(e) {
   if (e.status !== 'DELIVERED') return '';
   const r = myReviews.get(e.id);
   if (r) return `<div class="rated">You rated this <span aria-label="${r.rating} out of 5">${starText(r.rating)}</span>. Thank you for your feedback.${r.published ? ' It is now on our website.' : ''}</div>`;
-  return `<button type="button" class="btn rate-open" data-rate="${esc(e.id)}">★ Rate your ${e.kind === 'GIFT' ? 'framed gift' : 'artwork'}</button>
+  return `<button type="button" class="btn rate-open" data-rate="${esc(e.id)}">★ Rate your ${e.kind === 'GIFT' ? 'framed gift' : e.kind === 'PHOTO' ? 'framed photo' : 'artwork'}</button>
   <form class="rate" data-id="${esc(e.id)}" novalidate hidden>
-    <b>How did we do? Rate your ${e.kind === 'GIFT' ? 'framed gift' : 'artwork'}</b>
+    <b>How did we do? Rate your ${e.kind === 'GIFT' ? 'framed gift' : e.kind === 'PHOTO' ? 'framed photo' : 'artwork'}</b>
     <div class="stars" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="false" aria-label="${n} star${n > 1 ? 's' : ''}" data-n="${n}">★</button>`).join('')}</div>
     <textarea name="comment" maxlength="600" placeholder="Tell us about the painting, the packing and delivery (optional)"></textarea>
     <label class="tick"><input type="checkbox" name="consent"> You may show my first name and this review on the Kalai Art House website.</label>
@@ -346,7 +349,7 @@ function wireRate(root, items) {
         const { data, errors } = await client.models.Review.create({
           enquiryId: e.id, ref: e.ref, firstName, rating,
           // Only a general label goes with the review (no child's name or commission details).
-          title: e.kind === 'GIFT' ? 'Little Artists framed gift' : e.kind === 'COMMISSION' ? 'Commissioned painting' : e.title,
+          title: e.kind === 'GIFT' ? 'Little Artists framed gift' : e.kind === 'PHOTO' ? 'Framed photo print' : e.kind === 'COMMISSION' ? 'Commissioned painting' : e.title,
           comment: String(f.comment.value || '').trim().slice(0, 600), consent: f.consent.checked,
         });
         if (errors?.length) throw new Error(errors[0].message);
@@ -368,9 +371,9 @@ function cancelTerms(e) {
   const price = Number(e.quotedPrice || 0);
   if (['RECEIVED', 'PRICE_SENT'].includes(st)) return { type: 'FREE', due: 0, text: "Nothing has been paid, so there's nothing to refund. Your enquiry is cancelled straight away." };
   if (['PAID', 'FRAMING'].includes(st)) {
-    const started = e.kind === 'GIFT' ? st === 'FRAMING' : !!e.artistStartedAt || st === 'FRAMING';
+    const started = e.kind === 'GIFT' || e.kind === 'PHOTO' ? st === 'FRAMING' : !!e.artistStartedAt || st === 'FRAMING';
     return started
-      ? { type: 'HALF', due: Math.round(price * 50) / 100, text: e.kind === 'GIFT' ? `Framing has started, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>.` : `The artist started your work${e.artistStartedAt ? ` on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>. The rest covers the artist's time.` }
+      ? { type: 'HALF', due: Math.round(price * 50) / 100, text: e.kind === 'GIFT' || e.kind === 'PHOTO' ? `Framing has started, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>.` : `The artist started your work${e.artistStartedAt ? ` on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>. The rest covers the artist's time.` }
       : { type: 'FULL', due: price, text: `The work hasn't started yet, so you get a <b>full refund of ${aedTxt(price)}</b>.` };
   }
   return null;
@@ -723,9 +726,10 @@ async function save({ ref, subject, fields, files }) {
     }).result;
     fileKey = res.path;
   }
-  const kind = subject.startsWith('Price') || subject.startsWith('Artwork order') ? 'PRICE' : subject.startsWith('Commission') ? 'COMMISSION' : 'GIFT';
+  const kind = subject.startsWith('Price') || subject.startsWith('Artwork order') ? 'PRICE' : subject.startsWith('Commission') ? 'COMMISSION' : subject.startsWith('Photo framing') ? 'PHOTO' : 'GIFT';
   const title = kind === 'PRICE' ? (fields['Artwork'] || 'Price enquiry').split(' (')[0]
     : kind === 'COMMISSION' ? `Commission: ${fields['Subject'] || ''} (${fields['Style'] || ''})`
+    : kind === 'PHOTO' ? `Photo framing: ${fields['Size'] || ''}${fields['Frame'] ? `, ${fields['Frame']}` : ''}`
     : `Little Artists gift for ${fields['Gift for'] || ''}`;
   const { errors } = await client.models.Enquiry.create({
     ref, kind, title,
