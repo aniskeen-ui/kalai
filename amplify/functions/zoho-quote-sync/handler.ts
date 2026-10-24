@@ -1125,6 +1125,17 @@ async function artistRows(enquiries: Img[], admin = false) {
   if (process.env.PRODUCT_TABLE && enquiries.some((e) => str(e, 'kind') === 'PRICE')) {
     for (const p of await scanAll(process.env.PRODUCT_TABLE)) if (str(p, 'code') && str(p, 'imageKey')) pics.set(str(p, 'code'), str(p, 'imageKey'));
   }
+  // Where to send the finished work: the frame shop given the framing job, else (when there is only one) our frame shop.
+  const shops = new Map<string, Img>();
+  if (process.env.SELLER_TABLE) for (const p of await scanAll(process.env.SELLER_TABLE)) if (str(p, 'type') === 'FRAMER' && str(p, 'status') === 'APPROVED') shops.set(str(p, 'id'), p);
+  const onlyShop = shops.size === 1 ? [...shops.values()][0] : undefined;
+  const shopOf = (c: Img | undefined) => {
+    const fj = parseJobs(str(c, 'supplierJobs')).framer;
+    const p = (fj?.supplierId && shops.get(fj.supplierId)) || (fj ? undefined : onlyShop);
+    if (!p) return fj ? { name: fj.name, contact: '', phone: '', address: '', assigned: true } : null;
+    return { name: str(p, 'business'), contact: str(p, 'contactName'), phone: str(p, 'phone'),
+      address: [str(p, 'address'), str(p, 'city'), str(p, 'emirate'), str(p, 'country') || 'UAE'].filter(Boolean).join(', '), assigned: !!fj };
+  };
   return enquiries
     .map((e) => {
       const c = costing.get(str(e, 'id'));
@@ -1162,6 +1173,7 @@ async function artistRows(enquiries: Img[], admin = false) {
         hasPO: !!str(e, 'zohoPOId'),
         onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
         rework: reworkForArtist(e, c),
+        frameShop: shopOf(c),
         priceBy: str(c, 'artistBy'),
         ...artistStage(e, c),
       };

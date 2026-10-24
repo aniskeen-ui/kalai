@@ -192,6 +192,13 @@ function card(x) {
 
 let isAdmin = false; // Kalai Art House signed in on Siva's page: may correct a courier / AWB after it was sent.
 const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
+/** The frame shop the finished work goes to: name, contact and address (from the framing job, or our only frame shop). */
+function shopBox(f) {
+  if (!f) return `<div class="shopbox muted">Kalai Art House will confirm the frame shop's address: please ask on WhatsApp before sending.</div>`;
+  return `<div class="shopbox"><div class="muted" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Send it to</div>
+    <div><b>${esc(f.name)}</b>${f.contact ? ` · ${esc(f.contact)}` : ''}${f.phone ? ` · <a href="tel:${esc(f.phone.replace(/[^+\d]/g, ''))}">${esc(f.phone)}</a>` : ''}</div>
+    ${f.address ? `<div>${esc(f.address)}</div>` : '<div class="muted">Address not on file yet: ask Kalai Art House.</div>'}</div>`;
+}
 function progressBlock(x) {
   if (!x.ordered) return '';
   // During a rework the original steps are done: the Rework card above has the buttons.
@@ -207,6 +214,7 @@ function progressBlock(x) {
     : p === 'STARTED' ? `<button type="button" class="btn" data-step="FINISHED">It's finished</button>`
     : '';
   const lockedShip = p === 'SHIPPED' && !x.editShip;
+  const shop = p === 'FINISHED' || p === 'SHIPPED' ? shopBox(x.frameShop) : '';
   const ship = lockedShip ? (isAdmin ? `<div><button type="button" class="linkbtn" data-fixship="${esc(x.id)}">Correct courier / AWB (Kalai Art House only)</button></div>` : '')
     : p === 'FINISHED' || p === 'SHIPPED' ? `<div class="aform">
       <div class="field"><label for="sc-${esc(x.id)}">Courier to the frame shop</label><select id="sc-${esc(x.id)}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${x.artistCourier === c || (c === 'Other' && x.artistCourier && !COURIERS.includes(x.artistCourier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>
@@ -217,7 +225,7 @@ function progressBlock(x) {
   return `<div class="progress" id="pg-${esc(x.id)}">
     <ol>${step('STARTED', 'Started', x.startedAt)}${step('FINISHED', 'Finished', x.finishedAt)}${step('SHIPPED', 'Sent to frame shop', x.shippedAt)}${x.artistAwb ? ` <li class="muted" style="list-style:none">${esc(x.artistCourier)} · AWB ${esc(x.artistAwb)}</li>` : ''}</ol>
     ${x.progressBy && x.progressBy !== 'Siva' ? `<div class="muted" style="font-size:12px">Last update made for you by Kalai Art House.</div>` : ''}
-    ${next}${ship}
+    ${next}${shop}${ship}
     <div class="ok" id="pm-${esc(x.id)}" role="status"></div>
   </div>`;
 }
@@ -282,6 +290,7 @@ function reworkBlock(x) {
       <div class="field"><label for="ra-${id}">AWB / tracking no.</label><input id="ra-${id}" value="${esc(r.awb)}"></div>
       <div class="field"><button type="button" class="btn" data-rw="SENT">${r.stage === 'SENT' ? 'Update shipping' : 'Sent to frame shop'}</button></div>
     </div>` : '';
+  const rwShop = !ready && (r.stage === 'FINISHED' || r.stage === 'SENT') ? shopBox(x.frameShop) : '';
   const priceLocked = r.billed || ready && r.priceInr != null;
   return `<div class="progress rework" id="rw-${id}">
     <div><b>Rework needed:</b> the work arrived damaged at the customer. Kalai Art House asks you for ${kind}.${r.note ? ` <span class="muted">“${esc(r.note)}”</span>` : ''}</div>
@@ -292,7 +301,7 @@ function reworkBlock(x) {
     ${r.priceBy && r.priceBy !== 'Siva' && r.priceInr != null ? '<div class="muted" style="font-size:12px">Rework price entered for you by Kalai Art House.</div>' : ''}
     ${inbound}
     <ol>${repair ? step('Received', r.receivedAt) : ''}${step('Rework started', r.startedAt)}${step('Rework finished', r.finishedAt)}${step('Sent to frame shop', r.sentAt)}${step('Checked and ready (Kalai Art House)', r.readyAt)}${r.awb ? ` <li class="muted" style="list-style:none">${esc(r.courier)} · AWB ${esc(r.awb)}</li>` : ''}</ol>
-    ${next}${ship}
+    ${next}${rwShop}${ship}
     ${!ready && r.stage === 'SENT' && !x.editRwShip && isAdmin ? `<div><button type="button" class="linkbtn" data-fixrwship="${id}">Correct courier / AWB (Kalai Art House only)</button></div>` : ''}
     ${r.priceInr > 0 ? `<div class="muted" style="font-size:13px">${r.paid ? `Rework paid to you · ref ${esc(r.paidRef)}` : r.billed ? `Your rework invoice ${esc(r.invoiceNo)} received · payment pending` : 'Send your rework invoice to Kalai Art House when it is done.'}</div>` : ''}
     <div class="ok" id="rwm-${id}" role="status"></div>
