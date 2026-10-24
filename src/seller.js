@@ -1,6 +1,7 @@
 // Seller portal: sign up, apply, and (once approved) list products with a price calculator.
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
 import { openPdf } from './pdf.js';
+import { wireFind } from './find.js';
 import './amplify-config.js';
 import './skin.js';
 import {
@@ -331,6 +332,7 @@ async function imgUrl(key) {
 }
 const keysOf = (l) => { try { return JSON.parse(l.imageKeys || '[]'); } catch { return []; } };
 
+let lFindRun = null;
 async function drawList() {
   if (!listings.length) { $('lList').innerHTML = `<p class="muted">No ${profile?.type === 'ARTIST' ? 'artworks' : 'products'} yet. Click <b>New listing</b> to add your first one.</p>`; return; }
   listings.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -355,6 +357,7 @@ async function drawList() {
       try { const r = await call(b.dataset.act, { id: l.id }); Object.assign(l, r.listing); drawList(); } catch (ex) { alertRow(b, ex.message); b.disabled = false; }
     };
   });
+  (lFindRun ||= wireFind($('lFind'), '#lList article.lrow'))();
 }
 function alertRow(b, msg) { const p = document.createElement('div'); p.className = 'err'; p.style.fontSize = '12px'; p.textContent = msg; b.parentElement.appendChild(p); }
 

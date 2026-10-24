@@ -4,6 +4,7 @@ import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
+import { wireFind } from './find.js';
 import { SUGGEST } from './suggest.js';
 
 const client = generateClient();
@@ -86,7 +87,7 @@ async function renderWorks(force = false) {
   $('cWorks').textContent = todo ? `(${todo})` : '';
   if (filter !== 'WORKS') return;
   if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
-  $('list').innerHTML = `<p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>
+  $('list').innerHTML = `<div style="display:flex;gap:8px;align-items:center"><input id="wFind" type="search" placeholder="Find a work: title, AT-…, size" aria-label="Find a work" style="max-width:320px"><span class="muted find-count" style="font-size:12px"></span></div><p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>
     ${works.some((w) => !w.named) ? '<div style="display:flex;gap:10px;align-items:center;margin:0 0 6px"><button type="button" class="btn small" id="saveAllW">Save all titles shown</button><span class="muted" id="saveAllMsg" style="font-size:12px">Saves every work below that has a title (and price, if given).</span></div>' : ''}`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
@@ -97,6 +98,7 @@ async function renderWorks(force = false) {
         <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description || (!w.named && SUGGEST[w.code] ? SUGGEST[w.code][2] : ''))}</textarea></div>
         <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? `<span class="wdone">✓ Named${w.artistPrice != null ? ' · priced' : ''}</span>` : ''}</span></div>
       </form></article>`).join('');
+  wireFind($('wFind'), '.wcard');
   document.querySelectorAll('.wcard img[data-key]').forEach(async (img) => {
     try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no picture */ }
   });

@@ -213,12 +213,15 @@ const picked = new Set();
 let bulkNote = '';
 
 function drawList() {
+  const fq = ($('pcFind')?.value || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
   const rows = works.filter((w) => filter === 'ALL' || stateOf(w)[0] === filter || (filter === 'TODO' && stateOf(w)[0] === 'CHANGED'))
+    .filter((w) => !fq.length || fq.every((q) => `${w.title} ${w.code} ${w.artist || 'Siva Raja'} ${w.size} ${w.kind}`.toLowerCase().includes(q)))
     .sort((a, b) => String(a.code).localeCompare(String(b.code)));
   const counts = Object.fromEntries(['TODO', 'LIVE', 'WAIT'].map((k) => [k, works.filter((w) => stateOf(w)[0] === k || (k === 'TODO' && stateOf(w)[0] === 'CHANGED')).length]));
   $('pcTabs').innerHTML = [['TODO', 'To approve'], ['LIVE', 'On website'], ['WAIT', 'Waiting for artist price'], ['ALL', 'All']]
     .map(([k, l]) => `<button type="button" data-f="${k}" aria-pressed="${k === filter}">${l}${k !== 'ALL' ? ` <b>${counts[k]}</b>` : ''}</button>`).join('');
   $('pcTabs').querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => { filter = b.dataset.f; openId = null; drawList(); }; });
+  if ($('pcFind') && !$('pcFind').dataset.wired) { $('pcFind').dataset.wired = '1'; $('pcFind').addEventListener('input', () => { openId = null; drawList(); }); }
   if (!rows.length) { $('pcList').innerHTML = `${bulkNote ? `<p class="ok">${esc(bulkNote)}</p>` : ''}<p class="muted">${filter === 'TODO' ? 'Nothing to approve. Works appear here once the artist gives his price under "My works & prices".' : 'Nothing here.'}</p>`; return; }
   for (const id of [...picked]) if (!rows.some((w) => w.id === id)) picked.delete(id);
   $('pcList').innerHTML = `<div class="pc-bulk">

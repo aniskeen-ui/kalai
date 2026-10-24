@@ -55,7 +55,7 @@ async function load() {
 
 function filtered() {
   const f = $('cgFilter').value, q = $('cgSearch').value.trim().toLowerCase();
-  return items.filter((p) => (!f || state(p) === f) && (!q || `${p.title} ${p.size} ${p.description}`.toLowerCase().includes(q)));
+  return items.filter((p) => (!f || state(p) === f) && (!q || q.split(/\s+/).every((w) => `${p.title} ${p.code} ${p.artist || 'Siva Raja'} ${p.size} ${p.medium} ${p.description}`.toLowerCase().includes(w))));
 }
 
 function draw() {

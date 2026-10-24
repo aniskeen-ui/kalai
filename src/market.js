@@ -1,4 +1,5 @@
 // Sellers tab (Order Management): approve sellers (commission % + Kalai delivery fee) and approve their listings.
+import { wireFind } from './find.js';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 
@@ -96,7 +97,9 @@ function draw() {
   }
   $('mkBody').innerHTML = html;
   wireCards();
+  (findRun ||= wireFind($('mkFind'), '#mkBody article.mk-card, #mkBody tr[data-seller]'))();
 }
+let findRun = null;
 
 // ---------- Artist prospects (outreach list): not artists yet, never shown on the website ----------
 const OUTREACH = ['To contact', 'Contacted', 'Replied - interested', 'Not interested', 'No reply'];

@@ -284,6 +284,7 @@ footer p{margin:2px 0}
 .dhs{font-style:normal;margin-right:.12em}
 .cur-sel{white-space:nowrap;background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;cursor:pointer;width:auto}.cur-pick{position:relative}.cur-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.18);display:grid;min-width:120px;overflow:hidden;z-index:30}.cur-menu button{background:none;border:0;color:inherit;font:inherit;font-size:14px;text-align:left;padding:9px 14px;cursor:pointer;white-space:nowrap}.cur-menu button:hover{background:var(--sunk)}.pprice .note{font-family:var(--body);font-size:13px}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0}
+.art-find{max-width:300px;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--fg);font:inherit;font-size:14px}
 .otabs,.itabs-bar{display:flex;gap:4px;border-bottom:1px solid var(--line)}
 .otabs button,.itabs-bar button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:8px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
 .otabs button[aria-selected="true"],.itabs-bar button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--gold)}
@@ -402,6 +403,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
   <div class="sec-head">
     <div><h2>The collection</h2><p>Every piece is one of a kind and signed. Tap "Ask for price" on any work and we reply on WhatsApp with the price, framing options and delivery date.</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <input id="artFind" class="art-find" type="search" placeholder="Search paintings: title, artist, AT-…" aria-label="Search paintings">
     <select id="artistSel" class="artist-sel" aria-label="Filter by artist" hidden><option value="all">All artists</option></select>
     <div class="tabs" role="group" aria-label="Filter collection">
       <button data-f="all" aria-pressed="true">All</button>
@@ -539,6 +541,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
   <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--kumkum);font-weight:700">Framed Prints</div>
   <h2 style="margin-top:6px">Ready to hang: framed fine-art prints</h2>
   <p class="lead" style="max-width:760px">Photographs from our studio, printed on matte archival paper, mounted and framed in Dubai. Choose the size and frame; delivery in the UAE is included. These are prints, not original paintings.</p>
+  <input id="printFind" class="art-find" type="search" placeholder="Search prints: title, artist" aria-label="Search prints" style="margin:0 0 14px">
   <div class="grid" id="printGrid"><p class="note">New prints are coming soon.</p></div>
 </div></section>
 <section id="artist"><div class="wrap" style="max-width:1100px">
@@ -744,7 +747,8 @@ document.addEventListener("click",async e=>{const b=e.target.closest("[data-bio]
 });
 function drawGrid(){
   const g=document.getElementById("grid");g.innerHTML="";
-  const list=PRODUCTS.concat(ARTWORKS).filter(p=>(filter==="all"||p.kind===filter)&&(subj==="all"||p.subject===subj)&&(artistF==="all"||(p.artist||"Siva Raja")===artistF));
+  const fq=(document.getElementById("artFind")?.value||"").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const list=PRODUCTS.concat(ARTWORKS).filter(p=>(filter==="all"||p.kind===filter)&&(subj==="all"||p.subject===subj)&&(artistF==="all"||(p.artist||"Siva Raja")===artistF)&&(!fq.length||fq.every(q=>[p.name,p.code,SHOW_ARTIST_NAMES?p.artist||"Siva Raja":"",p.size,p.medium,p.desc,p.category].join(" ").toLowerCase().includes(q))));
   document.getElementById("countNote").textContent=list.length+(list.length===1?" artwork":" artworks");
   list.forEach(p=>{
     const card=document.createElement("article");card.className="card";
@@ -877,6 +881,7 @@ window.kalaiShowCatalogue=function(list){
   PRODUCTS.forEach(p=>{p.name=cleanName(p.name);const m=String(p.size||"").match(/(\d+)\s*[×x]\s*(\d+)/);p.wcm=m?+m[1]:30;p.hcm=m?+m[2]:40;if(!SUBJECTS[p.subject])p.subject="land";});
   drawChips();drawArtistSel();drawGrid();
 };
+document.getElementById("artFind")?.addEventListener("input",()=>drawGrid());
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawGrid()});
 document.addEventListener("click",e=>{const bp=e.target.closest("[data-buyprint]");if(bp){closeAll();setTimeout(()=>window.kalaiOpenPrint&&window.kalaiOpenPrint(bp.dataset.buyprint),50);return}const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
 
@@ -1243,13 +1248,16 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   const from=it=>Math.min(...sizesOf(it).map(z=>price(z,"black",it)));
   const draw=()=>{const g=document.getElementById("printGrid");if(!g)return;
     if(!PRINTS.length){g.innerHTML='<p class="note">New prints are coming soon.</p>';return}
-    g.innerHTML=PRINTS.map(p=>`<article class="card"><button class="frame" type="button" data-print="${esc2(p.id)}" aria-label="View ${esc2(p.name)}"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" loading="lazy"></button>
+    const fq=(document.getElementById("printFind")?.value||"").trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const shown=PRINTS.filter(p=>!fq.length||fq.every(q=>[p.name,p.code,p.painting&&SHOW_ARTIST_NAMES?p.artist:"",p.desc].join(" ").toLowerCase().includes(q)));
+    if(!shown.length){g.innerHTML='<p class="note">No prints match your search.</p>';return}
+    g.innerHTML=shown.map(p=>`<article class="card"><button class="frame" type="button" data-print="${esc2(p.id)}" aria-label="View ${esc2(p.name)}"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" loading="lazy"></button>
       <div class="kind">${p.painting?"Framed print of a painting":"Framed print"}</div><h3>${esc2(p.name)}</h3>${p.painting&&SHOW_ARTIST_NAMES?`<div class="meta">by ${esc2(p.artist)}</div>`:""}${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
       <div class="row"><span class="price"><small style="font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">from </small>${moneyH(from(p))}</span><button class="add" type="button" data-print="${esc2(p.id)}">View details</button></div></article>`).join("");
     g.querySelectorAll("[data-print]").forEach(b=>b.onclick=()=>openPrint(PRINTS.find(x=>x.id===b.dataset.print)));};
   window.kalaiShowPrints=list=>{PRINTS=list||[];draw();
     const m=location.hash.match(/^#print-(.+)$/);if(m){const p=PRINTS.find(x=>String(x.id)===decodeURIComponent(m[1]));if(p)openPrint(p)}};
-  window.kalaiPhotoFee=draw;
+  window.kalaiPhotoFee=draw;document.getElementById("printFind")?.addEventListener("input",draw);
   window.kalaiOpenPrint=id=>openPrint(PRINTS.find(x=>String(x.id)===String(id)));
   window.kalaiPrintInfo=id=>{const it=PRINTS.find(x=>String(x.id)===String(id));if(!it)return null;return{from:from(it),sizes:sizesOf(it).map(z=>[z[1],price(z,"black",it),price(z,"none",it)])}};
   function openPrint(p){if(!p)return;const SZ=sizesOf(p);const box=document.getElementById("modalBox");box.className="box wide";
