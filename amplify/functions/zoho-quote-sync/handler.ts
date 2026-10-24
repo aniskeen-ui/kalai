@@ -3234,7 +3234,8 @@ async function artistWorks(ev: ApiEvent) {
   const d = parseData(ev.arguments.data);
   const ptab = process.env.ARTPRICE_TABLE;
   if (action === 'list') {
-    const items = (await scanAll(table)).filter((x) => str(x, 'status') !== 'HIDDEN' && str(x, 'imageKey'));
+    // Siva's own works only: works by portal artists (artistId set) are priced and named in their own portal.
+    const items = (await scanAll(table)).filter((x) => str(x, 'status') !== 'HIDDEN' && str(x, 'imageKey') && !str(x, 'artistId'));
     const prices = new Map(ptab ? (await scanAll(ptab)).map((x) => [str(x, 'productId'), x] as const) : []);
     return {
       works: items.map((x) => { const pr = prices.get(str(x, 'id')); return { id: str(x, 'id'), title: str(x, 'title'), kind: str(x, 'kind'), size: str(x, 'size'), description: str(x, 'description'), status: str(x, 'status'), imageKey: str(x, 'imageKey'), named: str(x, 'named'), code: str(x, 'code'), leadDays: num(x, 'leadDays'), leadMax: num(x, 'leadMax'), artistPrice: num(pr, 'artistPrice'), currency: str(pr, 'currency') || 'INR' }; })
@@ -3248,6 +3249,7 @@ async function artistWorks(ev: ApiEvent) {
     if (!priceOnly && title.length < 2) throw new Error('Give the work a title (2 to 80 letters).');
     const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
     if (!got.Item) throw new Error('Work not found');
+    if (str(got.Item as Img, 'artistId')) throw new Error("This work belongs to another artist: they name and price it in their own portal.");
     const set: Record<string, string> = priceOnly ? { updatedAt: new Date().toISOString() } : { title, named: `${actor(ev)} ${new Date().toISOString()}`, updatedAt: new Date().toISOString() };
     const size = txt(d.size, 40), description = txt(d.description, 1000);
     // "3", "0" or a range "10-15" (days)
