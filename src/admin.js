@@ -1328,7 +1328,11 @@ function showFlow(e, d) {
   const slot = $('flowSlot'); if (!slot) return;
   if (!e) { slot.hidden = true; slot.innerHTML = ''; return; }
   slot.hidden = false;
-  slot.innerHTML = `<div class="flowhead"><h3>✨ Document flow</h3><span class="muted mono" style="font-size:12px">${esc(e.ref)} · ${esc(e.customerName || '')}</span></div>${d ? docFlow(e, d) : '<div class="muted" style="font-size:13px">Press <b>Check Zoho</b> on the order to draw its documents.</div>'}`;
+  let fp = 'pastel'; try { fp = localStorage.getItem('kalaiFlowLook') || 'pastel'; } catch { /* storage blocked */ }
+  slot.dataset.fp = fp;
+  const looks = [['dusk', 'Dusk', 'linear-gradient(135deg,#3b3566,#2e5a55)'], ['pastel', 'Pastel', 'linear-gradient(135deg,#e6dcff,#d6f3e6)'], ['sand', 'Sand', 'linear-gradient(135deg,#f4e3c4,#dfeccb)']];
+  slot.innerHTML = `<div class="flowhead"><h3>✨ Document flow</h3><span class="fp-pick" title="Choose the look">Look ${looks.map(([k, n, g]) => `<button type="button" data-fp="${k}" aria-pressed="${k === fp}" title="${n}" style="background:${g}"></button>`).join('')}</span><span class="muted mono" style="font-size:12px;margin-left:auto">${esc(e.ref)} · ${esc(e.customerName || '')}</span></div>${d ? docFlow(e, d) : '<div class="muted" style="font-size:13px">Press <b>Check Zoho</b> on the order to draw its documents.</div>'}`;
+  slot.querySelectorAll('[data-fp]').forEach((b) => { b.onclick = () => { slot.dataset.fp = b.dataset.fp; try { localStorage.setItem('kalaiFlowLook', b.dataset.fp); } catch { /* ignore */ } slot.querySelectorAll('.fp-pick [data-fp]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }; });
 }
 function docsList(e) {
   const raw = costings.get(e.id)?.zohoDocs;
