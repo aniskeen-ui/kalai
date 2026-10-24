@@ -50,6 +50,9 @@ export async function showSettings() {
       <div class="field" style="max-width:720px"><label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-launchOn" style="width:auto"> Show a notice at the top of the website</label>
         <input id="st-launchNote" maxlength="200" placeholder="${LAUNCH_DEF}">
         <div class="muted" style="font-size:12px">Blank text = the suggested one. Untick on launch day (when Zoho and Ziina test modes are off).</div></div>
+      <h3 style="margin:0;font-size:17px">Order screen layout (Order Management)</h3>
+      <div class="field" style="max-width:640px"><label for="st-layout">How an order opens in Orders</label><select id="st-layout" style="max-width:340px"><option value="original">Original (list left, details right)</option><option value="a">A · Tabs (full width, action strip on top)</option><option value="b">B · Dashboard (three columns, sticky action panel)</option><option value="c">C · Journey (timeline, action panel on the right)</option></select>
+        <span class="muted" style="font-size:12px">Choosing one switches this browser straight away so you can try it on a few orders; Save settings makes it the layout for everyone.</span></div>
       <h3 style="margin:0;font-size:17px">Website theme</h3>
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=green" target="_blank" rel="noopener">preview 2. Monda theme</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview 1. Original theme</a> · <a href="/?look=auto" target="_blank" rel="noopener">end preview</a>. A preview changes only your own browser.</div></div>
@@ -126,6 +129,7 @@ export async function showSettings() {
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? f.def ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
+    { let cur = row?.orderLayout || 'original'; try { cur = localStorage.getItem('kalaiOrderLayout') || cur; } catch { /* */ } $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value); }
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
     $('st-usdRound').value = String(row?.usdRound || 5);
@@ -165,6 +169,8 @@ async function save() {
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
+  rec.orderLayout = $('st-layout').value;
+  window.kalaiSetLayout?.(rec.orderLayout);
   const inr = Number($('st-inr').value);
   if (!(inr >= 1 && inr <= 100)) { $('stMsg').textContent = 'Rupees per dirham: enter a number like 24.'; return; }
   rec.inrPerAed = inr;

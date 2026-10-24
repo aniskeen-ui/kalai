@@ -71,6 +71,47 @@ td.mono{font-family:var(--mono);font-size:13px}
 .pill.DELIVERED{background:var(--ok);color:#fff}
 .pill.PRICE_SENT,.pill.PAID{background:var(--gold-soft)}
 .detail{display:grid;gap:14px;position:sticky;top:12px}
+/* Order screen layouts (Settings → Order screen layout) */
+.lay-act{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:10px 14px;align-items:end;background:var(--sunk);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.lay-act > .two{grid-column:1/2}.lay-act > .field{grid-column:2/3}.lay-act > #eSave{grid-column:3/4;align-self:end;white-space:nowrap}
+.lay-act > #autoHint,.lay-act > #saveMsg,.lay-act > #waLinks{grid-column:1/-1}
+.lay-act textarea{min-height:44px}
+@media (max-width:900px){.lay-act{grid-template-columns:1fr}.lay-act > *{grid-column:1/-1!important}}
+.lay-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.lay-tabs button{border:0;background:none;color:var(--muted);font:inherit;font-weight:600;padding:9px 12px;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.lay-tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--gold)}
+.lay-tabs b{font-size:11px;background:var(--kumkum);color:#fff;border-radius:999px;padding:1px 6px}
+.lay-pane{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start}
+.lay-pane > *{min-width:0}
+.lay-head{display:grid;gap:8px}
+.lay-back{display:flex}
+.desk[data-layout="a"].open{grid-template-columns:1fr}
+.desk[data-layout="a"].open > .deskL{display:none}
+.desk[data-layout="a"].open > .detail{position:static}
+.desk[data-layout="b"]{grid-template-columns:1fr}
+.desk[data-layout="b"] > .deskL > .tablewrap{max-height:240px;min-height:120px}
+.desk[data-layout="b"] > .detail{position:static}
+.lay-grid3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(260px,330px);gap:14px;align-items:start}
+.lay-grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:14px;align-items:start}
+.lay-col{display:grid;gap:12px;min-width:0;align-content:start}
+.lay-side{position:sticky;top:10px}
+.lay-side .two{grid-template-columns:1fr}.lay-side .lay-act{grid-template-columns:1fr}.lay-side .lay-act > *{grid-column:1/-1!important}
+@media (max-width:1100px){.lay-grid3{grid-template-columns:1fr 1fr}.lay-grid3 > .lay-side{grid-column:1/-1;position:static}}
+@media (max-width:760px){.lay-grid3,.lay-grid2{grid-template-columns:1fr}.lay-side{position:static}}
+.desk[data-layout="c"]{grid-template-columns:minmax(220px,300px) minmax(0,1fr)}
+.desk[data-layout="c"] > .detail{position:static}
+.desk[data-layout="c"] #rows td:nth-child(1),.desk[data-layout="c"] #rows td:nth-child(2),.desk[data-layout="c"] thead th:nth-child(2),.desk[data-layout="c"] #rows td:nth-child(3),.desk[data-layout="c"] #rows td:nth-child(5),.desk[data-layout="c"] #rows td:nth-child(7),
+.desk[data-layout="c"] thead th:nth-child(1),.desk[data-layout="c"] thead th:nth-child(3),.desk[data-layout="c"] thead th:nth-child(5),.desk[data-layout="c"] thead th:nth-child(7){display:none}
+.desk[data-layout="c"] > .deskL > .flowcard{display:none}
+@media (max-width:900px){.desk[data-layout="c"]{grid-template-columns:1fr}}
+.lay-journey{display:grid;gap:0;padding:12px 14px}
+.lay-journey .lj{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px;align-items:start}
+.lay-journey .lj i{width:12px;height:12px;border-radius:50%;border:2px dashed var(--line);margin-top:3px}
+.lay-journey .lj.done i{background:var(--ok);border:0}
+details.lay-acc{border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+details.lay-acc > summary{cursor:pointer;padding:10px 12px;font-weight:700}
+details.lay-acc[open]{padding:0 12px 12px;display:grid;gap:10px}
+details.lay-acc[open] > summary{margin:0 -12px}
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:14px;margin:0}
 .kv dt{color:var(--muted)}
 .kv dd{margin:0;overflow-wrap:anywhere}

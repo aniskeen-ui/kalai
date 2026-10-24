@@ -454,6 +454,7 @@ const schema = a.schema({
       kidsTitle: a.string(),
       kidsText: a.string(), // paragraphs separated by a blank line
       licencePcts: a.string(), // JSON {WEB, MEDIA, COMMERCIAL}: image licence price as % of the artwork's price
+      orderLayout: a.string(), // Order Management order screen: original | a (tabs) | b (dashboard) | c (journey)
       instalments: a.string(), // '' (off) | Tabby | Tamara: shows "4 interest-free payments" on the website
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),

@@ -1516,7 +1516,7 @@ function zohoPanel(e) {
   const st = e.zohoState || '';
   const color = st === 'PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
   const icon = st === 'PAID' ? '✓' : st === 'ERROR' ? '✗' : st === 'TEST' ? '◌' : '•';
-  return `<div class="card" style="padding:12px 14px;display:grid;gap:6px;background:var(--sunk)">
+  return `<div class="card" id="zohoBox" style="padding:12px 14px;display:grid;gap:6px;background:var(--sunk)">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <b style="color:${color}">${icon} ${esc(ZOHO_LABEL[st] || 'Zoho Books')}</b>
       <span class="muted" style="font-size:12px;margin-right:auto">${esc(when(e.zohoAt))}</span>
@@ -1534,7 +1534,7 @@ function ziinaLine(e) {
   if (!e.ziinaIntentId && !e.ziinaMessage) return '';
   const paid = !!e.ziinaPaidAt && e.paymentMethod === 'ZIINA';
   const refund = e.ziinaRefundId ? ` · refund ${esc(e.ziinaRefundState || 'pending')}` : '';
-  return `<div class="card" style="padding:10px 14px;display:grid;gap:4px;background:var(--sunk);font-size:13px">
+  return `<div class="card" id="ziinaCard" style="padding:10px 14px;display:grid;gap:4px;background:var(--sunk);font-size:13px">
     <b style="color:${paid ? 'var(--ok)' : 'var(--fg)'}">${paid ? '✓ Paid online with Ziina' : 'Ziina payment link'}${e.ziinaTest === 'yes' ? ' <span class="chip">test</span>' : ''}</b>
     <div>${escSym(e.ziinaMessage || '')}${paid ? ` ${esc(when(e.ziinaPaidAt))}${e.ziinaCard ? ` · ${esc(e.ziinaCard)}` : ''}` : e.ziinaAmount ? ` Link for ⃃ ${Number(e.ziinaAmount).toLocaleString('en-US')}; the order turns Paid by itself when the customer pays.` : ''}${refund}</div>
   </div>`;
@@ -1657,7 +1657,100 @@ async function wireDiscount(e) {
   }
 }
 
+// ---------- Order screen layouts (Settings → Order screen layout): Original, A Tabs, B Dashboard, C Journey ----------
+// The detail is drawn once as before; the layout then moves its parts into tabs / columns (the same elements, so every
+// button and field keeps working). Original leaves it as it is.
+let LAYOUT = 'original';
+try { LAYOUT = localStorage.getItem('kalaiOrderLayout') || 'original'; } catch { /* storage blocked */ }
+client.models.SiteSetting.get({ id: 'site' }).then((r) => { const v = r?.data?.orderLayout; if (v && v !== LAYOUT) { LAYOUT = v; try { localStorage.setItem('kalaiOrderLayout', v); } catch { /* */ } applyDeskLayout(); } }).catch(() => {});
+window.kalaiSetLayout = (v) => { LAYOUT = v || 'original'; try { localStorage.setItem('kalaiOrderLayout', LAYOUT); } catch { /* */ } applyDeskLayout(); };
+let layoutTab = 'order';
+function applyDeskLayout() {
+  const desk = $('desk'); if (!desk) return;
+  desk.dataset.layout = LAYOUT;
+  const e = all.find((x) => x.id === selectedId);
+  if (e && $('editForm')) showDetail(e); else desk.classList.remove('open');
+}
 async function showDetail(e) {
+  await showDetailBody(e);
+  try { arrangeDetail(e); } catch (err) { console.warn('Layout', err); }
+}
+function arrangeDetail(e) {
+  const desk = $('desk'), box = $('detail');
+  desk.dataset.layout = LAYOUT;
+  desk.classList.toggle('open', !!$('editForm') && LAYOUT === 'a');
+  if (LAYOUT === 'original' || !$('editForm')) return;
+  const q = (sel) => box.querySelector(sel);
+  const fieldOf = (id) => $(id)?.closest('.field');
+  const rowOf = (id) => $(id)?.closest('.two');
+  const el = (cls, html = '') => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; return d; };
+  const put = (parent, ...nodes) => { nodes.flat().filter(Boolean).forEach((n) => parent.appendChild(n)); return parent; };
+  $('eSave')?.setAttribute('form', 'editForm');
+  const payRow = rowOf('ePayMethod'), payNote = payRow?.nextElementSibling;
+  const head = put(el('lay-head'), q('.dtop'), $('fileLinks'));
+  const act = put(el('lay-act'), rowOf('eStatus'), fieldOf('eMsg'), $('autoHint'), $('saveMsg'), $('eSave'), $('waLinks'));
+  const parts = {
+    order: [fieldOf('ePhone'), $('addrBox'), q('#editForm > fieldset.cost:not([id])')],
+    pay: [$('zohoBox'), $('ziinaCard'), payRow, payNote, fieldOf('eLink'), $('flowSlot')],
+    ship: [$('shipBox'), $('supplierBox'), $('purchase'), $('marketBox'), $('reworkBox')],
+    cost: [$('costing'), $('actualBox')],
+    after: [$('afterBox')],
+    review: [$('reviewBox') || [...box.children].find((x) => /customer can now rate/.test(x.textContent || ''))],
+  };
+  const LABEL = { order: 'Order', pay: 'Payment & Zoho', ship: 'Shipping & suppliers', cost: 'Costing', after: 'After-sales', review: 'Review' };
+  const form = $('editForm');
+  if (LAYOUT === 'a') {
+    const top = el('lay-back', '<button type="button" class="btn small ghost" id="layBack">← All orders</button>');
+    const keys = Object.keys(parts).filter((k) => parts[k].some(Boolean));
+    if (!keys.includes(layoutTab)) layoutTab = 'order';
+    const tabs = el('lay-tabs', keys.map((k) => `<button type="button" role="tab" data-lt="${k}" aria-selected="${k === layoutTab}">${LABEL[k]}${k === 'after' && e.cancelState === 'REQUESTED' ? ' <b>1</b>' : ''}${k === 'review' && reviews.get(e.id)?.rating ? ` ★${reviews.get(e.id).rating}` : ''}</button>`).join(''));
+    const panes = keys.map((k) => { const p = put(el('lay-pane'), parts[k]); p.dataset.lp = k; p.hidden = k !== layoutTab; return p; });
+    box.prepend(top, head, act, tabs, ...panes);
+    form.hidden = true; form.style.display = 'none';
+    tabs.querySelectorAll('[data-lt]').forEach((b) => { b.onclick = () => { layoutTab = b.dataset.lt; tabs.querySelectorAll('[data-lt]').forEach((x) => x.setAttribute('aria-selected', x === b)); panes.forEach((p) => { p.hidden = p.dataset.lp !== layoutTab; }); }; });
+    $('layBack').onclick = () => { selectedId = null; desk.classList.remove('open'); render(); restoreFlow(); box.innerHTML = '<p class="muted">Select an order to see the details, set a price and update its status.</p>'; showFlow(null); };
+    if ($('flowSlot')) $('flowSlot').hidden = !costings.get(e.id)?.zohoDocs;
+    return;
+  }
+  if (LAYOUT === 'b') {
+    const c1 = put(el('lay-col'), head, parts.order, parts.review);
+    const c2 = put(el('lay-col'), parts.ship, parts.pay.filter((x) => x && x.id !== 'flowSlot'), parts.cost, parts.after);
+    const c3 = put(el('lay-col lay-side'), el('lay-h', '<b>Action</b>'), act, $('flowSlot'));
+    box.prepend(put(el('lay-grid3'), c1, c2, c3));
+    form.style.display = 'none';
+    return;
+  }
+  // C: journey
+  const main = put(el('lay-col'), head, journeyCard(e), parts.ship, parts.order.slice(1), parts.after);
+  const accs = [['Costing', parts.cost], ['Payment & Zoho', parts.pay.filter((x) => x && x.id !== 'flowSlot')]].map(([t, nodes]) => { const d = document.createElement('details'); d.className = 'lay-acc'; d.innerHTML = `<summary>${t}</summary>`; put(d, nodes); return d; });
+  put(main, accs);
+  const side = put(el('lay-col lay-side'), el('lay-h', '<b>Action</b>'), act, fieldOf('ePhone'), parts.review, $('flowSlot'));
+  box.prepend(put(el('lay-grid2'), main, side));
+  form.style.display = 'none';
+}
+/** C layout: the order's steps as a timeline, from what the order already records. */
+function journeyCard(e) {
+  const j = jobsOf(e), steps = [];
+  const add = (done, title, when2, note = '', doc = '') => steps.push({ done, title, when: when2, note, doc });
+  add(true, 'Order received', e.createdAt, KIND[e.kind] || '', e.zohoQuote || '');
+  add(['PRICE_SENT', ...SOLD].includes(e.status) || !!e.paymentLink, 'Price sent', '', e.quotedPrice != null ? `⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}` : '');
+  add(!!(e.ziinaPaidAt || e.zohoPaymentId || SOLD.includes(e.status)), 'Paid', e.ziinaPaidAt || '', e.ziinaPaidAt ? 'Ziina' : PAY_LABEL_UI[e.paymentMethod] || '', e.zohoInvoice || '');
+  if (hasArtist(e)) add(!!e.artistShippedAt, `Artist: ${artistOf(e)}`, e.artistShippedAt || e.artistFinishedAt || e.artistStartedAt || '', e.artistStage ? `${String(e.artistStage).toLowerCase()}${e.artistAwb ? ` · ${e.artistCourier || ''} ${e.artistAwb}` : ''}` : 'not started');
+  if (j.printer) add(['READY', 'COLLECTED'].includes(j.printer.stage), `Print: ${j.printer.name}`, j.printer.readyAt || '', String(j.printer.stage || '').toLowerCase(), j.printer.price != null ? `⃃ ${j.printer.price}` : '');
+  if (j.framer || ['FRAMING', 'SHIPPED', 'DELIVERED'].includes(e.status)) add(!!j.framer && ['READY', 'COLLECTED'].includes(j.framer.stage) || ['SHIPPED', 'DELIVERED'].includes(e.status), `Framing${j.framer ? `: ${j.framer.name}` : ''}`, j.framer?.readyAt || '', j.framer ? String(j.framer.stage || '').toLowerCase() : '', j.framer?.price != null ? `⃃ ${j.framer.price}` : '');
+  add(['SHIPPED', 'DELIVERED'].includes(e.status), 'Picked up / shipped', j.delivery?.pickedAt || '', [e.courierName, e.trackingNo].filter(Boolean).join(' · '), e.zohoChallan || '');
+  add(e.status === 'DELIVERED', 'Delivered', e.deliveredAt || '', e.deliveryName || '', j.delivery?.price != null ? `⃃ ${j.delivery.price}` : '');
+  if (e.cancelRequest) add(e.cancelState !== 'REQUESTED', `Request: ${REQ_LABEL[e.cancelRequest] || e.cancelRequest}`, e.cancelRequestedAt || '', e.cancelState === 'REQUESTED' ? 'open' : String(e.cancelState || '').toLowerCase());
+  if (reviews.get(e.id)) add(true, `Review ${'★'.repeat(Number(reviews.get(e.id).rating) || 0)}`, reviews.get(e.id).createdAt || '', String(reviews.get(e.id).text || reviews.get(e.id).comment || '').slice(0, 80));
+  const d = document.createElement('div'); d.className = 'card lay-journey';
+  d.innerHTML = `<b style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Journey</b>${steps.map((x) => `<div class="lj ${x.done ? 'done' : ''}"><i></i><div><b>${esc(x.title)}</b>${x.when ? ` <span class="muted">${esc(day(x.when))}</span>` : ''}${x.note ? `<div class="muted" style="font-size:12px">${esc(x.note)}</div>` : ''}</div><span class="mono muted" style="font-size:12px">${esc(x.doc)}</span></div>`).join('')}`;
+  return d;
+}
+// The document-flow card lives under the order list; a layout may borrow it into the detail: put it back first.
+function restoreFlow() { const fs = $('flowSlot'), home = document.querySelector('.deskL'); if (fs && home && !home.contains(fs)) home.appendChild(fs); }
+const PAY_LABEL_UI = { ZIINA: 'Ziina', BANK: 'Bank transfer', CASH: 'Cash', CARD: 'Card', OTHER: 'Other' };
+async function showDetailBody(e) {
+  restoreFlow();
   showFlow(null);
   const det = parseDetails(e.details);
   const s = e.status || 'RECEIVED';
@@ -1692,10 +1785,11 @@ async function showDetail(e) {
       ${actualSection(e)}
       <div class="two">
         <div class="field"><label for="ePayMethod">Paid by</label><select id="ePayMethod">
-          ${[['', '–'], ['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${k === (e.paymentMethod || '') ? 'selected' : ''}>${v}</option>`).join('')}
+          ${[['', '–'], ['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${k === (e.paymentMethod || (e.ziinaPaidAt ? 'ZIINA' : '')) ? 'selected' : ''}>${v}</option>`).join('')}
         </select></div>
         <div class="field"><label for="ePayRef">Payment reference</label><input id="ePayRef" placeholder="Ziina / bank transaction ID" value="${esc(e.paymentRef)}"></div>
       </div>
+      ${e.ziinaPaidAt && e.paymentMethod !== 'ZIINA' ? `<div class="muted" style="font-size:12px;color:var(--gold)">Ziina recorded the customer's payment through the link on ${esc(when(e.ziinaPaidAt))}, but "Paid by" says ${esc(e.paymentMethod || 'nothing')}: choose Ziina and save, unless the money really came another way.</div>` : ''}
       <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? `, then records ${esc(artistOf(e))}’s order` : ''}.</div>
       ${purchaseSection(e)}
       ${marketSection(e)}
@@ -1757,7 +1851,7 @@ async function showDetail(e) {
       [closed || (s === 'SHIPPED' && same), '#addrBox input, #addrBox select, #addrBox textarea, #addrBox button'],
     ];
     const lockSet = new Set(), all = new Set();
-    for (const [on, sel] of groups) $('editForm').querySelectorAll(sel).forEach((el) => { all.add(el); if (on) lockSet.add(el); });
+    for (const [on, sel] of groups) $('detail').querySelectorAll(sel).forEach((el) => { all.add(el); if (on) lockSet.add(el); });
     all.forEach((el) => {
       if (lockSet.has(el)) { if (!el.disabled) { el.disabled = true; el.dataset.doneLock = '1'; } }
       else if (el.dataset.doneLock) { el.disabled = false; delete el.dataset.doneLock; }
@@ -1878,7 +1972,7 @@ async function showDetail(e) {
 
   $('editForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const b = ev.target.querySelector('button'); b.disabled = true; $('saveMsg').textContent = '';
+    const b = $('eSave'); b.disabled = true; $('saveMsg').textContent = '';
     $('detail').querySelectorAll('.err').forEach((x) => x.remove());
     const priceVal = finalPriceStr();
     const disc = readDiscount();
