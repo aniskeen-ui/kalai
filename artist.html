@@ -194,14 +194,22 @@ html.embed main{padding-left:0;padding-right:0}
   </section>
   <section id="deskView" hidden>
     <div class="tabs" role="group" aria-label="Show">
-      <button type="button" data-f="NEEDED" aria-pressed="true">Price needed <b id="cNeeded"></b></button>
-      <button type="button" data-f="OPEN" aria-pressed="false">Orders &amp; payments</button>
+      <button type="button" data-f="NEEDED" aria-pressed="false">Price needed <b id="cNeeded"></b></button>
+      <button type="button" data-f="OPEN" aria-pressed="true">Orders &amp; payments</button>
       <button type="button" data-f="ALL" aria-pressed="false">All</button>
       <button type="button" data-f="WORKS" aria-pressed="false">My works &amp; prices <b id="cWorks"></b></button>
       <button type="button" id="reload" class="btn small" style="margin-left:auto">Refresh</button>
     </div>
     <div class="finder" id="finder">
       <input id="qRef" type="search" list="dlRefs" placeholder="Order no. (KA-…) or artwork" aria-label="Order number"><datalist id="dlRefs"></datalist>
+      <select id="qSt" aria-label="Status">
+        <option value="OPEN">Open orders</option><option value="TO_START">To start</option><option value="WORKING">In progress</option>
+        <option value="TO_SEND">Finished · send to frame shop</option><option value="SENT">Sent · send your invoice</option>
+        <option value="REWORK">Rework / repair</option><option value="CANCELLED">Cancelled by customer</option>
+        <option value="INVOICED">Invoice sent · payment pending</option><option value="PAID">Paid to you</option>
+        <option value="PRICED">Price given · waiting for customer</option><option value="CLOSED">Closed / not going ahead</option>
+        <option value="">All statuses</option>
+      </select>
       <select id="qCust" aria-label="Customer"><option value="">All customers</option></select>
       <label>From <input id="qFrom" type="date"></label><label>To <input id="qTo" type="date"></label>
       <button type="button" class="btn small ghost" id="qClear">Clear</button>

@@ -19,7 +19,7 @@ const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
 let items = [];
-let filter = 'NEEDED';
+let filter = 'OPEN';
 
 function show(view) {
   ['loginView', 'denyView', 'deskView'].forEach((v) => { $(v).hidden = v !== view; });
@@ -54,6 +54,7 @@ $('reload').onclick = () => (filter === 'WORKS' ? renderWorks(true) : load());
 document.querySelectorAll('.tabs [data-f]').forEach((b) => {
   b.onclick = () => {
     filter = b.dataset.f;
+    $('qSt').value = filter === 'ALL' ? '' : 'OPEN';
     document.querySelectorAll('.tabs [data-f]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     render();
   };
@@ -139,6 +140,22 @@ function fillFinder() {
   $('qCust').value = cs.has(cur) ? cur : '';
 }
 const dubaiDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
+/** One status per order for the Status filter. */
+function stOf(x) {
+  if (x.stage === 'NEEDED') return 'NEEDED';
+  if (x.stage === 'PRICED') return 'PRICED';
+  if (x.stage === 'CLOSED') return 'CLOSED';
+  if (x.stage === 'PAID') return 'PAID';
+  if (x.stage === 'INVOICED') return 'INVOICED';
+  if (x.stopped) return 'CANCELLED';
+  if (x.rework) return 'REWORK';
+  return x.progress === 'SHIPPED' ? 'SENT' : x.progress === 'FINISHED' ? 'TO_SEND' : x.progress === 'STARTED' ? 'WORKING' : 'TO_START';
+}
+const OPEN_ST = ['TO_START', 'WORKING', 'TO_SEND', 'SENT', 'REWORK', 'CANCELLED', 'INVOICED'];
+function stMatch(x) {
+  const v = $('qSt').value;
+  return !v || (v === 'OPEN' ? OPEN_ST.includes(stOf(x)) : stOf(x) === v);
+}
 function found(x) {
   const q = $('qRef').value.trim().toLowerCase(), c = $('qCust').value, from = $('qFrom').value, to = $('qTo').value;
   return (!q || [x.ref, x.title].some((v) => String(v || '').toLowerCase().includes(q))) && (!c || x.customerCode === c)
@@ -147,21 +164,22 @@ function found(x) {
 const searching = () => !!($('qRef').value.trim() || $('qCust').value || $('qFrom').value || $('qTo').value);
 let qT;
 $('qRef').addEventListener('input', () => { clearTimeout(qT); qT = setTimeout(render, 200); });
-['qCust', 'qFrom', 'qTo'].forEach((id) => $(id).addEventListener('change', render));
+['qCust', 'qFrom', 'qTo', 'qSt'].forEach((id) => $(id).addEventListener('change', render));
 $('qClear').onclick = () => { ['qRef', 'qCust', 'qFrom', 'qTo'].forEach((id) => { $(id).value = ''; }); render(); };
 
 function render() {
   $('finder').hidden = filter === 'WORKS';
+  $('qSt').hidden = filter === 'NEEDED';
   if (filter === 'WORKS') { renderWorks(); return; }
   fillFinder();
   // Collection works already have his price (My works & prices): only commissions (and rework) wait for a price here.
   const needed = items.filter((x) => (x.stage === 'NEEDED' && x.kind !== 'PRICE') || reworkPriceNeeded(x));
   $('cNeeded').textContent = needed.length ? `(${needed.length})` : '';
   const list = (filter === 'NEEDED' ? needed
-    : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage))
-    : items).filter(found);
+    : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage)).filter(stMatch)
+    : items.filter(stMatch)).filter(found);
   if (!list.length) {
-    $('list').innerHTML = `<p class="muted">${searching() ? 'Nothing matches your search. <button type="button" class="linkbtn" onclick="document.getElementById(\'qClear\').click()">Clear search</button>' : filter === 'NEEDED' ? 'Nothing to price right now.' : filter === 'OPEN' ? 'No orders yet. Orders appear here once a customer has paid.' : 'No enquiries yet.'}</p>`;
+    $('list').innerHTML = `<p class="muted">${searching() ? 'Nothing matches your search. <button type="button" class="linkbtn" onclick="document.getElementById(\'qClear\').click()">Clear search</button>' : filter === 'NEEDED' ? 'Nothing to price right now.' : filter === 'OPEN' && $('qSt').value ? 'No orders with this status. <button type="button" class="linkbtn" onclick="var s=document.getElementById(\'qSt\');s.value=\'\';s.dispatchEvent(new Event(\'change\'))">Show all statuses</button>' : filter === 'OPEN' ? 'No orders yet. Orders appear here once a customer has paid.' : 'No enquiries yet.'}</p>`;
     return;
   }
   $('list').innerHTML = list.map(card).join('');
