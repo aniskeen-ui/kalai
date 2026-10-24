@@ -83,9 +83,11 @@ function draw() {
   } else if (view === 'suppliers') {
     const these = sellers.filter(SUP).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
     html = addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
+  } else if (view === 'prospects') {
+    html = prospectsView();
   } else if (view === 'artists' || view === 'sellers') {
     const wantArtist = view === 'artists';
-    const these = sellers.filter((s) => !SUP(s) && (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
+    const these = sellers.filter((s) => !SUP(s) && s.status !== 'PROSPECT' && (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
     html = these.length ? these.map(sellerCard).join('') : wantArtist
       ? '<p class="muted">No artists yet. Share art.pranixtechno.com/seller.html?as=artist (or the “Become an artist” page) with artists.</p>'
       : '<p class="muted">No sellers yet. Share art.pranixtechno.com/seller.html with craftspeople who want to sell.</p>';
@@ -94,6 +96,44 @@ function draw() {
   }
   $('mkBody').innerHTML = html;
   wireCards();
+}
+
+// ---------- Artist prospects (outreach list): not artists yet, never shown on the website ----------
+const OUTREACH = ['To contact', 'Contacted', 'Replied - interested', 'Not interested', 'No reply'];
+const artistInvite = (s) => `Hello ${s.business}, this is Anis from Kalai Art House in Dubai (art.pranixtechno.com). I came across your work and really like it. We're an online gallery for original paintings and commissions: you set your own price and receive it in full; we list, frame, deliver, collect the payment and pay you, and you can earn a royalty on framed prints if you wish. If that interests you, you can apply in a few minutes at art.pranixtechno.com/seller.html?as=artist${s.email ? ` (please sign up with ${s.email})` : ''}. Happy to answer any questions. Thank you!`;
+function prospectsView() {
+  const ps = sellers.filter((s) => s.status === 'PROSPECT').sort((a, b) => OUTREACH.indexOf(a.outreach || 'To contact') - OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
+  const counts = OUTREACH.map((o) => `${o}: <b>${ps.filter((p) => (p.outreach || 'To contact') === o).length}</b>`).join(' · ');
+  return `<div class="mk-card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Artists you are inviting</b><span class="muted" style="font-size:12px">${counts}</span>
+      <label class="btn small ghost" style="margin-left:auto;cursor:pointer">Import outreach sheet (.xlsx)<input type="file" accept=".xlsx" id="prImport" hidden></label><span class="muted" id="prMsg" style="font-size:12px"></span></div>
+    <div class="muted" style="font-size:12px">Prospects are not artists yet: they are not on the website and not in “To approve”. When one signs up with the same email, they finish the artist application and appear under To approve. Send each invitation yourself, one at a time.</div></div>
+    ${ps.length ? `<div class="tablewrap"><table><thead><tr><th>Artist</th><th>Based in</th><th>Work</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>${ps.map((p) => {
+      const wa = waLink(p.phone, artistInvite(p));
+      return `<tr class="mk-card" data-seller="${esc(p.id)}" style="display:table-row"><td><b>${esc(p.business)}</b>${p.portfolio ? `<br><a href="${esc(p.portfolio)}" target="_blank" rel="noopener noreferrer" style="font-size:12px">profile / website</a>` : ''}<div class="muted" style="font-size:11px;max-width:260px;white-space:normal">${esc(p.adminNote || '')}</div></td>
+        <td style="font-size:12px">${esc(p.city || p.country || '')}</td><td style="font-size:12px;max-width:260px;white-space:normal">${esc(p.mediums || '')}</td>
+        <td style="font-size:12px">${p.email ? `${esc(p.email)}<br>` : ''}${esc(p.phone || '')}${!p.email && !p.phone ? '<span class="muted">via their profile</span>' : ''}</td>
+        <td><select data-pr="outreach" style="width:auto">${OUTREACH.map((o) => `<option ${o === (p.outreach || 'To contact') ? 'selected' : ''}>${o}</option>`).join('')}</select>${p.outreachAt ? `<div class="muted" style="font-size:11px">${esc(day(p.outreachAt))}</div>` : ''}</td>
+        <td style="white-space:nowrap">${wa ? `<a class="btn small ghost" href="${wa}" target="_blank" rel="noopener">WhatsApp</a> ` : ''}${p.email ? '<button class="btn small ghost" type="button" data-pr="email">Email invite</button> ' : ''}<button class="btn small ghost" type="button" data-pr="copy">Copy message</button> <button class="btn small ghost" type="button" data-pr="remove">Remove</button><div class="err" data-msg style="font-size:11px"></div></td></tr>`;
+    }).join('')}</tbody></table></div>` : '<p class="muted">No prospects yet. Import the outreach sheet above.</p>'}`;
+}
+// The outreach workbook (sheet "Artists", headers on row 4) → prospects.
+async function importProspects(file) {
+  const msg = $('prMsg'); msg.textContent = 'Reading the sheet…';
+  try {
+    if (!window.XLSX) await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = ok; s.onerror = () => no(new Error('Could not load the spreadsheet reader.')); document.head.appendChild(s); });
+    const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const ws = wb.Sheets.Artists || wb.Sheets[wb.SheetNames[0]];
+    const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    const hi = rows.findIndex((r) => r.includes('Artist'));
+    if (hi < 0) throw new Error('No "Artist" column found: use the outreach sheet.');
+    const H = rows[hi], col = (name) => H.findIndex((h) => String(h).toLowerCase().startsWith(name));
+    const c = { name: col('artist'), based: col('based'), work: col('work'), fit: col('fit'), email: col('email'), phone: col('phone'), how: col('how'), link: col('link'), source: col('found'), status: col('status') };
+    const items = rows.slice(hi + 1).filter((r) => String(r[c.name] || '').trim()).map((r) => Object.fromEntries(Object.entries(c).map(([k, i]) => [k, i >= 0 ? String(r[i] ?? '').trim() : ''])));
+    msg.textContent = `Adding ${items.length} prospects…`;
+    const r = await act('addProspects', { items });
+    msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} skipped (already there)` : ''}.`;
+    await load();
+  } catch (ex) { msg.textContent = ex.message; }
 }
 
 const samplesOf = (s) => { try { return JSON.parse(s.sampleKeys || '[]'); } catch { return []; } };
@@ -245,6 +285,15 @@ function wireCards() {
         msg.textContent = 'Photo uploaded: press Save rates to put it on their bio.';
       } catch (ex) { msg.textContent = ex.message; }
     };
+  });
+  $('prImport')?.addEventListener('change', (e) => { const f = e.target.files?.[0]; if (f) importProspects(f); });
+  document.querySelectorAll('#mkBody [data-pr]').forEach((el) => {
+    const row = el.closest('[data-seller]'), id = row.dataset.seller, msg = row.querySelector('[data-msg]'), p = sellers.find((s) => s.id === id);
+    const run = async (action, data) => { msg.textContent = ''; try { const r = await act(action, { id, ...data }); if (r.profile) Object.assign(p, r.profile); return r; } catch (ex) { msg.textContent = ex.message; return null; } };
+    if (el.dataset.pr === 'outreach') el.onchange = async () => { if (await run('prospectUpdate', { outreach: el.value })) draw(); };
+    if (el.dataset.pr === 'email') el.onclick = async () => { el.disabled = true; if (await run('inviteArtist', {})) { msg.textContent = 'Invitation emailed.'; setTimeout(draw, 900); } else el.disabled = false; };
+    if (el.dataset.pr === 'copy') el.onclick = async () => { try { await navigator.clipboard.writeText(artistInvite(p)); msg.textContent = 'Copied: paste it in their Instagram / Artmajeur message.'; } catch { msg.textContent = 'Copy not allowed here.'; } };
+    if (el.dataset.pr === 'remove') el.onclick = async () => { if (el.dataset.sure) { if (await run('removeProspect', {})) { sellers = sellers.filter((s) => s.id !== id); draw(); } } else { el.dataset.sure = '1'; el.textContent = 'Sure?'; } };
   });
   document.querySelectorAll('#mkBody [data-a]').forEach((b) => {
     b.onclick = async () => {

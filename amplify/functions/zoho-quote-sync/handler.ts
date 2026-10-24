@@ -1899,7 +1899,8 @@ async function sellerAction(ev: ApiEvent) {
   // A frame shop / delivery partner the studio added by hand: the first time it signs in with that email, the
   // profile (and its jobs) becomes this login's.
   if (!profile && action === 'me' && me.email && !viewAs) {
-    const added = (await scanAll(S)).map(plain).find((p) => p && !p.owner && String(p.id).startsWith('sup-') && String(p.email ?? '').toLowerCase() === me.email.toLowerCase());
+    // (also an artist prospect the studio added from outreach: they then complete the artist application)
+    const added = (await scanAll(S)).map(plain).find((p) => p && !p.owner && (String(p.id).startsWith('sup-') || String(p.id).startsWith('pro-')) && String(p.email ?? '').toLowerCase() === me.email.toLowerCase());
     if (added) {
       const row = { ...added, id: me.sub, owner: me.owner, updatedAt: new Date().toISOString() };
       await putRow(S, row);
@@ -2360,6 +2361,51 @@ async function marketAdmin(ev: ApiEvent) {
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
   // The studio adds a frame shop or delivery partner by hand (approved straight away). It works through the studio
   // view of the supplier portal until the shop signs up with the same email and takes the account over.
+  // Artist prospects (outreach): not artists yet, never on the website, not in "To approve". If one signs up with the
+  // same email, the record becomes theirs and they finish the artist application.
+  if (action === 'addProspects') {
+    const items = Array.isArray(d.items) ? (d.items as Dict[]).slice(0, 200) : [];
+    const all = (await scanAll(S)).map(plain).filter((x): x is Dict => !!x);
+    const now = new Date().toISOString();
+    let added = 0, skipped = 0;
+    for (const it of items) {
+      const name = txt(it.name, 120), email = txt(it.email, 120).toLowerCase();
+      if (!name) { skipped++; continue; }
+      if (all.some((x) => x.type === 'ARTIST' && ((email && String(x.email ?? '').toLowerCase() === email) || String(x.business ?? '').toLowerCase() === name.toLowerCase()))) { skipped++; continue; }
+      const link = txt(it.link, 300);
+      const row = { id: `pro-${crypto.randomUUID()}`, __typename: 'SellerProfile', createdAt: now, updatedAt: now, appliedAt: now,
+        type: 'ARTIST', status: 'PROSPECT', business: name, contactName: name, email: email || undefined, phone: txt(it.phone, 40) || undefined,
+        city: txt(it.based, 80) || undefined, country: /india/i.test(String(it.based ?? '')) ? 'India' : /oman/i.test(String(it.based ?? '')) ? 'Oman' : 'UAE',
+        mediums: txt(it.work, 200) || undefined, about: txt(it.work, 2000) || undefined, portfolio: /^https?:\/\//i.test(link) ? link : undefined,
+        adminNote: [txt(it.fit, 120) && `Fit: ${txt(it.fit, 120)}`, txt(it.how, 160) && `Reach: ${txt(it.how, 160)}`, txt(it.source, 120) && `Found via: ${txt(it.source, 120)}`].filter(Boolean).join(' · ') || undefined,
+        outreach: txt(it.status, 40) || 'To contact', commissionPct: 0, sampleKeys: '[]' };
+      await putRow(S, row); all.push(row); added++;
+    }
+    return { added, skipped };
+  }
+  if (action === 'prospectUpdate' || action === 'removeProspect') {
+    const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
+    if (!p || p.status !== 'PROSPECT') throw new Error('Prospect not found');
+    if (action === 'removeProspect') { await delRow(S, { id: { S: String(p.id) } }); return { removed: true }; }
+    const row = { ...p, outreach: txt(d.outreach, 40) || p.outreach, outreachAt: new Date().toISOString(), adminNote: d.note !== undefined ? txt(d.note, 500) : p.adminNote, email: d.email !== undefined ? txt(d.email, 120).toLowerCase() || undefined : p.email, phone: d.phone !== undefined ? txt(d.phone, 40) || undefined : p.phone, updatedAt: new Date().toISOString() };
+    await putRow(S, row);
+    return { profile: row };
+  }
+  if (action === 'inviteArtist') {
+    const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
+    if (!p || p.status !== 'PROSPECT') throw new Error('Prospect not found');
+    if (!p.email) throw new Error('Add their email first.');
+    await sendMail({ to: String(p.email), subject: 'Invitation to list your work with Kalai Art House, Dubai',
+      lines: [`Dear ${h(p.business)},`,
+        "I'm Anis, founder of Kalai Art House in Dubai (art.pranixtechno.com). I came across your work and would love to have it in our gallery.",
+        'We are an online gallery for original paintings, watercolours and sketches, and we take portrait commissions from customers\' photos. You set your own price for each work and receive it in full; we list it, frame it in Dubai, deliver it, collect the payment and pay you. Optionally, you earn a royalty on framed prints of your works.',
+        `If you'd like to join, please create an account with this email address (${h(p.email)}) and complete the short artist application with a few sample photos. We review every application personally.`,
+        txt(d.note, 500) ? h(txt(d.note, 500)) : ''].filter(Boolean),
+      button: { label: 'Apply as an artist', url: `${SITE}/seller.html?as=artist` }, footer: 'Kalai Art House · Pranix Technologies FZCO, Dubai · +971 55 299 6626' });
+    const row = { ...p, outreach: 'Contacted', outreachAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    await putRow(S, row);
+    return { sent: true, profile: row };
+  }
   if (action === 'inviteSupplier') {
     const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
     if (!p || !ROLE_OF[String(p.type)]) throw new Error('Supplier not found');

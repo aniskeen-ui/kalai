@@ -128,7 +128,7 @@ function route() {
   $('tabDesk').textContent = isAdminUser() && !groups.includes('ARTISTS') ? 'Studio orders (Siva)' : 'Studio orders';
   if (!profile && groups.includes('ARTISTS') && !viewAs) { deskOnly(); return; }
   if (!profile && isAdminUser() && !viewAs) { deskOnly(); $('tabDesk').textContent = 'Studio orders (Siva)'; return; }
-  if (!profile || s === 'REJECTED') {
+  if (!profile || s === 'REJECTED' || s === 'PROSPECT') {
     show('applyView');
     fillApply();
     $('applyTitle').textContent = s === 'REJECTED' ? 'Apply again' : isArtist() ? 'Artist application' : 'Seller application';
