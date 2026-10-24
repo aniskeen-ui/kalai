@@ -6,6 +6,7 @@ import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { wireFind } from './find.js';
 import { SUGGEST } from './suggest.js';
+import { cleanTitle } from './title.js';
 
 const client = generateClient();
 // Shown inside the artist & seller portal (seller.html "Studio orders" tab): no own header there.
@@ -92,7 +93,7 @@ async function renderWorks(force = false) {
     ${works.some((w) => !w.named) ? '<div style="display:flex;gap:10px;align-items:center;margin:0 0 6px"><button type="button" class="btn small" id="saveAllW">Save all titles shown</button><span class="muted" id="saveAllMsg" style="font-size:12px">Saves every work below that has a title (and price, if given).</span></div>' : ''}`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}" data-code="${esc(w.code)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
-        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title${!w.named && SUGGEST[w.code] ? ' <span class="muted" style="font-weight:400">(suggested: change it if you like, then Save)</span>' : ''}</label><input name="title" maxlength="80" value="${esc(w.title || (!w.named && SUGGEST[w.code] ? SUGGEST[w.code][0] : ''))}" placeholder="A short, meaningful title"></div>
+        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title${!w.named && shownTitle(w) ? ` <span class="muted" style="font-weight:400">(${webTitle(w) ? 'as on the website' : 'suggested'}: change it if you like, then Save)</span>` : ''}</label><input name="title" maxlength="80" value="${esc(shownTitle(w))}" placeholder="A short, meaningful title"></div>
         <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
         <div class="field"><label>My price (₹, artwork only)</label><input name="price" type="number" min="100" step="50" inputmode="numeric" value="${w.artistPrice ?? ''}" placeholder="e.g. 3000"></div></div>
         <div class="field" style="max-width:260px"><label>Ready to send in (days)</label><input name="leadDays" maxlength="9" value="${w.leadDays == null ? '' : w.leadMax != null && w.leadMax !== w.leadDays ? `${w.leadDays}-${w.leadMax}` : w.leadDays}" placeholder="e.g. 7 or 10-15 (0 = ready now)"></div>
@@ -208,6 +209,9 @@ function card(x) {
   </article>`;
 }
 
+/** The title the website shows for an unnamed work (its tidied file name), or '' when that is just "Original". */
+function webTitle(w) { const t = cleanTitle(w.title); return t === 'Original' ? '' : t; }
+function shownTitle(w) { return w.named ? w.title : webTitle(w) || SUGGEST[w.code]?.[0] || ''; }
 let isAdmin = false; // Kalai Art House signed in on Siva's page: may correct a courier / AWB after it was sent.
 const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
 /** The frame shop the finished work goes to: name, contact and address (from the framing job, or our only frame shop). */
