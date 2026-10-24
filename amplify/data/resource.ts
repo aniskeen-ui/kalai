@@ -78,6 +78,9 @@ const schema = a.schema({
       cancelReply: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Studio asked for new damage photos (cancelState REOPENED): the customer can report again for 48 hours from this time.
       cancelReopenAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Studio's review of a damage report (Order Management): the customer's mistake and our resolution (codes).
+      cancelIssue: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      cancelResolution: a.string().authorization((allow) => [allow.group('ADMINS')]),
       deliveredAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Rework for a replacement (damaged in transit): frame shop or Siva, confirmed ready by the studio before it ships again.
       reworkType: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),

@@ -987,24 +987,103 @@ function reqAction(e) {
   return e.cancelRequest || '';
 }
 const REQ_LABEL = { CANCEL: 'Cancel the order', DAMAGED_REFUND: 'Arrived damaged: full refund', DAMAGED_REPLACE: 'Arrived damaged: replacement / repair' };
+// Review a damage report: what the customer got wrong (common mistakes) → our resolution. The resolution either changes the
+// request straight away (new photos / decline, emailed) or pre-fills "What happened?" below for a refund or replacement.
+const RV_ISSUES = [
+  ['WRONG_PHOTO', 'Wrong or unrelated photo uploaded', 'NEW_PHOTOS', 'The photo you sent is not of this order. Please send photos of the framed work you received.'],
+  ['BLURRY', 'Photo blurry, dark or taken from too far', 'NEW_PHOTOS', 'The photo is not clear enough to see the damage. Please send a sharp photo of the whole frame and a close-up of the damaged part, in good light.'],
+  ['NOT_VISIBLE', 'Damage not visible in the photos', 'NEW_PHOTOS', "We can't see the damage in the photos. Please send a close-up of exactly where it is damaged, and one of the whole frame."],
+  ['BOX_ONLY', 'Only the box photographed, not the artwork', 'NEW_PHOTOS', 'Please also send photos of the artwork and frame out of the box, so we can see the damage itself.'],
+  ['NO_PACKAGING', 'No photo of the outer box / packaging', 'BOX_PHOTO', 'For the courier insurance we also need a photo of the outer box and packaging. Please send it with a photo of the damage.'],
+  ['TOO_FEW', 'Too few photos (needs whole frame + close-up + box)', 'NEW_PHOTOS', 'Please send three photos: the whole frame, a close-up of the damage, and the outer box.'],
+  ['WRONG_CHOICE', 'Chose refund but wants a replacement (or the other way)', 'CONTACT', ''],
+  ['WRONG_ORDER', 'Reported on the wrong order', 'DECLINE', 'This report seems to be for a different order. Please report it on the right order under My enquiries & orders, or reply to this email.'],
+  ['DUPLICATE', 'Same problem reported twice', 'DECLINE', 'You have already reported this; we are dealing with it under your first report.'],
+  ['LATE', 'Reported after the 48 hours', 'DECLINE_LATE', 'Damage has to be reported within 48 hours of delivery, and this report came later, so we cannot accept it under our terms. Please reply if there was a reason it could not be sent in time.'],
+  ['AFTER_DELIVERY', 'Damage happened after delivery (e.g. dropped while hanging)', 'DECLINE_AFTER', 'The photos show damage that does not come from the delivery (for example from a fall after unpacking), so it is not covered. We can repair or re-frame it at cost: reply if you would like a quote.'],
+  ['CHANGE_OF_MIND', 'Not damaged: change of mind / does not like it', 'DECLINE_MIND', 'Each work is one of a kind, so we cannot accept change-of-mind returns. If something is actually damaged, please send photos of it.'],
+  ['LOOKS_DIFFERENT', 'Not damaged: colours or size look different from the website', 'CONTACT', ''],
+  ['MINOR', 'Minor, fixable problem (loose corner, smudge or scratch on the glass, crooked mount)', 'REPAIR', ''],
+  ['NOT_RECEIVED', 'Says it never arrived (marked delivered)', 'COURIER', ''],
+  ['GENUINE', 'Genuine transit damage, photos are fine', 'ACCEPT_CHOICE', ''],
+];
+const RV_RES = {
+  NEW_PHOTOS: 'Ask for new photos (48 hours, emailed)',
+  BOX_PHOTO: 'Ask for a photo of the box / packaging (48 hours, emailed)',
+  CONTACT: 'Call / WhatsApp the customer first (request stays open)',
+  COURIER: 'Open a claim with the courier (request stays open)',
+  REPAIR: 'Accept: free repair or re-frame at the frame shop',
+  ACCEPT_CHOICE: "Accept the customer's choice (refund or replacement)",
+  REPLACE: 'Accept: replacement / repair',
+  REFUND: 'Accept: full refund',
+  PARTIAL: 'Accept: partial refund as goodwill (customer keeps it)',
+  DECLINE: 'Decline (emailed)',
+  DECLINE_LATE: 'Decline: reported after 48 hours (emailed)',
+  DECLINE_AFTER: 'Decline: damage not from delivery (emailed)',
+  DECLINE_MIND: 'Decline: change of mind, one-of-a-kind work (emailed)',
+};
+function reviewBlock(e) {
+  const issue = e.cancelIssue || '', res = e.cancelResolution || (RV_ISSUES.find((x) => x[0] === issue) || [])[2] || '';
+  return `<div class="rvbox" style="display:grid;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
+    <b style="font-size:13px">Review the report</b>
+    <div style="display:grid;gap:8px"><div class="field"><label for="rvIssue">What did the customer get wrong?</label><select id="rvIssue"><option value="">Choose…</option>${RV_ISSUES.map(([k, l]) => `<option value="${k}" ${k === issue ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+      <div class="field"><label for="rvRes">Our resolution</label><select id="rvRes"><option value="">Choose…</option>${Object.entries(RV_RES).map(([k, l]) => `<option value="${k}" ${k === res ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div></div>
+    <div class="field" id="rvMsgBox"><label for="rvMsg">Message to the customer (emailed when it asks for photos or declines)</label><textarea id="rvMsg" rows="2">${esc(e.cancelReply || '')}</textarea></div>
+    <div><button class="btn small" type="button" id="rvApply">Apply</button> <span class="ok" id="rvOk" role="status" style="font-size:12px"></span></div>
+  </div>`;
+}
+function wireReview(e) {
+  if (!$('rvIssue')) return;
+  const msgFor = (k) => (RV_ISSUES.find((x) => x[0] === k) || [])[3] || '';
+  const showMsg = () => { const r = $('rvRes').value; $('rvMsgBox').hidden = !['NEW_PHOTOS', 'BOX_PHOTO', 'DECLINE', 'DECLINE_LATE', 'DECLINE_AFTER', 'DECLINE_MIND'].includes(r); };
+  $('rvIssue').onchange = () => { const it = RV_ISSUES.find((x) => x[0] === $('rvIssue').value); if (it) { $('rvRes').value = it[2]; if (it[3]) $('rvMsg').value = it[3]; } showMsg(); };
+  $('rvRes').onchange = showMsg; showMsg();
+  $('rvApply').onclick = async () => {
+    const issue = $('rvIssue').value, res = $('rvRes').value, ok = $('rvOk');
+    if (!res) { ok.textContent = 'Choose our resolution.'; return; }
+    const msg = $('rvMsg').value.trim() || msgFor(issue) || null;
+    const base = { id: e.id, cancelIssue: issue || null, cancelResolution: res };
+    let set = base, after = '';
+    if (res === 'NEW_PHOTOS' || res === 'BOX_PHOTO') set = { ...base, cancelState: 'REOPENED', cancelReopenAt: new Date().toISOString(), cancelReply: msg };
+    else if (res.startsWith('DECLINE')) set = { ...base, cancelState: 'DECLINED', cancelReply: msg };
+    else if (res === 'REFUND' || res === 'PARTIAL') after = 'DAMAGED_REFUND';
+    else if (res === 'REPLACE' || res === 'REPAIR') after = 'DAMAGED_REPLACE';
+    else if (res === 'ACCEPT_CHOICE') after = e.cancelRequest;
+    $('rvApply').disabled = true; ok.textContent = 'Saving…';
+    try {
+      const { data, errors } = await client.models.Enquiry.update(set);
+      if (errors?.length) throw new Error(errors[0].message);
+      Object.assign(e, data || set);
+      if (set.cancelState) { render(); showDetail(e); return; }
+      if (after && $('aAction') && !$('aAction').disabled) {
+        $('aAction').value = after; $('aAction').dispatchEvent(new Event('change'));
+        if (res === 'PARTIAL' && $('aAmount')) { $('aAmount').value = ''; $('aAmount').placeholder = 'goodwill amount'; $('aAmount').focus(); }
+        if ($('aNote')) $('aNote').value = `${RV_RES[res]}${issue ? ` · ${(RV_ISSUES.find((x) => x[0] === issue) || [])[1]}` : ''}`;
+        ok.textContent = res === 'PARTIAL' ? 'Saved. Enter the goodwill amount below, pay it, tick the box and save the order.' : 'Saved. Finish below: "What happened?" is filled in; tick the box and save the order.';
+        $('aAction').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else ok.textContent = res === 'CONTACT' ? 'Saved. The request stays open while you talk to the customer.' : res === 'COURIER' ? 'Saved. The request stays open while the courier claim runs.' : 'Saved.';
+    } catch (ex) { ok.textContent = ex.message || 'Could not save.'; }
+    finally { if ($('rvApply')) $('rvApply').disabled = false; }
+  };
+}
+
 function requestBanner(e) {
   if (!isReq(e) && !['DECLINED', 'REOPENED', 'WITHDRAWN'].includes(e.cancelState)) return '';
   const dmg = String(e.cancelRequest || '').startsWith('DAMAGED');
-  const redo = `<div style="margin-top:6px"><div class="field"><label for="rqRedoMsg">Message to the customer (emailed)</label><input id="rqRedoMsg" value="${esc(e.cancelReply || 'The photo you sent does not show the damage. Please send clear photos of the whole frame and a close-up of the damage.')}"></div><button class="btn small ghost" type="button" id="rqRedo">Ask the customer for new photos (48 hours)</button> <span class="ok" id="rqRedoOk" role="status"></span></div>`;
-  if (e.cancelState === 'REOPENED') return `<div class="reqbox"><b>Waiting for new damage photos</b> · asked ${esc(when(e.cancelReopenAt))}; the customer can send them for 48 hours from then. ${e.cancelReply ? `“${esc(e.cancelReply)}”` : ''}</div>`;
+  const resLine = e.cancelResolution ? ` · <span class="muted">${esc((RV_ISSUES.find((x) => x[0] === e.cancelIssue) || [])[1] || '')}${e.cancelIssue ? ' → ' : ''}${esc(RV_RES[e.cancelResolution] || '')}</span>` : '';
+  if (e.cancelState === 'REOPENED') return `<div class="reqbox"><b>Waiting for new photos</b> · asked ${esc(when(e.cancelReopenAt))}; the customer can send them for 48 hours from then.${resLine} ${e.cancelReply ? `<div>“${esc(e.cancelReply)}”</div>` : ''}</div>`;
   if (e.cancelState === 'WITHDRAWN') return `<div class="muted" style="font-size:13px"><b>Customer withdrew their request</b> (${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest || '')}). If they report again it shows here as a new request.</div>`;
-  if (e.cancelState === 'DECLINED') return `<div class="muted" style="font-size:13px"><b>Customer request declined:</b> ${esc(REQ_LABEL[e.cancelRequest] || '')}${e.cancelReply ? ` · “${esc(e.cancelReply)}”` : ''}${dmg ? redo : ''}</div>`;
+  if (e.cancelState === 'DECLINED') return `<div class="reqbox"><div><b>Customer request declined:</b> ${esc(REQ_LABEL[e.cancelRequest] || '')}${e.cancelReply ? ` · “${esc(e.cancelReply)}”` : ''}${resLine}</div>${dmg ? reviewBlock(e) : ''}</div>`;
   return `<div class="reqbox">
-    <div><b>Customer request · ${esc(when(e.cancelRequestedAt))}</b></div>
+    <div><b>Customer request · ${esc(when(e.cancelRequestedAt))}</b>${resLine}</div>
     <div>${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest)}${e.cancelRequest !== 'DAMAGED_REPLACE' ? ` · refund under the policy: <b>⃃ ${Number(e.cancelRefundDue || 0).toLocaleString('en-US')}</b>` : ''}</div>
     ${e.cancelReason ? `<div>Reason: “${esc(e.cancelReason)}”</div>` : ''}
     ${e.cancelPhotos ? `<div class="links" id="reqPhotos"><span class="muted">Loading photos…</span></div>` : ''}
     <div class="muted" style="font-size:12px">${e.cancelRequest === 'CANCEL' && e.zohoPOId ? `${esc(artistOf(e))}'s order is on hold. ` : ''}To accept: ${e.cancelRequest === 'DAMAGED_REPLACE' ? 'tick the box below and save.' : 'pay the refund (Ziina / bank), enter its reference below, tick the box and save.'} The customer is emailed automatically.</div>
-    <details><summary>Decline the request instead</summary>
+    ${dmg ? reviewBlock(e) : `<details><summary>Decline the request instead</summary>
       <div class="field" style="margin-top:8px"><label for="rqReply">Reply to the customer (emailed)</label><textarea id="rqReply" rows="2" placeholder="e.g. As agreed on the phone, you are keeping the painting."></textarea></div>
       <button class="btn ghost" type="button" id="rqDecline">Decline and email the customer</button> <span class="ok" id="rqMsg" role="status"></span>
-    </details>
-    ${dmg ? `<details><summary>Wrong or unclear photo? Ask for new photos</summary>${redo}</details>` : ''}
+    </details>`}
   </div>`;
 }
 
@@ -1640,6 +1719,7 @@ async function showDetail(e) {
       if ($('rtPicked')) $('rtPicked').closest('label').hidden = m !== 'PICKUP';
     });
   }
+  wireReview(e);
   if ($('rqRedo')) {
     $('rqRedo').onclick = async (ev) => {
       const b = ev.currentTarget; b.disabled = true; $('rqRedoOk').textContent = 'Saving…';
