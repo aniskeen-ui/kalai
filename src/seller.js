@@ -163,7 +163,7 @@ function route() {
   $('dPhoto').hidden = !profile.photoKey;
   if (profile.photoKey) imgUrl(profile.photoKey).then((u) => { $('dPhoto').src = u; });
   $('tabProducts').textContent = profile.type === 'ARTIST' ? 'My artworks' : 'My products';
-  if (profile.type === 'ARTIST') $('dTerms').innerHTML = 'You receive <b>your price</b> for each work sold. Kalai Art House frames, prices and delivers your works, collects the payment from the customer and pays you your price.';
+  if (profile.type === 'ARTIST') $('dTerms').innerHTML = `You receive <b>your price</b> for each work sold. Kalai Art House frames, prices and delivers your works, collects the payment from the customer and pays you your price.${Number(profile.royaltyPct) ? ` Framed prints of your works: you receive <b>${Number(profile.royaltyPct)}%</b> of each print sold.` : ''}`;
   else $('dTerms').innerHTML = `Kalai commission: <b>${profile.commissionPct ?? 0}%</b> added on top of your price${Number(profile.kalaiDeliveryFee) ? ` · Kalai delivery: <b>${aed(profile.kalaiDeliveryFee)}</b> per order when Kalai delivers` : ''}. Kalai collects the payment from the customer and pays you your price.`;
   if ($('tabProducts').hidden) $('dTerms').textContent = 'Price new works, follow your orders and payments, and name your works.';
   drawList();

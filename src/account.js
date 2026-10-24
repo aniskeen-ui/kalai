@@ -960,10 +960,11 @@ async function showCatalogue() {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
       if (p.kind === 'photo') return { id: p.id, print: true, name: p.named ? p.title : cleanTitle(p.title), code: p.code || '', desc: p.description || '', img };
-      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}) };
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}), ...(p.printable ? { printable: true, printMax: p.printMax || 'A3', printRoyalty: Number(p.printRoyalty || 0) } : {}) };
     }));
     // Framed prints (Catalogue type "Framed print") have their own section; paintings go to the collection.
-    window.kalaiShowPrints?.(list.filter((x) => x.img && x.print));
+    // Framed Prints: our photos, then paintings with prints switched on (Catalogue → Sell framed prints).
+    window.kalaiShowPrints?.([...list.filter((x) => x.img && x.print), ...list.filter((x) => x.img && x.printable).map((x) => ({ id: x.id, print: true, painting: true, name: x.name, code: x.code, desc: x.desc, img: x.img, artist: x.artist || 'Siva Raja', max: x.printMax, royalty: x.printRoyalty }))]);
     window.kalaiShowCatalogue(list.filter((x) => x.img && !x.print));
   } catch (ex) { console.warn('Catalogue not loaded; showing the built-in collection.', ex); }
 }

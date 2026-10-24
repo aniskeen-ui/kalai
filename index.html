@@ -805,7 +805,7 @@ window.kalaiShowCatalogue=function(list){
   drawChips();drawArtistSel();drawGrid();
 };
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawGrid()});
-document.addEventListener("click",e=>{const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
+document.addEventListener("click",e=>{const bp=e.target.closest("[data-buyprint]");if(bp){closeAll();setTimeout(()=>window.kalaiOpenPrint&&window.kalaiOpenPrint(bp.dataset.buyprint),50);return}const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
 
 /* cart */
 let cart=[];try{cart=JSON.parse(localStorage.getItem("kalai-cart")||"[]")}catch(e){cart=[]}
@@ -1050,7 +1050,7 @@ function openModal(p){
        <div class="badge"><i>⛟</i><div><b>Delivered worldwide</b>UAE: duties paid, insured courier · abroad: shipping quoted before you pay</div></div>
        <div class="badge"><i>◈</i><div><b>Damage protected</b>Replaced or refunded if it arrives damaged</div></div>
      </div>
-     <div class="acts">${p.price?`<button class="btn primary" data-ask="${p.id}">${p.prices?"Order this work":"Ask for price"}</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
+     <div class="acts">${p.printable?`<button class="btn ghost-dark" type="button" data-buyprint="${p.id}">Buy a framed print</button>`:""}${p.price?`<button class="btn primary" data-ask="${p.id}">${p.prices?"Order this work":"Ask for price"}</button><button class="btn ghost-dark" data-offer="${p.id}">Make an offer</button>`:`<button class="btn primary" data-jump="commission">Commission a portrait</button>`}<a class="btn ghost-dark wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(`Hello Kalai Art House, I'm interested in "${p.name}"${p.code?` (${p.code})`:""}.`)}" target="_blank" rel="noopener">Contact us via WhatsApp</a></div>
      <p class="note" style="margin:0">${p.prices?"The price changes with the frame and size you choose. It includes the mount, glass and insured delivery in the UAE; for other countries we quote the shipping before you pay.":"We reply on WhatsApp within one working day with the price, framing options and delivery date."}</p>
      ${p.artist&&p.artist!=="Siva Raja"?`<details><summary>About the artist</summary><p>${SHOW_ARTIST_NAMES?esc2(p.artist):"Our artist"} is one of the artists who work with Kalai Art House. Every work here is made by hand and signed by the artist; we frame it in Dubai and deliver it.</p></details>`:`<details><summary>About the artist</summary><p>Our artist is a painter, sketch artist and story illustrator from South India. The watercolours and pen drawings record village life, old streets, rivers and trees. Every work here is drawn or painted by hand and signed.</p></details>`}
      <details><summary>Shipping, framing &amp; returns</summary><p>Framed in Dubai and delivered by insured courier to all seven emirates, customs duty and VAT included. We also ship worldwide: the shipping charge is confirmed before you pay. Each work is one of a kind, so we can't accept change-of-mind returns; if it arrives damaged, send photos within 48 hours and we replace or refund it.</p></details>
@@ -1162,27 +1162,30 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   const SIZES=[["A4","A4 (21 × 30 cm)",169,59],["A3","A3 (30 × 42 cm)",249,79],["40×50","40 × 50 cm",299,99],["50×70","50 × 70 cm",399,139],["60×80","60 × 80 cm",499,179]];
   const FR=[["black","Black frame"],["white","White frame"],["wood","Natural wood frame"],["none","Print only (no frame)"]];
   let PRINTS=[];
-  const price=(z,f)=>{const p=(window.kalaiPhotoPrices||{})[z[0]]||{};return f==="none"?(p.print??z[3]):(p.framed??z[2])};
-  const from=()=>Math.min(...SIZES.map(z=>price(z,"black")));
+  // Prints of paintings add the artist's royalty to the size price (rounded up to Dhs 5); photos use the size price.
+  const price=(z,f,it)=>{const p=(window.kalaiPhotoPrices||{})[z[0]]||{};const b=f==="none"?(p.print??z[3]):(p.framed??z[2]);const r=Number(it&&it.royalty||0);return r?Math.ceil(b*(1+r/100)/5)*5:b};
+  const sizesOf=it=>{const i=SIZES.findIndex(z=>z[0]===(it&&it.max));return i>=0?SIZES.slice(0,i+1):SIZES};
+  const from=it=>Math.min(...sizesOf(it).map(z=>price(z,"black",it)));
   const draw=()=>{const g=document.getElementById("printGrid");if(!g)return;
     if(!PRINTS.length){g.innerHTML='<p class="note">New prints are coming soon.</p>';return}
     g.innerHTML=PRINTS.map(p=>`<article class="card"><button class="frame" type="button" data-print="${esc2(p.id)}" aria-label="View ${esc2(p.name)}"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" loading="lazy"></button>
-      <div class="kind">Framed print</div><h3>${esc2(p.name)}</h3>${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
-      <div class="row"><span class="price"><small style="font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">from </small>${moneyH(from())}</span><button class="add" type="button" data-print="${esc2(p.id)}">View details</button></div></article>`).join("");
+      <div class="kind">${p.painting?"Framed print of a painting":"Framed print"}</div><h3>${esc2(p.name)}</h3>${p.painting&&SHOW_ARTIST_NAMES?`<div class="meta">by ${esc2(p.artist)}</div>`:""}${p.desc?`<div class="meta" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc2(p.desc)}</div>`:""}
+      <div class="row"><span class="price"><small style="font-size:11px;font-weight:400;color:var(--muted);font-family:var(--body)">from </small>${moneyH(from(p))}</span><button class="add" type="button" data-print="${esc2(p.id)}">View details</button></div></article>`).join("");
     g.querySelectorAll("[data-print]").forEach(b=>b.onclick=()=>openPrint(PRINTS.find(x=>x.id===b.dataset.print)));};
   window.kalaiShowPrints=list=>{PRINTS=list||[];draw();
     const m=location.hash.match(/^#print-(.+)$/);if(m){const p=PRINTS.find(x=>String(x.id)===decodeURIComponent(m[1]));if(p)openPrint(p)}};
   window.kalaiPhotoFee=draw;
-  function openPrint(p){if(!p)return;const box=document.getElementById("modalBox");box.className="box wide";
+  window.kalaiOpenPrint=id=>openPrint(PRINTS.find(x=>String(x.id)===String(id)));
+  function openPrint(p){if(!p)return;const SZ=sizesOf(p);const box=document.getElementById("modalBox");box.className="box wide";
     box.innerHTML=`<button class="x xtop" id="mClose" aria-label="Close">×</button><button type="button" class="ap-back" id="mBack">← Back to the prints</button>
      <div class="viewer"><div class="stage"><div class="kframe" id="prFrame" style="max-width:420px;margin:auto"><div class="kmount" id="prMount"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" style="width:100%;display:block"></div></div></div>
       <p class="room-cap">A preview of the look. Printed on matte fine-art paper from our full-size file.</p></div>
-     <div class="info"><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">Framed print · fine-art photographic print</div>
+     <div class="info"><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.painting?"Framed print · fine-art print of the painting":"Framed print · fine-art photographic print"}</div>
       <h2 style="font-size:30px">${esc2(p.name)}</h2>${p.code?`<p class="note" style="margin:0" class="mono">${esc2(p.code)}</p>`:""}
       <div class="pprice"><b id="prPrice"></b> <span class="note" id="prNote"></span></div>
       ${p.desc?`<p class="note" style="font-size:15px;margin:0">${esc2(p.desc)}</p>`:""}
       <form id="prForm" novalidate style="display:grid;gap:12px">
-       <div class="two"><div class="field"><label for="prSize">Size</label><select id="prSize">${SIZES.map(z=>`<option value="${z[0]}">${z[1]}</option>`).join("")}</select></div>
+       <div class="two"><div class="field"><label for="prSize">Size</label><select id="prSize">${SZ.map(z=>`<option value="${z[0]}">${z[1]}</option>`).join("")}</select></div>
         <div class="field"><label for="prFr">Frame</label><select id="prFr">${FR.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join("")}</select></div></div>
        <div class="two"><div class="field"><label for="prQty">Copies</label><select id="prQty"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
         <label class="check" id="prMatBox" style="align-self:end"><input type="checkbox" id="prMat" checked><span>White mount</span></label></div>
@@ -1191,19 +1194,19 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
        <button class="btn primary" type="submit">Order this print</button><div class="ok-msg" id="prOk" hidden></div>
       </form>
       <div class="badges"><div class="badge"><i>✦</i><div><b>Fine-art print</b>Archival matte paper, true colours</div></div><div class="badge"><i>⛟</i><div><b>Delivered</b>UAE included · abroad: shipping quoted before you pay</div></div></div>
-      <p class="note" style="margin:0">This is a print, not an original painting. Each print is made to order and framed in Dubai.</p></div>`;
-    const upd=()=>{const z=SIZES.find(x=>x[0]===box.querySelector("#prSize").value),f=box.querySelector("#prFr").value,q=+box.querySelector("#prQty").value;
-      box.querySelector("#prPrice").innerHTML=moneyH(price(z,f)*q);box.querySelector("#prNote").textContent=`${f==="none"?"print only":FR.find(x=>x[0]===f)[1].toLowerCase()}, ${z[0]}${q>1?` × ${q}`:""} · delivered in the UAE`;
+      <p class="note" style="margin:0">This is a print, not an original${p.painting?": the original painting is sold separately":" painting"}. Each print is made to order and framed in Dubai.</p></div>`;
+    const upd=()=>{const z=SZ.find(x=>x[0]===box.querySelector("#prSize").value),f=box.querySelector("#prFr").value,q=+box.querySelector("#prQty").value;
+      box.querySelector("#prPrice").innerHTML=moneyH(price(z,f,p)*q);box.querySelector("#prNote").textContent=`${f==="none"?"print only":FR.find(x=>x[0]===f)[1].toLowerCase()}, ${z[0]}${q>1?` × ${q}`:""} · delivered in the UAE`;
       box.querySelector("#prMatBox").hidden=f==="none";box.querySelector("#prFrame").className="kframe "+(f==="wood"?"":f==="none"?"white":f);
       box.querySelector("#prMount").style.padding=f==="none"?"0":box.querySelector("#prMat").checked?"":"0";
-      [...box.querySelector("#prSize").options].forEach(o=>{const zz=SIZES.find(x=>x[0]===o.value);o.textContent=`${zz[1]} · ${price(zz,f)} Dhs`});};
+      [...box.querySelector("#prSize").options].forEach(o=>{const zz=SZ.find(x=>x[0]===o.value);o.textContent=`${zz[1]} · ${price(zz,f,p)} Dhs`});};
     ["prSize","prFr","prQty","prMat"].forEach(id=>box.querySelector("#"+id).addEventListener("change",upd));upd();
     box.querySelector("#prForm").onsubmit=e=>{e.preventDefault();const ok=box.querySelector("#prOk");ok.hidden=false;ok.style.color="var(--kumkum)";
       const n=box.querySelector("#prName").value.trim(),ph=box.querySelector("#prPhone").value.trim();
       if(!n||!ph){ok.textContent="Please add your name and mobile number.";return}
       if(needSignIn(ok))return;
-      const z=SIZES.find(x=>x[0]===box.querySelector("#prSize").value),f=box.querySelector("#prFr").value,q=+box.querySelector("#prQty").value;
-      const fields={"Print":p.name,"Artwork no.":p.code||"","Size":z[1],"Frame":f==="none"?"Print only (no frame)":FR.find(x=>x[0]===f)[1]+(box.querySelector("#prMat").checked?", white mount":""),"Copies":String(q),"Delivery charge":"included in the UAE","Total":"AED "+(price(z,f)*q).toLocaleString("en-US"),"Name":n,"Mobile":ph};
+      const z=SZ.find(x=>x[0]===box.querySelector("#prSize").value),f=box.querySelector("#prFr").value,q=+box.querySelector("#prQty").value;
+      const fields={"Print":p.name+(p.painting?" (print of the painting"+(p.artist?" by "+p.artist:"")+")":""),"Artwork no.":p.code||"","Size":z[1],"Frame":f==="none"?"Print only (no frame)":FR.find(x=>x[0]===f)[1]+(box.querySelector("#prMat").checked?", white mount":""),"Copies":String(q),"Delivery charge":"included in the UAE","Total":"AED "+(price(z,f,p)*q).toLocaleString("en-US"),"Name":n,"Mobile":ph};
       const url=sendEnquiry("Photo framing: "+p.name,fields);
       ok.style.color="var(--fg)";ok.textContent=`Thank you, ${n}. We've received your order for "${p.name}" (${fields.Total}). We'll send you the payment link and ask for your delivery address; it's delivered 4 to 6 days after payment. If WhatsApp didn't open, tap here: `;url.then(u=>ok.appendChild(waLink(u)));};
     modal.hidden=false;scrim.hidden=false;box.scrollTop=0;document.getElementById("mClose").onclick=closeAll;document.getElementById("mBack").onclick=closeAll;

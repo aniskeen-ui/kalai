@@ -98,11 +98,23 @@ function row(p) {
         <label style="display:inline-flex;gap:5px;align-items:center;font-size:12px;font-weight:400;white-space:nowrap" title="The picture is an AI-made preview; the artist paints the order by hand"><input data-f="aiPreview" type="checkbox" ${p.aiPreview ? 'checked' : ''} style="width:auto"> AI preview</label>
       </div>
       <textarea data-f="description" rows="1" placeholder="Short description shown on the website" aria-label="Description">${esc(p.description)}</textarea>
+      ${p.kind !== 'photo' ? `<div class="cg-prints" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px">
+        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400" title="Also sell framed prints of this painting (Framed Prints, and a button on its page)"><input data-f="printable" type="checkbox" ${p.printable ? 'checked' : ''}> Sell framed prints</label>
+        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400">up to <select data-f="printMax" aria-label="Largest print size">${PRINT_MAX.map((z) => `<option ${z === (p.printMax || 'A3') ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
+        <label class="linkbtn" style="cursor:pointer" title="High-quality scan or photo for printing (the website picture is used if none)">${p.printKey ? '✓ Print file uploaded · change' : 'Upload print file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
+        <span class="muted">${p.printable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
       <span class="cg-saved muted" aria-live="polite"></span>
     </div>
   </article>`;
 }
 
+// Largest print size the print file allows (A3 is safe for a good web photo; bigger needs a proper scan).
+const PRINT_MAX = ['A4', 'A3', '40×50', '50×70', '60×80'];
+let sivaRoyalty = null;
+async function sivaRoyaltyPct() {
+  if (sivaRoyalty == null) { try { const r = await client.models.Rates.get({ key: 'default' }); const d = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : {}; sivaRoyalty = Number(d.sivaRoyalty ?? 10); } catch { sivaRoyalty = 10; } }
+  return sivaRoyalty;
+}
 function wireRows(list) {
   document.querySelectorAll('.cg-row').forEach((el) => {
     const p = list.find((x) => x.id === el.dataset.id);
@@ -116,6 +128,8 @@ function wireRows(list) {
         const patch = { id: p.id, [f]: v };
         if (f === 'title') patch.named = `Studio ${new Date().toISOString()}`;
         if (f === 'kind' && (!p.medium || Object.values(MEDIUM).includes(p.medium))) patch.medium = MEDIUM[v];
+        // Prints switched on for one of Siva's works: his royalty from Rates (portal artists' comes from their profile).
+        if (f === 'printable' && v && !p.artistId && p.printRoyalty == null) patch.printRoyalty = await sivaRoyaltyPct();
         const msg = el.querySelector('.cg-saved'); msg.textContent = 'Saving…';
         const r = await client.models.Product.update(patch);
         if (r.errors?.length) { msg.textContent = 'Not saved: ' + r.errors[0].message; return; }
@@ -125,6 +139,19 @@ function wireRows(list) {
         setTimeout(() => { msg.textContent = ''; }, 1500);
       };
     });
+    const pf = el.querySelector('[data-print-file]');
+    if (pf) pf.onchange = async () => {
+      const file = pf.files?.[0]; if (!file) return;
+      const msg = el.querySelector('.cg-saved');
+      if (file.size > 200 * 1024 * 1024) { msg.textContent = 'The print file is larger than 200 MB.'; return; }
+      msg.textContent = 'Uploading the print file…';
+      try {
+        const res = await uploadData({ path: `catalogue/print/${p.id}-${file.name.replace(/[^\w.-]+/g, '-')}`, data: file, options: { contentType: file.type || 'image/jpeg' } }).result;
+        const r = await client.models.Product.update({ id: p.id, printKey: res.path });
+        if (r.errors?.length) throw new Error(r.errors[0].message);
+        p.printKey = res.path; pf.parentElement.firstChild.textContent = '✓ Print file uploaded · change'; msg.textContent = 'Print file saved';
+      } catch (ex) { msg.textContent = 'Not saved: ' + ex.message; }
+    };
   });
 }
 

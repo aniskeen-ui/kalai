@@ -399,8 +399,9 @@ function reportLine(e) {
     const gd = parseDetails(e.details), sp = specOf(e, gd), big = !['A4', 'A3'].includes(sp.size);
     const print = Number(sp.size === 'A4' ? rates.printA4 : rates.printA3) * (big ? 2 : 1);
     const frm = sp.style === 'none' ? 0 : Number((sp.size === 'A4' ? rates.tiers.S : sp.size === 'A3' ? rates.tiers.M : rates.tiers.L)?.framing || 0);
-    k = { artist: 0, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(rates.local || 0) };
-    note = 'est. from Rates (print + frame)';
+    // A print of a painting: the artist's royalty (% of the price) is their share, shown under Artist.
+    k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(rates.local || 0) };
+    note = `est. from Rates (print + frame${e.royaltyPct ? ` + ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''})`;
   } else if (e.kind === 'GIFT') {
     // Print (from the photo) + framing, per copy; A3 when the customer chose the large size.
     const gd = parseDetails(e.details), big = /A3|Large size/i.test(String(gd.Extras || ''));
@@ -1232,6 +1233,7 @@ function showRates() {
         <div class="field"><label for="rLocal">Local courier (AED)</label><input id="rLocal" type="number" min="0" step="1" value="${rates.local}"></div>
         <div class="field"><label for="rPr4">Little Artists print, A4 (AED)</label><input id="rPr4" type="number" min="0" step="1" value="${rates.printA4 ?? 25}"></div>
         <div class="field"><label for="rPr3">Little Artists print, A3 (AED)</label><input id="rPr3" type="number" min="0" step="1" value="${rates.printA3 ?? 40}"></div>
+        <div class="field"><label for="rSivaRoy">Siva's print royalty (%)</label><input id="rSivaRoy" type="number" min="0" max="50" step="0.5" value="${rates.sivaRoyalty ?? 10}"><span class="muted" style="font-size:12px">His share of each framed print of his paintings, added to the print price. Portal artists: set in Artists &amp; sellers.</span></div>
         <div class="field"><label for="rFx">Exchange rate (AED per INR)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
@@ -1262,7 +1264,7 @@ function showRates() {
     $('detail').querySelectorAll('.err').forEach((x) => x.remove());
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: n($('rF' + k).value) ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
-    const data = { tiers, local: n($('rLocal').value) ?? 0, printA4: n($('rPr4').value) ?? 0, printA3: n($('rPr3').value) ?? 0, fx: n($('rFx').value) ?? 0,
+    const data = { tiers, local: n($('rLocal').value) ?? 0, printA4: n($('rPr4').value) ?? 0, printA3: n($('rPr3').value) ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(), ...(rates.pricing ? { pricing: rates.pricing } : {}),
       market: Object.fromEntries(Object.keys(t).map((k) => [k, { sk: [n($('mSk1' + k).value) ?? 0, n($('mSk2' + k).value) ?? 0], wc: [n($('mWc1' + k).value) ?? 0, n($('mWc2' + k).value) ?? 0], saatchi: $('mSa' + k).value.trim() }])) };
@@ -1270,6 +1272,10 @@ function showRates() {
       const rec = { key: 'default', data: JSON.stringify(data) };
       let res = rates.saved ? await client.models.Rates.update(rec) : await client.models.Rates.create(rec);
       if (res.errors?.length && !rates.saved) res = await client.models.Rates.update(rec);
+      // Siva's print royalty is kept on his works (the website adds it to their print price).
+      if (Number(rates.sivaRoyalty ?? -1) !== data.sivaRoyalty) {
+        try { let nt = null; do { const x = await client.models.Product.list({ limit: 500, nextToken: nt }); for (const w of (x.data || []).filter((w) => !w.artistId && w.kind !== 'photo')) await client.models.Product.update({ id: w.id, printRoyalty: data.sivaRoyalty }); nt = x.nextToken; } while (nt); } catch { /* next save retries */ }
+      }
       if (res.errors?.length) throw new Error(res.errors[0].message);
       rates = { ...data, saved: true };
       $('ratesMsg').textContent = 'Rates saved. New prices use them straight away.';

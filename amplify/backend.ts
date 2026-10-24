@@ -70,7 +70,8 @@ backend.zohoQuoteSync.resources.lambda.addToRolePolicy(
 // Commission photos for the Artist desk (signed links). The bucket is in the storage stack, which doesn't depend on data.
 backend.zohoQuoteSync.addEnvironment('UPLOADS_BUCKET', backend.storage.resources.bucket.bucketName);
 backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'uploads/*');
-backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'market/*'); // portal artists' works in the collection
+backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'market/*');
+backend.storage.resources.bucket.grantRead(backend.zohoQuoteSync.resources.lambda, 'catalogue/*'); // frame shops download the artwork / print file // portal artists' works in the collection
 // Catalogue import from links: the function saves the downloaded pictures here.
 backend.storage.resources.bucket.grantPut(backend.zohoQuoteSync.resources.lambda, 'catalogue/*');
 

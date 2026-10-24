@@ -1,6 +1,6 @@
 // Sellers tab (Order Management): approve sellers (commission % + Kalai delivery fee) and approve their listings.
 import { generateClient } from 'aws-amplify/data';
-import { getUrl } from 'aws-amplify/storage';
+import { getUrl, uploadData } from 'aws-amplify/storage';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -160,7 +160,9 @@ function sellerCard(s) {
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     <div class="mk-act">
       ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? DEF_PCT)}"></label>
-      <label>Kalai delivery fee (AED)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>` : ''}
+      <label>Kalai delivery fee (AED)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
+      ${s.type === 'ARTIST' ? `<label title="The artist's share of each framed print sold of their works, added to the print price">Print royalty %<input type="number" min="0" max="50" step="0.5" data-f="royalty" value="${esc(s.royaltyPct ?? 10)}"></label>
+      <label title="Shown on their artist bio on the website">Artist photo<input type="file" accept="image/*" data-f="photofile"><input type="hidden" data-f="photo" value=""></label>` : ''}` : ''}
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small" data-a="approveSeller" type="button">Save rates</button><button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
@@ -228,6 +230,20 @@ function wireCards() {
     const u = await urls.get(k);
     if (u) { img.src = u; img.parentElement.href = u; }
   });
+  // Artist photo chosen by the studio: uploaded at once, saved with "Save rates" / "Approve".
+  document.querySelectorAll('#mkBody [data-f="photofile"]').forEach((inp) => {
+    inp.onchange = async () => {
+      const card = inp.closest('.mk-card'), msg = card.querySelector('[data-msg]'), file = inp.files?.[0];
+      if (!file) return;
+      if (!/^image\//.test(file.type) || file.size > 10 * 1024 * 1024) { msg.textContent = 'Choose a JPG or PNG photo up to 10 MB.'; return; }
+      msg.textContent = 'Uploading the photo…';
+      try {
+        const r = await uploadData({ path: ({ identityId }) => `market/${identityId}/profile/${Date.now()}-${file.name.replace(/[^\w.-]+/g, '-')}`, data: file, options: { contentType: file.type } }).result;
+        card.querySelector('[data-f="photo"]').value = r.path;
+        msg.textContent = 'Photo uploaded: press Save rates to put it on their bio.';
+      } catch (ex) { msg.textContent = ex.message; }
+    };
+  });
   document.querySelectorAll('#mkBody [data-a]').forEach((b) => {
     b.onclick = async () => {
       const card = b.closest('.mk-card');
@@ -237,6 +253,7 @@ function wireCards() {
       const msg = card.querySelector('[data-msg]');
       if (['rejectSeller', 'rejectListing', 'suspendSeller'].includes(a) && !f('note').trim()) { msg.textContent = 'Write a short note to the seller first.'; return; }
       const data = { id, note: f('note').trim() };
+      if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); if (f('photo')) data.photoKey = f('photo'); }
       if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
       if (a === 'approveListing') data.commissionPct = f('pct');
       card.querySelectorAll('button').forEach((x) => { x.disabled = true; }); msg.textContent = '';

@@ -145,6 +145,7 @@ const schema = a.schema({
       artistId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       artistName: a.string().authorization((allow) => [allow.group('ADMINS')]),
       artistCountry: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      royaltyPct: a.float().authorization((allow) => [allow.group('ADMINS')]), // framed print of a painting: the artist's royalty % at the time of the order
       ziinaIntentId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       ziinaAmount: a.float().authorization((allow) => [allow.group('ADMINS')]),
       ziinaTest: a.string().authorization((allow) => [allow.group('ADMINS')]),
@@ -252,6 +253,12 @@ const schema = a.schema({
       artistId: a.string(), // their SellerProfile id: orders for this work go to them
       artistCountry: a.string(), // UAE: no India courier or customs in the price
       listingId: a.string(),
+      // Framed prints of this painting (Catalogue → Prints): on/off, the largest size the print file allows,
+      // the full-quality print file, and the artist's royalty % (added to the print price).
+      printable: a.boolean(),
+      printMax: a.string(),
+      printKey: a.string(),
+      printRoyalty: a.float(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
@@ -324,6 +331,7 @@ const schema = a.schema({
       bornYear: a.integer(), // artists, optional (shown as "b. India, 1985")
       city: a.string(),
       rateCard: a.string(), // frame shops / delivery partners: their price list (JSON, supplier portal → My rates)
+      royaltyPct: a.float(), // artists: their share of each print sold of their works (% of the print price)
       catalogue: a.string(), // frame shops: their frames (JSON [{name, style, material, colour, widthMm, extra, photoKey, note}])
     })
     .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),

@@ -1464,6 +1464,15 @@ async function onStreamRecord(rec: StreamRecord) {
   if (rec.eventName === 'INSERT') {
     // Customer code for the new enquiry (same code as the customer's earlier orders).
     if (!str(img, 'customerCode')) await assignCodes().catch((err) => console.warn('Customer code not assigned', err));
+    // A framed print of a painting: whose painting it is and their royalty %, for the costs (paid with their earnings).
+    if (str(img, 'kind') === 'PHOTO' && process.env.PRODUCT_TABLE) {
+      const d0 = parseDetails(str(img, 'details')), no = String(d0['Artwork no.'] ?? '').trim();
+      const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no) : undefined;
+      if (pr && str(pr, 'kind') !== 'photo') {
+        const pct = num(pr, 'printRoyalty'); // set from the artist's royalty (Artists & sellers; Siva's in Rates)
+        await writeBack(id, { artistName: str(pr, 'artist') || 'Siva Raja', ...(str(pr, 'artistId') ? { artistId: str(pr, 'artistId'), artistCountry: str(pr, 'artistCountry') || 'UAE' } : {}), royaltyPct: pct ?? 0 }).catch(() => {});
+      }
+    }
     // An order for a portal artist's collection work goes to that artist (their portal → Commissions).
     if (str(img, 'kind') === 'PRICE' && !str(img, 'artistId') && process.env.PRODUCT_TABLE) {
       const d0 = parseDetails(str(img, 'details')), no = String(d0['Artwork no.'] ?? '').trim();
@@ -1844,7 +1853,7 @@ async function upsertArtistProduct(l: Dict, seller: Dict, codes = true) {
     title: l.title, named: 'yes', kind: old.kind ?? kind, subject: old.subject ?? 'nature', medium: old.medium ?? cat,
     size: old.size ?? (sz ? `${sz[1]} × ${sz[2]} cm` : ''), description: l.description, imageKey: keys[0] ?? old.imageKey,
     status: ['PUBLISHED', 'SOLD'].includes(String(old.status)) ? old.status : 'DRAFT', source: 'artist-portal',
-    artist: seller.business, artistId: seller.id, artistCountry: seller.country || 'UAE', listingId: l.id,
+    artist: seller.business, artistId: seller.id, artistCountry: seller.country || 'UAE', listingId: l.id, printRoyalty: Number(seller.royaltyPct ?? old.printRoyalty ?? 0) || undefined,
   });
   if (AP) {
     const ap = plain(await getRow(AP, { productId: { S: id } })) || {};
@@ -2229,7 +2238,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
       const det = parseDetails(str(e, 'details'));
       const name = String(det['Artwork'] || det['Print'] || str(e, 'title')).split(' (')[0].trim().toLowerCase();
       const pr = (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'title').trim().toLowerCase() === name || (str(x, 'code') && String(det['Code'] ?? det['Artwork no.'] ?? '').includes(str(x, 'code'))));
-      key = str(pr, 'imageKey');
+      key = (str(e, 'kind') === 'PHOTO' && str(pr, 'printKey')) || str(pr, 'imageKey'); // prints: the full-quality print file when uploaded
     }
     if (!key) throw new Error('No photo for this order yet: ask Kalai Art House.');
     // download: the original file as uploaded (full size), saved under the order number, for printing.
@@ -2354,13 +2363,23 @@ async function marketAdmin(ev: ApiEvent) {
     if (!p) throw new Error('Seller not found');
     if (action === 'approveSeller') {
       const pct = numIn(d.commissionPct, 90), fee = numIn(d.kalaiDeliveryFee, 1000);
-      const row = { ...p, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
+      const wasApproved = p.status === 'APPROVED';
+      const extra: Dict = {};
+      if (p.type === 'ARTIST' && d.royaltyPct !== undefined && d.royaltyPct !== '') extra.royaltyPct = numIn(d.royaltyPct, 50);
+      if (typeof d.photoKey === 'string' && /^market\//.test(d.photoKey)) extra.photoKey = txt(d.photoKey, 300);
+      const row = { ...p, ...extra, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
       if (p.type === 'ARTIST') {
         await publishArtist(row);
-        // Works already live move to the collection with the artist's name.
-        for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) await publishItem(plain(x)!);
+        // Their approved works are catalogue works (priced in Pricing); keep them in step, with the print royalty.
+        for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id && str(x, 'status') === 'APPROVED')) await upsertArtistProduct(plain(x)!, row, false);
+        if (extra.royaltyPct !== undefined && process.env.PRODUCT_TABLE) {
+          for (const pr of (await scanAll(process.env.PRODUCT_TABLE)).filter((x) => str(x, 'artistId') === id)) {
+            await ddb.send(new UpdateItemCommand({ TableName: process.env.PRODUCT_TABLE, Key: { id: { S: str(pr, 'id') } }, UpdateExpression: 'SET printRoyalty = :r', ExpressionAttributeValues: { ':r': { N: String(extra.royaltyPct) } } }));
+          }
+        }
       }
+      if (wasApproved) return { profile: row }; // saving rates: no welcome email again
       if (ROLE_OF[String(p.type)]) {
         await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'FRAMER' ? 'frame shop' : 'delivery partner'} account is approved`, lines: [`Hello ${h(p.contactName)},`,
           `Welcome to Kalai Art House as a ${p.type === 'FRAMER' ? 'frame shop' : 'delivery partner'}. When we have a ${p.type === 'FRAMER' ? 'framing' : 'delivery'} job for you, you get an email and it appears under My jobs in your supplier portal, with the agreed price.`,
