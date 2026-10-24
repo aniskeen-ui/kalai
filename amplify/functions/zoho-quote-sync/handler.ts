@@ -1099,6 +1099,7 @@ async function artistList(admin = false) {
       if (num(c, 'artistPriceInr') == null && num(c, 'artistPriceAed') == null) await useCataloguePrice(str(e, 'id'), e).catch(() => {});
     }
   }
+  await catchUpArtistStatus(enquiries);
   return artistRows(enquiries, admin);
 }
 
@@ -1144,7 +1145,7 @@ async function artistRows(enquiries: Img[], admin = false) {
     const fj = parseJobs(str(c, 'supplierJobs')).framer;
     // The frame shop on the order page (saved with the costing), else the default / only frame shop.
     let picked: Img | undefined;
-    try { let cs: unknown = str(c, 'costs'); for (let i = 0; i < 2 && typeof cs === 'string'; i++) cs = JSON.parse(cs || '{}'); const fid = String((cs as { framerId?: string } | null)?.framerId ?? ''); picked = fid ? shops.get(fid) : undefined; } catch { picked = undefined; }
+    try { let cs: unknown = c?.costs ? fromAttr(c.costs as AttributeValue) : null; for (let i = 0; i < 2 && typeof cs === 'string'; i++) cs = JSON.parse(cs || '{}'); const fid = String((cs as { framerId?: string } | null)?.framerId ?? ''); picked = fid ? shops.get(fid) : undefined; } catch { picked = undefined; }
     const p = (fj?.supplierId && shops.get(fj.supplierId)) || (fj ? undefined : picked ?? onlyShop);
     if (!p) return fj ? { name: fj.name, contact: '', phone: '', address: '', assigned: true } : null;
     return { name: str(p, 'business'), contact: str(p, 'contactName'), phone: str(p, 'phone'),
@@ -1285,12 +1286,21 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   // Sent to the frame shop and the frame shop has already accepted the job: the order is now "Being framed".
   // The order's status follows the artist: Started → Artist working, Finished → Artist finished, sent with an AWB →
   // Sent by artist (or straight to Being framed when the frame shop has already accepted the job). Only forward.
-  if (PAID_LIKE.includes(str(e, 'status'))) {
-    const fj = target >= 2 ? (await jobsOf(id)).framer : undefined;
-    const next = target >= 2 ? (fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage)) ? 'FRAMING' : 'ARTIST_SENT') : target === 1 ? 'ARTIST_DONE' : 'ARTIST_WORKING';
-    if (STATUS_RANK.indexOf(next) > STATUS_RANK.indexOf(str(e, 'status'))) await updateEnquiry(id, { status: next }).catch((err) => console.warn(`Status not moved to ${next}`, err));
-  }
+  await followArtist(e, PROGRESS[Math.max(target, current)]);
   return { ok: true, ref: str(e, 'ref'), ...set };
+}
+/** The order's status follows the artist's step (paid orders only, forward only). Also catches up older orders. */
+async function followArtist(e: Img, stage: string) {
+  const target = PROGRESS.indexOf(stage);
+  if (target < 0 || !PAID_LIKE.includes(str(e, 'status')) || sivaStopped(e)) return;
+  const id = str(e, 'id');
+  const fj = target >= 2 ? (await jobsOf(id)).framer : undefined;
+  const next = target >= 2 ? (fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage)) ? 'FRAMING' : 'ARTIST_SENT') : target === 1 ? 'ARTIST_DONE' : 'ARTIST_WORKING';
+  if (STATUS_RANK.indexOf(next) > STATUS_RANK.indexOf(str(e, 'status'))) await updateEnquiry(id, { status: next }).catch((err) => console.warn(`Status not moved to ${next}`, err));
+}
+/** Older orders: bring the status up to the artist's step (once; later steps move it as they happen). */
+async function catchUpArtistStatus(list: Img[]) {
+  for (const e of list) if (str(e, 'artistStage') && PAID_LIKE.includes(str(e, 'status'))) await followArtist(e, str(e, 'artistStage')).catch(() => {});
 }
 
 async function artistPhoto(id: string) {
@@ -3231,6 +3241,7 @@ async function artistCommissions(action: string, d: Dict, sub: string, profile: 
   const currency: 'INR' | 'AED' = profile.country === 'India' ? 'INR' : 'AED';
   if (action === 'commissions') {
     const mine = (await scanAll(table)).filter((e) => str(e, 'artistId') === sub && ['PRICE', 'COMMISSION'].includes(str(e, 'kind')));
+    await catchUpArtistStatus(mine);
     return { currency, items: await artistRows(mine) };
   }
   const id = txt(d.id, 60);
@@ -3450,6 +3461,7 @@ async function assignCodes() {
       if (mail) for (const e of list) if (!str(e, 'email').trim()) await writeBack(str(e, 'id'), { email: mail }).catch(() => {});
     }
     await syncCustomers(byCode).catch((err) => console.warn('Customer master not updated', err));
+    await catchUpArtistStatus(all);
   }
   // Offer master numbers PR-0000001… (in order of creation).
   const prtable = process.env.PROMO_TABLE;
