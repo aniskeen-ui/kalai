@@ -57,6 +57,9 @@ label{font-size:13px;font-weight:600}
 .count[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .count b{font-family:var(--mono)}
 .tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+/* Reports: the table scrolls inside the screen, so the side-scroll bar stays at the bottom of the window; the header and totals stay in view. */
+.rp-scroll{max-height:calc(100vh - 150px);overflow:auto}.rp-scroll thead th{position:sticky;top:0;z-index:2;background:var(--surface)}.rp-scroll tfoot td,.rp-scroll tfoot th{position:sticky;bottom:0;z-index:2;background:var(--surface)}
+.rp-scroll::-webkit-scrollbar{height:14px;width:12px}.rp-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted) 55%,transparent);border-radius:8px}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
@@ -289,7 +292,7 @@ a.df[href]:hover{transform:translateY(-2px)}
       </div>
       <div class="tiles" id="rTiles"></div>
       <p class="muted" style="font-size:13px;margin:0 0 10px">Paid orders only (Paid, Being framed, Shipped, Delivered, Replacement, Refunded), by order date. Planned costs are the estimates saved in each order's Costing box; actual costs come from the bills entered under <b>Actual costs</b> on each paid order (a cost with no bill yet stays at its planned figure, shown in <i>italics</i>). Both include the actual extra cost of any replacement (less insurance received); refunds and cancelled Siva orders are taken into account. Sales are shown with VAT; margin is on net sales (excluding VAT and the payment fee).</p>
-      <div class="tablewrap"><table class="report">
+      <div class="tablewrap rp-scroll"><table class="report">
         <thead><tr><th>Date</th><th>Ref</th><th>Order</th><th>Customer</th><th>Status</th><th class="num">Sales</th><th class="num">Refund</th><th class="num">Net sales</th><th class="num">Artist</th><th class="num">Framing</th><th class="num">India courier</th><th class="num">Customs</th><th class="num">Local courier</th><th class="num">Rework</th><th class="num">Fees &amp; ins.</th><th class="num">Total cost</th><th class="num">Planned margin</th><th class="num">Actual margin</th><th class="num">Variance</th><th class="num">Margin %</th></tr></thead>
         <tbody id="rRows"></tbody>
         <tfoot id="rFoot"></tfoot>
