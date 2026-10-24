@@ -1390,6 +1390,22 @@ async function syncFramer(e) {
   const rec = { enquiryId: e.id, costs: JSON.stringify({ ...costs, framerId: id }) };
   try { const res = c ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec); if (!res.errors?.length) costings.set(e.id, res.data || { ...c, ...rec }); } catch { /* next time */ }
 }
+/** Which email (if any) the customer gets for this save, and to which address. */
+const MAIL_ON = { PRICE_SENT: 'PRICE_SENT', PAID: 'PAID', FRAMING: 'FRAMING', SHIPPED: 'SHIPPED', DELIVERED: 'DELIVERED', REPLACEMENT: 'REPLACEMENT', REFUNDED: 'REFUNDED', CANCELLED: 'CANCELLED', RECEIVED: 'RECEIVED_AGAIN' };
+let mailOffList = null;
+async function mailNote(e, oldSt, newSt, prevMsg) {
+  if (mailOffList == null) { try { const r = await client.models.SiteSetting.get({ id: 'site' }); mailOffList = String(r.data?.mailOff || '').split(',').map((x) => x.trim()).filter(Boolean); } catch { mailOffList = []; } }
+  const to = e.email ? `to ${e.email}` : '';
+  if (!e.email) return 'No email on this order (sent without signing in): send the update on WhatsApp.';
+  if (newSt !== oldSt) {
+    const key = MAIL_ON[newSt];
+    if (!key) return `No customer email for “${STATUS[newSt] || newSt}” (it shows under My enquiries & orders).`;
+    if (mailOffList.includes(key)) return `The “${STATUS[newSt] || newSt}” email is switched off in Settings → Customer emails: nothing emailed.`;
+    return `Email sent ${to} (${STATUS[newSt] || newSt}${(e.adminMessage || '') ? ', with your message' : ''}).`;
+  }
+  if ((e.adminMessage || '') && (e.adminMessage || '') !== prevMsg) return `Your message was emailed ${to}.`;
+  return `No email this time (status and message unchanged). Customer email: ${e.email}.`;
+}
 async function saveCosting(e) {
   const { local, ...inp } = readCosting();
   const r = calc({ ...inp, local }, n(finalPriceStr()));
@@ -1903,7 +1919,7 @@ async function showDetailBody(e) {
       ${afterSection(e)}
       <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="Leave empty: a Ziina link is created when you save as Price sent" value="${esc(e.paymentLink)}">
         <span class="muted" style="font-size:12px">${e.ziinaIntentId ? 'Created by Ziina automatically. Change the price and save again (still Price sent) to get a new link.' : 'Leave empty and save as <b>Price sent</b>: the Ziina link is made for you and emailed to the customer.'}</span></div>
-      <div class="field"><label for="eMsg">Message to customer</label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
+      <div class="field"><label for="eMsg">Message to customer <span class="muted" style="font-weight:400;font-size:12px">· emails go to ${e.email ? esc(e.email) : 'no email on this order'}</span></label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
       <div class="ok" id="saveMsg" role="status"></div>
       <div class="muted" id="autoHint" style="font-size:12px;color:var(--gold)" hidden></div>
       <button class="btn" type="submit" id="eSave">Save and update customer</button>
@@ -2170,6 +2186,7 @@ async function showDetailBody(e) {
     try {
       if (costingChanged) await saveCosting(e);
       if (rw) await saveRework(e, rw);
+      const prevMsg = e.adminMessage || '', newSt = $('eStatus').value;
       const { data, errors } = await client.models.Enquiry.update({
         ...(costingChanged ? { costingAt: savedAt } : {}),
         ...(invNo ? { artistInvoiceNo: invNo } : {}), // never cleared here: the artist may have sent it from their portal meanwhile
@@ -2200,7 +2217,8 @@ async function showDetailBody(e) {
       });
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(e, data || {});
-      $('saveMsg').textContent = $('eStatus').value === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries & orders and is emailed when the status or message changes.';
+      $('saveMsg').textContent = newSt === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries & orders.';
+      $('saveMsg').insertAdjacentText('beforeend', ' ' + await mailNote(e, s, newSt, prevMsg));
       render();
       // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
       void toZoho;
