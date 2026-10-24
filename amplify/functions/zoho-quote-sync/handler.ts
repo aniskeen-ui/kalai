@@ -2747,7 +2747,9 @@ async function securePrintFiles() {
 /** Width × height from the start of a JPEG or PNG (first 256 KB only). */
 async function imageDims(bucket: string, key: string): Promise<{ w: number; h: number } | null> {
   const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: 'bytes=0-262143' }));
-  const b: Uint8Array = await r.Body.transformToByteArray();
+  const body = r.Body as { transformToByteArray(): Promise<Uint8Array> } | undefined;
+  if (!body) return null;
+  const b: Uint8Array = await body.transformToByteArray();
   if (b[0] === 0x89 && b[1] === 0x50) return { w: (b[16] << 24 | b[17] << 16 | b[18] << 8 | b[19]) >>> 0, h: (b[20] << 24 | b[21] << 16 | b[22] << 8 | b[23]) >>> 0 };
   if (b[0] !== 0xff || b[1] !== 0xd8) return null;
   let i = 2;
