@@ -988,8 +988,12 @@ function reqAction(e) {
 }
 const REQ_LABEL = { CANCEL: 'Cancel the order', DAMAGED_REFUND: 'Arrived damaged: full refund', DAMAGED_REPLACE: 'Arrived damaged: replacement / repair' };
 function requestBanner(e) {
-  if (!isReq(e) && e.cancelState !== 'DECLINED') return '';
-  if (e.cancelState === 'DECLINED') return `<div class="muted" style="font-size:13px"><b>Customer request declined:</b> ${esc(REQ_LABEL[e.cancelRequest] || '')}${e.cancelReply ? ` · “${esc(e.cancelReply)}”` : ''}</div>`;
+  if (!isReq(e) && !['DECLINED', 'REOPENED', 'WITHDRAWN'].includes(e.cancelState)) return '';
+  const dmg = String(e.cancelRequest || '').startsWith('DAMAGED');
+  const redo = `<div style="margin-top:6px"><div class="field"><label for="rqRedoMsg">Message to the customer (emailed)</label><input id="rqRedoMsg" value="${esc(e.cancelReply || 'The photo you sent does not show the damage. Please send clear photos of the whole frame and a close-up of the damage.')}"></div><button class="btn small ghost" type="button" id="rqRedo">Ask the customer for new photos (48 hours)</button> <span class="ok" id="rqRedoOk" role="status"></span></div>`;
+  if (e.cancelState === 'REOPENED') return `<div class="reqbox"><b>Waiting for new damage photos</b> · asked ${esc(when(e.cancelReopenAt))}; the customer can send them for 48 hours from then. ${e.cancelReply ? `“${esc(e.cancelReply)}”` : ''}</div>`;
+  if (e.cancelState === 'WITHDRAWN') return `<div class="muted" style="font-size:13px"><b>Customer withdrew their request</b> (${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest || '')}). If they report again it shows here as a new request.</div>`;
+  if (e.cancelState === 'DECLINED') return `<div class="muted" style="font-size:13px"><b>Customer request declined:</b> ${esc(REQ_LABEL[e.cancelRequest] || '')}${e.cancelReply ? ` · “${esc(e.cancelReply)}”` : ''}${dmg ? redo : ''}</div>`;
   return `<div class="reqbox">
     <div><b>Customer request · ${esc(when(e.cancelRequestedAt))}</b></div>
     <div>${esc(REQ_LABEL[e.cancelRequest] || e.cancelRequest)}${e.cancelRequest !== 'DAMAGED_REPLACE' ? ` · refund under the policy: <b>⃃ ${Number(e.cancelRefundDue || 0).toLocaleString('en-US')}</b>` : ''}</div>
@@ -1000,6 +1004,7 @@ function requestBanner(e) {
       <div class="field" style="margin-top:8px"><label for="rqReply">Reply to the customer (emailed)</label><textarea id="rqReply" rows="2" placeholder="e.g. As agreed on the phone, you are keeping the painting."></textarea></div>
       <button class="btn ghost" type="button" id="rqDecline">Decline and email the customer</button> <span class="ok" id="rqMsg" role="status"></span>
     </details>
+    ${dmg ? `<details><summary>Wrong or unclear photo? Ask for new photos</summary>${redo}</details>` : ''}
   </div>`;
 }
 
@@ -1634,6 +1639,18 @@ async function showDetail(e) {
       $('rtPickup').hidden = m !== 'PICKUP'; $('rtHint').hidden = m !== 'PICKUP'; $('rtTicks').hidden = !m || m === 'NONE';
       if ($('rtPicked')) $('rtPicked').closest('label').hidden = m !== 'PICKUP';
     });
+  }
+  if ($('rqRedo')) {
+    $('rqRedo').onclick = async (ev) => {
+      const b = ev.currentTarget; b.disabled = true; $('rqRedoOk').textContent = 'Saving…';
+      try {
+        const set = { id: e.id, cancelState: 'REOPENED', cancelReopenAt: new Date().toISOString(), cancelReply: $('rqRedoMsg').value.trim() || null };
+        const { data, errors } = await client.models.Enquiry.update(set);
+        if (errors?.length) throw new Error(errors[0].message);
+        Object.assign(e, data || set);
+        render(); showDetail(e);
+      } catch (ex) { $('rqRedoOk').textContent = ex.message || 'Could not save.'; b.disabled = false; }
+    };
   }
   if ($('rqDecline')) {
     $('rqDecline').onclick = async (ev) => {

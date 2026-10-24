@@ -382,6 +382,7 @@ function cancelTerms(e) {
 }
 function damageOpen(e) {
   if (e.status !== 'DELIVERED') return false;
+  if (e.cancelState === 'REOPENED') { const r = Date.parse(e.cancelReopenAt); return !Number.isFinite(r) || Date.now() - r <= DAMAGE_HOURS * 3600_000; }
   const at = Date.parse(e.deliveredAt || e.updatedAt);
   return !Number.isFinite(at) || Date.now() - at <= DAMAGE_HOURS * 3600_000;
 }
@@ -391,7 +392,13 @@ function requestBlock(e) {
   if (e.cancelState === 'REQUESTED') {
     return `<div class="enq-msg warn">${e.cancelRequest === 'CANCEL' ? `Cancellation requested on ${esc(when)}. Refund due: <b>${aedTxt(e.cancelRefundDue)}</b>, sent within 7 working days. We'll email you when it's done.`
       : e.cancelRequest === 'DAMAGED_REPLACE' ? `Damage reported on ${esc(when)}. You asked for a replacement or repair; we'll confirm within 2 working days.`
-      : `Damage reported on ${esc(when)}. Refund due: <b>${aedTxt(e.cancelRefundDue)}</b> once we've checked the photos. We'll email you.`}</div>`;
+      : `Damage reported on ${esc(when)}. Refund due: <b>${aedTxt(e.cancelRefundDue)}</b> once we've checked the photos. We'll email you.`}</div>
+      <button type="button" class="req-open" data-withdraw="${esc(e.id)}">Sent the wrong photo or changed your mind? Withdraw this request</button>`;
+  }
+  if (e.cancelState === 'REOPENED') {
+    const open = damageOpen(e);
+    return `<div class="enq-msg warn"><b>Please send new photos.</b> ${esc(e.cancelReply || 'The photos did not show the damage clearly.')}${open ? ' You have 48 hours from our message.' : ' The 48 hours have passed: please contact us.'}</div>
+      ${open ? `<button type="button" class="req-open" data-req="DAMAGE" data-id="${esc(e.id)}">Send new damage photos</button>` : ''}`;
   }
   if (e.cancelState === 'DECLINED') return `<div class="enq-msg warn">About your request: ${esc(e.cancelReply || 'we could not accept it under our terms. Please reply to our email to talk it through.')}</div>`;
   if (['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(e.status)) return '';
@@ -536,6 +543,18 @@ function wireRequests(root, items) {
       if (errors?.length) throw new Error(errors[0].message);
       return typeof data === 'string' ? JSON.parse(data) : data;
     });
+  });
+  root.querySelectorAll('[data-withdraw]').forEach((b) => {
+    b.onclick = async () => {
+      if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Withdraw it? Tap again to confirm'; return; }
+      b.disabled = true; b.textContent = 'Withdrawing…';
+      try {
+        const { errors } = await client.mutations.customerRequest({ id: b.dataset.withdraw, action: 'WITHDRAW' });
+        if (errors?.length) throw new Error(errors[0].message);
+        const e = items.find((x) => x.id === b.dataset.withdraw); if (e) { e.cancelState = 'WITHDRAWN'; e.cancelRefundDue = null; }
+        currentTab = 'ORDERS'; showList();
+      } catch (ex) { b.textContent = ex.message || 'Could not withdraw.'; b.disabled = false; }
+    };
   });
   root.querySelectorAll('[data-req]').forEach((b) => {
     b.onclick = () => {
@@ -720,7 +739,7 @@ const ORDER_ST = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
 const TABS = [
   ['ORDERS', 'Orders', (e) => ORDER_ST.includes(e.status) && e.cancelState !== 'REQUESTED'],
   ['ENQ', 'Enquiries', (e) => ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED')],
-  ['CANCEL', 'Cancellations & refunds', (e) => ['CANCELLED', 'REFUNDED'].includes(e.status) || e.cancelState === 'REQUESTED' || e.cancelState === 'DECLINED'],
+  ['CANCEL', 'Cancellations & refunds', (e) => ['CANCELLED', 'REFUNDED'].includes(e.status) || ['REQUESTED', 'DECLINED', 'REOPENED'].includes(e.cancelState)],
 ];
 let currentTab = null;
 const POLICY_NOTE = `<p class="acct-info" style="margin:0;font-size:13px">To cancel, open the order under <b>Orders</b> or <b>Enquiries</b> and tap “Cancel this order”: you see the refund before you confirm. Before payment it's free; after payment you get a full refund until the artist starts, then 50%. Shipped orders can't be cancelled; damage can be reported with photos within 48 hours of delivery. <a href="#terms" class="acct-terms" style="color:var(--kumkum)">Full terms</a></p>`;

@@ -3744,7 +3744,9 @@ function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
   if (action === 'DAMAGED_REFUND' || action === 'DAMAGED_REPLACE') {
     if (status !== 'DELIVERED') return t('NONE', 0, 'Damage can be reported once the order is delivered.', false);
     const at = Date.parse(str(e, 'deliveredAt') || str(e, 'updatedAt'));
-    if (Number.isFinite(at) && now - at > DAMAGE_WINDOW_MS) return t('NONE', 0, 'Damage must be reported within 48 hours of delivery. Please contact us.', false);
+    // The studio asked for new photos: 48 hours from that request instead of from delivery.
+    const reopen = str(e, 'cancelState') === 'REOPENED' ? Date.parse(str(e, 'cancelReopenAt')) : NaN;
+    if (Number.isFinite(reopen) ? now - reopen > DAMAGE_WINDOW_MS : Number.isFinite(at) && now - at > DAMAGE_WINDOW_MS) return t('NONE', 0, Number.isFinite(reopen) ? 'The 48 hours to send new photos have passed. Please contact us.' : 'Damage must be reported within 48 hours of delivery. Please contact us.', false);
     return action === 'DAMAGED_REFUND' ? t('DAMAGE', 1, 'Damaged in transit: full refund once we have checked the photos.') : t('DAMAGE', 0, 'Damaged in transit: we replace or repair it at no cost.');
   }
   return t('NONE', 0, 'Unknown request.', false);
@@ -3786,6 +3788,19 @@ async function customerRequest(ev: ApiEvent) {
   if (action === 'LICENCE_FILE') return licenceFile(e);
   // Certificate of authenticity for an original (the website draws the PDF).
   if (action === 'COA') return certificateOf(e, true);
+  // The customer takes back an open request (e.g. sent the wrong photo): they can then report again while the window is open.
+  if (action === 'WITHDRAW') {
+    if (str(e, 'cancelState') !== 'REQUESTED') throw new Error('There is no open request to withdraw.');
+    const wnow = new Date().toISOString();
+    await ddb.send(new UpdateItemCommand({
+      TableName: table, Key: { id: { S: id } },
+      UpdateExpression: 'SET cancelState = :w, updatedAt = :n REMOVE cancelRefundDue',
+      ExpressionAttributeValues: { ':w': { S: 'WITHDRAWN' }, ':n': { S: wnow } },
+      ConditionExpression: 'attribute_exists(id)',
+    }));
+    console.log(`Customer withdrew request ${str(e, 'cancelRequest')} for ${str(e, 'ref')}`);
+    return { ok: true, state: 'WITHDRAWN' };
+  }
   const terms = cancelTerms(e, action);
   if (!terms.allowed) throw new Error(terms.note);
   const reason = String(a.reason ?? '').trim().slice(0, 1000);
@@ -3985,6 +4000,14 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'cancelReason') ? `Reason: ${h(str(img, 'cancelReason'))}` : '', damage ? 'Photos are attached to the order.' : '',
       req === 'CANCEL' && str(img, 'zohoPOId') ? "Siva's order is on hold until you decide." : '',
       'Pay the refund, then confirm it in the order (the box is filled in for you).']);
+  }
+  if (cs !== ocs && cs === 'REOPENED') {
+    key = 'DECLINED';
+    cust(`Please send new photos for ${ref}`, [`We've looked at the damage report for <b>${h(title)}</b>.`, str(img, 'cancelReply') ? h(str(img, 'cancelReply')) : 'The photos did not show the damage clearly.',
+      'Please send new photos under <b>My enquiries & orders</b> → this order → <b>Send new damage photos</b>, within 48 hours. Show the whole frame and a close-up of the damage, and the outer box if it was damaged.']);
+  }
+  if (cs !== ocs && cs === 'WITHDRAWN') {
+    studio(`Request withdrawn: ${title} (${ref})`, [`The customer withdrew their request (${h(str(img, 'cancelRequest'))}) for <b>${h(title)}</b>.`, 'If they report again, it comes in as a new request.']);
   }
   if (cs !== ocs && cs === 'DECLINED') {
     key = 'DECLINED';
