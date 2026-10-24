@@ -181,7 +181,7 @@ function supplierCard(s) {
       <label>Note to ${fr ? 'frame shop' : 'delivery partner'}<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
-        : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`}
+        : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`} ${s.status !== 'APPROVED' ? '<button class="btn small ghost" data-a="deleteSeller" type="button" title="Remove this account for good (only if it has no orders)">Delete</button>' : ''}
       <a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open their portal${!s.owner ? ' (price list, jobs)' : ''}</a>
       ${waLink(s.phone, inviteText(s)) ? `<a class="btn small ghost" href="${waLink(s.phone, inviteText(s))}" target="_blank" rel="noopener">WhatsApp invite</a><a class="btn small ghost" href="${waLink(s.phone, priceText(s))}" target="_blank" rel="noopener">WhatsApp: ask for prices</a>` : ''}
       ${s.email ? '<button class="btn small ghost" data-a="inviteSupplier" type="button">Email invite</button>' : ''}
@@ -211,7 +211,7 @@ function sellerCard(s) {
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small" data-a="approveSeller" type="button">Save rates</button><button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
-        : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`}
+        : `<button class="btn small" data-a="approveSeller" type="button">Approve</button>${s.status !== 'REJECTED' ? '<button class="btn small ghost" data-a="rejectSeller" type="button">Reject</button>' : ''}`} ${s.status !== 'APPROVED' ? '<button class="btn small ghost" data-a="deleteSeller" type="button" title="Remove this account for good (only if it has no orders)">Delete</button>' : ''}
       <a class="btn small ghost" href="/seller.html?view=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">Open ${s.type === 'ARTIST' ? 'artist' : 'seller'} portal</a>
       <span class="err" data-msg></span>
     </div>
@@ -311,6 +311,7 @@ function wireCards() {
       const a = b.dataset.a;
       const msg = card.querySelector('[data-msg]');
       if (['rejectSeller', 'rejectListing', 'suspendSeller'].includes(a) && !f('note').trim()) { msg.textContent = 'Write a short note to the seller first.'; return; }
+      if (a === 'deleteSeller' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Delete for good? Click again'; b.classList.remove('ghost'); msg.textContent = 'This removes the account, its listings and its catalogue copies. It cannot be undone.'; return; }
       const data = { id, note: f('note').trim() };
       if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); if (f('photo')) data.photoKey = f('photo'); }
       if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
@@ -321,6 +322,7 @@ function wireCards() {
         if (r.profile) sellers = sellers.map((s) => (s.id === id ? { ...s, ...r.profile } : s));
         if (r.listing) listings = listings.map((l) => (l.id === id ? { ...l, ...r.listing } : l));
         if (a === 'inviteSupplier') { msg.textContent = 'Invite emailed.'; card.querySelectorAll('button').forEach((x) => { x.disabled = false; }); return; }
+        if (a === 'deleteSeller') { sellers = sellers.filter((x) => x.id !== id); listings = listings.filter((l) => l.sellerId !== id); draw(); return; }
         if (a === 'suspendSeller') await load(); else draw();
       } catch (ex) { msg.textContent = ex.message; card.querySelectorAll('button').forEach((x) => { x.disabled = false; }); }
     };

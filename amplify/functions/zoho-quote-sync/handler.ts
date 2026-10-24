@@ -2480,6 +2480,25 @@ async function marketAdmin(ev: ApiEvent) {
       await sendMail({ to: String(p.email ?? ''), subject: `Your Kalai Art House ${p.type === 'ARTIST' ? 'artist' : 'seller'} account is approved`, lines: [`Hello ${h(p.contactName)},`, p.type === 'ARTIST' ? 'Welcome to Kalai Art House as one of our artists. You receive your full price for each work sold; we frame, price and deliver it.' : `Welcome to Kalai Art House. Your commission rate is <b>${pct}%</b> of your price${fee ? `, plus AED ${fee} when Kalai delivers` : ''}; it is added on top, so you receive your full price.`, p.type === 'ARTIST' ? 'You can now list your artworks with their price. Each one is checked by us before it goes live.' : 'You can now add your products. Each listing is checked by us before it goes live.'], button: { label: 'Open the seller portal', url: `${SITE}/seller.html` } }).catch(() => {});
       return { profile: row };
     }
+    // Delete an artist / seller / supplier for good (e.g. a duplicate account). Only when not active and with no orders:
+    // their unpublished listings and catalogue copies go too. Someone with orders stays (Suspended) so the history is kept.
+    if (action === 'deleteSeller') {
+      if (p.status === 'APPROVED') throw new Error('Suspend them first, then delete.');
+      const ET = process.env.ENQUIRY_TABLE;
+      const orders = ET ? (await scanAll(ET)).filter((e) => str(e, 'artistId') === id || str(e, 'sellerId') === id) : [];
+      if (orders.length) throw new Error(`They have ${orders.length} order${orders.length === 1 ? '' : 's'} (${orders.slice(0, 3).map((e) => str(e, 'ref')).join(', ')}${orders.length > 3 ? '…' : ''}), so they can't be deleted: keep them suspended to keep the history.`);
+      const jobsWith = process.env.COSTING_TABLE ? (await scanAll(process.env.COSTING_TABLE)).filter((c) => Object.values(parseJobs(c.supplierJobs?.S)).some((j) => j && (j as { supplierId?: string }).supplierId === id)) : [];
+      if (jobsWith.length) throw new Error(`They have ${jobsWith.length} supplier job${jobsWith.length === 1 ? '' : 's'} on orders, so they can't be deleted: keep them suspended.`);
+      await unpublishArtist(id).catch(() => {});
+      let gone = 0;
+      for (const x of (await scanAll(L)).filter((x) => str(x, 'sellerId') === id)) {
+        await unpublishItem(str(x, 'id')).catch(() => {}); await hideArtistProduct(str(x, 'id')).catch(() => {});
+        await delRow(L, { id: { S: str(x, 'id') } }); gone++;
+      }
+      await delRow(S, { id: { S: id } });
+      console.log(`Deleted ${p.type} ${p.business} (${id}) and ${gone} listing(s)`);
+      return { deleted: true, listings: gone };
+    }
     if (action === 'rejectSeller' || action === 'suspendSeller') {
       const row = { ...p, status: action === 'rejectSeller' ? 'REJECTED' : 'SUSPENDED', adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
