@@ -99,8 +99,8 @@ function row(p) {
       </div>
       <textarea data-f="description" rows="1" placeholder="Short description shown on the website" aria-label="Description">${esc(p.description)}</textarea>
       ${p.kind !== 'photo' ? `<div class="cg-prints" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px">
-        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400" title="Also sell framed prints of this painting (Framed Prints, and a button on its page)"><input data-f="printable" type="checkbox" ${p.printable ? 'checked' : ''}> Sell framed prints</label>
-        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400">up to <select data-f="printMax" aria-label="Largest print size">${PRINT_MAX.map((z) => `<option ${z === (p.printMax || 'A3') ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
+        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Also sell framed prints of this painting (Framed Prints, and a button on its page)"><input data-f="printable" type="checkbox" style="width:auto" ${p.printable ? 'checked' : ''}> Sell framed prints</label>
+        <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap">up to <select data-f="printMax" aria-label="Largest print size" style="width:auto">${PRINT_MAX.map((z) => `<option ${z === (p.printMax || 'A3') ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
         <label class="linkbtn" style="cursor:pointer" title="High-quality scan or photo for printing (the website picture is used if none)">${p.printKey ? '✓ Print file uploaded · change' : 'Upload print file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
         <span class="muted">${p.printable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
       <span class="cg-saved muted" aria-live="polite"></span>
@@ -247,6 +247,20 @@ function wireToolbar() {
     selected.clear(); order.forEach((id) => selected.add(id));
     bulk(`Scheduling ${per} per day from ${start}`, (p, i) => upd(p, { status: 'PUBLISHED', publishAt: slot(start, Math.floor(i / per)) }));
   };
+  // Framed prints for the selected works (photos are prints already; works whose artist said no are skipped).
+  $('cgPrintsOn').onclick = async () => {
+    const max = $('cgPrintMax').value, siva = await sivaRoyaltyPct();
+    let skipped = 0;
+    await bulk(`Switching on prints (up to ${max})`, async (p) => {
+      if (p.kind === 'photo') return;
+      let royalty = p.printRoyalty ?? null;
+      if (p.artistId) { const ap = await artistProfile(p.artistId); if (ap?.allowPrints === 'NO') { skipped++; return; } royalty = royalty ?? Number(ap?.royaltyPct ?? 10); }
+      else royalty = royalty ?? siva;
+      await upd(p, { printable: true, printMax: max, printRoyalty: royalty });
+    });
+    if (skipped) $('cgBulkMsg').textContent += ` ${skipped} skipped: the artist hasn't agreed to prints.`;
+  };
+  $('cgPrintsOff').onclick = () => bulk('Stopping prints', (p) => upd(p, { printable: false }));
   $('cgSold').onclick = () => bulk('Marking sold', (p) => upd(p, { status: 'SOLD' }));
   $('cgDraft').onclick = () => bulk('Taking off the website', (p) => upd(p, { status: 'DRAFT' }));
   $('cgHide').onclick = () => bulk('Hiding', (p) => upd(p, { status: 'HIDDEN' }));
