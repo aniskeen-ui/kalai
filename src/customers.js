@@ -61,6 +61,8 @@ function edit(c) {
     <div class="three">${countryRegionHtml({ country: c.country || 'UAE', region: c.emirate || '', pin: c.pin || '', prefix: 'cu' })}</div>
     <div class="field"><label for="cuAddr">Address</label><textarea id="cuAddr" name="address" rows="2" maxlength="300">${esc(c.address)}</textarea></div>
     <div class="field"><label for="cuLand">Landmark (optional)</label><input id="cuLand" name="landmark" maxlength="120" value="${esc(c.landmark)}"></div>
+    <div class="field"><label for="cuDiscT">Standard discount for this customer</label><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="cuDiscT" name="discountType" style="width:auto"><option value="">None</option><option value="PCT" ${c.discountType === 'PCT' ? 'selected' : ''}>%</option><option value="AED" ${c.discountType === 'AED' ? 'selected' : ''}>⃃</option></select><input id="cuDiscV" name="discountValue" type="number" min="0" step="0.01" style="max-width:110px" value="${esc(c.discountValue ?? '')}" aria-label="Discount"><input id="cuDiscN" name="discountNote" maxlength="120" placeholder="Reason, e.g. loyal customer / corporate" style="flex:1;min-width:180px" value="${esc(c.discountNote)}"></div>
+      <span class="muted" style="font-size:12px">Filled in automatically on their new orders (Price → Discount) before payment; you can still change it per order.</span></div>
     <div class="field"><label for="cuNotes">Studio notes (only you see them)</label><textarea id="cuNotes" name="notes" rows="2" maxlength="1000">${esc(c.notes)}</textarea></div>
     <label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" id="cuPush" style="width:auto" checked> Also update their open orders (contact; address on orders not yet shipped)</label>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn small" type="submit">Save customer</button><span class="muted" id="cuMsg" style="font-size:12px">${c.editedAt ? `Last changed by ${c.editedBy === 'customer' ? 'the customer' : 'the studio'} ${esc(day(c.editedAt))}.` : 'Filled in from their orders.'} Customer since ${esc(day(c.firstOrderAt))}.</span></div>
@@ -73,8 +75,10 @@ function edit(c) {
     const f = ev.target, msg = $('cuMsg');
     const v = (n) => (f.querySelector(`[name="${n}"]`)?.value ?? '').trim();
     const rec = { code: c.code, name: v('name'), email: v('email').toLowerCase(), phone: v('phone'), country: v('country') || 'UAE', emirate: v('emirate'), pin: v('pin') || null,
-      address: v('address'), landmark: v('landmark') || null, notes: v('notes') || null, editedBy: 'studio', editedAt: new Date().toISOString() };
+      address: v('address'), landmark: v('landmark') || null, notes: v('notes') || null, discountType: v('discountType') || null, discountValue: v('discountType') && Number(v('discountValue')) > 0 ? Number(v('discountValue')) : null, discountNote: v('discountType') ? v('discountNote') || null : null, editedBy: 'studio', editedAt: new Date().toISOString() };
     if (!rec.name) { msg.textContent = 'Add the name.'; return; }
+    if (rec.discountType && !rec.discountValue) { msg.textContent = 'Enter the discount amount, or choose None.'; return; }
+    if (rec.discountType === 'PCT' && rec.discountValue > 100) { msg.textContent = 'A % discount can be at most 100.'; return; }
     if (rec.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(rec.email)) { msg.textContent = 'Check the email address.'; return; }
     msg.textContent = 'Saving…';
     try {

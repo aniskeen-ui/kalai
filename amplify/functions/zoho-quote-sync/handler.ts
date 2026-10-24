@@ -3405,6 +3405,7 @@ async function applyCode(ev: ApiEvent) {
   const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
   if (!e || (!ownsEnquiry(e, ev) && !groups.includes('ADMINS'))) throw new Error('Order not found');
   if (!['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') || str(e, 'zohoInvoiceId')) throw new Error('This order is already paid, so a code can no longer be added.');
+  if (str(e, 'discountType')) throw new Error('A special discount is already applied to this order, so a code can\'t be added as well.');
   const current = str(e, 'discountCode');
   const list = num(e, 'listPrice') ?? num(e, 'quotedPrice') ?? 0;
   if (!(list > 0)) throw new Error('Add the code once we have sent you the price.');
@@ -3943,7 +3944,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>. Licences are digital and can't be cancelled once paid.`],
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
     else if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
-      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>, including framing, ${(str(img, 'deliveryCountry') || 'UAE') === 'UAE' ? 'delivery in the UAE' : `shipping to ${h(str(img, 'deliveryCountry'))}`} and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
+      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>${num(img, 'discountAmount') && num(img, 'listPrice') ? ` (${aed(num(img, 'listPrice'))} less your discount of ${aed(num(img, 'discountAmount'))})` : ''}, including framing, ${(str(img, 'deliveryCountry') || 'UAE') === 'UAE' ? 'delivery in the UAE' : `shipping to ${h(str(img, 'deliveryCountry'))}`} and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
       msgLine, str(img, 'paymentLink') ? 'You can pay securely with the button below. The price is held for 7 days.' : 'The price is held for 7 days. Reply to this email or message us on WhatsApp to go ahead.',
       str(img, 'deliveryAddress') ? '' : 'Please also add your <b>delivery address</b> under My enquiries & orders, so we can ship it as soon as it is ready.',
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>, including the cancellation policy.`],

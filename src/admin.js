@@ -1280,7 +1280,7 @@ function readCosting() {
 
 function renderCost() {
   if (!$('costOut')) return;
-  const r = calc(readCosting(), n($('ePrice').value));
+  const r = calc(readCosting(), n(finalPriceStr()));
   const row = (k, v, note = '') => `<tr><td>${k}</td><td class="mono num">${v}</td><td class="muted">${note}</td></tr>`;
   const t = rates.tiers[$('cTier').value];
   let html = `<table class="costs"><tbody>
@@ -1308,7 +1308,7 @@ function renderCost() {
 
 async function saveCosting(e) {
   const { local, ...inp } = readCosting();
-  const r = calc({ ...inp, local }, n($('ePrice').value));
+  const r = calc({ ...inp, local }, n(finalPriceStr()));
   const costs = {
     artistInr: inp.artistPriceInr, artistAedPrice: inp.artistPriceAed, fx: rates.fx, artistAed: r.artistAed != null ? Math.round(r.artistAed * 100) / 100 : null,
     framing: r.framing, indiaCourier: r.indiaCourier, localCourier: r.localCourier,
@@ -1559,6 +1559,64 @@ async function showThumb(e, det) {
   } catch { /* no picture */ }
 }
 
+// ---------- Discount on the order (studio): % or dirhams, typed here or from the customer's standard discount ----------
+// The Price box holds the price before discount; the customer pays the price after it (quotedPrice). listPrice and
+// discountAmount keep both, so the customer sees the old price struck through.
+function discountRow(e) {
+  const code = e.discountCode && !e.discountType; // a customer's promo code is shown separately
+  if (code) return '';
+  const t = e.discountType || '', v = e.discountValue ?? '';
+  return `<div id="discBox" style="display:grid;grid-template-columns:auto 90px 1fr;gap:6px;align-items:center;margin-top:6px">
+    <select id="eDiscT" aria-label="Discount type" style="width:auto"><option value="">No discount</option><option value="PCT" ${t === 'PCT' ? 'selected' : ''}>Discount %</option><option value="AED" ${t === 'AED' ? 'selected' : ''}>Discount ⃃</option></select>
+    <input id="eDiscV" type="number" min="0" step="0.01" aria-label="Discount" value="${esc(v)}" ${t ? '' : 'hidden'}>
+    <span class="muted" id="eDiscOut" style="font-size:12px"></span>
+    <input id="eDiscNote" placeholder="Reason (optional, e.g. loyal customer)" value="${esc(e.discountNote || '')}" style="grid-column:1/-1" ${t ? '' : 'hidden'}></div>`;
+}
+const r2c = (x) => Math.round(x * 100) / 100;
+function discountOf() {
+  const t = $('eDiscT')?.value || '', v = Number($('eDiscV')?.value || 0), list = Number($('ePrice')?.value || 0);
+  if (!t || !(v > 0) || !(list > 0)) return { t: '', amount: 0, list };
+  const amount = t === 'PCT' ? r2c(list * Math.min(v, 100) / 100) : Math.min(v, list);
+  return { t, v, amount: Math.round(amount), list };
+}
+function finalPriceStr() {
+  const raw = $('ePrice')?.value.trim() ?? '';
+  if (raw === '') return '';
+  const d = discountOf();
+  return d.t ? String(Math.max(0, d.list - d.amount)) : raw;
+}
+function readDiscount() {
+  if (!$('eDiscT')) return {};
+  const d = discountOf();
+  if (!d.t) return currentDiscountType ? { discountType: null, discountValue: null, discountNote: null, discountAmount: null, listPrice: null, discountCode: null } : {};
+  return { discountType: d.t, discountValue: d.v, discountNote: $('eDiscNote').value.trim() || null, discountAmount: d.amount, listPrice: d.list,
+    discountCode: `Studio discount ${d.t === 'PCT' ? `${d.v}%` : `⃃ ${d.v}`}` };
+}
+let currentDiscountType = '';
+async function wireDiscount(e) {
+  currentDiscountType = e.discountType || '';
+  if (!$('eDiscT')) return;
+  const show = () => {
+    const d = discountOf(), on = !!$('eDiscT').value;
+    $('eDiscV').hidden = !on; $('eDiscNote').hidden = !on;
+    $('eDiscOut').innerHTML = on && d.t ? `− ⃃ ${d.amount.toLocaleString('en-US')} → customer pays <b>⃃ ${Math.max(0, d.list - d.amount).toLocaleString('en-US')}</b>` : on ? 'enter the discount' : '';
+  };
+  ['eDiscT', 'eDiscV', 'ePrice'].forEach((id) => { $(id).addEventListener('input', show); $(id).addEventListener('change', show); });
+  if (priceLocked(e)) { ['eDiscT', 'eDiscV', 'eDiscNote'].forEach((id) => { $(id).disabled = true; }); }
+  show();
+  // The customer's standard discount (Customers tab), offered on orders that have none yet.
+  if (!e.discountType && !priceLocked(e) && e.customerCode && BEFORE_PAYMENT.includes(e.status || 'RECEIVED')) {
+    try {
+      const c = (await client.models.Customer.get({ code: e.customerCode }))?.data;
+      if (c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value) {
+        $('eDiscT').value = c.discountType; $('eDiscV').value = c.discountValue; $('eDiscNote').value = c.discountNote || 'Customer\'s standard discount';
+        show(); renderCost?.();
+        $('eDiscOut').insertAdjacentHTML('beforeend', ' <span style="color:var(--gold)">(this customer\'s standard discount: saved with the order when you save)</span>');
+      }
+    } catch { /* no customer row */ }
+  }
+}
+
 async function showDetail(e) {
   showFlow(null);
   const det = parseDetails(e.details);
@@ -1583,8 +1641,9 @@ async function showDetail(e) {
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once ${esc(artistOf(e))} marks it <b>Sent to frame shop</b> (you can do it for them in ${artistPage(e)}).</span>` : ''}</div>
-        <div class="field"><label for="ePrice">Price (⃃)</label><input id="ePrice" type="number" min="0" step="1" value="${e.quotedPrice ?? (/^(AED|Dhs) ?\d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^⃃ [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
-          ${e.discountCode ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: ⃃ ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
+        <div class="field"><label for="ePrice">Price (⃃)</label><input id="ePrice" type="number" min="0" step="1" value="${(e.discountType && e.listPrice != null ? e.listPrice : null) ?? e.quotedPrice ?? (/^(AED|Dhs) ?\d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^⃃ [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
+          ${discountRow(e)}
+          ${e.discountCode && !e.discountType ? `<span class="muted" style="font-size:12px">Customer used code <b>${esc(e.discountCode)}</b>: ⃃ ${Number(e.listPrice || 0).toLocaleString('en-US')} − ${Number(e.discountAmount || 0).toLocaleString('en-US')}. If you change the price here, the code no longer applies to it.</span>` : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
       ${e.kind === 'LICENCE' ? licenceSection(e) : `${addressSection(e)}
       ${shippingSection(e)}
@@ -1610,10 +1669,11 @@ async function showDetail(e) {
     </form>
     <div class="links" id="waLinks"></div>`;
 
+  wireDiscount(e);
   const waLink = () => {
     const digits = waDigits($('ePhone').value);
     if (!digits) { $('waLinks').innerHTML = '<span class="muted">No mobile number to message.</span>'; return; }
-    const price = $('ePrice').value, link = $('eLink').value.trim(), msg = $('eMsg').value.trim();
+    const price = finalPriceStr(), link = $('eLink').value.trim(), msg = $('eMsg').value.trim();
     const text = [`Hello ${e.customerName || ''}, this is ${STUDIO_WHATSAPP_NAME} about your enquiry ${e.ref} (${e.title}).`,
       price ? `Price: AED ${price}` : '', msg, link ? `Pay securely here: ${link}` : '',
       SHIP_STATUSES.includes($('eStatus').value) && $('eCourier').value.trim()
@@ -1686,7 +1746,7 @@ async function showDetail(e) {
   }
   if ($('costOut')) {
     renderCost();
-    ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice'].forEach((id) => { $(id).addEventListener('input', renderCost); $(id).addEventListener('change', renderCost); });
+    ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice', 'eDiscT', 'eDiscV'].forEach((id) => { $(id)?.addEventListener('input', renderCost); $(id)?.addEventListener('change', renderCost); });
   }
 
   showThumb(e, det);
@@ -1763,7 +1823,8 @@ async function showDetail(e) {
     ev.preventDefault();
     const b = ev.target.querySelector('button'); b.disabled = true; $('saveMsg').textContent = '';
     $('detail').querySelectorAll('.err').forEach((x) => x.remove());
-    const priceVal = $('ePrice').value.trim();
+    const priceVal = finalPriceStr();
+    const disc = readDiscount();
     if ($('eStatus').value === 'PAID' && (!priceVal || Number(priceVal) <= 0)) {
       $('saveMsg').textContent = '';
       $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', '<div class="err">Set the price before marking it Paid, so the Zoho invoice has the right amount.</div>');
@@ -1873,7 +1934,7 @@ async function showDetail(e) {
         status: $('eStatus').value,
         paymentMethod: $('ePayMethod').value || null,
         paymentRef: $('ePayRef').value.trim() || null,
-        ...(priceLocked(e) ? {} : { quotedPrice: priceVal === '' ? null : Number(priceVal) }),
+        ...(priceLocked(e) ? {} : { quotedPrice: priceVal === '' ? null : Number(priceVal), ...disc }),
         paymentLink: $('eLink').value.trim() || null,
         adminMessage: $('eMsg').value.trim() || null,
       });

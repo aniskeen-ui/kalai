@@ -149,6 +149,10 @@ const schema = a.schema({
       discountCode: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       discountAmount: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       listPrice: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Studio discount on this order (Order Management → Price): PCT | AED and its value; discountAmount/listPrice hold the result.
+      discountType: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      discountValue: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      discountNote: a.string().authorization((allow) => [allow.group('ADMINS')]),
       // Artist doing a price enquiry / commission: empty = Siva (Artist desk); else an approved portal artist.
       artistId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       artistName: a.string().authorization((allow) => [allow.group('ADMINS')]),
@@ -630,6 +634,9 @@ const schema = a.schema({
       address: a.string(),
       landmark: a.string(),
       notes: a.string(), // studio only
+      discountType: a.string(), // standard discount for this customer: PCT | AED (offered on their new orders)
+      discountValue: a.float(),
+      discountNote: a.string(),
       orderCount: a.integer(),
       paidCount: a.integer(),
       totalSpent: a.float(),
