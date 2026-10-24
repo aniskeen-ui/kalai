@@ -289,8 +289,10 @@ footer p{margin:2px 0}
 .otabs button[aria-selected="true"],.itabs-bar button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--gold)}
 .otabs button:focus-visible,.itabs-bar button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .itabs-bar button{font-size:13px;padding:6px 10px}.itabs-pane{margin:8px 0 0;font-size:14px;color:var(--muted);line-height:1.5}
-#paneLic{gap:12px}.lic-ticks{margin:0;padding:0;list-style:none;font-size:14px;display:grid;gap:4px}.lic-ticks li::before{content:"✓ ";color:var(--gold);font-weight:700}
+.lic-ticks{margin:0;padding:0;list-style:none;font-size:14px;display:grid;gap:4px}.lic-ticks li::before{content:"✓ ";color:var(--gold);font-weight:700}
 .lic-usage{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px 14px;font-size:14px}
+.opane{gap:12px}.lic-table{width:100%;border-collapse:collapse;font-size:13px;margin:0 0 14px}.lic-table td,.lic-table th{padding:8px 10px;text-align:left;border-top:1px solid var(--line)}.lic-table tr:nth-child(odd) td{background:color-mix(in srgb,var(--line) 35%,transparent)}.lic-table th{font-size:12px;color:var(--muted)}
+.lic-thumb{display:grid;grid-template-columns:110px auto;grid-template-rows:auto auto;gap:4px 10px;align-items:center;justify-content:center;margin:0 0 14px;font-size:12px;color:var(--muted)}.lic-thumb img{grid-row:2;width:110px;height:110px;object-fit:cover;border:1px solid var(--line)}.lic-thumb span:nth-of-type(1){grid-row:1;grid-column:1;text-align:center}.lic-thumb span:nth-of-type(2){grid-row:2;grid-column:2}
 .inst-note{font-size:13px;color:var(--muted);margin-top:-6px}
 
 .badge{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
@@ -613,7 +615,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
     <div><b style="color:var(--fg)">14. Law.</b> These terms are governed by the laws of the United Arab Emirates as applied in the Emirate of Dubai, and the courts of Dubai have jurisdiction.</div>
     <div><b style="color:var(--fg)">15. Changes.</b> We may update these terms; the version on this page at the time of your order applies to that order.</div>
     <div><b style="color:var(--fg)">16. Crafts shop.</b> Items in the Crafts shop are made and sold by independent makers we have checked; the maker's name is shown on each item. You order and pay through Kalai Art House, which handles your payment, delivery updates, cancellations and refunds under these terms. Until an item is dispatched you can cancel it for a full refund; after delivery, report damage with photos within 48 hours. Prices include delivery within the UAE; delivery to India is confirmed before you pay.</div>
-    <div><b style="color:var(--fg)">17. Image licences.</b> A licence lets you use the picture of a work for the purpose of the type you buy (Web: websites, social media and online ads; Media: print and digital media, adverts and TV; Commercial: products made for sale, plus web and media), worldwide and without time limit. The artist keeps the copyright and the original; the licence is not exclusive and can't be transferred, and you may not resell or share the file itself. Light cropping and resizing are fine; changes that alter the work (colours, shapes, adding text over the artwork) need the artist's written permission. Please credit "Artwork © the artist / Kalai Art House" where practical. Licences are digital: the file is available as soon as you have paid, so a paid licence can't be cancelled or refunded.</div>
+    <div><b style="color:var(--fg)">17. Image licences.</b> A licence lets you use the picture of a work for the purpose of the type you buy (Web: websites, social media and online ads, no printed copies; Media: print and digital media, adverts and TV, up to 10,000 printed copies; Commercial: products made for sale, up to 1,000 products, plus web and media), worldwide and without time limit. The artist keeps the copyright and the original; the licence is not exclusive and can't be transferred, and you may not resell or share the file itself. Light cropping and resizing are fine; changes that alter the work (colours, shapes, adding text over the artwork) need the artist's written permission. Please credit "Artwork © the artist / Kalai Art House" where practical. Licences are digital: the file is available as soon as you have paid, so a paid licence can't be cancelled or refunded.</div>
   </div>
 </div></section>
 
@@ -788,22 +790,37 @@ function wireInfoTabs(box){box.querySelectorAll(".itabs").forEach(w=>w.querySele
 /* Pay in instalments (Settings → Tabby / Tamara): a line under the price */
 function instNote(el,pr){if(!el)return;const v=window.kalaiInstalments;if(!v||!(pr>0)){el.hidden=true;return}el.hidden=false;el.innerHTML=`or 4 interest-free payments of <b>${moneyH(Math.ceil(pr/4))}</b> with ${esc2(v)} · tick it when you order`}
 /* Image licences of a work (Catalogue → Sell licences): price = % of the original's unframed price (Settings) */
-const LIC=[["WEB","Web licence","Websites, blogs, social media and online ads, worldwide.","No printed copies, no products for sale.",10],
-  ["MEDIA","Media licence","Print and digital media: magazines, books, brochures, flyers, adverts and TV, worldwide.","No products for sale.",25],
-  ["COMMERCIAL","Commercial licence","Products made for sale (posters, cards, textiles, packaging, merchandise), plus all web and media uses.","The artist keeps the copyright; reselling the file itself is not allowed.",50]];
+const LIC=[["WEB","Web licence","Using the image on websites, blogs, social media and online ads.","",10,[["Use worldwide","Yes"],["Use on multi-support","Yes"],["Use on any type of media","Online only"],["Right of reselling","No"],["Max number of prints","0"],["Products intended for sale","No"]]],
+  ["MEDIA","Media licence","Using the image in print and digital media: magazines, books, brochures, flyers, adverts and TV.","",25,[["Use worldwide","Yes"],["Use on multi-support","Yes"],["Use on any type of media","Yes"],["Right of reselling","No"],["Max number of prints","10,000"],["Products intended for sale","No"]]],
+  ["COMMERCIAL","Commercial licence","Using the image for manufactured goods intended for sale (posters, cards, textiles, packaging, merchandise).","",50,[["Use worldwide","Yes"],["Use on multi-support","Yes"],["Use on any type of media","Yes"],["Right of reselling","No"],["Max number of prints","1,000"],["Products intended for sale","Yes"]]]];
 function licBase(p){const n=priceOf(p,"none");if(n>0)return n;const m=p.prices;if(!m)return 0;const all=[];const w=o=>{if(typeof o==="number"&&o>0)all.push(o);else if(o&&typeof o==="object")Object.values(o).forEach(w)};w(m.v===2?m.sizes:m);return all.length?Math.min(...all):0}
 function licPrice(p,k){const base=licBase(p),l=LIC.find(x=>x[0]===k);const pct=Number((window.kalaiLicencePcts||{})[k])||l[4];return base>0?Math.max(25,Math.ceil(base*pct/100/5)*5):0}
-function licencePane(p){return `<p style="margin:0;font-size:15px">Buy a licence to use this image on your website, in your publications or on products for sale. The artist receives a royalty on each licence.</p>
+function licencePane(p){return `<p style="margin:0;font-size:15px">Purchase a licence to use this image for your website, communications or to sell merchandise.</p>
   <div class="field"><label for="licType">Type</label><select id="licType">${LIC.map(l=>`<option value="${l[0]}">${l[1]}</option>`).join("")}</select></div>
-  <ul class="lic-ticks"><li>Download the full-size file as soon as you have paid</li><li>Artists get paid their royalties for each sale</li></ul>
-  <div class="pprice"><b id="licPrice"></b> <span class="note">one-off fee, worldwide, no time limit</span></div>
+  <ul class="lic-ticks"><li>Download immediately upon purchase</li><li>Artists get paid their royalties for each sale</li></ul>
+  <div class="pprice"><b id="licPrice"></b></div>
   <button class="btn primary" type="button" id="licBuy">Buy and download</button><div class="ok-msg" id="licMsg" hidden></div>
-  <div class="lic-usage"><b id="licName"></b><p id="licAllows" style="margin:4px 0"></p><p id="licNot" class="note" style="margin:0"></p></div>`}
-function wireOtabs(box,p){if(!p.licensable)return;const orig=box.querySelector("#paneOrig"),lic=box.querySelector("#paneLic");
-  box.querySelectorAll("[data-ot]").forEach(b=>b.onclick=()=>{box.querySelectorAll("[data-ot]").forEach(x=>x.setAttribute("aria-selected",x===b));const L=b.dataset.ot==="lic";orig.style.display=L?"none":"contents";lic.style.display=L?"grid":"none"});
-  const sel=box.querySelector("#licType"),upd=()=>{const l=LIC.find(x=>x[0]===sel.value),pr=licPrice(p,sel.value);box.querySelector("#licPrice").innerHTML=pr?moneyH(pr)+moneyNote(pr):"Ask us";box.querySelector("#licName").textContent="Usage: "+l[1];box.querySelector("#licAllows").textContent=l[2];box.querySelector("#licNot").textContent=l[3];box.querySelector("#licBuy").disabled=!pr};
+  <div class="lic-usage"><b id="licName" style="font-size:17px"></b><p id="licAllows" style="margin:4px 0 12px"></p>
+   <div class="lic-thumb"><img src="${esc2(p.img)}" alt=""><span>${p.fileW?p.fileW+" px":""}</span><span>${p.fileH?p.fileH+" px":""}</span></div>
+   <table class="lic-table" id="licRights"></table>
+   <b style="font-size:16px">Download immediately upon purchase</b><p style="margin:4px 0 12px">The full-size file is ready as soon as you have paid, under My enquiries &amp; orders, and you can download it again at any time.</p>
+   <b style="font-size:16px">Restrictions</b><p style="margin:4px 0 0">Every image on Kalai Art House is an original work by the artist, and all rights are reserved. A licence gives the right to use the image under its terms. Minor changes such as cropping or resizing to fit your project are fine; any change that harms the integrity of the work (distorting it, cutting it up, changing its colours, adding elements) needs the artist's written permission first. See clause 17 of our <a href="#terms">terms</a>.</p></div>`}
+function wireOtabs(box,p){if(!p.licensable&&!p.printable)return;const orig=box.querySelector("#paneOrig");
+  box.querySelectorAll("[data-ot]").forEach(b=>b.onclick=()=>{box.querySelectorAll("[data-ot]").forEach(x=>x.setAttribute("aria-selected",x===b));const t=b.dataset.ot;orig.style.display=t==="orig"?"contents":"none";
+    const c=box.querySelector("#paneCopy"),l=box.querySelector("#paneLic");if(c)c.style.display=t==="copy"?"grid":"none";if(l)l.style.display=t==="lic"?"grid":"none";if(t==="copy")fillCopy(box,p)});
+  if(!p.licensable)return;
+  const sel=box.querySelector("#licType"),upd=()=>{const l=LIC.find(x=>x[0]===sel.value),pr=licPrice(p,sel.value);box.querySelector("#licPrice").innerHTML=pr?moneyH(pr)+moneyNote(pr):"Ask us";box.querySelector("#licName").textContent="Usage: "+l[1];box.querySelector("#licAllows").textContent=l[2];
+    box.querySelector("#licRights").innerHTML=`<tr><td>Dimensions of the file (px)</td><td>${p.fileW&&p.fileH?p.fileW+" × "+p.fileH:"Full size, high resolution"}</td></tr>`+l[5].map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("");box.querySelector("#licBuy").disabled=!pr};
   sel.onchange=upd;upd();
   box.querySelector("#licBuy").onclick=()=>{const l=LIC.find(x=>x[0]===sel.value);if(window.kalaiBuyLicence){closeAll();window.kalaiBuyLicence({productId:p.id,type:l[0],label:l[1],name:p.name})}else{const m=box.querySelector("#licMsg");m.hidden=false;m.textContent="Please try again in a moment."}}}
+/* Copy tab: framed fine-art prints of this painting (same as the Framed Prints catalogue) */
+function copyPane(p){return `<p style="margin:0;font-size:15px">A fine-art print of this painting on archival matte paper, framed in Dubai and delivered. A copy, clearly sold as a print; the artist receives a royalty on each one.</p>
+  <div class="pprice"><b id="cpFrom"></b> <span class="note">framed, smallest size · delivered in the UAE</span></div>
+  <table class="lic-table" id="cpSizes"></table>
+  <button class="btn primary" type="button" data-buyprint="${esc2(p.id)}">Choose size and frame</button>
+  <p class="note" style="margin:0">Print only (no frame) is also available. Each print is made to order and delivered 4 to 6 days after payment.</p>`}
+function fillCopy(box,p){const i=window.kalaiPrintInfo&&window.kalaiPrintInfo(p.id),t=box.querySelector("#cpSizes"),f=box.querySelector("#cpFrom");if(!i||!t)return;
+  f.innerHTML="from "+moneyH(i.from);t.innerHTML="<tr><th>Size</th><th>Framed</th><th>Print only</th></tr>"+i.sizes.map(([n,a,b])=>`<tr><td>${esc2(n)}</td><td>${moneyH(a)}</td><td>${moneyH(b)}</td></tr>`).join("")}
 /* Detail page for a work listed by an artist from the artist portal: all photos, description, price and Order. */
 function openWork(p){
   const box=document.getElementById("modalBox");box.className="box wide";
@@ -1088,7 +1105,7 @@ function openModal(p){
      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.kind==="sketch"?"Original sketch":"Original watercolour"} · ${p.ai?"Hand-painted to order":"One"} of a kind</div>
      <h2 style="font-size:30px">${p.name}</h2>
      <p class="byline">Hand-made by our artist</p>
-     ${p.licensable?`<div class="otabs" role="tablist"><button type="button" role="tab" data-ot="orig" aria-selected="true">Original</button><button type="button" role="tab" data-ot="lic" aria-selected="false">Licences</button></div><div id="paneLic" style="display:none">${licencePane(p)}</div>`:""}<div id="paneOrig" style="display:contents">
+     ${p.licensable||p.printable?`<div class="otabs" role="tablist"><button type="button" role="tab" data-ot="orig" aria-selected="true">Real</button>${p.printable?`<button type="button" role="tab" data-ot="copy" aria-selected="false">Copy</button>`:""}${p.licensable?`<button type="button" role="tab" data-ot="lic" aria-selected="false">License</button>`:""}</div>${p.printable?`<div id="paneCopy" class="opane" style="display:none">${copyPane(p)}</div>`:""}${p.licensable?`<div id="paneLic" class="opane" style="display:none">${licencePane(p)}</div>`:""}`:""}<div id="paneOrig" style="display:contents">
      ${p.ai?`<div class="ai-note"><b>AI preview.</b> This picture was made with AI to show the design. When you order, our artist paints it by hand and signs it; ${p.leadDays!=null?`it is ready in about ${p.leadDays}${p.leadMax&&p.leadMax!==p.leadDays?`–${p.leadMax}`:""} days, delivered about a week later`:"allow about 2–3 weeks before dispatch"}.</div>`:""}
      ${p.prices?`<div class="pprice"><b id="mPrice"></b> <span id="mPriceNote" class="note"></span></div><div class="inst-note" id="mInst" hidden></div>
      <div class="pick-row"><label>Frame<select id="pkStyle">${FRAMES.map(f=>`<option value="${f.k}">${f.n}</option>`).join("")}</select></label>
@@ -1229,6 +1246,7 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
     const m=location.hash.match(/^#print-(.+)$/);if(m){const p=PRINTS.find(x=>String(x.id)===decodeURIComponent(m[1]));if(p)openPrint(p)}};
   window.kalaiPhotoFee=draw;
   window.kalaiOpenPrint=id=>openPrint(PRINTS.find(x=>String(x.id)===String(id)));
+  window.kalaiPrintInfo=id=>{const it=PRINTS.find(x=>String(x.id)===String(id));if(!it)return null;return{from:from(it),sizes:sizesOf(it).map(z=>[z[1],price(z,"black",it),price(z,"none",it)])}};
   function openPrint(p){if(!p)return;const SZ=sizesOf(p);const box=document.getElementById("modalBox");box.className="box wide";
     box.innerHTML=`<button class="x xtop" id="mClose" aria-label="Close">×</button><button type="button" class="ap-back" id="mBack">← Back to the prints</button>
      <div class="viewer"><div class="stage"><div class="kframe" id="prFrame" style="max-width:420px;margin:auto"><div class="kmount" id="prMount"><img src="${esc2(p.img)}" alt="${esc2(p.name)}" style="width:100%;display:block"></div></div></div>

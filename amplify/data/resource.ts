@@ -264,6 +264,8 @@ const schema = a.schema({
       printRoyalty: a.float(),
       // Image licences of this work (website → Licences tab): sold from the same full-size file (printKey).
       licensable: a.boolean(),
+      printW: a.integer(), // pixel size of the print file (Licence tab)
+      printH: a.integer(),
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 

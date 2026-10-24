@@ -168,7 +168,9 @@ function wireRows(list) {
       msg.textContent = 'Uploading the print file…';
       try {
         const res = await uploadData({ path: `originals/print/${p.id}-${file.name.replace(/[^\w.-]+/g, '-')}`, data: file, options: { contentType: file.type || 'image/jpeg' } }).result;
-        const r = await client.models.Product.update({ id: p.id, printKey: res.path });
+        // Pixel size for the Licence tab (TIFF can't be read here: the function fills it in later).
+        let dims = {}; try { const bm = await createImageBitmap(file); dims = { printW: bm.width, printH: bm.height }; bm.close?.(); } catch { dims = { printW: null, printH: null }; }
+        const r = await client.models.Product.update({ id: p.id, printKey: res.path, ...dims });
         if (r.errors?.length) throw new Error(r.errors[0].message);
         p.printKey = res.path; pf.parentElement.firstChild.textContent = '✓ Print file uploaded · change'; msg.textContent = 'Print file saved';
       } catch (ex) { msg.textContent = 'Not saved: ' + ex.message; }

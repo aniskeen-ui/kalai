@@ -2574,9 +2574,9 @@ async function marketOrder(ev: ApiEvent) {
 // set per type in Settings. Paid by Ziina; once paid the order is Delivered and the buyer downloads the file under
 // My enquiries & orders. The artist's royalty % is kept on the order (settled like print royalties).
 const LICENCES: Record<string, { label: string; allows: string; pct: number }> = {
-  WEB: { label: 'Web licence', allows: 'Websites, blogs, social media and online ads, worldwide. No printed copies and no products for sale.', pct: 10 },
-  MEDIA: { label: 'Media licence', allows: 'Print and digital media: magazines, books, brochures, flyers, adverts and TV, worldwide. No products for sale.', pct: 25 },
-  COMMERCIAL: { label: 'Commercial licence', allows: 'Products made for sale (posters, cards, textiles, packaging, merchandise), plus all web and media uses.', pct: 50 },
+  WEB: { label: 'Web licence', allows: 'Websites, blogs, social media and online ads, worldwide. Online use only: no printed copies, no products for sale, no reselling.', pct: 10 },
+  MEDIA: { label: 'Media licence', allows: 'Print and digital media: magazines, books, brochures, flyers, adverts and TV, worldwide, up to 10,000 printed copies. No products for sale, no reselling.', pct: 25 },
+  COMMERCIAL: { label: 'Commercial licence', allows: 'Products made for sale (posters, cards, textiles, packaging, merchandise), up to 1,000 products, plus all web and media uses. No reselling of the file.', pct: 50 },
 };
 async function licencePcts(): Promise<Record<string, number>> {
   const out: Record<string, number> = Object.fromEntries(Object.entries(LICENCES).map(([k, v]) => [k, v.pct]));
@@ -2666,15 +2666,39 @@ async function securePrintFiles() {
   const PT = process.env.PRODUCT_TABLE, bucket = process.env.UPLOADS_BUCKET;
   if (!PT || !bucket) return;
   for (const raw of await scanAll(PT)) {
-    const pr = plain(raw);
-    const key = String(pr?.printKey || '');
-    if (!pr || !key.startsWith('catalogue/print/')) continue;
-    const to = key.replace(/^catalogue\/print\//, 'originals/print/');
-    await s3.send(new CopyObjectCommand({ Bucket: bucket, CopySource: `${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`, Key: to }));
-    await putRow(PT, { ...pr, printKey: to, updatedAt: new Date().toISOString() });
-    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-    console.log(`Print file moved to private: ${to}`);
+    let pr = plain(raw);
+    let key = String(pr?.printKey || '');
+    if (!pr || !key) continue;
+    if (key.startsWith('catalogue/print/')) {
+      const to = key.replace(/^catalogue\/print\//, 'originals/print/');
+      await s3.send(new CopyObjectCommand({ Bucket: bucket, CopySource: `${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`, Key: to }));
+      pr = { ...pr, printKey: to, updatedAt: new Date().toISOString() };
+      await putRow(PT, pr);
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+      console.log(`Print file moved to private: ${to}`);
+      key = to;
+    }
+    // Pixel size of the file, shown on the Licence tab ("Dimensions of the file").
+    if (!pr.printW) {
+      const d = await imageDims(bucket, key).catch(() => null);
+      if (d) await putRow(PT, { ...pr, printW: d.w, printH: d.h, updatedAt: new Date().toISOString() });
+    }
   }
+}
+/** Width × height from the start of a JPEG or PNG (first 256 KB only). */
+async function imageDims(bucket: string, key: string): Promise<{ w: number; h: number } | null> {
+  const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: 'bytes=0-262143' }));
+  const b: Uint8Array = await r.Body.transformToByteArray();
+  if (b[0] === 0x89 && b[1] === 0x50) return { w: (b[16] << 24 | b[17] << 16 | b[18] << 8 | b[19]) >>> 0, h: (b[20] << 24 | b[21] << 16 | b[22] << 8 | b[23]) >>> 0 };
+  if (b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1], len = b[i + 2] << 8 | b[i + 3];
+    if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: b[i + 5] << 8 | b[i + 6], w: b[i + 7] << 8 | b[i + 8] };
+    i += 2 + len;
+  }
+  return null;
 }
 
 // ---------- Certificate of authenticity (originals) ----------
