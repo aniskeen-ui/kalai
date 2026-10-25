@@ -56,6 +56,7 @@ async function load() {
   } catch (ex) { $('mkBody').innerHTML = `<p class="err">Could not load: ${esc(ex.message)}</p>`; }
 }
 
+let flash = ''; // one-off success note at the top of the suppliers list
 async function act(action, data) {
   const r = await client.mutations.marketAdmin({ action, data: JSON.stringify(data) });
   if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
@@ -83,7 +84,7 @@ function draw() {
       || '<p class="muted">Nothing waiting for approval.</p>';
   } else if (view === 'suppliers') {
     const these = sellers.filter((x) => SUP(x) && x.status !== 'PROSPECT' && (!supType || x.type === supType)).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
-    html = supTypeBar() + ((!supType || supType === 'PRINTER') ? supplierProspectsView() : '') + addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
+    html = supTypeBar() + (flash ? `<div class="enq-msg" style="border-left:4px solid var(--ok);padding:8px 10px;margin:6px 0;background:var(--surface)">${esc(flash)}</div>` : '') + ((!supType || supType === 'PRINTER') ? supplierProspectsView() : '') + addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
   } else if (view === 'prospects') {
     html = prospectsView();
   } else if (view === 'artists' || view === 'sellers') {
@@ -349,7 +350,13 @@ function wireCards() {
     if (el.dataset.pr === 'outreach') el.onchange = async () => { if (await run('prospectUpdate', { outreach: el.value })) draw(); };
     if (el.dataset.pr === 'email') el.onclick = async () => { el.disabled = true; if (await run('inviteArtist', {})) { msg.textContent = 'Invitation emailed.'; setTimeout(draw, 900); } else el.disabled = false; };
     if (el.dataset.pr === 'copy') el.onclick = async () => { try { await navigator.clipboard.writeText(artistInvite(p)); msg.textContent = 'Copied: paste it in their Instagram / Artmajeur message.'; } catch { msg.textContent = 'Copy not allowed here.'; } };
-    if (el.dataset.pr === 'promote') el.onclick = async () => { if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Prices checked? Click again'; return; } if (await run('promoteSupplier', {})) draw(); };
+    if (el.dataset.pr === 'promote') el.onclick = async () => {
+      if (!confirm(`Make ${p?.business || 'this shop'} an approved supplier?\n\nCheck its prices first (Price list). Once approved it can be given print jobs and costing uses its prices.`)) return;
+      el.disabled = true; el.textContent = 'Saving…'; msg.style.color = '';
+      const r = await run('promoteSupplier', {});
+      if (r) { flash = `✓ ${p?.business || 'The shop'} is now an approved supplier: it is listed below${p?.email ? `. To see its jobs itself, it signs up at art.pranixtechno.com/supplier.html with ${p.email}` : ''}.`; draw(); }
+      else { el.disabled = false; el.textContent = 'Make supplier'; msg.style.color = 'var(--kumkum)'; if (!msg.textContent) msg.textContent = 'Not saved. Please try again.'; }
+    };
     if (el.dataset.pr === 'remove') el.onclick = async () => { if (el.dataset.sure) { if (await run('removeProspect', {})) { sellers = sellers.filter((s) => s.id !== id); draw(); } } else { el.dataset.sure = '1'; el.textContent = 'Sure?'; } };
   });
   document.querySelectorAll('#mkBody [data-edit-save]').forEach((b) => {
