@@ -2075,7 +2075,7 @@ async function sellerAction(ev: ApiEvent) {
     const bornYear = born >= 1920 && born <= new Date().getFullYear() - 10 ? born : null;
     const photo = txt(d.photoKey, 300);
     f.photoKey = photo.startsWith('market/') ? photo : '';
-    const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : 'APPLIED';
+    const status = profile?.status === 'APPROVED' ? 'APPROVED' : profile?.status === 'SUSPENDED' ? 'SUSPENDED' : profile?.status === 'PROSPECT' ? 'PROSPECT' : 'APPLIED'; // editing details keeps the status
     const row = { ...(profile ?? {}), ...f, ...(bornYear ? { bornYear } : {}), id: me.sub, owner: me.owner, email: me.email || profile?.email, __typename: 'SellerProfile', status, appliedAt: profile?.appliedAt ?? now, createdAt: profile?.createdAt ?? now, updatedAt: now };
     await putRow(S, row);
     if (row.status === 'APPROVED' && type === 'ARTIST') await publishArtist(row);

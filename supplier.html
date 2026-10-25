@@ -235,7 +235,7 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
       <div class="field"><label for="sAcc">Account name</label><input id="sAcc" maxlength="120"></div>
       <div class="field"><label for="sIban">IBAN</label><input id="sIban" maxlength="40" placeholder="AE07 0331 2345 6789 0123 456"></div>
       <div class="err" id="sErr" role="alert"></div>
-      <button class="btn" type="submit" id="sBtn">Send application</button>
+      <button class="btn" type="submit" id="sBtn">Send application</button> <button type="button" class="linkbtn" id="sBack" hidden>Back</button>
     </form>
   </section>
 
@@ -245,7 +245,7 @@ main > p.muted{margin:0 auto 8px;max-width:820px}
     <div class="sbox">
       <h2 id="jBiz"></h2>
       <p class="muted" id="jNote" style="margin:0"></p>
-      <div class="tabsj" id="jTabs"><button type="button" data-t="open" aria-pressed="true">To do</button><button type="button" data-t="done" aria-pressed="false">Done</button><button type="button" data-t="all" aria-pressed="false">All</button><button type="button" data-t="rates" aria-pressed="false">My price list</button><button type="button" data-t="frames" aria-pressed="false" id="tabFrames" hidden>My frames</button><button type="button" class="linkbtn" id="jReload" style="margin-left:auto">Refresh</button></div>
+      <div class="tabsj" id="jTabs"><button type="button" data-t="open" aria-pressed="true">To do</button><button type="button" data-t="done" aria-pressed="false">Done</button><button type="button" data-t="all" aria-pressed="false">All</button><button type="button" data-t="rates" aria-pressed="false">My price list</button><button type="button" data-t="frames" aria-pressed="false" id="tabFrames" hidden>My frames</button><button type="button" data-t="details" aria-pressed="false">My details</button><button type="button" class="linkbtn" id="jReload" style="margin-left:auto">Refresh</button></div>
     </div>
     <div id="jList" style="display:grid;gap:12px"></div>
   </section>

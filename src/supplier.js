@@ -181,6 +181,16 @@ function typeText() {
   $('sAddrL').textContent = fr ? 'Workshop address (where works are dropped off and collected)' : ty === 'PRINTER' ? 'Shop address (where prints are collected)' : 'Your address / base';
   $('sAboutL').textContent = fr ? 'Your services: frame styles and mouldings, glass/acrylic, mount, usual turnaround, and whether you deliver' : ty === 'PRINTER' ? 'Your services: printers and papers (matte / fine-art / photo), largest size, colour calibration, usual turnaround' : 'Your services: vehicles, areas you cover (emirates), same-day or next-day, and your usual rates';
 }
+// Approved suppliers (and the studio for them) update their details with the same form: name, contact, address, bank.
+let editingDetails = false;
+function openDetails() {
+  editingDetails = true;
+  show('applyView'); fillApply();
+  $('applyTitle').textContent = 'My details';
+  $('applyNote').textContent = 'Update your business, contact, address and bank details. Kalai Art House uses them for jobs, pickups and payments.';
+  $('sBtn').textContent = 'Save my details'; $('sBack').hidden = false;
+  $('sBack').onclick = () => { editingDetails = false; $('sBtn').textContent = 'Send application'; $('sBack').hidden = true; route(); };
+}
 $('applyForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(Object.entries(AF).map(([id, k]) => [k, $(id).value.trim()]));
@@ -188,7 +198,7 @@ $('applyForm').addEventListener('submit', async (e) => {
   if (data.portfolio && !/^https?:\/\//i.test(data.portfolio)) data.portfolio = `https://${data.portfolio}`;
   data.country = 'UAE';
   const b = $('sBtn'); b.disabled = true; $('sErr').textContent = '';
-  try { profile = (await call('apply', data)).profile; route(); } catch (ex) { $('sErr').textContent = ex.message; } finally { b.disabled = false; }
+  try { profile = (await call('apply', data)).profile; if (editingDetails) { $('sErr').textContent = ''; editingDetails = false; $('sBtn').textContent = 'Send application'; $('sBack').hidden = true; } route(); } catch (ex) { $('sErr').textContent = ex.message; } finally { b.disabled = false; }
 });
 
 // ---------- jobs ----------
@@ -201,7 +211,7 @@ async function loadJobs() {
   try { jobs = (await call('jobs')).jobs || []; drawJobs(); } catch (ex) { $('jList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
 }
 $('jReload').onclick = loadJobs;
-$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'rates') { openRates('jobsView'); return; } if (b.dataset.t === 'frames') { openFrames('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
+$('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'details') { openDetails(); return; } if (b.dataset.t === 'rates') { openRates('jobsView'); return; } if (b.dataset.t === 'frames') { openFrames('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
 
 function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
 function jobCard(j) {
