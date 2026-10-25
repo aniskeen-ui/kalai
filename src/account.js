@@ -137,6 +137,7 @@ const css = `
 .trk-list li.todo{opacity:.55}
 .trk-at{font-size:12px;opacity:.75;margin-left:4px}
 .trk-note{font-size:13px;margin-top:2px}
+.circle{border:1px solid var(--gold);background:color-mix(in srgb,var(--gold) 8%,transparent);border-radius:10px;padding:10px 12px;margin:6px 0;display:grid;gap:6px}
 .redeem{border:1px dashed var(--gold);border-radius:10px;padding:8px 12px;margin:6px 0}
 .redeem summary{cursor:pointer;font-weight:700;font-size:14px}
 .enq-msg{font-size:13px;line-height:1.45;background:var(--surface);border-left:3px solid var(--gold);padding:8px 10px}
@@ -701,6 +702,61 @@ function wireAddress(root, items) {
 
 const parseDet = (d) => { try { const v = typeof d === 'string' ? JSON.parse(d) : d; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
 // Discount code on an order that has a price and isn't paid yet.
+/* ---------- Kalai Circle: points, level, invite code; points spent on an order ---------- */
+let circle = null;
+async function showCircle(items) {
+  const host = body.querySelector('#circleBox'); if (!host) return;
+  try {
+    const r = await client.mutations.customerProfile({ action: 'get' });
+    if (r.errors?.length) throw new Error(r.errors[0].message);
+    const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    circle = d?.loyalty?.on ? d.loyalty : null;
+  } catch { circle = null; }
+  if (!circle) { host.innerHTML = ''; return; }
+  const c = circle, fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const nx = c.next ? `${c.next.spendLeft ? `Spend ⃃ ${fmt(c.next.spendLeft)} more` : ''}${c.next.spendLeft && c.next.ordersLeft ? ' or ' : ''}${c.next.ordersLeft ? `${c.next.ordersLeft} more order${c.next.ordersLeft > 1 ? 's' : ''}` : ''} to reach <b>${esc(c.next.name)}</b> (${c.next.pct}% back).` : 'You are at our highest level. Thank you!';
+  const share = c.referralCode ? `https://art.pranixtechno.com/#redeem=${encodeURIComponent(c.referralCode)}` : '';
+  const wa = `I love the original art from Kalai Art House in Dubai. Here's ⃃ ${c.friendAed} off your first order (from ⃃ ${c.friendMin}) with my code ${c.referralCode}: ${share}`;
+  host.innerHTML = `<div class="circle"><div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><b style="font-size:15px">✦ Kalai Circle</b><span class="pill">${esc(c.tier)} · ${c.pct}% back</span>
+      <span style="margin-left:auto"><b style="font-size:18px">${fmt(c.points)}</b> points <span class="acct-info">= ⃃ ${fmt(c.worth)}</span></span></div>
+    <div class="acct-info" style="font-size:13px">${nx}${c.expireAt ? ` Points last until ${esc(new Date(c.expireAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))} (each new order extends them).` : ''} Spend them on an order from ${fmt(c.minRedeem)} points, up to ${c.maxPct}% of its price.</div>
+    ${c.referralCode ? `<div style="font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">Invite friends: they get <b>⃃ ${c.friendAed} off</b> their first order, you get <b>⃃ ${c.referrerAed}</b> in points. Your code <b class="mono">${esc(c.referralCode)}</b> <a href="https://wa.me/?text=${encodeURIComponent(wa)}" target="_blank" rel="noopener" class="acct-link" style="margin:0">Share on WhatsApp</a><button type="button" class="acct-link" style="margin:0" data-copyref>Copy link</button></div>` : ''}
+    <details style="font-size:12px"><summary class="acct-info">How it works · history</summary><div class="acct-info">Points come 48 hours after an order is delivered: ${c.tiers.map((t) => `<b>${esc(t.name)}</b> ${t.pct}%${t.spend ? ` (from ⃃ ${fmt(t.spend)}${t.orders ? ` or ${t.orders} orders` : ''})` : ''}`).join(' · ')}. 100 points = ⃃ ${c.pointValue}. Points have no cash value and can't be transferred.</div>
+      ${(c.history || []).map((h) => `<div>${esc(new Date(h.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))} · ${h.pts > 0 ? '+' : ''}${h.pts} · ${esc({ order: 'order', referral: 'friend invited', spent: 'spent on', back: 'given back', expired: 'expired', adjust: 'from the studio' }[h.why] || h.why)} ${esc(h.ref || '')}</div>`).join('')}</details></div>`;
+  host.querySelector('[data-copyref]')?.addEventListener('click', async (ev) => { try { await navigator.clipboard.writeText(share); ev.target.textContent = 'Copied'; } catch { ev.target.textContent = share; } });
+  // Order cards were drawn before the balance arrived: draw their points boxes now.
+  body.querySelectorAll('[data-points-slot]').forEach((el) => { const e = items.find((x) => x.id === el.dataset.pointsSlot); if (e) { el.outerHTML = pointsBox(e); } });
+  wirePoints(items);
+}
+function pointsBox(e) {
+  const st = e.status || 'RECEIVED';
+  if (!e.quotedPrice || !['RECEIVED', 'PRICE_SENT'].includes(st) || e.cancelState === 'REQUESTED') return '';
+  if (!circle) return `<span data-points-slot="${esc(e.id)}" hidden></span>`;
+  if (e.loyaltyRedeemed) return `<div class="code-box" data-points-id="${esc(e.id)}" style="font-size:13px">✦ ${Number(e.loyaltyRedeemed).toLocaleString('en-US')} Kalai Circle points used: − ⃃ ${Number(e.loyaltyAmount || 0).toLocaleString('en-US')} <button type="button" class="req-open" data-points-remove>Remove</button><span class="acct-err" data-points-msg></span></div>`;
+  if (circle.points < circle.minRedeem) return '';
+  const base = Number(e.quotedPrice), maxAed = Math.floor(base * circle.maxPct) / 100, maxPts = Math.min(circle.points, Math.ceil(maxAed * 100 / circle.pointValue));
+  return `<form class="code-box" data-points-id="${esc(e.id)}" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px">✦ Use points: <input name="pts" type="number" min="${circle.minRedeem}" max="${maxPts}" step="1" value="${maxPts}" style="max-width:110px;padding:6px 8px;font-size:13px"> <span class="acct-info" data-points-worth>= ⃃ ${(Math.floor(maxPts * circle.pointValue) / 100).toLocaleString('en-US')}</span><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Use</button><span class="acct-err" data-points-msg style="flex-basis:100%"></span></form>`;
+}
+function wirePoints() {
+  body.querySelectorAll('[data-points-id]').forEach((box) => {
+    const id = box.dataset.pointsId, msg = box.querySelector('[data-points-msg]');
+    const send = async (pts) => {
+      msg.textContent = ''; box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      try {
+        const r = await client.mutations.redeemPoints({ id, points: pts });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        await showList();
+      } catch (ex) { msg.textContent = ex.message || 'Not applied.'; box.querySelectorAll('button').forEach((b) => { b.disabled = false; }); }
+    };
+    if (box.tagName === 'FORM') {
+      const inp = box.querySelector('[name=pts]');
+      inp.oninput = () => { box.querySelector('[data-points-worth]').textContent = `= ⃃ ${(Math.floor(Number(inp.value || 0) * circle.pointValue) / 100).toLocaleString('en-US')}`; };
+      box.onsubmit = (ev) => { ev.preventDefault(); send(Number(inp.value)); };
+    }
+    box.querySelector('[data-points-remove]')?.addEventListener('click', () => send(0));
+  });
+}
+
 /* ---------- Gift cards, vouchers and private codes: check, scan the QR, apply to an order ---------- */
 const PENDING = 'kalaiRedeem';
 const pendingCode = () => { try { return localStorage.getItem(PENDING) || ''; } catch { return ''; } };
@@ -794,6 +850,7 @@ function card(e) {
     ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true" style="grid-template-columns:repeat(${steps.length},1fr)">${steps.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">⃃ ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
     ${codeBox(e)}
+    ${pointsBox(e)}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
     ${['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your artwork on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your artwork is finished and is being prepared for the framer.' : 'Your artwork is on its way to our framer in Dubai.'}</div>` : ''}
     ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(parseDet(e.details).Maker || e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
@@ -904,6 +961,7 @@ async function showList() {
   try { admin = ((await fetchAuthSession()).tokens?.accessToken?.payload?.['cognito:groups'] || []).includes('ADMINS'); } catch { /* not admin */ }
   body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b><span id="custNo"></span></p>
     ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
+    <div id="circleBox"></div>
     <details class="redeem" id="redeemBox"><summary>🎁 Have a gift card, voucher or code?</summary>
       <form id="redeemForm" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><input name="code" id="redeemCode" placeholder="Enter the code" maxlength="30" style="max-width:200px;text-transform:uppercase;padding:6px 8px;font-size:14px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Check</button><button class="btn ghost-dark" type="button" id="redeemScan" style="padding:6px 12px;font-size:13px">📷 Scan QR</button></form>
       <video id="redeemCam" playsinline muted hidden style="width:100%;max-width:320px;border-radius:8px;margin-top:8px"></video>
@@ -957,9 +1015,11 @@ async function showList() {
       wireRequests(list, items);
       wireAddress(list, items);
       wireCodes(list);
+      wirePoints();
     };
     draw();
     wireRedeem(items);
+    showCircle(items);
   } catch (ex) {
     list.textContent = 'We could not load your enquiries and orders. ' + friendly(ex);
   }

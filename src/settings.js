@@ -16,7 +16,7 @@ const SHIP_ZONES = [['A', 'GCC (Saudi Arabia, Oman, Qatar, Bahrain, Kuwait)'], [
 // Customer emails by event (the website emails the customer at each step; untick to stop one).
 // Opt-in (off unless ticked): the customer sees these on the tracker anyway.
 const MAIL_OPTIN = ['ARTIST_DONE', 'ARTIST_SENT'];
-const MAILS = [['RECEIVED', 'Enquiry or order received'], ['PRICE_SENT', 'Price sent (with the payment link)'], ['PAID', 'Payment received'], ['ARTIST_STARTED', 'The artist has started (paintings and sketches)'],
+const MAILS = [['LOYALTY', 'Kalai Circle points earned'], ['RECEIVED', 'Enquiry or order received'], ['PRICE_SENT', 'Price sent (with the payment link)'], ['PAID', 'Payment received'], ['ARTIST_STARTED', 'The artist has started (paintings and sketches)'],
   ['ARTIST_DONE', 'The artist has finished (off by default: shown on the tracker)'], ['ARTIST_SENT', 'On its way to our framer (off by default: shown on the tracker)'], ['MESSAGE', 'Your message on an order (without a status change)'],
   ['FRAMING', 'Being framed'], ['SHIPPED', 'Shipped (courier and tracking number)'], ['DELIVERED', 'Delivered (with the rating link)'], ['CANCELLED', 'Cancelled'],
   ['REQUEST', 'Cancellation or damage request received'], ['DECLINED', 'Request declined'], ['PICKUP', 'Return pickup booked'], ['REPLACEMENT', 'Replacement under way'],
@@ -57,6 +57,22 @@ export async function showSettings() {
       <h3 style="margin:0;font-size:17px">Order screen layout (Order Management)</h3>
       <div class="field" style="max-width:640px"><label for="st-layout">How an order opens in Orders</label><select id="st-layout" style="max-width:340px"><option value="original">Original (list left, details right)</option><option value="a">A · Tabs (full width, action strip on top)</option><option value="b">B · Dashboard (three columns, sticky action panel)</option><option value="c">C · Journey (timeline, action panel on the right)</option></select>
         <span class="muted" style="font-size:12px">Choosing one switches this browser straight away so you can try it on a few orders; Save settings makes it the layout for everyone.</span></div>
+      <h3 style="margin:0;font-size:17px">Kalai Circle (loyalty points)</h3>
+      <div class="field" style="max-width:900px"><label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="lyOn" style="width:auto"> Kalai Circle is on (customers earn and spend points; they see their balance, level and invite code under My enquiries &amp; orders)</label>
+        <div class="tablewrap"><table class="costs"><thead><tr><th>Level</th><th>Name</th><th>From total spend (⃃)</th><th>or orders</th><th>Points back (% of what they pay)</th></tr></thead><tbody>
+          ${[0, 1, 2].map((i) => `<tr><td>${i + 1}</td><td><input id="lyN${i}" maxlength="20" style="width:120px"></td><td><input id="lyS${i}" type="number" min="0" step="100" style="width:110px" ${i === 0 ? 'disabled value="0"' : ''}></td><td><input id="lyO${i}" type="number" min="0" step="1" style="width:80px" ${i === 0 ? 'disabled value="0"' : ''}></td><td><input id="lyP${i}" type="number" min="0" max="30" step="0.5" style="width:80px"> %</td></tr>`).join('')}
+        </tbody></table></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:6px">
+          <label class="field"><span style="font-size:12px;font-weight:700">100 points are worth (⃃)</span><input id="lyVal" type="number" min="0.5" step="0.5"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Spend from (points)</span><input id="lyMin" type="number" min="0" step="50"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Up to (% of an order)</span><input id="lyMax" type="number" min="5" max="100" step="5"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Points last (months after the last order)</span><input id="lyExp" type="number" min="1" max="60" step="1"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Invite: friend's discount (⃃)</span><input id="lyFr" type="number" min="0" step="5"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Invite: friend's minimum order (⃃)</span><input id="lyFrMin" type="number" min="0" step="50"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Invite: reward to the customer (⃃ in points)</span><input id="lyRef" type="number" min="0" step="5"></label>
+          <label class="field"><span style="font-size:12px;font-weight:700">Invite rewards per customer per year</span><input id="lyRefMax" type="number" min="0" step="1"></label>
+        </div>
+        <span class="muted" style="font-size:12px">Points arrive 48 hours after an order is delivered (no refund window left). The customer is emailed when they earn points (switch off under Customer emails: “Kalai Circle points”).</span></div>
       <h3 style="margin:0;font-size:17px">Website languages</h3>
       <div class="field"><span class="muted" style="font-size:12px">The language button in the website header offers the languages ticked here. A new visitor starts in the <b>default language</b> below (English unless you change it) and can switch. Each sentence is translated once (Amazon Translate) and saved; a language costs nothing until a visitor picks it.</span>
         <div class="field" style="max-width:340px;margin:6px 0"><label for="st-langDef">Default language (what a new visitor sees first)</label><select id="st-langDef"></select><span class="muted" style="font-size:12px">Visitors who pick a language keep their choice.</span></div>
@@ -141,6 +157,14 @@ export async function showSettings() {
       boxes.forEach((b) => { if (b.dataset.lang !== 'en') b.checked = on.has(b.dataset.lang); b.onchange = count; });
       document.querySelectorAll('[data-langset]').forEach((x) => { x.onclick = () => { const v = x.dataset.langset; boxes.forEach((b) => { if (b.dataset.lang !== 'en') b.checked = v === 'all' || (v === 'default' && DEFAULT_LANGS.includes(b.dataset.lang)); }); count(); }; });
       fillDef(row?.siteLangDefault || 'en'); count(); }
+    { // Kalai Circle settings (defaults as proposed)
+      let ly = {}; try { ly = JSON.parse(row?.loyalty || '{}') || {}; } catch { ly = {}; }
+      const D = { on: true, pointValue: 3, minRedeem: 500, maxPct: 30, expiryMonths: 12, tiers: [{ name: 'Friend', spend: 0, orders: 0, pct: 3 }, { name: 'Collector', spend: 2000, orders: 3, pct: 5 }, { name: 'Patron', spend: 6000, orders: 0, pct: 7 }], friendAed: 50, friendMin: 300, referrerAed: 50, refMaxYear: 10 };
+      const L = { ...D, ...ly };
+      $('lyOn').checked = L.on !== false;
+      (L.tiers || D.tiers).slice(0, 3).forEach((t, i) => { $(`lyN${i}`).value = t.name; if (i) { $(`lyS${i}`).value = t.spend || ''; $(`lyO${i}`).value = t.orders || ''; } $(`lyP${i}`).value = t.pct; });
+      $('lyVal').value = L.pointValue; $('lyMin').value = L.minRedeem; $('lyMax').value = L.maxPct; $('lyExp').value = L.expiryMonths;
+      $('lyFr').value = L.friendAed; $('lyFrMin').value = L.friendMin; $('lyRef').value = L.referrerAed; $('lyRefMax').value = L.refMaxYear; }
     { let cur = row?.orderLayout || 'original'; try { cur = localStorage.getItem('kalaiOrderLayout') || cur; } catch { /* */ } $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value); }
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
@@ -178,6 +202,10 @@ async function save() {
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
   rec.siteLangDefault = $('st-langDef').value || 'en';
+  { const n = (id, d) => (Number.isFinite(Number($(id).value)) && $(id).value !== '' ? Number($(id).value) : d);
+    rec.loyalty = JSON.stringify({ on: $('lyOn').checked, pointValue: n('lyVal', 3), minRedeem: n('lyMin', 500), maxPct: n('lyMax', 30), expiryMonths: n('lyExp', 12),
+      tiers: [0, 1, 2].map((i) => ({ name: $(`lyN${i}`).value.trim() || ['Friend', 'Collector', 'Patron'][i], spend: i ? n(`lyS${i}`, 0) : 0, orders: i ? n(`lyO${i}`, 0) : 0, pct: n(`lyP${i}`, [3, 5, 7][i]) })),
+      friendAed: n('lyFr', 50), friendMin: n('lyFrMin', 300), referrerAed: n('lyRef', 50), refMaxYear: n('lyRefMax', 10) }); }
   rec.siteLangs = ['en', ...[...document.querySelectorAll('[data-lang]')].filter((b) => b.checked && b.dataset.lang !== 'en').map((b) => b.dataset.lang)].join(',');
   rec.orderLayout = $('st-layout').value;
   window.kalaiSetLayout?.(rec.orderLayout);

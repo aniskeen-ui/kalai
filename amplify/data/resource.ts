@@ -63,6 +63,12 @@ const schema = a.schema({
       // Siva's progress, reported on the Artist desk: STARTED → FINISHED → SHIPPED (to the frame shop).
       // Status history for the customer's tracker: JSON [{s, at}], appended by the function on every status change.
       statusLog: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Kalai Circle (loyalty): points earned on this order (after delivery), points spent on it and their value, referral.
+      loyaltyPoints: a.integer().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      loyaltyAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      loyaltyRedeemed: a.integer().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      loyaltyAmount: a.float().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      referralBy: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistStage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistStartedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistFinishedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -451,6 +457,7 @@ const schema = a.schema({
       active: a.boolean(),
       note: a.string(),
       uses: a.string(), // JSON [{ref, amount, at}]
+      refOwner: a.string(), // REF (Kalai Circle referral): the customer code it belongs to
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
@@ -466,6 +473,7 @@ const schema = a.schema({
       siteLook: a.string(), // classic | green
       inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
       siteLangs: a.string(), // website languages offered (codes, comma-separated; blank = the default set)
+      loyalty: a.string(), // Kalai Circle settings (JSON): rates, levels, referral, expiry
       siteLangDefault: a.string(), // language a new visitor sees first (blank = English)
       gbpPerAed: a.float(), // pounds per dirham (£ prices), refreshed with the rupee rate
       eurPerAed: a.float(), // euros per dirham (€ prices)
@@ -559,6 +567,14 @@ const schema = a.schema({
 
   // Customer (or the studio for them): apply / remove a discount code on an order before paying.
   // Customer: what a code or gift card gives (before applying it to an order).
+  // Customer: spend Kalai Circle points on an order (points 0 = take them off again).
+  redeemPoints: a
+    .mutation()
+    .arguments({ id: a.id().required(), points: a.integer() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
   checkCode: a
     .mutation()
     .arguments({ code: a.string().required() })
@@ -698,6 +714,14 @@ const schema = a.schema({
       firstOrderAt: a.string(),
       lastOrderAt: a.string(),
       editedBy: a.string(), // studio | customer
+      // Kalai Circle (loyalty)
+      loyaltyPoints: a.integer(),
+      loyaltySpend: a.float(), // paid and delivered, counted for the level
+      loyaltyOrders: a.integer(),
+      loyaltyTier: a.string(),
+      loyaltyExpireAt: a.string(),
+      loyaltyLog: a.string(), // JSON [{at, pts, why, ref}]
+      referralCode: a.string(),
       editedAt: a.string(),
     })
     .identifier(['code'])

@@ -53,7 +53,7 @@ async function vLoad() {
   try {
     const r = await client.models.Voucher.list({ limit: 1000 });
     if (r.errors?.length) throw new Error(r.errors[0].message);
-    vouchers = (r.data || []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    vouchers = (r.data || []).filter((v) => v.kind !== 'REF').sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     vDraw();
   } catch (ex) { $('vList').innerHTML = `<p class="err">Could not load private codes: ${esc(ex.message)}</p>`; }
 }

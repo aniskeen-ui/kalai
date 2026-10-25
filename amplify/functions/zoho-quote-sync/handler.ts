@@ -2599,6 +2599,14 @@ async function marketAdmin(ev: ApiEvent) {
     if (row.status === 'APPROVED' && row.type === 'ARTIST') await publishArtist(row);
     return { profile: row };
   }
+  // Studio: add or take off Kalai Circle points for a customer (with a reason in the history).
+  if (action === 'adjustPoints') {
+    const cfg = await loyCfg();
+    const code = txt(d.code, 20), pts = Math.round(Number(d.points));
+    if (!code || !pts) throw new Error('Choose the customer and the points (+ or −).');
+    const row = await loyAdd(code, pts, 'adjust', txt(d.note, 120) || 'Studio', cfg);
+    return { points: row?.loyaltyPoints ?? 0, tier: row?.loyaltyTier ?? '' };
+  }
   if (action === 'promoteSupplier') {
     const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
     if (!p || p.status !== 'PROSPECT' || !ROLE_OF[String(p.type)]) throw new Error('Supplier prospect not found');
@@ -3510,7 +3518,7 @@ async function customerProfile(ev: ApiEvent) {
   const cur = code ? plain(await getRow(T, { code: { S: code } })) : null;
   const view = (c: Dict | null) => ({ code: code ?? '', name: c?.name ?? str(mine[0], 'customerName'), email: c?.email || email, phone: c?.phone ?? str(mine[0], 'phone'),
     country: c?.country ?? 'UAE', emirate: c?.emirate ?? '', pin: c?.pin ?? '', address: c?.address ?? '', landmark: c?.landmark ?? '' });
-  if (ev.arguments.action === 'get') return view(cur);
+  if (ev.arguments.action === 'get') return { ...view(cur), loyalty: await loyView(code ?? '', email).catch(() => ({ on: false })) };
   if (ev.arguments.action !== 'save') throw new Error('Unknown action');
   if (!code) throw new Error('Your details are saved with your first order or enquiry. Send one first, then you can change them here.');
   const d = parseData(ev.arguments.data);
@@ -3645,6 +3653,139 @@ async function bumpUses(code: string, delta: number) {
   if (!p) return;
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET usedCount = if_not_exists(usedCount, :z) + :d', ExpressionAttributeValues: { ':z': { N: '0' }, ':d': { N: String(delta) } } }));
 }
+// ---------- Kalai Circle (loyalty points) ----------
+// Points on every paid order once it has been delivered for 48 hours (no refund window left), more back at higher
+// levels, spent like a gift card on a later order (up to a share of the price), a referral code per customer, and
+// expiry a set time after the last order. Settings → Kalai Circle sets the numbers (SiteSetting.loyalty).
+type LoyCfg = { on: boolean; pointValue: number; minRedeem: number; maxPct: number; expiryMonths: number;
+  tiers: { name: string; spend: number; orders: number; pct: number }[]; friendAed: number; friendMin: number; referrerAed: number; refMaxYear: number };
+const LOY_DEF: LoyCfg = { on: true, pointValue: 3, minRedeem: 500, maxPct: 30, expiryMonths: 12,
+  tiers: [{ name: 'Friend', spend: 0, orders: 0, pct: 3 }, { name: 'Collector', spend: 2000, orders: 3, pct: 5 }, { name: 'Patron', spend: 6000, orders: 0, pct: 7 }],
+  friendAed: 50, friendMin: 300, referrerAed: 50, refMaxYear: 10 };
+async function loyCfg(): Promise<LoyCfg> {
+  const t = process.env.SITE_TABLE;
+  try { const raw = t ? (await ddb.send(new GetItemCommand({ TableName: t, Key: { id: { S: 'site' } } }))).Item?.loyalty?.S : ''; return { ...LOY_DEF, ...(raw ? JSON.parse(raw) : {}) }; } catch { return LOY_DEF; }
+}
+/** The level a customer has reached: total paid spend or number of orders (either). */
+function tierOf(c: Dict | null, cfg: LoyCfg) {
+  const spend = Number(c?.loyaltySpend ?? 0), orders = Number(c?.loyaltyOrders ?? 0);
+  const ts = [...cfg.tiers].sort((a, b) => a.spend - b.spend);
+  let t = ts[0];
+  for (const x of ts) if ((x.spend && spend >= x.spend) || (x.orders && orders >= x.orders) || (!x.spend && !x.orders)) t = x;
+  const next = ts[ts.indexOf(t) + 1];
+  return { tier: t, next, spend, orders };
+}
+const ptsWorth = (pts: number, cfg: LoyCfg) => Math.floor(pts * cfg.pointValue) / 100; // AED
+const ptsFor = (aed: number, cfg: LoyCfg) => Math.round(aed * 100 / cfg.pointValue);
+async function loyCustomer(code: string) { const T = process.env.CUSTOMER_TABLE; return T && code ? plain(await getRow(T, { code: { S: code } })) : null; }
+async function loyAdd(code: string, pts: number, why: string, ref: string, cfg: LoyCfg, extra: Dict = {}) {
+  const T = process.env.CUSTOMER_TABLE;
+  if (!T || !code) return null;
+  const c = (await loyCustomer(code)) ?? { code, __typename: 'Customer', createdAt: new Date().toISOString() };
+  let log: Dict[] = []; try { log = JSON.parse(String(c.loyaltyLog ?? '[]')); } catch { log = []; }
+  const now = new Date();
+  log.push({ at: now.toISOString(), pts, why, ref });
+  const row: Dict = { ...c, ...extra, loyaltyPoints: Math.max(0, Number(c.loyaltyPoints ?? 0) + pts), loyaltyLog: JSON.stringify(log.slice(-200)), updatedAt: now.toISOString() };
+  if (pts > 0 && why !== 'adjust') row.loyaltyExpireAt = new Date(now.getTime() + cfg.expiryMonths * 30.44 * 864e5).toISOString();
+  row.loyaltyTier = tierOf(row, cfg).tier.name;
+  await putRow(T, row);
+  return row;
+}
+/** Hourly: points for orders delivered 48 h ago, referral rewards, and expiry. */
+async function awardLoyalty() {
+  const cfg = await loyCfg();
+  const table = process.env.ENQUIRY_TABLE, T = process.env.CUSTOMER_TABLE;
+  if (!cfg.on || !table || !T) return;
+  const cutoff = new Date(Date.now() - 48 * 3600_000).toISOString();
+  for (const e of await scanAll(table)) {
+    if (str(e, 'status') !== 'DELIVERED' || str(e, 'loyaltyAt') || !str(e, 'customerCode') || str(e, 'cancelState') === 'REQUESTED') continue;
+    let at = str(e, 'deliveredAt'); if (!at) { try { const log = JSON.parse(str(e, 'statusLog') || '[]') as { s: string; at: string }[]; at = log.filter((x) => x.s === 'DELIVERED').pop()?.at ?? ''; } catch { at = ''; } }
+    if (!at || at > cutoff) continue;
+    const paid = num(e, 'quotedPrice') ?? 0;
+    const c = await loyCustomer(str(e, 'customerCode'));
+    const { tier } = tierOf(c, cfg);
+    const pts = paid > 0 ? ptsFor(paid * tier.pct / 100, cfg) : 0;
+    const row = await loyAdd(str(e, 'customerCode'), pts, 'order', str(e, 'ref'), cfg, { loyaltySpend: Math.round((Number(c?.loyaltySpend ?? 0) + paid) * 100) / 100, loyaltyOrders: Number(c?.loyaltyOrders ?? 0) + 1 });
+    await writeBack(str(e, 'id'), { loyaltyPoints: pts, loyaltyAt: new Date().toISOString() });
+    // The friend who referred them: their reward, once per new customer (and up to the yearly limit).
+    const by = str(e, 'referralBy');
+    if (by && by !== str(e, 'customerCode')) {
+      const rc = await loyCustomer(by);
+      let log: Dict[] = []; try { log = JSON.parse(String(rc?.loyaltyLog ?? '[]')); } catch { log = []; }
+      const year = log.filter((x) => x.why === 'referral' && String(x.at) > new Date(Date.now() - 365 * 864e5).toISOString()).length;
+      if (rc && year < cfg.refMaxYear && !log.some((x) => x.why === 'referral' && x.ref === str(e, 'customerCode'))) {
+        const rr = await loyAdd(by, ptsFor(cfg.referrerAed, cfg), 'referral', str(e, 'customerCode'), cfg);
+        if (rr?.email) await sendMail({ to: String(rr.email), subject: 'Thank you for the introduction: Kalai Circle points added', lines: [`Hello ${h(String(rr.name || '').split(' ')[0] || 'there')},`, `A friend you invited has received their first order from Kalai Art House. We've added <b>${ptsFor(cfg.referrerAed, cfg)} points</b> (worth AED ${cfg.referrerAed}) to your Kalai Circle.`, `Your balance: <b>${rr.loyaltyPoints} points</b> (AED ${ptsWorth(Number(rr.loyaltyPoints), cfg)}).`], button: MY }).catch(() => {});
+      }
+    }
+    if (row?.email && pts > 0 && (await emailsOn()) && !(await mailOff()).includes('LOYALTY')) await sendMail({ to: String(row.email), subject: `You earned ${pts} Kalai Circle points`, lines: [`Hello ${h(String(row.name || '').split(' ')[0] || 'there')},`, `Thank you for your order ${h(str(e, 'ref'))}. You've earned <b>${pts} points</b> (worth AED ${ptsWorth(pts, cfg)}).`, `Your balance: <b>${row.loyaltyPoints} points</b> (AED ${ptsWorth(Number(row.loyaltyPoints), cfg)}) · level <b>${h(String(row.loyaltyTier))}</b>. Spend them on your next order under My enquiries & orders.`], button: MY }).catch(() => {});
+  }
+  // Expiry: the balance lapses a set time after the last order that earned points.
+  const now = new Date().toISOString();
+  for (const c of (await scanAll(T)).map(plain)) if (c && Number(c.loyaltyPoints ?? 0) > 0 && c.loyaltyExpireAt && String(c.loyaltyExpireAt) < now) await loyAdd(String(c.code), -Number(c.loyaltyPoints), 'expired', '', cfg);
+}
+/** The customer's Kalai Circle summary (and their referral code, made on first look). */
+async function loyView(code: string, email: string) {
+  const cfg = await loyCfg();
+  if (!cfg.on || !code) return { on: cfg.on };
+  let c = await loyCustomer(code);
+  if (c && !c.referralCode && process.env.VOUCHER_TABLE) {
+    const ref = `REF-${Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('')}`;
+    const now = new Date().toISOString();
+    await putRow(process.env.VOUCHER_TABLE, { id: `ref-${code}`, __typename: 'Voucher', createdAt: now, updatedAt: now, code: ref, kind: 'REF', discountType: 'AED', discountValue: cfg.friendAed, minOrder: cfg.friendMin, appliesTo: 'ALL', active: true, usedCount: 0, uses: '[]', refOwner: code, forName: String(c.name ?? ''), forEmail: '' });
+    c = { ...c, referralCode: ref };
+    await putRow(process.env.CUSTOMER_TABLE!, c);
+  }
+  const { tier, next, spend, orders } = tierOf(c, cfg);
+  const pts = Number(c?.loyaltyPoints ?? 0);
+  let log: Dict[] = []; try { log = JSON.parse(String(c?.loyaltyLog ?? '[]')); } catch { log = []; }
+  return { on: true, points: pts, worth: ptsWorth(pts, cfg), pointValue: cfg.pointValue, minRedeem: cfg.minRedeem, maxPct: cfg.maxPct, tier: tier.name, pct: tier.pct,
+    next: next ? { name: next.name, spend: next.spend, orders: next.orders, pct: next.pct, spendLeft: Math.max(0, next.spend - spend), ordersLeft: next.orders ? Math.max(0, next.orders - orders) : null } : null,
+    expireAt: pts > 0 ? c?.loyaltyExpireAt ?? '' : '', referralCode: c?.referralCode ?? '', friendAed: cfg.friendAed, friendMin: cfg.friendMin, referrerAed: cfg.referrerAed, tiers: cfg.tiers, history: log.slice(-12).reverse(), email };
+}
+/** Customer: spend points on an order (or take them off). */
+async function redeemPoints(ev: ApiEvent) {
+  const cfg = await loyCfg();
+  if (!cfg.on) throw new Error('Kalai Circle is paused.');
+  const id = String(ev.arguments.id ?? ''), want = Math.max(0, Math.floor(Number((ev.arguments as { points?: number }).points ?? 0)));
+  const e = await enquiryRow(id);
+  const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
+  if (!e || (!ownsEnquiry(e, ev) && !groups.includes('ADMINS'))) throw new Error('Order not found');
+  if (!['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') || str(e, 'zohoInvoiceId')) throw new Error('This order is already paid.');
+  const code = str(e, 'customerCode');
+  if (!code) throw new Error('Points are available once your first order is registered.');
+  const had = num(e, 'loyaltyRedeemed') ?? 0, hadAmt = num(e, 'loyaltyAmount') ?? 0;
+  const list = num(e, 'listPrice') ?? num(e, 'quotedPrice') ?? 0;
+  if (!(list > 0)) throw new Error('Spend points once we have sent you the price.');
+  const base = Math.round((list - (num(e, 'discountAmount') ?? 0)) * 100) / 100; // after an offer code / studio discount
+  if (had) await loyAdd(code, had, 'back', str(e, 'ref'), cfg); // give back what was on the order first
+  if (!want) {
+    await updateEnquiry(id, { loyaltyRedeemed: null, loyaltyAmount: null, quotedPrice: base, listPrice: num(e, 'discountAmount') ? list : null });
+    return { ok: true, price: base };
+  }
+  const c = await loyCustomer(code);
+  const bal = Number(c?.loyaltyPoints ?? 0);
+  if (want < cfg.minRedeem) throw new Error(`Spend at least ${cfg.minRedeem} points.`);
+  if (want > bal) throw new Error(`You have ${bal} points.`);
+  const amt = Math.min(ptsWorth(want, cfg), Math.floor(base * cfg.maxPct) / 100);
+  const used = Math.min(want, Math.ceil(amt * 100 / cfg.pointValue));
+  await loyAdd(code, -used, 'spent', str(e, 'ref'), cfg);
+  const price = Math.round((base - amt) * 100) / 100;
+  await updateEnquiry(id, { loyaltyRedeemed: used, loyaltyAmount: amt, listPrice: list, quotedPrice: price });
+  void hadAmt;
+  return { ok: true, used, amount: amt, price };
+}
+/** An unpaid order cancelled with points on it: the points go back. */
+async function loyaltyOnStatus(rec: StreamRecord) {
+  const img = rec.dynamodb?.NewImage, old = rec.dynamodb?.OldImage;
+  if (rec.eventName !== 'MODIFY' || !img || !old || str(img, 'status') === str(old, 'status')) return;
+  if (str(img, 'status') === 'CANCELLED' && (num(img, 'loyaltyRedeemed') ?? 0) > 0) {
+    const cfg = await loyCfg();
+    await loyAdd(str(img, 'customerCode'), num(img, 'loyaltyRedeemed')!, 'back', str(img, 'ref'), cfg);
+    await writeBack(str(img, 'id'), { loyaltyRedeemed: null, loyaltyAmount: null });
+  }
+}
+
 // ---------- Private codes and gift cards (Voucher) ----------
 async function findVoucher(code: string) {
   const T = process.env.VOUCHER_TABLE;
@@ -3663,6 +3804,7 @@ function voucherAmount(v: Img, e: Img, list: number): { amount: number; error?: 
     if (!(bal > 0)) return { amount: 0, error: 'This gift card has been fully used.' };
     return { amount: Math.round(Math.min(bal, list) * 100) / 100 };
   }
+  if (str(v, 'kind') === 'REF' && str(v, 'refOwner') === str(e, 'customerCode')) return { amount: 0, error: 'This is your own invite code: share it with friends.' };
   const max = num(v, 'maxUses');
   if (max && (num(v, 'usedCount') ?? 0) >= max) return { amount: 0, error: 'This code has been fully used.' };
   return discountFor(v, str(e, 'kind'), list);
@@ -3724,7 +3866,8 @@ async function applyCode(ev: ApiEvent) {
   if (!code) {
     // Remove the code: back to the full price.
     if (!current) return { ok: true, price: list };
-    await updateEnquiry(id, { quotedPrice: list, discountAmount: null, discountCode: null, listPrice: null });
+    const lp = num(e, 'loyaltyAmount') ?? 0;
+    await updateEnquiry(id, { quotedPrice: Math.round((list - lp) * 100) / 100, discountAmount: null, discountCode: null, listPrice: lp ? list : null, referralBy: null });
     await releaseCode(current, str(e, 'ref'), num(e, 'discountAmount') ?? 0);
     return { ok: true, price: list, removed: current };
   }
@@ -3735,9 +3878,11 @@ async function applyCode(ev: ApiEvent) {
   if (!v && (!f || 'error' in f)) throw new Error(f?.error ?? 'This code is not valid.');
   const d = v ? voucherAmount(v, e, list) : discountFor((f as { p: Img }).p, str(e, 'kind'), list);
   if (d.error) throw new Error(d.error);
-  const price = Math.round((list - d.amount) * 100) / 100;
+  // A friend's invite code (Kalai Circle): for a first order only.
+  if (v && str(v, 'kind') === 'REF') { const me = await loyCustomer(str(e, 'customerCode')); if (Number(me?.paidCount ?? 0) > 0) throw new Error('Invite codes are for a first order: you can earn your own by inviting friends.'); }
+  const price = Math.round((list - d.amount - (num(e, 'loyaltyAmount') ?? 0)) * 100) / 100;
   const prevAmount = num(e, 'discountAmount') ?? 0;
-  await updateEnquiry(id, { listPrice: list, discountAmount: d.amount, discountCode: code, quotedPrice: price });
+  await updateEnquiry(id, { listPrice: list, discountAmount: d.amount, discountCode: code, quotedPrice: price, referralBy: v && str(v, 'kind') === 'REF' ? str(v, 'refOwner') : null });
   if (v) await useVoucher(v, str(e, 'ref'), d.amount); else await bumpUses(code, 1);
   if (current) await releaseCode(current, str(e, 'ref'), prevAmount);
   console.log(`Code ${code} on ${str(e, 'ref')}: AED ${list} - ${d.amount} = ${price}`);
@@ -4532,6 +4677,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
   if ((event as { task?: string }).task === 'dailyKural') {
     // Runs every hour: publish once a day, from the hour set in Settings (Dubai time).
     const st = process.env.SITE_TABLE ? (await ddb.send(new GetItemCommand({ TableName: process.env.SITE_TABLE, Key: { id: { S: 'site' } } })).catch(() => null))?.Item : undefined;
+    await awardLoyalty().catch((e) => console.log('Kalai Circle points not awarded', e)); // every hour
     const hour = Number(st?.kuralHour?.N ?? 6), dubaiHour = new Date(Date.now() + 4 * 3600_000).getUTCHours();
     if (dubaiHour < hour) return { skipped: 'not yet' };
     await securePrintFiles().catch((e) => console.log('Print files not moved', e));
@@ -4552,6 +4698,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));
     if (field === 'applyCode') return JSON.stringify(await applyCode(event));
     if (field === 'checkCode') return JSON.stringify(await checkCode(event));
+    if (field === 'redeemPoints') return JSON.stringify(await redeemPoints(event));
     if (field === 'assignCodes') return JSON.stringify(await assignCodes());
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));
@@ -4578,6 +4725,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
       await onStreamRecord(rec);
       await logStatus(rec).catch((err) => console.warn('Status log not written', err));
       await clearStaleMessage(rec).catch((err) => console.warn('Old message not cleared', err));
+      await loyaltyOnStatus(rec).catch((err) => console.warn('Points not given back', err));
       await notify(rec);
       await artistNotify(rec).catch((err) => console.warn('Artist email step failed', err));
     } catch (err) {
