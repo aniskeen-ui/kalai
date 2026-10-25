@@ -53,7 +53,8 @@ type ZohoBody = {
   vendorpayment?: { payment_id: string; payment_number?: string };
 };
 
-const KIND: Record<string, string> = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop order', PHOTO: 'Framed print', LICENCE: 'Image licence' };
+// Sales category (as on the website menu), used in emails, Zoho and the supplier portal.
+const KIND: Record<string, string> = { PRICE: 'Collection', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed Prints', LICENCE: 'Image licence' };
 const INVOICE_PREFIX = 'KAH-INV-';
 // Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
 // so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
@@ -4222,7 +4223,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
         : det0['Price'] ? `Thank you for your order: <b>${h(title)}</b>, ${h(String(det0['Price']).replace(/\s*\(website price\)/i, ''))}. We'll confirm it's ready and send you a secure payment link, usually within 24 hours.`
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
       `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries & orders on our website.`]);
-    studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`,
+    studio(`New ${KIND[kind] ? `${KIND[kind]} order` : 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`,
       kind === 'MARKET' ? `Maker: ${h(str(img, 'sellerName'))} · qty ${num(img, 'qty') ?? 1} · <b>${aed(price)}</b> · ${str(img, 'deliveryBy') === 'KALAI' ? 'Kalai collects and delivers' : 'maker delivers'}${str(img, 'deliveryCountry') === 'India' ? ' · <b>delivery to India: add the shipping to the price</b>' : ''}. Send the payment link (status Price sent); once Paid the maker is told automatically.` : '']);
     return out;
   }
