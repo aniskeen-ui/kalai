@@ -82,8 +82,8 @@ function draw() {
       + (queueL.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Listings to approve</h2>${queueL.map(listingCard).join('')}` : '')
       || '<p class="muted">Nothing waiting for approval.</p>';
   } else if (view === 'suppliers') {
-    const these = sellers.filter((x) => SUP(x) && x.status !== 'PROSPECT').sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
-    html = supplierProspectsView() + addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
+    const these = sellers.filter((x) => SUP(x) && x.status !== 'PROSPECT' && (!supType || x.type === supType)).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
+    html = supTypeBar() + ((!supType || supType === 'PRINTER') ? supplierProspectsView() : '') + addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
   } else if (view === 'prospects') {
     html = prospectsView();
   } else if (view === 'artists' || view === 'sellers') {
@@ -120,6 +120,12 @@ function prospectsView() {
     }).join('')}</tbody></table></div>` : '<p class="muted">No prospects yet. Import the outreach sheet above.</p>'}`;
 }
 // ---------- Print shops (and other suppliers) to ask for quotes: not suppliers yet, never given jobs ----------
+let supType = ''; // Frame, print & delivery: show one kind of supplier
+const SUP_TYPES = [['', 'All suppliers'], ['FRAMER', 'Frame shops'], ['PRINTER', 'Print shops'], ['COURIER', 'Delivery partners']];
+function supTypeBar() {
+  const n = (t) => sellers.filter((x) => SUP(x) && (!t || x.type === t)).length;
+  return `<div class="tabs" role="group" aria-label="Supplier category" style="margin:0 0 10px;display:flex;gap:6px;flex-wrap:wrap">${SUP_TYPES.map(([t, l]) => `<button type="button" class="btn small ${supType === t ? '' : 'ghost'}" data-suptype="${t}">${l} <b>${n(t)}</b></button>`).join('')}</div>`;
+}
 const SUP_OUTREACH = ['To contact', 'Quote requested', 'Quote received', 'Not suitable'];
 const quoteAsk = (p) => `Hello ${p.business}, this is Anis from Kalai Art House, Dubai (art.pranixtechno.com). We sell framed fine-art prints and are looking for a print partner for regular monthly orders (single prints, made to order). Could you please share your price per print on matte fine-art paper (230–310 gsm, archival inks) for these sizes: A4 (21×30), A3 (30×42), 30×40, 40×50, 50×70, 60×80 and 70×100 cm? Also your turnaround time, whether you deliver or we collect, and any trade discount for regular orders. Thank you!`;
 const RC_SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
@@ -134,7 +140,7 @@ function supplierProspectsView() {
       const prices = RC_SZ.filter((z) => pr[z] != null).map((z) => `${z} <b>${pr[z]}</b>`).join(' · ');
       return `<tr class="mk-card" data-seller="${esc(p.id)}" style="display:table-row"><td><b>${esc(p.business)}</b>${p.portfolio ? `<br><a href="${esc(p.portfolio)}" target="_blank" rel="noopener noreferrer" style="font-size:12px">website</a>` : ''}<div class="muted" style="font-size:11px">${esc(p.address || p.city || '')}</div></td>
         <td style="font-size:12px;max-width:260px;white-space:normal">${esc(p.mediums || '')}${c.fineArt ? ' <span class="chip">fine art</span>' : ''}</td>
-        <td style="font-size:12px;max-width:240px;white-space:normal">${prices || '<span class="muted">no paper prices</span>'}${prices ? ` <span class="muted">(${c.basis === 'pub' ? 'published' : 'est.'})</span>` : ''}</td>
+        <td style="font-size:12px;max-width:240px;white-space:normal">${prices || '<span class="muted">no paper prices</span>'}${prices ? ` <span class="muted">(${c.basis === 'pub' ? 'published' : c.basis === 'est' ? 'est.' : 'price list'})</span>` : ''}</td>
         <td style="font-size:12px">${p.email ? `${esc(p.email)}<br>` : ''}${esc(p.phone || '')}</td>
         <td><select data-pr="outreach" style="width:auto">${SUP_OUTREACH.map((o) => `<option ${o === (p.outreach || 'To contact') ? 'selected' : ''}>${o}</option>`).join('')}</select>${p.outreachAt ? `<div class="muted" style="font-size:11px">${esc(day(p.outreachAt))}</div>` : ''}</td>
         <td style="white-space:nowrap">${wa ? `<a class="btn small ghost" href="${wa}" target="_blank" rel="noopener">Ask for a quote (WhatsApp)</a> ` : ''}<a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">Price list</a> <button class="btn small" type="button" data-pr="promote">Make supplier</button> <button class="btn small ghost" type="button" data-pr="remove">Remove</button><div class="err" data-msg style="font-size:12px"></div></td></tr>`;
@@ -315,6 +321,7 @@ function wireCards() {
     try { const { RESEARCHED_ARTISTS } = await import('./prospects-seed.js'); const r = await act('addProspects', { items: RESEARCHED_ARTISTS }); msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} already there` : ''}.`; await load(); }
     catch (ex) { msg.textContent = ex.message; b.disabled = false; }
   };
+  document.querySelectorAll('#mkBody [data-suptype]').forEach((b) => { b.onclick = () => { supType = b.dataset.suptype; draw(); }; });
   if ($('spSeed')) $('spSeed').onclick = async () => {
     const b = $('spSeed'), msg = $('spMsg'); b.disabled = true; msg.textContent = 'Adding…';
     try {

@@ -65,7 +65,8 @@ async function adminBar() {
     const all = (typeof list === 'string' ? JSON.parse(list) : list).portals || [];
     const sup = all.filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type));
     const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)} · ${p.type === 'FRAMER' ? 'frame shop' : p.type === 'PRINTER' ? 'print shop' : 'delivery'} · ${esc({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' }[p.status] || p.status)}</option>`;
-    $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${sup.map(opt).join('')}`;
+    const grp = (t, l) => { const xs = sup.filter((p) => p.type === t); return xs.length ? `<optgroup label="${l}">${xs.map(opt).join('')}</optgroup>` : ''; };
+    $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${grp('FRAMER', 'Frame shops')}${grp('PRINTER', 'Print shops')}${grp('COURIER', 'Delivery partners')}`;
     $('viewAs').value = sup.some((p) => p.id === viewAs) ? viewAs : '';
     if (!$('viewAs').value) viewAs = '';
     $('adminNote').textContent = sup.length ? '' : 'No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them.';

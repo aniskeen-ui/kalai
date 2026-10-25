@@ -2105,8 +2105,10 @@ async function sellerAction(ev: ApiEvent) {
     const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
     const PARCELS = ['s1', '40×50', '50×70', '60×80', '70×100']; // delivery partners: price by parcel (frame) size
     const PSZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
+    // Keep the studio's flags on a print shop's card (fine-art paper: used for the market estimate).
+    let prev: Dict = {}; try { let v: unknown = profile.rateCard; for (let i = 0; i < 2 && typeof v === 'string'; i++) v = JSON.parse(v); prev = (v && typeof v === 'object' ? v : {}) as Dict; } catch { prev = {}; }
     const card = profile.type === 'PRINTER'
-      ? { print: grid({ x: d.print }, ['x'], PSZ).x ?? {}, notes: txt(d.notes, 500), at: now }
+      ? { print: grid({ x: d.print }, ['x'], PSZ).x ?? {}, notes: txt(d.notes, 500), at: now, ...(prev.fineArt !== undefined ? { fineArt: prev.fineArt } : {}), basis: 'list' }
       : profile.type === 'FRAMER'
       ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']).x ?? {},
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }

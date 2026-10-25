@@ -19,7 +19,7 @@ async function load() {
   ]);
   site = s?.data || null;
   sups = (sp?.data || []).filter((p) => p.status === 'APPROVED' && ['FRAMER', 'PRINTER', 'COURIER'].includes(p.type));
-  printPros = (sp?.data || []).filter((p) => p.status === 'PROSPECT' && p.type === 'PRINTER' && parseCard(p).fineArt);
+  printPros = (sp?.data || []).filter((p) => p.status === 'PROSPECT' && p.type === 'PRINTER' && parseCard(p).fineArt !== false);
   let rd = {}; try { rd = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : {}; } catch { rd = {}; }
   defaults = rd.defaults || {};
   fees = Number(rd.fee || 0) + Number(rd.ins || 0) + Number(rd.reserve || 0);

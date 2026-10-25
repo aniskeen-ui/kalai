@@ -604,7 +604,7 @@ let artists = [];
 async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
-  printProspects = (r.data || []).filter((p) => p.type === 'PRINTER' && p.status === 'PROSPECT' && parseCard(p).fineArt);
+  printProspects = (r.data || []).filter((p) => p.type === 'PRINTER' && p.status === 'PROSPECT' && parseCard(p).fineArt !== false);
   suppliers = (r.data || []).filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type) && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
 }
 let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COURIER)
