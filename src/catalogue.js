@@ -103,7 +103,7 @@ function row(p) {
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap">up to <select data-f="printMax" aria-label="Largest print size" style="width:auto">${PRINT_MAX.map((z) => `<option ${z === (p.printMax || 'A3') ? 'selected' : ''}>${z}</option>`).join('')}</select></label>
         <label class="btn small ${p.printKey ? 'ghost' : ''}" style="cursor:pointer" title="High-quality scan or photo of the work (JPG, PNG or TIFF, up to 200 MB): used for framed prints and sent to licence buyers">${p.printKey ? `✓ Full-size file uploaded${p.printW ? ` (${p.printW} × ${p.printH} px)` : ''} · change` : '⬆ Upload full-size file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Sell image licences (web, media, commercial) of this work from the print file: Licences tab on its page"><input data-f="licensable" type="checkbox" style="width:auto" ${p.licensable ? 'checked' : ''}> Sell licences</label>
-        <span class="muted">${p.printable || p.licensable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
+        ${p.printable || p.licensable ? `<label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="The artist's share of each framed print / licence of this work. Blank = the artist's own % (Artists &amp; sellers; Siva's in Pricing).">Royalty to the artist <input data-f="printRoyalty" type="number" min="0" max="50" step="0.5" value="${p.printRoyalty ?? ''}" placeholder="artist's %" style="width:80px"> %</label>` : ''}</div>` : ''}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small ghost" data-clean title="Removes thin dark scan lines or borders along the edges of the picture shown on the website (the original stays in storage)">Clean picture edges</button><span class="cg-saved muted" aria-live="polite"></span></div>
     </div>
   </article>`;
@@ -131,6 +131,7 @@ function wireRows(list) {
         let v = inp.type === 'checkbox' ? inp.checked : inp.value.trim();
         if (f === 'title' && !v) { inp.value = p.title; return; }
         if (f === 'priceAed') v = v === '' ? null : Number(v);
+        if (f === 'printRoyalty') { v = v === '' ? null : Number(v); if (v != null && !(v >= 0 && v <= 50)) { inp.value = p.printRoyalty ?? ''; el.querySelector('.cg-saved').textContent = 'Royalty: 0 to 50 %.'; return; } }
         const patch = { id: p.id, [f]: v };
         if (f === 'title') patch.named = `Studio ${new Date().toISOString()}`;
         if (f === 'kind' && (!p.medium || Object.values(MEDIUM).includes(p.medium))) patch.medium = MEDIUM[v];
