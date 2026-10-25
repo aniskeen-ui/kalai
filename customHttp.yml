@@ -1,0 +1,15 @@
+# Pages are always checked for a new version (so a deploy shows at once); the built files under /assets have a new
+# name on every change, so they can be kept by the browser for a long time.
+customHeaders:
+  - pattern: '**/*.html'
+    headers:
+      - key: Cache-Control
+        value: 'no-cache, must-revalidate'
+  - pattern: '/'
+    headers:
+      - key: Cache-Control
+        value: 'no-cache, must-revalidate'
+  - pattern: '/assets/**'
+    headers:
+      - key: Cache-Control
+        value: 'public, max-age=31536000, immutable'
