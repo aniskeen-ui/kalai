@@ -44,7 +44,7 @@ type ZohoBody = {
   contact?: { contact_id: string };
   estimate?: { estimate_id: string; estimate_number: string; customer_id?: string; status?: string; line_items?: LineItem[] };
   estimates?: { estimate_id: string; estimate_number: string; reference_number?: string; status?: string }[];
-  invoice?: { invoice_id: string; invoice_number: string; status?: string; balance?: number; total?: number };
+  invoice?: { invoice_id: string; invoice_number: string; status?: string; balance?: number; total?: number; customer_id?: string };
   invoices?: { invoice_id: string; invoice_number: string; reference_number?: string; status?: string; balance?: number }[];
   payment?: { payment_id: string; payment_number?: string };
   payments?: { payment_id: string; payment_number?: string; amount?: number }[];
@@ -174,6 +174,42 @@ async function fixedCustomerId(): Promise<string> {
   return (cachedCustomerId = created.body.contact.contact_id);
 }
 
+/** The customer as their own Zoho contact ("Name (BP-0000009)"), created on first use; the fixed website contact
+ *  only when the order has no name. */
+const customerCache = new Map<string, string>();
+async function customerIdFor(img: Img): Promise<string> {
+  const nm = str(img, 'customerName').replace(/\s+/g, ' ').trim();
+  if (!nm) return fixedCustomerId();
+  const code = str(img, 'customerCode');
+  const name = (code ? `${nm} (${code})` : nm).slice(0, 190);
+  const hit = customerCache.get(name);
+  if (hit) return hit;
+  const found = await zoho(`/contacts?contact_name=${encodeURIComponent(name)}`);
+  const match = found.ok ? found.body.contacts?.find((c) => c.contact_name === name) : undefined;
+  if (match) { customerCache.set(name, match.contact_id); return match.contact_id; }
+  const [first, ...rest] = nm.split(' ');
+  const created = await zoho('/contacts', {
+    method: 'POST',
+    body: JSON.stringify({
+      contact_name: name, contact_type: 'customer', customer_sub_type: 'individual',
+      contact_persons: [{ first_name: first, last_name: rest.join(' ') || undefined, email: str(img, 'email') || undefined, phone: str(img, 'phone') || undefined, is_primary_contact: true }],
+      notes: `Website customer ${code || ''} (art.pranixtechno.com).`.trim(),
+    }),
+  });
+  if (!created.ok || !created.body.contact) { console.warn(`Zoho customer ${name} not created (${created.status}): ${created.body.message}`); return fixedCustomerId(); }
+  customerCache.set(name, created.body.contact.contact_id);
+  return created.body.contact.contact_id;
+}
+/** The customer the order's invoice is made out to (older orders: the website contact), so challans and credit notes match it. */
+async function invoiceCustomerId(img: Img): Promise<string> {
+  const invId = str(img, 'zohoInvoiceId');
+  if (invId) {
+    const r = await zoho(`/invoices/${invId}`);
+    if (r.ok && r.body.invoice?.customer_id) return r.body.invoice.customer_id;
+  }
+  return customerIdFor(img);
+}
+
 /** The artist as a Zoho vendor (created on first use). */
 async function vendorId(): Promise<string> {
   if (cachedVendorId) return cachedVendorId;
@@ -231,7 +267,7 @@ function quoteParts(img: Img) {
     `Email: ${str(img, 'email')}`,
   ];
   const detailLines = Object.entries(details)
-    .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total'].includes(k))
+    .filter(([k, v]) => v && !['Reference', 'Name', 'Mobile', 'Parent', 'Estimate', 'Total', 'Email', 'Offer', 'Frame tried on the website', 'Message', 'Payment'].includes(k))
     .map(([k, v]) => `${k}: ${v}`);
   // Price enquiries start at 0. Commissions use the website estimate, gifts the total shown.
   const startRate = kind === 'COMMISSION' ? amount(details['Estimate']) : kind === 'GIFT' || kind === 'PHOTO' ? amount(details['Total']) : kind === 'MARKET' || kind === 'LICENCE' ? num(img, 'quotedPrice') ?? 0 : 0;
@@ -288,7 +324,7 @@ async function writeBack(id: string, set: Record<string, string | number | null>
 
 async function createQuote(img: Img, rate?: number) {
   const q = quoteParts(img);
-  const customerId = await fixedCustomerId();
+  const customerId = await customerIdFor(img);
   const vat = await vatFields();
   const r = await zoho('/estimates', {
     method: 'POST',
@@ -411,7 +447,7 @@ async function keepAsDraft(path: string, status?: string): Promise<'draft' | 'vo
 
 async function createInvoice(img: Img, price: number) {
   const q = quoteParts(img);
-  const customerId = await fixedCustomerId();
+  const customerId = await customerIdFor(img);
   const vat = await vatFields();
   let n = await nextInvoiceNumber();
   for (let attempt = 0; attempt < 4; attempt++, n++) {
@@ -477,7 +513,7 @@ async function invoiceAndRecordPayment(img: Img) {
     console.log(`Invoice ${inv.number} for ${q.ref} already paid; no payment recorded`);
     return { quote: quote?.number ?? '', invoiceId: inv.id, invoice: inv.number, paymentId: pays[0]?.payment_id ?? 'paid', total };
   }
-  const customerId = await fixedCustomerId();
+  const customerId = fresh.body.invoice.customer_id || await customerIdFor(img);
   const pay = await zoho('/customerpayments', {
     method: 'POST',
     body: JSON.stringify({
@@ -761,7 +797,7 @@ async function createChallan(img: Img) {
   const price = num(img, 'quotedPrice') ?? 0;
   const notes = challanNotes(img);
   const body: Record<string, unknown> = {
-    customer_id: await fixedCustomerId(),
+    customer_id: await invoiceCustomerId(img),
     reference_number: q.ref,
     date: dubaiToday(),
     challan_type: 'others',
@@ -862,7 +898,7 @@ async function creditNoteAndRefund(img: Img, amount: number) {
   if (existingId) return refundCreditNote(img, amount, { creditnote_id: existingId, creditnote_number: str(img, 'zohoCreditNote') });
   const vat = await vatFields();
   const body: Record<string, unknown> = {
-    customer_id: await fixedCustomerId(),
+    customer_id: await invoiceCustomerId(img),
     reference_number: q.ref,
     date: dubaiToday(),
     invoice_id: str(img, 'zohoInvoiceId'),
@@ -900,7 +936,7 @@ async function draftCreditNote(img: Img, amount: number) {
   if (str(img, 'zohoCreditNoteId')) return { number: str(img, 'zohoCreditNote'), id: str(img, 'zohoCreditNoteId'), state: 'draft' as const };
   const vat = await vatFields();
   const cn = await postCreditNote({
-    customer_id: await fixedCustomerId(), reference_number: q.ref, date: dubaiToday(), invoice_id: str(img, 'zohoInvoiceId'), ...vat.header,
+    customer_id: await invoiceCustomerId(img), reference_number: q.ref, date: dubaiToday(), invoice_id: str(img, 'zohoInvoiceId'), ...vat.header,
     line_items: [{ name: `Refund: ${q.name}`, description: AFTER_LABEL[action] ?? action, rate: amount, quantity: 1, ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
     notes: [`TEST · ${AFTER_LABEL[action] ?? action} · order ${q.ref}`, str(img, 'refundNote')].filter(Boolean).join('\n'),
   });
