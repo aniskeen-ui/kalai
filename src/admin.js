@@ -925,6 +925,8 @@ function statusBlock(e, k, s) {
   const fixUnpaid = k === 'PRICE_SENT' && !isLocked(e) && ['FRAMING', 'SHIPPED'].includes(s);
   if (!fixUnpaid && !(NEXT[s] || []).includes(k)) return s === 'DELIVERED' ? 'already delivered' : ['REFUNDED', 'CANCELLED'].includes(s) && !(NEXT[s] || []).length ? 'order closed' : WHY[k] || 'not now';
   if (needsSiva(e) && !sivaDone(e) && AFTER_SIVA.includes(k)) return `waiting for ${artistOf(e)}`;
+  // Collection / commission: framing and shipping only once the artist has sent the work (even before the artist's order exists).
+  if (hasArtist(e) && !sivaDone(e) && AFTER_SIVA.includes(k) && e.refundAction !== 'DAMAGED_REPLACE' && s !== 'REPLACEMENT') return `waiting for ${artistOf(e)} to send it`;
   // Steps a supplier has confirmed (frame shop accepted, delivery partner picked up / delivered, delivery challan in
   // Zoho) are facts: the status can't go back behind them.
   const FLOW = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
