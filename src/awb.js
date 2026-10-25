@@ -176,61 +176,33 @@ export async function printAwb(l, mode) {
 
 /* ---------- buttons shared by the supplier portal, artist desk and artist portal ---------- */
 const AWB_CSS = `.awb-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 2px}.awb-acts select{width:auto}
-.awb-show{margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.awb-show figure{margin:0;display:grid;gap:4px;justify-items:center;flex:1 1 260px;max-width:400px}.awb-show img,.awb-side img{width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;display:block}
-.awb-show figcaption,.awb-side figcaption{font-size:12px;color:#777}
-.awb-side{position:fixed;top:90px;z-index:40;display:grid;gap:6px;justify-items:center;max-height:calc(100vh - 110px);overflow:auto}.awb-side .awb-x{justify-self:end;border:1px solid #ccc;background:#fff;color:#333;border-radius:999px;padding:2px 10px;font:inherit;font-size:12px;cursor:pointer}
-@media print{.awb-side{display:none}}`;
+.awb-show{margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.awb-show figure{margin:0;display:grid;gap:4px;justify-items:center;flex:1 1 260px;max-width:400px}.awb-show img{width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;display:block}
+.awb-show figcaption{font-size:12px;color:#777}`;
 if (typeof document !== 'undefined' && !document.getElementById('awb-css')) { const st = document.createElement('style'); st.id = 'awb-css'; st.textContent = AWB_CSS; document.head.appendChild(st); }
-/** The label buttons: code (QR / barcode / both), where to show it (beside the page / in the card), Display, PDF, Print. */
+/** The label buttons: code (QR + barcode / QR / barcode), Display (in the card), PDF, Print. */
 export function awbButtons() {
-  let fmt = 'both', pos = 'side';
-  try { fmt = localStorage.getItem('kalai-awb-fmt') || fmt; pos = localStorage.getItem('kalai-awb-pos') || pos; } catch { /* defaults */ }
+  let fmt = 'both';
+  try { fmt = localStorage.getItem('kalai-awb-fmt') || fmt; } catch { /* default */ }
   const opt = (v, l, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`;
   return `<div class="awb-acts"><select data-awbfmt aria-label="Code on the label">${opt('both', 'QR code + barcode', fmt)}${opt('qr', 'QR code', fmt)}${opt('bar', 'Barcode', fmt)}</select>
-    <select data-awbpos aria-label="Where to show it">${opt('side', 'Show beside the page', pos)}${opt('card', 'Show here in the card', pos)}</select>
     <button type="button" class="btn small" data-awbdo="show">👁 Display</button><button type="button" class="btn small ghost" data-awbdo="pdf">📄 Download PDF</button><button type="button" class="btn small ghost" data-awbdo="print">🖨 Print</button></div><div class="awb-show" data-awbshow hidden></div>`;
 }
-// The side panels (left: QR code, right: barcode) use the empty margins beside the page; one order's label at a time.
-let sideOwner = null;
-function closeSide() { document.querySelectorAll('.awb-side').forEach((x) => x.remove()); if (sideOwner) { sideOwner.textContent = '👁 Display'; sideOwner = null; } }
-function placeSide(anchor) {
-  const r = anchor.getBoundingClientRect();
-  const L = document.getElementById('awbSideL'), R = document.getElementById('awbSideR');
-  const gl = r.left - 24, gr = window.innerWidth - r.right - 24;
-  if (L) { L.style.left = '12px'; L.style.width = `${Math.min(420, gl)}px`; }
-  if (R) { R.style.right = '12px'; R.style.width = `${Math.min(420, gr)}px`; }
-}
-const sideFits = (anchor, n) => { const r = anchor.getBoundingClientRect(); const gl = r.left - 24, gr = window.innerWidth - r.right - 24; return n === 'both' ? gl >= 230 && gr >= 230 : Math.max(gl, gr) >= 230; };
-if (typeof window !== 'undefined') window.addEventListener('resize', () => { const a = document.querySelector('[data-awbanchor]'); if (a && document.querySelector('.awb-side')) { if (sideFits(a, document.getElementById('awbSideL') && document.getElementById('awbSideR') ? 'both' : 'one')) placeSide(a); else closeSide(); } });
 /** Wires the buttons in box. getLabel() fetches the label data; say(text, ok) shows a message. */
 export function wireAwb(box, getLabel, say) {
   if (!box || box.dataset.awbWired) return;
   box.dataset.awbWired = '1';
   let cache = null;
-  const fmtSel = box.querySelector('[data-awbfmt]'), posSel = box.querySelector('[data-awbpos]');
+  const fmtSel = box.querySelector('[data-awbfmt]');
   const showBtn = box.querySelector('[data-awbdo="show"]'), show = box.querySelector('[data-awbshow]');
   const fig = (src, m) => `<figure><img alt="Airway bill ${cache.awb} (${m === 'qr' ? 'QR code' : 'barcode'})" src="${src}"><figcaption>${m === 'qr' ? 'QR code' : 'Barcode'}: the courier can scan it from the screen</figcaption></figure>`;
-  const isOpen = () => !show.hidden || sideOwner === showBtn;
-  const hide = () => { show.hidden = true; show.innerHTML = ''; if (sideOwner === showBtn) closeSide(); showBtn.textContent = '👁 Display'; };
+  const isOpen = () => !show.hidden;
+  const hide = () => { show.hidden = true; show.innerHTML = ''; showBtn.textContent = '👁 Display'; };
   const display = async () => {
     const mode = fmtSel.value, modes = modesOf(mode);
     const imgs = {}; for (const m of modes) imgs[m] = await awbImage(cache, m);
-    const anchor = box.closest('article, .ocard, .card, .progress') || box;
-    hide(); closeSide();
-    if (posSel.value === 'side' && sideFits(anchor, mode)) {
-      document.querySelectorAll('[data-awbanchor]').forEach((x) => x.removeAttribute('data-awbanchor'));
-      anchor.setAttribute('data-awbanchor', '');
-      const panel = (id, m) => { const d = document.createElement('div'); d.className = 'awb-side'; d.id = id; d.innerHTML = `<button type="button" class="awb-x">✕ Close</button>${fig(imgs[m], m)}`; d.querySelector('.awb-x').onclick = hide; document.body.appendChild(d); };
-      // QR on the left, barcode on the right (one code alone: its own side).
-      if (imgs.qr) panel('awbSideL', 'qr');
-      if (imgs.bar) panel('awbSideR', 'bar');
-      placeSide(anchor);
-      sideOwner = showBtn;
-    } else {
-      show.innerHTML = modes.map((m) => fig(imgs[m], m)).join('');
-      show.hidden = false;
-      if (posSel.value === 'side') say('Not enough room beside the page on this screen: shown here instead.', true);
-    }
+    // Shown in the card: QR code and barcode side by side (one code alone on its own).
+    show.innerHTML = modes.map((m) => fig(imgs[m], m)).join('');
+    show.hidden = false;
     showBtn.textContent = '✕ Hide';
   };
   box.querySelectorAll('[data-awbdo]').forEach((b) => {
@@ -247,8 +219,8 @@ export function wireAwb(box, getLabel, say) {
       } catch (ex) { say(ex.message, false); }
     });
   });
-  [fmtSel, posSel].forEach((sel) => sel.addEventListener('change', () => {
-    try { localStorage.setItem('kalai-awb-fmt', fmtSel.value); localStorage.setItem('kalai-awb-pos', posSel.value); } catch { /* */ }
+  fmtSel.addEventListener('change', () => {
+    try { localStorage.setItem('kalai-awb-fmt', fmtSel.value); } catch { /* */ }
     if (isOpen() && cache) display().catch((ex) => say(ex.message, false));
-  }));
+  });
 }
