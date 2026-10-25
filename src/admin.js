@@ -17,6 +17,7 @@ import { showCustomers } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import { awbButtons, wireAwb } from './awb.js';
 import { downloadPod, podImage } from './pod.js';
+import { watchIcons } from './icons.js';
 import outputs from '../amplify_outputs.json';
 
 const client = generateClient();
@@ -2511,3 +2512,6 @@ function varOpen(v) {
 }
 $('varBtn').onclick = () => { const v = variantOn(); if (!$('varBox').hidden) { varPicking = false; $('varBox').hidden = true; render(); return; } varOpen(v); };
 $('fVar').onchange = () => { try { localStorage.setItem('kalai-variant', $('fVar').value); } catch { /* */ } render(); };
+
+// Section icons on the order screen (and the document flow), kept when cards are redrawn.
+watchIcons('desk');
