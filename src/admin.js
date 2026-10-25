@@ -929,7 +929,20 @@ const WHY = { RECEIVED: 'already priced', PRICE_SENT: 'not now', PAID: 'send the
   DELIVERED: 'ship it first', REPLACEMENT: 'after delivery', REFUNDED: 'not paid', CANCELLED: 'paid: refund instead' };
 function statusBlock(e, k, s) {
   if (k === s) return '';
+  const ARTIST_ST = ['ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'];
+  // Only collection works and commissions have an artist making them: prints, gifts, crafts and licences don't.
+  if (ARTIST_ST.includes(k) && !hasArtist(e)) return 'no artist on this order';
   if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
+  if (e.kind === 'LICENCE' && ['PAID', 'FRAMING', 'SHIPPED', 'REPLACEMENT'].includes(k)) return 'digital licence';
+  // A print / gift / crafts order put on an artist step by mistake: back to Paid (or on to framing) is allowed.
+  if (ARTIST_ST.includes(s) && !hasArtist(e) && ['PAID', 'FRAMING'].includes(k)) return '';
+  // The print shop, frame shop and delivery partner set these steps from their portal (dates and AWB recorded there).
+  { const jj = jobsOf(e), fj = jj.framer, dj = jj.delivery, FL = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+    if (s !== 'REPLACEMENT' && e.refundAction !== 'DAMAGED_REPLACE' && FL.includes(k) && FL.indexOf(k) > Math.max(0, FL.indexOf(s))) {
+      if (k === 'FRAMING' && fj && !['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage))) return `set when ${fj.name || 'the frame shop'} accepts`;
+      if (['SHIPPED', 'DELIVERED'].includes(k) && dj && !(k === 'SHIPPED' ? dj.pickedAt : dj.deliveredAt)) return `set by ${dj.name || 'the delivery partner'}'s step`;
+      if (['SHIPPED', 'DELIVERED'].includes(k) && !dj && fj && !['READY', 'COLLECTED'].includes(String(fj.stage))) return `waiting for ${fj.name || 'the frame shop'} to finish`;
+    } }
   // Moved on without a recorded payment by mistake: it can go back to Price sent.
   const fixUnpaid = k === 'PRICE_SENT' && !isLocked(e) && ['FRAMING', 'SHIPPED'].includes(s);
   if (!fixUnpaid && !(NEXT[s] || []).includes(k)) return s === 'DELIVERED' ? 'already delivered' : ['REFUNDED', 'CANCELLED'].includes(s) && !(NEXT[s] || []).length ? 'order closed' : WHY[k] || 'not now';
