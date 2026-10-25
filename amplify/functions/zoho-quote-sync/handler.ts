@@ -5,7 +5,7 @@ import { KURALS } from './kural-data';
 import { S3Client, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
-import { TranslateClient, TranslateTextCommand } from '@aws-sdk/client-translate';
+import { TranslateClient, TranslateTextCommand, TranslateDocumentCommand } from '@aws-sdk/client-translate';
 import { createHmac, createHash, timingSafeEqual } from 'node:crypto';
 
 /**
@@ -3762,17 +3762,32 @@ async function siteTranslate(a: { lang?: string; texts?: string }) {
     const r = await ddb.send(new BatchGetItemCommand({ RequestItems: { [T]: { Keys: want.slice(i, i + 100).map((k) => ({ id: { S: k } })) } } }));
     for (const it of (r.Responses?.[T] ?? []) as Img[]) trMemo.set(str(it, 'id'), it.text?.S ?? '');
   }
-  // The rest: Amazon Translate, a few at a time, then kept.
+  // The rest: Amazon Translate in ONE call (the texts as a small HTML document, tags kept), then kept.
   const todo = texts.map((t, i) => ({ t, i })).filter(({ t, i }) => t && !(out[i] = trMemo.get(id(t)) ?? ''));
   const now = new Date().toISOString();
-  for (let k = 0; k < todo.length; k += 8) {
-    await Promise.all(todo.slice(k, k + 8).map(async ({ t, i }) => {
-      try {
-        const tr = (await translator.send(new TranslateTextCommand({ Text: t, SourceLanguageCode: 'en', TargetLanguageCode: lang }))).TranslatedText ?? '';
-        out[i] = tr; trMemo.set(id(t), tr);
-        if (T && tr) await ddb.send(new PutItemCommand({ TableName: T, Item: { id: { S: id(t) }, text: { S: tr }, en: { S: t.slice(0, 600) }, __typename: { S: 'Translation' }, createdAt: { S: now }, updatedAt: { S: now } } })).catch(() => {});
-      } catch (err) { console.warn('Translate failed', err); }
-    }));
+  const keep = async (t: string, i: number, tr: string) => {
+    out[i] = tr; trMemo.set(id(t), tr);
+    if (T && tr) await ddb.send(new PutItemCommand({ TableName: T, Item: { id: { S: id(t) }, text: { S: tr }, en: { S: t.slice(0, 600) }, __typename: { S: 'Translation' }, createdAt: { S: now }, updatedAt: { S: now } } })).catch(() => {});
+  };
+  if (todo.length) {
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const unesc = (v: string) => v.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
+    try {
+      const html = `<html><body>${todo.map(({ t }, k) => `<p id="t${k}">${esc(t)}</p>`).join('')}</body></html>`;
+      const r = await translator.send(new TranslateDocumentCommand({ Document: { Content: new TextEncoder().encode(html), ContentType: 'text/html' }, SourceLanguageCode: 'en', TargetLanguageCode: lang }));
+      const back = new TextDecoder().decode(r.TranslatedDocument?.Content ?? new Uint8Array());
+      const got = new Map<number, string>();
+      for (const m of back.matchAll(/<p id="t(\d+)"[^>]*>([\s\S]*?)<\/p>/g)) got.set(Number(m[1]), unesc(m[2]));
+      await Promise.all(todo.map(({ t, i }, k) => (got.get(k) ? keep(t, i, got.get(k)!) : Promise.resolve())));
+    } catch (err) { console.warn('Document translation failed, one by one', err); }
+    // Anything the document call missed: one by one (a few at a time).
+    const left = todo.filter(({ i }) => !out[i]);
+    for (let k = 0; k < left.length; k += 4) {
+      await Promise.all(left.slice(k, k + 4).map(async ({ t, i }) => {
+        try { await keep(t, i, (await translator.send(new TranslateTextCommand({ Text: t, SourceLanguageCode: 'en', TargetLanguageCode: lang }))).TranslatedText ?? ''); }
+        catch (err) { console.warn('Translate failed', err); }
+      }));
+    }
   }
   texts.forEach((t, i) => { if (!out[i]) out[i] = trMemo.get(id(t)) ?? ''; });
   return out;

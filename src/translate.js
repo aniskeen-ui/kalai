@@ -47,18 +47,24 @@ async function translate(root = document.body) {
     nodes.forEach((n) => { if (!orig.has(n)) orig.set(n, n.nodeValue); items.push([enOf(n).trim(), (t) => { const o = enOf(n); n.nodeValue = o.replace(o.trim(), t); }]); });
     attrs.forEach(([el, a]) => { const m = attrKey(el, a); if (m[a] === undefined) m[a] = el.getAttribute(a); items.push([m[a].trim(), (t) => el.setAttribute(a, t)]); });
     const need = [...new Set(items.map(([t]) => t).filter((t) => t && !memo.has(`${lang}|${t}`)))];
+    // Show what is already known at once, then fill in the rest as each part arrives.
+    const apply = () => { paused = true; items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); if (v) put(v); }); setTimeout(() => { paused = false; }, 0); };
+    apply();
+    const lb = document.getElementById('langBtn'); if (need.length && lb) lb.classList.add('working');
     for (let i = 0; i < need.length; i += 80) {
       const part = need.slice(i, i + 80);
       try {
         const r = await client.mutations.siteTranslate({ lang, texts: JSON.stringify(part) }, { authMode: 'apiKey' });
         const out = JSON.parse(typeof r.data === 'string' ? r.data : '[]');
         part.forEach((t, k) => { if (out[k]) memo.set(`${lang}|${t}`, out[k]); });
-      } catch (ex) { console.warn('Translation failed', ex); break; }
+        apply();
+      } catch (ex) { console.warn('Translation failed', ex); }
     }
     paused = true;
     items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); if (v) put(v); });
     setTimeout(() => { paused = false; }, 0);
     saveCache(lang);
+    document.getElementById('langBtn')?.classList.remove('working');
   } finally {
     busy = false;
     if (again) { again = false; setTimeout(() => translate(), 50); }
