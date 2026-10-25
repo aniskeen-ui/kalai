@@ -14,6 +14,7 @@ const DOCS = [
   { k: 'cn', name: 'Credit note (Zoho)', prefix: 'KAH-CN-', digits: 4, source: 'internal', ext: 'Zoho numbers it' },
   { k: 'qt', name: 'Quote (Zoho)', prefix: 'KAH-QT-', digits: 4, source: 'external', ext: 'Zoho numbers it' },
   { k: 'dc', name: 'Delivery challan (Zoho)', prefix: 'KAH-DC-', digits: 4, source: 'external', ext: 'Zoho numbers it' },
+  { k: 'awb', name: 'Airway bill (courier label)', prefix: 'KA{C}', digits: 8, source: 'internal', ext: 'Courier gives the number', tokens: true },
   { k: 'varnt', name: 'Order variant (saved order selection)', prefix: 'VARNT', digits: 4, source: 'internal', ext: '', internalOnly: true },
 ];
 // Fixed: already printed on orders, emails and Zoho references, and read back by the system.
@@ -29,7 +30,9 @@ const FIELDS = [['mode', 'Format', [['alpha', 'Alphanumeric (prefix + number)'],
 
 let data = { docs: {}, sup: {} }, loadedSup = {}, wired = false, dirty = false;
 const docOf = (d) => ({ prefix: d.prefix, mode: 'alpha', source: d.source, digits: d.digits, ...(data.docs[d.k] || {}) });
-const sample = (d, s) => `${s.mode === 'numeric' ? '' : (d.perSupplier ? 'MF' : s.prefix)}${(d.k === 'varnt' ? '1001' : '1').padStart(Number(s.digits) || d.digits, '0')}`;
+const today = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+const tok = (p) => String(p).replace(/\{C\}/gi, 'EX').replace(/\{YY\}/gi, today().slice(2, 4)).replace(/\{MM\}/gi, today().slice(5, 7)).replace(/\{DD\}/gi, today().slice(8, 10));
+const sample = (d, s) => `${s.mode === 'numeric' ? '' : (d.perSupplier ? 'MF' : d.tokens ? tok(s.prefix) : s.prefix)}${(d.k === 'varnt' ? '1001' : '1').padStart(Number(s.digits) || d.digits, '0')}`;
 
 async function load() {
   try {
@@ -46,17 +49,17 @@ function draw() {
     const s = docOf(d);
     const sel = (f, opts, dis) => `<select data-ns="${d.k}" data-f="${f}" ${dis ? 'disabled' : ''}>${opts.map(([v, l]) => `<option value="${v}" ${String(s[f]) === v ? 'selected' : ''}>${esc(f === 'source' && v === 'external' && d.ext ? `External (${d.ext})` : l)}</option>`).join('')}</select>`;
     return `<tr><td><input type="checkbox" data-nsel="${d.k}" style="width:auto"></td><td>${esc(d.name)}</td>
-      <td>${d.perSupplier ? '<span class="muted" title="Each supplier\'s own 2 letters, below">Supplier code (2 letters)</span>' : `<input data-ns="${d.k}" data-f="prefix" value="${esc(s.prefix)}" maxlength="12" style="width:110px;font-family:monospace">`}</td>
+      <td>${d.perSupplier ? '<span class="muted" title="Each supplier\'s own 2 letters, below">Supplier code (2 letters)</span>' : `<input data-ns="${d.k}" data-f="prefix" value="${esc(s.prefix)}" maxlength="16" style="width:110px;font-family:monospace"${d.tokens ? ' title="{C} = courier\'s 2 letters, {YY} {MM} {DD} = date"' : ''}>`}</td>
       <td>${sel('mode', FIELDS[0][2])}</td><td>${sel('source', d.internalOnly ? [['internal', 'Internal (Kalai)']] : FIELDS[1][2], d.internalOnly)}</td>
       <td><input data-ns="${d.k}" data-f="digits" type="number" min="3" max="12" value="${esc(s.digits)}" style="width:64px"></td>
       <td><code data-nsx="${d.k}">${esc(s.source === 'external' && !d.internalOnly ? (d.perSupplier ? 'typed by supplier' : 'Zoho') : sample(d, s))}</code></td></tr>`;
   }).join('');
   const sups = Object.entries(data.sup || {});
   box.innerHTML = `<style>#nsBox table{width:100%;font-size:13px;border-collapse:collapse}#nsBox th,#nsBox td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}#nsBox select,#nsBox input{font-size:13px;padding:4px 6px}#nsBox th{white-space:nowrap}#nsBox select{width:auto;max-width:260px}.ns-mass{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:400}</style>
-    <p class="muted" style="font-size:13px;margin:0">How each document is numbered. <b>Internal</b> = Kalai gives the next number in the series; <b>External</b> = the supplier types their own, or Zoho uses its own numbering. Changes apply to new documents only; existing numbers stay.</p>
+    <p class="muted" style="font-size:13px;margin:0">How each document is numbered. <b>Internal</b> = Kalai gives the next number in the series; <b>External</b> = the supplier types their own, or Zoho uses its own numbering. Changes apply to new documents only; existing numbers stay. Airway bill prefix can use <code>{C}</code> (the courier's 2 letters from Supplier codes) and <code>{YY}</code> <code>{MM}</code> <code>{DD}</code> (today), e.g. <code>KA{C}{YY}{MM}</code> → KAEX2610…; the number runs on across all couriers. When your courier integration is live, choose External and the courier's own number is used.</p>
     <div style="overflow:auto"><table><thead><tr><th><input type="checkbox" id="nsAll" style="width:auto" title="Select all"></th><th>Document</th><th>Prefix</th><th>Format</th><th>Numbering</th><th>Digits</th><th>Example</th></tr>
       <tr><th colspan="7"><span class="ns-mass">Change selected: <select id="nsMassF">${FIELDS.map(([f, l]) => `<option value="${f}">${l}</option>`).join('')}</select><span id="nsMassV"></span><button type="button" class="btn small ghost" id="nsMassGo">Apply to selected</button></span></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <h3 style="margin:6px 0 0;font-size:16px">Supplier codes</h3>
+    <h3 style="margin:6px 0 0;font-size:16px">Supplier &amp; courier codes</h3>
     <p class="muted" style="font-size:13px;margin:0">Each supplier invoice number = the supplier's 2 letters + the running number (e.g. Master Frames → MF00000001). A supplier gets its code with its first invoice; change the letters or the next number here.</p>
     ${sups.length ? `<div style="overflow:auto"><table><thead><tr><th>Supplier</th><th>Code</th><th>Next number</th><th>Next invoice</th></tr></thead><tbody>${sups.map(([id, v]) => `<tr><td>${esc(v.name || id)}</td>
       <td><input data-sup="${esc(id)}" data-f="code" value="${esc(v.code)}" maxlength="2" style="width:50px;text-transform:uppercase;font-family:monospace"></td>

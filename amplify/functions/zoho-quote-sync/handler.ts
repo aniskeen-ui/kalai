@@ -66,13 +66,15 @@ const CREDIT_PREFIX = 'KAH-CN-';
  * external = typed by the supplier / numbered by Zoho), digits. Supplier invoices: each supplier has its own 2-letter
  * code (Master Frames → MF) and running number: MF00000001, MF00000002 … */
 type SeriesDoc = { prefix: string; mode: 'alpha' | 'numeric'; source: 'internal' | 'external'; digits: number };
-type NumberSeries = { docs: Record<string, SeriesDoc>; sup: Record<string, { code: string; next: number; name?: string }> };
+type NumberSeries = { docs: Record<string, SeriesDoc>; sup: Record<string, { code: string; next: number; name?: string }>; counters?: Record<string, number> };
 const SERIES_DEF: Record<string, SeriesDoc> = {
   supInv: { prefix: '', mode: 'alpha', source: 'internal', digits: 8 },
   inv: { prefix: INVOICE_PREFIX, mode: 'alpha', source: 'internal', digits: 4 },
   cn: { prefix: CREDIT_PREFIX, mode: 'alpha', source: 'internal', digits: 4 },
   qt: { prefix: 'KAH-QT-', mode: 'alpha', source: 'external', digits: 4 },
   dc: { prefix: 'KAH-DC-', mode: 'alpha', source: 'external', digits: 4 },
+  // Airway bill: tokens in the prefix: {C} = the courier's 2 letters, {YY} {MM} {DD} = today (Dubai).
+  awb: { prefix: 'KA{C}', mode: 'alpha', source: 'internal', digits: 8 },
 };
 async function numberSeries(): Promise<NumberSeries> {
   let d: unknown = null;
@@ -82,7 +84,7 @@ async function numberSeries(): Promise<NumberSeries> {
   for (const [k, def] of Object.entries(SERIES_DEF)) {
     const x = (o.docs?.[k] ?? {}) as Partial<SeriesDoc>;
     docs[k] = {
-      prefix: typeof x.prefix === 'string' ? x.prefix.slice(0, 12) : def.prefix,
+      prefix: typeof x.prefix === 'string' ? x.prefix.slice(0, 16) : def.prefix,
       mode: x.mode === 'numeric' ? 'numeric' : x.mode === 'alpha' ? 'alpha' : def.mode,
       source: x.source === 'external' ? 'external' : x.source === 'internal' ? 'internal' : def.source,
       digits: Math.min(12, Math.max(3, Number(x.digits) || def.digits)),
@@ -106,6 +108,37 @@ function supplierCode(name: string, taken: Set<string>) {
   for (const a of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') for (const b of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') tries.push(a + b);
   return tries.find((c) => c.length === 2 && !taken.has(c))!;
 }
+/** Next airway bill number (Settings → Number series → Airway bill), moving the counter on. Null when the courier gives it. */
+async function nextAwb(courierId: string, courierName: string): Promise<string | null> {
+  const ns = await numberSeries();
+  const doc = ns.docs.awb;
+  if (doc.source !== 'internal') return null;
+  let s = ns.sup[courierId];
+  if (!s?.code) {
+    const taken = new Set(Object.entries(ns.sup).filter(([k]) => k !== courierId).map(([, v]) => v.code));
+    s = { code: supplierCode(courierName || 'Courier', taken), next: s?.next || 1, name: courierName };
+    ns.sup[courierId] = s;
+  }
+  const t = dubaiToday(); // YYYY-MM-DD
+  const pre = doc.mode === 'numeric' ? '' : doc.prefix.replace(/\{C\}/g, s.code).replace(/\{YY\}/g, t.slice(2, 4)).replace(/\{MM\}/g, t.slice(5, 7)).replace(/\{DD\}/g, t.slice(8, 10));
+  const counters = ns.counters ?? (ns.counters = {});
+  const n = (counters.awb || 0) + 1;
+  counters.awb = n;
+  await saveSeries(ns);
+  return `${pre}${String(n).padStart(doc.digits, '0')}`;
+}
+/** The shop the courier collects from: the frame shop, or the print shop when there is no framing. */
+const shipRole = (jobs: Jobs): Role | null => (jobs.framer ? 'framer' : jobs.printer ? 'printer' : null);
+/** The finished parcel gets its airway bill: once the shop has it ready and a courier is allocated. Returns true when one was made. */
+async function ensureAwb(jobs: Jobs): Promise<boolean> {
+  const sr = shipRole(jobs), dj = jobs.delivery;
+  if (!sr || !dj || dj.awb || !['READY', 'COLLECTED'].includes(jobs[sr]!.stage)) return false;
+  const no = await nextAwb(dj.supplierId, dj.name);
+  if (!no) return false;
+  dj.awb = no; dj.awbAt = new Date().toISOString();
+  return true;
+}
+
 /** The supplier's next invoice number (peek; take = true also moves the counter on). Null when suppliers type their own. */
 async function supplierInvoiceNo(sellerId: string, name: string, take = false): Promise<string | null> {
   const ns = await numberSeries();
@@ -2345,7 +2378,7 @@ async function sellerAction(ev: ApiEvent) {
 // Frame shop: Accept → Framed, ready for pickup → its invoice (Zoho bill). Delivery partner: Accept → Picked up
 // (order Shipped, tracking no.) → Delivered (order Delivered) → its invoice (Zoho bill).
 type Job = { supplierId: string; name: string; price: number | null; due: string; note: string; stage: string; assignedAt: string; acceptedAt?: string; readyAt?: string; canDeliver?: boolean; deliveryPrice?: number | null; byFramer?: boolean;
-  pickedAt?: string; deliveredAt?: string; awb?: string; pod?: { name: string; at: string; signKey?: string; photoKeys?: string[]; note?: string }; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
+  pickedAt?: string; deliveredAt?: string; awb?: string; awbAt?: string; pod?: { name: string; at: string; signKey?: string; photoKeys?: string[]; note?: string }; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
 // Print shops print the customer's photo / child's drawing / our print file (Little Artists, Framed Prints) and hand
 // the print to the frame shop. Without a print job, the frame shop prints it itself.
 type Role = 'framer' | 'delivery' | 'printer';
@@ -2411,6 +2444,7 @@ async function assignJob(action: string, d: Dict) {
     ? { ...cur, price, due: txt(d.due, 10), note: txt(d.note, 500), canDeliver, deliveryPrice }
     : { supplierId: sid, name: String(p.business || p.contactName), price, due: txt(d.due, 10), note: txt(d.note, 500), stage: 'ASSIGNED', assignedAt: now, canDeliver, deliveryPrice };
   jobs[role] = job;
+  if (role === 'delivery') await ensureAwb(jobs).catch((err) => console.warn('AWB not made', err));
   await saveJobs(id, jobs);
   if ((!cur || cur.supplierId !== sid) && p.email) {
     await sendMail({ to: String(p.email), subject: `New ${ROLE_WORD[role]} job: ${str(e, 'ref')}`,
@@ -2468,12 +2502,20 @@ function jobView(e: Img, jobs: Jobs, role: Role, framerProfile: Dict | null, pri
     printJob: role === 'printer' || (role === 'framer' && printed && !jobs.printer),
     hasPhoto: role === 'printer' || (role === 'framer' && (!!str(e, 'fileKey') || ['PRICE', 'PHOTO'].includes(str(e, 'kind')))),
     // Print shop: where the print goes (the frame shop). Frame shop: where to collect the print.
-    handTo: role === 'printer' ? (jobs.framer && framerProfile ? { name: String(framerProfile.business ?? jobs.framer.name), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? '') } : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'We confirm where to send the print' }) : null,
+    handTo: role === 'printer' ? (jobs.framer && framerProfile ? { name: String(framerProfile.business ?? jobs.framer.name), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? '') } : !jobs.framer && jobs.delivery ? { name: `${jobs.delivery.name} (courier) collects it from you`, phone: '', address: 'Pack it, stick the airway bill on the parcel and hand it over: it goes straight to the customer.' } : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'We confirm where to send the print' }) : null,
     collectFrom: role === 'framer' && jobs.printer && printerProfile ? { name: String(printerProfile.business ?? jobs.printer.name), phone: String(printerProfile.phone ?? ''), address: String(printerProfile.address ?? ''), ready: ['READY', 'COLLECTED'].includes(jobs.printer.stage) } : null,
     to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
     from: role === 'delivery' ? (selfDelivery ? { name: 'Your workshop', phone: '', address: '', ready: ['READY', 'COLLECTED'].includes(jobs.framer!.stage) } : jobs.framer && framerProfile ? { name: String(framerProfile.business ?? ''), phone: String(framerProfile.phone ?? ''), address: String(framerProfile.address ?? ''), ready: jobs.framer.stage === 'READY' || jobs.framer.stage === 'COLLECTED' }
+      : jobs.printer && printerProfile ? { name: String(printerProfile.business ?? jobs.printer.name), phone: String(printerProfile.phone ?? ''), address: String(printerProfile.address ?? ''), ready: ['READY', 'COLLECTED'].includes(jobs.printer.stage) }
       : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'Studio, Dubai (we confirm the pickup point)', ready: true }) : null,
     cancelled: str(e, 'status') === 'CANCELLED' || String(str(e, 'refundAction')).startsWith('CANCEL'),
+    // Airway bill label: for the shop the courier collects from (and the courier), once the parcel is ready and a courier is allocated.
+    label: (() => {
+      const sr = shipRole(jobs), dj = jobs.delivery;
+      if (!sr || !dj || (role !== sr && role !== 'delivery') || !['READY', 'COLLECTED'].includes(jobs[sr]!.stage)) return null;
+      return { awb: dj.awb ?? '', courier: dj.name };
+    })(),
+    courier: role !== 'delivery' && role === shipRole(jobs) ? (jobs.delivery ? jobs.delivery.name : '') : undefined,
   };
 }
 
@@ -2493,7 +2535,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   // The other party a job needs to know: delivery/print → the frame shop; frame shop → the print shop.
   const profilesFor = async (js: Jobs, r: Role) => {
     const fp = (r === 'delivery' || r === 'printer') && js.framer ? plain(await getRow(S, { id: { S: js.framer.supplierId } })) : null;
-    const pp = r === 'framer' && js.printer ? plain(await getRow(S, { id: { S: js.printer.supplierId } })) : null;
+    const pp = (r === 'framer' || (r === 'delivery' && !js.framer)) && js.printer ? plain(await getRow(S, { id: { S: js.printer.supplierId } })) : null;
     return [fp, pp] as const;
   };
   const ct = process.env.COSTING_TABLE;
@@ -2525,6 +2567,27 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   if (action === 'jobInvoicePdf') {
     if (!j.billId) throw new Error('Your invoice is not recorded yet.');
     return zohoPdf(`/bills/${j.billId}`, `invoice-${j.invoiceNo || ref}`);
+  }
+  // Airway bill label data (the portal draws it with a barcode or QR code to print and stick on the parcel).
+  if (action === 'jobLabel') {
+    const sr = shipRole(jobs);
+    if (!sr || (role !== sr && role !== 'delivery')) throw new Error('The airway bill is for the shop the courier collects from.');
+    if (!['READY', 'COLLECTED'].includes(jobs[sr]!.stage)) throw new Error(sr === 'printer' ? 'Mark it printed first.' : 'Mark it framed and ready first.');
+    if (!jobs.delivery) throw new Error('Kalai Art House has not allocated the courier yet: we will let you know.');
+    if (await ensureAwb(jobs)) await saveJobs(id, jobs);
+    const dj = jobs.delivery;
+    if (!dj.awb) throw new Error('The courier gives the airway bill number for this order: it shows here once they have it.');
+    const shop = plain(await getRow(S, { id: { S: jobs[sr]!.supplierId } }));
+    const det = parseDetails(str(e, 'details'));
+    const kind = str(e, 'kind');
+    const parcel = sr === 'printer' && !['GIFT', 'PHOTO'].includes(kind) ? 'Print' : sr === 'printer' ? 'Print (flat, do not bend)' : parcelOf(det);
+    return { label: {
+      awb: dj.awb, courier: dj.name, ref, date: dubaiToday(), service: 'Prepaid · Standard', pieces: '1 of 1',
+      contents: parcel, fragile: sr === 'framer' && !/unframed/i.test(parcel),
+      from: { name: String(shop?.business ?? jobs[sr]!.name), phone: String(shop?.phone ?? ''), address: String(shop?.address ?? '') },
+      to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
+      returnTo: 'Kalai Art House, Dubai · +971 55 299 6626',
+    } };
   }
   if (action === 'jobPhoto') {
     if (role === 'delivery') throw new Error('The artwork photo is for the frame shop and print shop.');
@@ -2561,8 +2624,15 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   // Print shop: printed and ready → the frame shop is told where to collect it.
   if (role === 'printer' && action === 'jobPrinted') {
     if (j.stage !== 'ACCEPTED') throw new Error(j.stage === 'ASSIGNED' ? 'Accept the job first.' : 'Already marked printed.');
-    j.stage = 'READY'; j.readyAt = now; await saveJobs(id, jobs);
+    j.stage = 'READY'; j.readyAt = now;
+    if (!jobs.framer) await ensureAwb(jobs).catch((err) => console.warn('AWB not made', err));
+    await saveJobs(id, jobs);
     if (['PAID', 'PRINTING'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'PRINTED' });
+    const cj = jobs.delivery;
+    if (!jobs.framer && cj && cj.supplierId !== sub) {
+      const cp = plain(await getRow(S, { id: { S: cj.supplierId } }));
+      if (cp?.email) await sendMail({ to: String(cp.email), subject: `Ready for pickup: ${ref}`, lines: [`Hello ${h(cp.contactName)},`, `Order <b>${h(ref)}</b> is printed and ready for pickup at <b>${h(by)}</b>, ${h(String(profile.address ?? ''))} (${h(String(profile.phone ?? ''))}).`, cj.awb ? `Airway bill <b>${h(cj.awb)}</b> is on the parcel: scan it at pickup.` : '', 'Please collect it and mark it picked up in your portal.'].filter(Boolean), button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } }).catch(() => {});
+    }
     await studio(`Printed: ${ref}`, [`${h(by)} has printed <b>${h(str(e, 'title'))}</b> (${h(ref)}). Ready to collect at ${h(String(profile.address ?? ''))}.`]);
     const fj = jobs.framer;
     if (fj) {
@@ -2576,7 +2646,9 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (jobs.printer && !['READY', 'COLLECTED'].includes(jobs.printer.stage)) throw new Error(`${jobs.printer.name} hasn't marked the print ready yet.`);
     if (['PRICE', 'COMMISSION'].includes(str(e, 'kind')) && str(e, 'artistStage') !== 'SHIPPED' && str(e, 'refundAction') !== 'DAMAGED_REPLACE') throw new Error('The artist hasn\'t sent the artwork yet: you can mark it framed once it has arrived.');
     if (jobs.printer) jobs.printer.stage = 'COLLECTED';
-    j.stage = 'READY'; j.readyAt = now; j.note = j.note; await saveJobs(id, jobs);
+    j.stage = 'READY'; j.readyAt = now;
+    await ensureAwb(jobs).catch((err) => console.warn('AWB not made', err));
+    await saveJobs(id, jobs);
     await studio(`Framed and ready: ${ref}`, [`${h(by)} has framed <b>${h(str(e, 'title'))}</b> (${h(ref)}). It is ready for pickup at ${h(String(profile.address ?? ''))}.`]);
     const dj = jobs.delivery;
     if (dj && dj.supplierId !== sub) {
@@ -2588,8 +2660,13 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   if (role === 'delivery' && action === 'jobPicked') {
     if (!['ASSIGNED', 'ACCEPTED'].includes(j.stage)) throw new Error('Already picked up.');
     if (jobs.framer && !['READY', 'COLLECTED'].includes(jobs.framer.stage)) throw new Error(jobs.framer.supplierId === sub ? 'Mark the framing ready first.' : `${jobs.framer.name} hasn't marked it ready yet.`);
-    j.stage = 'PICKED'; j.pickedAt = now; j.acceptedAt = j.acceptedAt ?? now; j.awb = txt(d.awb, 60);
+    if (!jobs.framer && jobs.printer && !['READY', 'COLLECTED'].includes(jobs.printer.stage)) throw new Error(`${jobs.printer.name} hasn't marked it printed yet.`);
+    // The scanned / typed airway bill must be this parcel's (when Kalai made one).
+    const typed = txt(d.awb, 60).toUpperCase();
+    if (j.awb && typed && typed !== j.awb.toUpperCase()) throw new Error(`That is not this parcel's airway bill: it should be ${j.awb}.`);
+    j.stage = 'PICKED'; j.pickedAt = now; j.acceptedAt = j.acceptedAt ?? now; j.awb = j.awb || typed;
     if (jobs.framer) jobs.framer.stage = 'COLLECTED';
+    else if (jobs.printer) jobs.printer.stage = 'COLLECTED';
     await saveJobs(id, jobs);
     if ([...PAID_LIKE, 'FRAMING'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'SHIPPED', courierName: by, trackingNo: j.awb || ref });
     await studio(`Picked up: ${ref}`, [`${h(by)} picked up <b>${h(str(e, 'title'))}</b> (${h(ref)})${j.awb ? `, tracking ${h(j.awb)}` : ''}. The order is now Shipped and the customer has been emailed.`]);

@@ -1,4 +1,5 @@
 import { openPdf } from './pdf.js';
+import { downloadAwb, printAwb } from './awb.js';
 // Supplier portal: frame shops (FRAMER), delivery partners (COURIER) and print shops (PRINTER).
 // They apply, and once approved see the jobs Kalai Art House gives them: the work's photo, frame spec and size,
 // the agreed price, pickup and delivery addresses. They update each step and enter their invoice (a Zoho bill).
@@ -272,8 +273,8 @@ function jobCard(j) {
     else if (fr && j.stage === 'ACCEPTED' && j.artist && j.artist.stage !== 'SHIPPED') act = `<span class="muted">Waiting for the artist to send the artwork. You'll be emailed with the courier and AWB when it's on its way.</span>`;
     else if (fr && j.stage === 'ACCEPTED') act = j.collectFrom && !j.collectFrom.ready ? `<span class="muted">Waiting: ${esc(j.collectFrom.name)} hasn't printed it yet.</span>` : '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
     else if (!fr && !pr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
-      act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't finished framing yet.</span>`
-        : `<div class="inline"><div class="field"><label>Tracking / AWB (optional)</label><input data-awb maxlength="60"></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
+      act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't marked it ready yet.</span>`
+        : `<div class="inline"><div class="field"><label>${j.label?.awb ? 'Scan or type the airway bill on the parcel' : 'Tracking / AWB (optional)'}</label><input data-awb maxlength="60" ${j.label?.awb ? `placeholder="${esc(j.label.awb)}"` : ''}></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
     } else if (!fr && !pr && j.stage === 'PICKED') act = podForm(j, 'Delivered to the customer', 'jobDelivered');
     else if (!fr && !pr && j.stage === 'DELIVERED' && !j.pod) act = podForm(j, 'Save proof of delivery', 'jobPod');
     const canInvoice = fr || pr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
@@ -291,7 +292,7 @@ function jobCard(j) {
         ${j.artist ? `<dt>The artwork</dt><dd>${j.artist.stage === 'SHIPPED' ? `<b>On its way to you</b> since ${esc(day(j.artist.sentAt))}${j.artist.courier ? ` · ${esc(j.artist.courier)}` : ''}${j.artist.awb && j.artist.awb !== '–' ? ` · AWB <b>${esc(j.artist.awb)}</b>` : ''}` : j.artist.stage === 'FINISHED' ? `Finished by the artist ${esc(day(j.artist.finishedAt))}, not sent yet` : j.artist.stage === 'STARTED' ? `The artist is making it (started ${esc(day(j.artist.startedAt))})` : 'The artist hasn\'t started yet'}</dd>` : ''}
         ${fr && j.delivering ? '<dt>Delivery</dt><dd>You deliver this one too (see the delivery job)</dd>' : ''}
         ${j.specs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
-        ${j.awb ? `<dt>Tracking</dt><dd>${esc(j.awb)}</dd>` : ''}
+        ${j.awb && !j.label ? `<dt>Tracking</dt><dd>${esc(j.awb)}</dd>` : ''}
         ${j.pod ? `<dt>Proof of delivery</dt><dd>Received by <b>${esc(j.pod.name)}</b>${j.pod.signed ? ' · signed' : ''}${j.pod.photos ? ` · ${j.pod.photos} photo${j.pod.photos > 1 ? 's' : ''}` : ''} · ${esc(day(j.pod.at))}</dd>` : ''}
         ${j.invoiceNo ? `<dt>Your invoice</dt><dd>${esc(j.invoiceNo)} · ${aed(j.invoiceAmt)}${j.bill ? ' · received' : ''}${j.hasBill ? ' · <button type="button" class="linkbtn" data-invpdf>📄 Open invoice</button>' : ''}</dd>` : ''}
       </dl>
@@ -300,6 +301,10 @@ function jobCard(j) {
       </dl>
     </div>
     ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? 'drawing' : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
+    ${j.label ? `<div class="awb-box"><div><span class="muted">Airway bill</span> ${j.label.awb ? `<b class="mono">${esc(j.label.awb)}</b>` : ''} · courier <b>${esc(j.label.courier)}</b></div>
+      <div class="awb-acts"><button type="button" class="btn small" data-label="bar">🏷 Download label (barcode)</button><button type="button" class="btn small ghost" data-label="qr">🏷 Download label (QR code)</button><button type="button" class="linkbtn" data-labelprint="bar">Print barcode label</button><button type="button" class="linkbtn" data-labelprint="qr">Print QR label</button></div>
+      <div class="muted" style="font-size:12px">${j.role === 'delivery' ? 'The shop sticks this label on the parcel: scan it at pickup.' : 'Print it (4 × 6 in label, or on A4 and cut it out), stick it on the packed parcel: the courier scans it at pickup.'}</div></div>`
+      : j.courier !== undefined && !j.cancelled && !j.invoiceNo ? `<div class="awb-box muted">${j.courier ? `Courier <b>${esc(j.courier)}</b> collects it from you: the airway bill (barcode / QR label) appears here when you mark it ${pr ? 'printed' : 'ready'}.` : 'Kalai Art House allocates the courier: the airway bill label appears here once it is.'}</div>` : ''}
     ${supGuide(j, fr, pr)}
     <div style="display:grid;gap:8px;justify-items:start">${act}</div>
     <div class="err" data-msg></div>
@@ -311,6 +316,11 @@ function drawJobs() {
   $('jList').querySelectorAll('.job').forEach((card) => {
     const [id, role] = card.dataset.key.split(':');
     const msg = card.querySelector('[data-msg]');
+    const labelOf = async () => (await call('jobLabel', { id, role })).label;
+    card.querySelectorAll('[data-label],[data-labelprint]').forEach((b) => b.addEventListener('click', async () => {
+      msg.textContent = 'Making the airway bill…';
+      try { const l = await labelOf(); if (b.dataset.label) await downloadAwb(l, b.dataset.label); else await printAwb(l, b.dataset.labelprint); msg.textContent = `Airway bill ${l.awb} ready.`; } catch (ex) { msg.textContent = ex.message; }
+    }));
     card.querySelector('[data-invpdf]')?.addEventListener('click', () => openPdf(() => call('jobInvoicePdf', { id, role }), (ex) => { msg.textContent = ex.message; }));
     const dl = card.querySelector('[data-dl]');
     if (dl) dl.onclick = async () => {
