@@ -1173,6 +1173,8 @@ async function artistRows(enquiries: Img[], admin = false) {
         artistPriceAed: num(c, 'artistPriceAed'),
         artistReadyBy: str(c, 'artistReadyBy'),
         artistNote: str(c, 'artistNote'),
+        studioNote: str(c, 'studioNote'), // Kalai Art House → artist
+        studioNoteAt: str(c, 'studioNoteAt'),
         locked: !!str(e, 'zohoPOId'),
         ordered: !!str(e, 'zohoPOId') && str(e, 'purchaseState') !== 'CANCELLED',
         stopped: sivaStopped(e),

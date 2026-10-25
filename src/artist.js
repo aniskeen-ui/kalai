@@ -198,6 +198,7 @@ function card(x) {
   const dis = x.locked ? 'disabled' : '';
   return `<article class="acard" id="c-${esc(x.id)}">
     <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span class="catchip" title="Sales category">${x.kind === 'COMMISSION' ? 'Commission' : 'Collection'}</span>${x.customerCode ? `<span class="mono" title="Customer">${x.customerName ? esc(x.customerName) + ' · ' : ''}${esc(x.customerCode)}</span>` : ''}${x.orderStatus === 'DELIVERED' ? '<span class="stage PAID" title="The customer has received it">Delivered to customer</span>' : ''}<span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
+    ${x.studioNote ? `<div class="studionote"><b>Note from Kalai Art House</b>${x.studioNoteAt ? ` <span class="muted" style="font-size:11px">${esc(day(x.studioNoteAt))}</span>` : ''}<div>${esc(x.studioNote)}</div></div>` : ''}
     <h2>${esc(x.title)}</h2>
     ${x.imageKey ? `<img class="opic" alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:220px;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}

@@ -414,6 +414,7 @@ function drawComms() {
     return `<article class="ocard" data-c="${esc(x.id)}">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(x.title)}</h3><span class="st ${x.stage === 'NEEDED' ? 'SUBMITTED' : x.stage === 'PAID' ? 'APPROVED' : ''}">${esc(x.label)}</span><span class="muted" style="margin-left:auto;font-family:var(--mono)">${esc(x.ref)} · ${esc(dd(x.createdAt))}</span></div>
       ${x.imageKey ? `<img alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:200px;max-height:200px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
+      ${x.studioNote ? `<div style="border-left:3px solid #c08a1e;background:#fff8e6;color:#3a2a05;border-radius:6px;padding:8px 10px;font-size:14px;white-space:pre-wrap"><b>Note from Kalai Art House</b><div>${esc(x.studioNote)}</div></div>` : ''}
       ${x.brief?.length ? `<div class="to">${x.brief.map((b) => `<div><b>${esc(b.k)}:</b> ${esc(b.v)}</div>`).join('')}</div>` : ''}
       ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo>View the customer's reference photo</button> <span class="muted" data-pm></span></div>` : ''}
       ${p != null ? `<div>Your price: <b>${commCur} ${Number(p).toLocaleString('en-IN')}</b>${x.artistReadyBy ? ` · ready by ${esc(x.artistReadyBy)}` : ''}${x.locked ? ' · fixed (order placed)' : ''}</div>` : ''}

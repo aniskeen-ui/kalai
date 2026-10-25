@@ -877,6 +877,7 @@ function costingSection(e) {
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
     <div class="muted" style="font-size:12px">${fromSiva}</div>
+    <div class="field"><label for="cNote">Note to ${esc(who)} <span class="muted" style="font-weight:400;font-size:12px">· shown on the artist's order card${c.studioNoteAt ? `, last changed ${esc(when(c.studioNoteAt))}` : ''}</span></label><textarea id="cNote" rows="2" maxlength="1000" placeholder="e.g. Please sign at the bottom right; customer wants it before 5 Nov.">${esc(c.studioNote || '')}</textarea></div>
     <details ${c.framingOverride != null || c.indiaCourierOverride != null || c.localCourierOverride != null ? 'open' : ''}><summary>Overrides for this order (premium frame, oversized, abroad)</summary>
       <div class="three" style="margin-top:8px">
         <div class="field"><label for="cFr">Framing (⃃)</label><input id="cFr" type="number" min="0" step="1" value="${c.framingOverride ?? ''}" ${dis}></div>
@@ -2217,6 +2218,13 @@ async function showDetailBody(e) {
     const rw = readRework(e);
     try {
       if (costingChanged) await saveCosting(e);
+      if ($('cNote') && $('cNote').value.trim() !== (costings.get(e.id)?.studioNote || '')) {
+        const note = $('cNote').value.trim(), cur = costings.get(e.id);
+        const rec = { enquiryId: e.id, studioNote: note || null, studioNoteAt: new Date().toISOString() };
+        const res = cur ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec);
+        if (res.errors?.length) throw new Error(res.errors[0].message);
+        costings.set(e.id, res.data || { ...cur, ...rec });
+      }
       if (rw) await saveRework(e, rw);
       const prevMsg = e.adminMessage || '', newSt = $('eStatus').value;
       const { data, errors } = await client.models.Enquiry.update({

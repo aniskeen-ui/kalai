@@ -199,6 +199,9 @@ const schema = a.schema({
       // Every Zoho document for the order (quote, invoices, payments, PO, bills), refreshed by Check Zoho.
       zohoDocs: a.json(),
       docsAt: a.string(),
+      // Studio → artist: a note shown on the artist's order card (artist desk / portal).
+      studioNote: a.string(),
+      studioNoteAt: a.string(),
     })
     .identifier(['enquiryId'])
     .authorization((allow) => [allow.group('ADMINS')]),
