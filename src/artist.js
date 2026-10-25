@@ -89,18 +89,31 @@ async function renderWorks(force = false) {
   $('cWorks').textContent = todo ? `(${todo})` : '';
   if (filter !== 'WORKS') return;
   if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
-  $('list').innerHTML = `<div style="display:flex;gap:8px;align-items:center"><input id="wFind" type="search" placeholder="Find a work: AT-… code or title" aria-label="Find a work" style="max-width:320px"><span class="muted find-count" style="font-size:12px"></span></div><p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>
+  $('list').innerHTML = `<div style="display:flex;gap:8px;align-items:center"><input id="wFind" type="search" placeholder="Find a work: AT-… code or title" aria-label="Find a work" style="max-width:320px"><select id="wFilter" aria-label="Show" style="width:auto"><option value="">All works</option><option value="priced">Priced</option><option value="unpriced">Not priced</option><option value="unnamed">Not named</option><option value="live">On the website</option><option value="notlive">Not on the website (draft / scheduled)</option><option value="sold">Sold</option></select><span class="muted find-count" style="font-size:12px"></span></div><p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>
     <div class="saveall"><button type="button" class="btn small" id="saveAllW">Save all changes</button><span class="muted" id="saveAllMsg" style="font-size:12px">Change titles, sizes, prices or days on as many works as you like, then save them all at once.</span></div>`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}" data-code="${esc(w.code)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
-        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title${!w.named && shownTitle(w) ? ` <span class="muted" style="font-weight:400">(${webTitle(w) ? 'as on the website' : 'suggested'}: change it if you like, then Save)</span>` : ''}</label><input name="title" maxlength="80" value="${esc(shownTitle(w))}" placeholder="A short, meaningful title"></div>
+        ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)} · <span style="font-family:var(--body)">${w.status === 'PUBLISHED' ? '<b style="color:var(--ok)">On the website</b>' : w.status === 'SOLD' ? '<b>Sold</b>' : 'Not on the website yet'}${w.artistPrice != null ? ' · priced' : ' · <b style="color:var(--kumkum)">no price</b>'}</span></div>` : ''}<div class="field"><label>Title${!w.named && shownTitle(w) ? ` <span class="muted" style="font-weight:400">(${webTitle(w) ? 'as on the website' : 'suggested'}: change it if you like, then Save)</span>` : ''}</label><input name="title" maxlength="80" value="${esc(shownTitle(w))}" placeholder="A short, meaningful title"></div>
         <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="field"><label>Size (paper)</label><input name="size" maxlength="40" value="${esc(w.size)}" placeholder="e.g. 38 × 28 cm"></div>
         <div class="field"><label>My price (₹, artwork only)</label><input name="price" type="number" min="100" step="50" inputmode="numeric" value="${w.artistPrice ?? ''}" placeholder="e.g. 3000"></div></div>
         <div class="field" style="max-width:260px"><label>Ready to send in (days)</label><input name="leadDays" maxlength="9" value="${w.leadDays == null ? '' : w.leadMax != null && w.leadMax !== w.leadDays ? `${w.leadDays}-${w.leadMax}` : w.leadDays}" placeholder="e.g. 7 or 10-15 (0 = ready now)"></div>
         <div class="field"><label>About this work (optional)</label><textarea name="description" rows="2" maxlength="1000" placeholder="What it shows, where, the story behind it">${esc(w.description || (!w.named && SUGGEST[w.code] ? SUGGEST[w.code][2] : ''))}</textarea></div>
         <div style="display:flex;gap:10px;align-items:center"><button class="btn small" type="submit">Save</button><span class="ok" data-m>${w.named ? `<span class="wdone">✓ Named${w.artistPrice != null ? ' · priced' : ''}</span>` : ''}</span></div>
       </form></article>`).join('');
-  wireFind($('wFind'), '.wcard', document, (el) => `${el.dataset.code || ''} ${el.querySelector('[name=title]')?.value || ''}`);
+  const findRun = wireFind($('wFind'), '.wcard', document, (el) => `${el.dataset.code || ''} ${el.querySelector('[name=title]')?.value || ''}`);
+  // Filter by state on top of the search (title or AT- code).
+  const wf = () => {
+    const v = $('wFilter').value;
+    findRun();
+    let shown = 0;
+    document.querySelectorAll('.wcard').forEach((el) => {
+      const w = works.find((x) => x.id === el.dataset.w) || {};
+      const ok = !v || (v === 'priced' ? w.artistPrice != null : v === 'unpriced' ? w.artistPrice == null : v === 'unnamed' ? !w.named : v === 'live' ? w.status === 'PUBLISHED' : v === 'sold' ? w.status === 'SOLD' : !['PUBLISHED', 'SOLD'].includes(w.status));
+      if (!ok) el.hidden = true; else if (!el.hidden) shown++;
+    });
+    const note = $('wFind').parentElement.querySelector('.find-count'); if (note && v) note.textContent = `${shown} of ${works.length}`;
+  };
+  $('wFilter').onchange = wf; $('wFind').addEventListener('input', () => setTimeout(wf, 0));
   document.querySelectorAll('.wcard img[data-key]').forEach(async (img) => {
     try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no picture */ }
   });
