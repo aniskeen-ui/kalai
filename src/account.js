@@ -1250,13 +1250,23 @@ async function showArtists() {
     const r = await client.models.ArtistProfile.list({ authMode: 'apiKey', limit: 200 });
     if (r.errors?.length) throw new Error(r.errors[0].message);
     const url = async (k) => { try { return k ? (await getUrl({ path: k, options: { expiresIn: 3600 } })).url.toString() : ''; } catch { return ''; } };
+    // The artist's works on the website (the catalogue pictures, cleaned and approved) come before the sample photos
+    // sent with the application.
+    const works = new Map();
+    try {
+      const pr = await client.models.Product.list({ authMode: 'apiKey', limit: 500 });
+      const nowIso = new Date().toISOString();
+      for (const p of pr.data || []) if (p.artist && p.imageKey && ['PUBLISHED', 'SOLD'].includes(p.status) && (!p.publishAt || p.publishAt <= nowIso)) (works.get(p.artist.trim().toLowerCase()) || works.set(p.artist.trim().toLowerCase(), []).get(p.artist.trim().toLowerCase())).push(p.imageKey);
+    } catch { /* samples only */ }
     const list = await Promise.all((r.data || []).sort((a, b) => String(a.publishedAt).localeCompare(String(b.publishedAt))).map(async (a) => {
       let keys = []; try { keys = JSON.parse(a.sampleKeys || '[]'); } catch { keys = []; }
+      const own = works.get(String(a.name || '').trim().toLowerCase()) || [];
+      if (own.length) keys = [...own, ...keys.filter((k) => !own.includes(k))].slice(0, 8);
       return {
         name: a.name, mediums: a.mediums, about: a.about, training: a.training || '', experience: a.experience || '', commissions: a.commissions,
         place: [a.city || a.region, a.country === 'India' ? 'India' : 'UAE'].filter(Boolean).join(', '),
         born: `b. ${a.country === 'India' ? 'India' : 'UAE'}${a.bornYear ? `, ${a.bornYear}` : ''}`,
-        img: await url(a.photoKey), featured: await url(a.featuredKey || keys[0]), sampleKeys: keys, url,
+        img: await url(a.photoKey), featured: await url(own.length ? own[0] : a.featuredKey || keys[0]), sampleKeys: keys, url,
       };
     }));
     window.kalaiShowArtists(list);
