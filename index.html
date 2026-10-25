@@ -51,6 +51,12 @@ header.top .wrap{display:flex;align-items:center;gap:20px;padding-block:14px}
 header.top .cart-btn{white-space:nowrap}
 .theme-btn{background:transparent;border:1px solid #6d6596;border-radius:999px;color:var(--on-ink);font-size:16px;line-height:1;padding:6px 10px;cursor:pointer}
 .brand{display:flex;align-items:baseline;gap:10px;margin-right:auto;min-width:0}
+/* Translated site (longer words): the menu gets its own row under the logo and buttons, nothing overlaps */
+html[data-tr="1"] header.top .wrap{flex-wrap:wrap;row-gap:8px}
+html[data-tr="1"] .brand{flex-shrink:0}
+html[data-tr="1"] nav.links{order:9;flex-basis:100%;flex-wrap:wrap;justify-content:center;gap:6px 18px;font-size:13px}
+html[data-tr="1"] nav.links a{white-space:nowrap}
+html[data-tr="1"] header.top .cart-btn{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand b{font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.06em}
 .brand span{font-size:12px;color:#c9c3dd;letter-spacing:.08em;text-transform:uppercase}
 nav.links{display:flex;gap:18px;font-size:14px}

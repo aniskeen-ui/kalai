@@ -85,6 +85,7 @@ export function setLang(l) {
   try { localStorage.setItem('kalaiLang', lang); } catch { /* */ }
   document.documentElement.lang = lang;
   document.documentElement.dir = RTL.includes(lang) ? 'rtl' : 'ltr';
+  document.documentElement.dataset.tr = lang === 'en' ? '' : '1'; // header layout for longer words
   loadCache(lang);
   paint();
   translate();
