@@ -711,6 +711,7 @@ async function showCircle(items) {
     if (r.errors?.length) throw new Error(r.errors[0].message);
     const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
     circle = d?.loyalty?.on ? d.loyalty : null;
+    showProgrammes(d?.programmes);
   } catch { circle = null; }
   if (!circle) { host.innerHTML = ''; return; }
   const c = circle, fmt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -727,6 +728,48 @@ async function showCircle(items) {
   // Order cards were drawn before the balance arrived: draw their points boxes now.
   body.querySelectorAll('[data-points-slot]').forEach((el) => { const e = items.find((x) => x.id === el.dataset.pointsSlot); if (e) { el.outerHTML = pointsBox(e); } });
   wirePoints(items);
+}
+/* ---------- Special programmes (seniors, Little Artists, top students …): apply, see the outcome ---------- */
+function showProgrammes(pg) {
+  const host = body.querySelector('#progBox'); if (!host) return;
+  if (!pg || (!pg.list?.length && !pg.mine?.length)) { host.innerHTML = ''; return; }
+  const ST = { PENDING: 'waiting for the studio', APPROVED: 'approved', DECLINED: 'not approved', ENDED: 'ended' };
+  const dt = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const busy = new Set((pg.mine || []).filter((a) => a.status === 'PENDING' || (a.status === 'APPROVED' && !a.voucher)).map((a) => a.pid));
+  host.innerHTML = `<div class="circle"><b style="font-size:15px">♥ Special programmes</b>
+    ${(pg.mine || []).map((a) => `<div style="font-size:13px"><b>${esc(a.name)}</b> (${esc(a.offer)}): ${ST[a.status] || a.status}${a.status === 'APPROVED' && a.voucher ? `. Your code <b class="mono">${esc(a.voucher)}</b>${a.until ? `, valid until ${esc(dt(a.until))}` : ''}: enter it on an order below.` : a.status === 'APPROVED' ? `. Taken off when we send your price${a.until ? `, until ${esc(dt(a.until))}` : ''}.` : ''}${a.note ? ` <span class="acct-info">${esc(a.note)}</span>` : ''}</div>`).join('')}
+    <details style="font-size:13px"><summary class="acct-info">See the programmes and apply</summary>
+    ${(pg.list || []).map((p) => `<div style="border-top:1px solid #0001;padding-top:6px;margin-top:6px"><b>${esc(p.name)}</b>: ${esc(p.offer)}${p.kind === 'ONGOING' ? ' on your orders' : ', one order'}. <span class="acct-info">${esc(p.about)}</span>
+      ${busy.has(p.id) ? '<div class="acct-info">You have this programme or a request is waiting.</div>' : `<button type="button" class="acct-link" style="margin:0" data-pg-open="${esc(p.id)}">Apply</button>
+      <form data-pg="${esc(p.id)}" hidden novalidate style="display:grid;gap:6px;margin-top:6px">
+        <div class="acct-info">What we need: ${esc(p.proof)}</div>
+        <input name="who" maxlength="80" placeholder="Who is it for? (name; for a child, their first name and age)">
+        <textarea name="said" maxlength="400" rows="2" placeholder="Tell us briefly"></textarea>
+        ${p.upload ? '<label class="acct-info">Proof (optional, photo or PDF; deleted once we decide) <input name="file" type="file" accept="image/*,application/pdf"></label>' : ''}
+        <label style="display:flex;gap:6px;align-items:flex-start"><input type="checkbox" name="agree"> <span>The details are true. Kalai Art House may decline or end a programme discount.</span></label>
+        <div><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Send request</button> <span class="acct-err" data-pg-msg></span></div></form>`}</div>`).join('')}</details></div>`;
+  host.querySelectorAll('[data-pg-open]').forEach((b) => { b.onclick = () => { const f = host.querySelector(`form[data-pg="${b.dataset.pgOpen}"]`); f.hidden = !f.hidden; }; });
+  host.querySelectorAll('form[data-pg]').forEach((f) => {
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const msg = f.querySelector('[data-pg-msg]'), btnS = f.querySelector('button[type=submit]');
+      if (!f.agree.checked) { msg.textContent = 'Please tick to confirm the details are true.'; return; }
+      btnS.disabled = true; msg.textContent = 'Sending…';
+      try {
+        let proofKey = '';
+        const file = f.file?.files?.[0];
+        if (file) {
+          if (file.size > 8 * 1024 * 1024) throw new Error('The file is too large (8 MB at most).');
+          proofKey = (await uploadData({ path: ({ identityId }) => `uploads/${identityId}/programme-${f.dataset.pg}-${Date.now()}-${safeName(file.name)}`, data: file, options: { contentType: file.type || 'application/octet-stream' } }).result).path;
+        }
+        const r = await client.mutations.customerProfile({ action: 'applyProgramme', data: JSON.stringify({ pid: f.dataset.pg, who: f.who.value.trim(), said: f.said.value.trim(), proofKey, agree: true }) });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+        showProgrammes(d);
+        host.insertAdjacentHTML('afterbegin', '<p class="acct-info" style="margin:0 0 6px">Thank you. We\'ve received your request and will email you once we\'ve looked at it.</p>');
+      } catch (ex) { msg.textContent = ex.message || 'Not sent.'; btnS.disabled = false; }
+    };
+  });
 }
 function pointsBox(e) {
   const st = e.status || 'RECEIVED';
@@ -962,6 +1005,7 @@ async function showList() {
   body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b><span id="custNo"></span></p>
     ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
     <div id="circleBox"></div>
+    <div id="progBox"></div>
     <details class="redeem" id="redeemBox"><summary>🎁 Have a gift card, voucher or code?</summary>
       <form id="redeemForm" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><input name="code" id="redeemCode" placeholder="Enter the code" maxlength="30" style="max-width:200px;text-transform:uppercase;padding:6px 8px;font-size:14px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Check</button><button class="btn ghost-dark" type="button" id="redeemScan" style="padding:6px 12px;font-size:13px">📷 Scan QR</button></form>
       <video id="redeemCam" playsinline muted hidden style="width:100%;max-width:320px;border-radius:8px;margin-top:8px"></video>

@@ -2607,6 +2607,7 @@ async function marketAdmin(ev: ApiEvent) {
     const row = await loyAdd(code, pts, 'adjust', txt(d.note, 120) || 'Studio', cfg);
     return { points: row?.loyaltyPoints ?? 0, tier: row?.loyaltyTier ?? '' };
   }
+  if (action === 'decideProgramme') return progDecide(d);
   if (action === 'promoteSupplier') {
     const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
     if (!p || p.status !== 'PROSPECT' || !ROLE_OF[String(p.type)]) throw new Error('Supplier prospect not found');
@@ -3518,7 +3519,8 @@ async function customerProfile(ev: ApiEvent) {
   const cur = code ? plain(await getRow(T, { code: { S: code } })) : null;
   const view = (c: Dict | null) => ({ code: code ?? '', name: c?.name ?? str(mine[0], 'customerName'), email: c?.email || email, phone: c?.phone ?? str(mine[0], 'phone'),
     country: c?.country ?? 'UAE', emirate: c?.emirate ?? '', pin: c?.pin ?? '', address: c?.address ?? '', landmark: c?.landmark ?? '' });
-  if (ev.arguments.action === 'get') return { ...view(cur), loyalty: await loyView(code ?? '', email).catch(() => ({ on: false })) };
+  if (ev.arguments.action === 'get') return { ...view(cur), loyalty: await loyView(code ?? '', email).catch(() => ({ on: false })), programmes: await progView(code ?? '').catch(() => ({ list: [], mine: [] })) };
+  if (ev.arguments.action === 'applyProgramme') return progApply(code ?? '', email, parseData(ev.arguments.data));
   if (ev.arguments.action !== 'save') throw new Error('Unknown action');
   if (!code) throw new Error('Your details are saved with your first order or enquiry. Send one first, then you can change them here.');
   const d = parseData(ev.arguments.data);
@@ -3690,6 +3692,118 @@ async function loyAdd(code: string, pts: number, why: string, ref: string, cfg: 
   row.loyaltyTier = tierOf(row, cfg).tier.name;
   await putRow(T, row);
   return row;
+}
+// ---------- Special programmes (seniors, Little Artists, top students, healthy-life rewards …) ----------
+// The studio keeps the list (Offers → Special programmes, SiteSetting.programmes). A signed-in customer applies from
+// My enquiries & orders; the studio approves or declines. Ongoing → the customer's standard discount (taken off when the
+// price is sent); one-time → a code locked to their email (FOC → a gift card up to a cap). Proof is optional and the
+// uploaded file is deleted when the studio decides.
+type Prog = { id: string; on: boolean; name: string; about: string; type: 'PCT' | 'AED' | 'FOC'; value: number; cap: number; kind: 'ONGOING' | 'ONCE'; months: number; days: number; area: string; proof: string; upload: boolean };
+const PROG_DEF: Prog[] = [
+  { id: 'senior', on: true, name: 'Senior citizens (60+)', about: 'Every order, always.', type: 'PCT', value: 25, cap: 0, kind: 'ONGOING', months: 0, days: 0, area: 'ALL', proof: 'Your year of birth. Show your Emirates ID or passport on WhatsApp or at delivery; no need to upload it.', upload: false },
+  { id: 'little', on: true, name: 'Little Artists (children under 10)', about: 'For orders for a child under 10.', type: 'PCT', value: 25, cap: 0, kind: 'ONGOING', months: 12, days: 0, area: 'ALL', proof: "The child's first name and age (a parent's word is enough).", upload: false },
+  { id: 'student', on: true, name: 'Top students', about: 'A free artwork for an outstanding academic result.', type: 'FOC', value: 0, cap: 500, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'A photo of the report card or certificate (deleted once we decide).', upload: true },
+  { id: 'smoke', on: true, name: 'Quit smoking', about: 'Three months smoke-free? Celebrate with art.', type: 'PCT', value: 20, cap: 0, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'Your own word. No medical papers needed.', upload: false },
+  { id: 'drink', on: true, name: 'Alcohol-free', about: 'Three months alcohol-free.', type: 'PCT', value: 20, cap: 0, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'Your own word. No medical papers needed.', upload: false },
+  { id: 'weight', on: true, name: 'Weight-loss goal reached', about: 'For example 5 kg in a month.', type: 'PCT', value: 15, cap: 0, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'Your own word. No weigh-in photos needed.', upload: false },
+  { id: 'pod', on: false, name: 'People of Determination', about: 'Every order.', type: 'PCT', value: 25, cap: 0, kind: 'ONGOING', months: 0, days: 0, area: 'ALL', proof: 'Your Sanad card or People of Determination card number.', upload: false },
+  { id: 'health', on: false, name: 'Healthcare workers', about: 'Doctors, nurses and care staff.', type: 'PCT', value: 10, cap: 0, kind: 'ONGOING', months: 12, days: 0, area: 'ALL', proof: 'Your workplace and job title.', upload: false },
+  { id: 'teacher', on: false, name: 'Teachers', about: 'School and nursery teachers.', type: 'PCT', value: 10, cap: 0, kind: 'ONGOING', months: 12, days: 0, area: 'ALL', proof: 'Your school and subject.', upload: false },
+  { id: 'blood', on: false, name: 'Blood donors', about: 'Thank you for donating.', type: 'PCT', value: 15, cap: 0, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'The date and place you donated.', upload: false },
+  { id: 'volunteer', on: false, name: 'Volunteers', about: 'Volunteering for a charity or community group.', type: 'PCT', value: 10, cap: 0, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'The organisation you volunteer with.', upload: false },
+  { id: 'newhome', on: false, name: 'Newlyweds and new homes', about: 'A gift for a new chapter.', type: 'PCT', value: 15, cap: 0, kind: 'ONCE', months: 0, days: 60, area: 'ALL', proof: 'The month of your wedding or move.', upload: false },
+  { id: 'birthday', on: false, name: 'Birthday month', about: 'A treat in your birthday month.', type: 'PCT', value: 10, cap: 0, kind: 'ONCE', months: 0, days: 30, area: 'ALL', proof: 'Your birthday (day and month).', upload: false },
+];
+async function progList(): Promise<Prog[]> {
+  const t = process.env.SITE_TABLE;
+  try { const raw = t ? (await ddb.send(new GetItemCommand({ TableName: t, Key: { id: { S: 'site' } } }))).Item?.programmes?.S : ''; const l = raw ? JSON.parse(raw) as Prog[] : []; return l.length ? l : PROG_DEF; } catch { return PROG_DEF; }
+}
+type ProgApp = { id: string; pid: string; name: string; status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'ENDED'; at: string; who: string; said: string; proofKey?: string; email: string; decidedAt?: string; note?: string; voucher?: string; until?: string; offer?: string };
+const progApps = (c: Dict | null): ProgApp[] => { try { return JSON.parse(String(c?.programmes ?? '[]')); } catch { return []; } };
+const progOffer = (p: Prog) => p.type === 'FOC' ? `free (up to AED ${p.cap})` : p.type === 'AED' ? `AED ${p.value} off` : `${p.value}% off`;
+/** The programmes a customer can see, and their own requests. */
+async function progView(code: string) {
+  const list = (await progList()).filter((p) => p.on).map((p) => ({ id: p.id, name: p.name, about: p.about, offer: progOffer(p), kind: p.kind, proof: p.proof, upload: p.upload }));
+  const c = code ? await loyCustomer(code) : null;
+  return { list, mine: progApps(c).slice(-20).reverse().map((a) => ({ id: a.id, pid: a.pid, name: a.name, status: a.status, at: a.at, voucher: a.voucher ?? '', until: a.until ?? '', note: a.note ?? '', offer: a.offer ?? '' })) };
+}
+async function progApply(code: string, email: string, d: Dict) {
+  const T = process.env.CUSTOMER_TABLE;
+  if (!T) throw new Error('Not configured');
+  if (!code) throw new Error('Programmes open once your first enquiry or order is registered. Send one first, then apply here.');
+  const p = (await progList()).find((x) => x.on && x.id === txt(d.pid, 30));
+  if (!p) throw new Error('This programme is not open now.');
+  if (!d.agree) throw new Error('Please confirm the details are true.');
+  const c = await loyCustomer(code);
+  const apps = progApps(c);
+  if (apps.some((a) => a.pid === p.id && (a.status === 'PENDING' || (a.status === 'APPROVED' && (p.kind === 'ONGOING' || !a.decidedAt || a.decidedAt > new Date(Date.now() - 365 * 864e5).toISOString())))))
+    throw new Error('You have already applied for this programme.');
+  const key = txt(d.proofKey, 300);
+  const app: ProgApp = { id: crypto.randomUUID().slice(0, 8), pid: p.id, name: p.name, status: 'PENDING', at: new Date().toISOString(), who: txt(d.who, 80), said: txt(d.said, 400), email, offer: progOffer(p), ...(key && key.startsWith('uploads/') ? { proofKey: key } : {}) };
+  apps.push(app);
+  await putRow(T, { ...(c ?? { code, __typename: 'Customer', createdAt: app.at }), programmes: JSON.stringify(apps.slice(-50)), updatedAt: app.at });
+  await sendMail({ to: STUDIO_EMAIL, subject: `Programme request: ${p.name} (${code})`, lines: [`<b>${h(String(c?.name ?? code))}</b> (${h(code)}, ${h(email)}) applied for <b>${h(p.name)}</b>: ${h(progOffer(p))}.`, app.who ? `For: ${h(app.who)}` : '', app.said ? `They say: ${h(app.said)}` : '', key ? 'A proof file is attached to the request.' : ''].filter(Boolean), button: { label: 'Open Offers → Special programmes', url: `${SITE}/admin.html#offers` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+  return progView(code);
+}
+/** Studio: approve or decline a request. Returns the proof file key (the page deletes it). */
+async function progDecide(d: Dict) {
+  const T = process.env.CUSTOMER_TABLE;
+  if (!T) throw new Error('Not configured');
+  const code = txt(d.code, 20), c = await loyCustomer(code);
+  const apps = progApps(c), a = apps.find((x) => x.id === txt(d.appId, 20));
+  if (!c || !a) throw new Error('Request not found');
+  if (a.status !== 'PENDING' && !(d.decision === 'END' && a.status === 'APPROVED')) throw new Error('This request is already decided.');
+  const p = (await progList()).find((x) => x.id === a.pid);
+  const now = new Date(), note = txt(d.note, 200), first = String(c.name || '').split(' ')[0] || 'there';
+  const proofKey = a.proofKey ?? '';
+  delete a.proofKey; a.decidedAt = now.toISOString(); if (note) a.note = note;
+  const row: Dict = { ...c, updatedAt: now.toISOString() };
+  let lines: string[] = [];
+  if (d.decision === 'END') {
+    a.status = 'ENDED';
+    if (row.discountNote === a.name) { row.discountType = undefined; row.discountValue = undefined; row.discountNote = undefined; row.discountArea = undefined; }
+  } else if (d.decision !== 'APPROVE') {
+    a.status = 'DECLINED';
+    lines = [`Hello ${h(first)},`, `Thank you for applying for <b>${h(a.name)}</b>. We're sorry, we can't approve it this time.`, note ? h(note) : '', 'If you have any questions, just reply to this email.'];
+  } else {
+    if (!p) throw new Error('This programme is no longer in the list.');
+    a.status = 'APPROVED';
+    if (p.kind === 'ONGOING') {
+      if (p.type === 'FOC') throw new Error('A free (FOC) programme must be one-time.');
+      const until = txt(d.until, 10) ? new Date(`${txt(d.until, 10)}T23:59:59+04:00`) : p.months ? new Date(now.getTime() + p.months * 30.44 * 864e5) : null;
+      if (until && !isNaN(until.getTime())) a.until = until.toISOString();
+      Object.assign(row, { discountType: p.type, discountValue: p.value, discountNote: p.name, discountArea: p.area || 'ALL' });
+      lines = [`Hello ${h(first)},`, `Good news: you're now in our <b>${h(p.name)}</b> programme. You get <b>${h(progOffer(p))}</b>${p.area && p.area !== 'ALL' ? ' on matching orders' : ' on your orders'}${a.until ? ` until ${new Date(a.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.`, "It's taken off automatically when we send you the price.", note ? h(note) : ''];
+    } else {
+      const V = process.env.VOUCHER_TABLE;
+      if (!V) throw new Error('Vouchers not configured');
+      const vc = `PRG-${Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('').replace(/(.{4})/, '$1-')}`;
+      const endAt = new Date(now.getTime() + (p.days || 90) * 864e5).toISOString();
+      const gift = p.type === 'FOC';
+      await putRow(V, { id: `prg-${code}-${a.id}`, __typename: 'Voucher', createdAt: now.toISOString(), updatedAt: now.toISOString(), code: vc, kind: gift ? 'GIFT' : 'CODE',
+        ...(gift ? { value: p.cap, balance: p.cap } : { discountType: p.type, discountValue: p.value, maxUses: 1 }), appliesTo: p.area || 'ALL', active: true, usedCount: 0, uses: '[]',
+        forName: String(c.name ?? ''), forEmail: a.email || String(c.email ?? ''), forPhone: String(c.phone ?? ''), endAt, note: `Programme: ${p.name} (${code})` });
+      a.voucher = vc; a.until = endAt;
+      lines = [`Hello ${h(first)},`, `Congratulations, and thank you for sharing your news. Your <b>${h(p.name)}</b> reward is ready: <b>${h(progOffer(p))}</b>${gift ? ' on one artwork' : ' on one order'}.`, `Your code: <b style="font-size:18px;letter-spacing:1px">${h(vc)}</b>, valid until ${new Date(endAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. It works with this email address only.`, 'Enter it on your order under My enquiries & orders.', note ? h(note) : ''];
+    }
+  }
+  row.programmes = JSON.stringify(apps);
+  await putRow(T, row);
+  const to = a.email || String(c.email ?? '');
+  if (to && lines.length) await sendMail({ to, subject: a.status === 'APPROVED' ? `Welcome to ${a.name}: Kalai Art House` : `Your ${a.name} request`, lines: lines.filter(Boolean), button: MY }).catch(() => {});
+  return { ok: true, status: a.status, voucher: a.voucher ?? '', proofKey, emailed: !!(to && lines.length) };
+}
+/** Hourly: ongoing programme discounts that have reached their end date. */
+async function progExpire() {
+  const T = process.env.CUSTOMER_TABLE;
+  if (!T) return;
+  const now = new Date().toISOString();
+  for (const c of (await scanAll(T)).map(plain)) {
+    if (!c?.programmes) continue;
+    const apps = progApps(c); let changed = false;
+    for (const a of apps) if (a.status === 'APPROVED' && !a.voucher && a.until && a.until < now) { a.status = 'ENDED'; changed = true; if (c.discountNote === a.name) { c.discountType = undefined; c.discountValue = undefined; c.discountNote = undefined; c.discountArea = undefined; } }
+    if (changed) await putRow(T, { ...c, programmes: JSON.stringify(apps), updatedAt: now });
+  }
 }
 /** Hourly: points for orders delivered 48 h ago, referral rewards, and expiry. */
 async function awardLoyalty() {
@@ -4678,6 +4792,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     // Runs every hour: publish once a day, from the hour set in Settings (Dubai time).
     const st = process.env.SITE_TABLE ? (await ddb.send(new GetItemCommand({ TableName: process.env.SITE_TABLE, Key: { id: { S: 'site' } } })).catch(() => null))?.Item : undefined;
     await awardLoyalty().catch((e) => console.log('Kalai Circle points not awarded', e)); // every hour
+    await progExpire().catch((e) => console.log('Programme end dates not checked', e));
     const hour = Number(st?.kuralHour?.N ?? 6), dubaiHour = new Date(Date.now() + 4 * 3600_000).getUTCHours();
     if (dubaiHour < hour) return { skipped: 'not yet' };
     await securePrintFiles().catch((e) => console.log('Print files not moved', e));

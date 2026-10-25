@@ -1,6 +1,6 @@
 // Offers tab (Order Management): website banner, the Offers page, and discount codes.
 import { generateClient } from 'aws-amplify/data';
-import { uploadData, getUrl } from 'aws-amplify/storage';
+import { uploadData, getUrl, remove } from 'aws-amplify/storage';
 
 const client = generateClient();
 const $ = (id) => document.getElementById(id);
@@ -21,9 +21,10 @@ function state(p, now = new Date().toISOString()) {
 }
 
 export async function showPromotions() {
-  if (!wired) { wired = true; $('prNew').onclick = () => edit(null); $('prFind').addEventListener('input', draw); $('vNew').onclick = () => vEdit(null); }
+  if (!wired) { wired = true; $('prNew').onclick = () => edit(null); $('prFind').addEventListener('input', draw); $('vNew').onclick = () => vEdit(null); $('pgAdd').onclick = pgAdd; $('pgSave').onclick = pgSave; }
   await load();
   await vLoad();
+  await pgLoad();
 }
 
 /* ---------- Private codes & gift cards (Voucher: studio only, never public) ---------- */
@@ -258,4 +259,113 @@ function edit(p, reuse = false) {
     } catch (ex) { $('pfMsg').textContent = ex.message; $('pfSave').disabled = false; }
   };
   $('prEdit').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- Special programmes: the master list (SiteSetting.programmes) and customers' requests ---------- */
+// Same starting list as the function (PROG_DEF), used until you save your own.
+const PG_DEF = [
+  ['senior', true, 'Senior citizens (60+)', 'Every order, always.', 'PCT', 25, 0, 'ONGOING', 0, 0, 'Your year of birth. Show your Emirates ID or passport on WhatsApp or at delivery; no need to upload it.', false],
+  ['little', true, 'Little Artists (children under 10)', 'For orders for a child under 10.', 'PCT', 25, 0, 'ONGOING', 12, 0, "The child's first name and age (a parent's word is enough).", false],
+  ['student', true, 'Top students', 'A free artwork for an outstanding academic result.', 'FOC', 0, 500, 'ONCE', 0, 90, 'A photo of the report card or certificate (deleted once we decide).', true],
+  ['smoke', true, 'Quit smoking', 'Three months smoke-free? Celebrate with art.', 'PCT', 20, 0, 'ONCE', 0, 90, 'Your own word. No medical papers needed.', false],
+  ['drink', true, 'Alcohol-free', 'Three months alcohol-free.', 'PCT', 20, 0, 'ONCE', 0, 90, 'Your own word. No medical papers needed.', false],
+  ['weight', true, 'Weight-loss goal reached', 'For example 5 kg in a month.', 'PCT', 15, 0, 'ONCE', 0, 90, 'Your own word. No weigh-in photos needed.', false],
+  ['pod', false, 'People of Determination', 'Every order.', 'PCT', 25, 0, 'ONGOING', 0, 0, 'Your Sanad card or People of Determination card number.', false],
+  ['health', false, 'Healthcare workers', 'Doctors, nurses and care staff.', 'PCT', 10, 0, 'ONGOING', 12, 0, 'Your workplace and job title.', false],
+  ['teacher', false, 'Teachers', 'School and nursery teachers.', 'PCT', 10, 0, 'ONGOING', 12, 0, 'Your school and subject.', false],
+  ['blood', false, 'Blood donors', 'Thank you for donating.', 'PCT', 15, 0, 'ONCE', 0, 90, 'The date and place you donated.', false],
+  ['volunteer', false, 'Volunteers', 'Volunteering for a charity or community group.', 'PCT', 10, 0, 'ONCE', 0, 90, 'The organisation you volunteer with.', false],
+  ['newhome', false, 'Newlyweds and new homes', 'A gift for a new chapter.', 'PCT', 15, 0, 'ONCE', 0, 60, 'The month of your wedding or move.', false],
+  ['birthday', false, 'Birthday month', 'A treat in your birthday month.', 'PCT', 10, 0, 'ONCE', 0, 30, 'Your birthday (day and month).', false],
+].map(([id, on, name, about, type, value, cap, kind, months, days, proof, upload]) => ({ id, on, name, about, type, value, cap, kind, months, days, area: 'ALL', proof, upload }));
+let progs = [];
+let pgSite = null;
+let pgCust = [];
+const pgOffer = (p) => (p.type === 'FOC' ? `Free up to ⃃ ${p.cap}` : p.type === 'AED' ? `⃃ ${p.value} off` : `${p.value}% off`);
+async function pgLoad(reqOnly = false) {
+  if (!reqOnly) $('pgList').innerHTML = '<p class="muted">Loading…</p>';
+  try {
+    const [s, cs] = await Promise.all([client.models.SiteSetting.get({ id: 'site' }), (async () => { const out = []; let nextToken = null; do { const r = await client.models.Customer.list({ limit: 500, nextToken }); out.push(...(r.data || [])); nextToken = r.nextToken; } while (nextToken); return out; })()]);
+    pgSite = s.data || null;
+    if (!reqOnly) { try { progs = JSON.parse(pgSite?.programmes || '[]'); } catch { progs = []; } if (!progs.length) progs = PG_DEF.map((p) => ({ ...p })); }
+    pgCust = cs;
+    if (!reqOnly) pgDraw();
+    pgReqDraw();
+  } catch (ex) { $('pgList').innerHTML = `<p class="err">Could not load programmes: ${esc(ex.message)}</p>`; }
+}
+function pgDraw() {
+  const opt = (v, list) => list.map(([k, n]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${n}</option>`).join('');
+  $('pgList').innerHTML = `<table><thead><tr><th>On</th><th>Programme · shown to customers</th><th>Discount</th><th>Type</th><th>Lasts</th><th>Use on</th><th>Proof asked</th><th></th></tr></thead><tbody>
+  ${progs.map((p, i) => `<tr data-i="${i}">
+    <td><input type="checkbox" data-f="on" ${p.on ? 'checked' : ''} aria-label="On"></td>
+    <td style="min-width:220px"><input data-f="name" value="${esc(p.name)}" maxlength="60" aria-label="Name"><input data-f="about" value="${esc(p.about)}" maxlength="120" placeholder="One line for customers" aria-label="About" style="margin-top:4px;font-size:12px"></td>
+    <td style="white-space:nowrap"><select data-f="type" aria-label="Discount type">${opt(p.type, [['PCT', '%'], ['AED', '⃃'], ['FOC', 'FOC']])}</select> <input data-f="value" type="number" min="0" step="1" value="${esc(p.value)}" style="width:70px" aria-label="Value" ${p.type === 'FOC' ? 'hidden' : ''}><input data-f="cap" type="number" min="0" step="10" value="${esc(p.cap)}" style="width:80px" title="FOC: up to this many dirhams" aria-label="FOC cap" ${p.type === 'FOC' ? '' : 'hidden'}></td>
+    <td><select data-f="kind" aria-label="Ongoing or one-time">${opt(p.kind, [['ONGOING', 'Ongoing'], ['ONCE', 'One-time']])}</select></td>
+    <td style="white-space:nowrap">${p.kind === 'ONGOING' ? `<input data-f="months" type="number" min="0" step="1" value="${esc(p.months)}" style="width:60px" aria-label="Months"> months <span class="muted" style="font-size:11px">(0 = always)</span>` : `code valid <input data-f="days" type="number" min="1" step="1" value="${esc(p.days || 90)}" style="width:60px" aria-label="Days"> days`}</td>
+    <td><select data-f="area" aria-label="Use on">${opt(p.area || 'ALL', Object.entries(AREA))}</select></td>
+    <td style="min-width:200px"><input data-f="proof" value="${esc(p.proof)}" maxlength="160" aria-label="Proof"><label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" data-f="upload" ${p.upload ? 'checked' : ''}> customer may upload a file</label></td>
+    <td><button type="button" class="btn small ghost" data-del title="Remove">✕</button></td></tr>`).join('')}</tbody></table>`;
+  $('pgList').querySelectorAll('tr[data-i]').forEach((tr) => {
+    const p = progs[Number(tr.dataset.i)];
+    tr.querySelectorAll('[data-f]').forEach((el) => {
+      el.onchange = () => {
+        const f = el.dataset.f;
+        p[f] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value || 0) : el.value;
+        if (f === 'type' && p.type === 'FOC') { p.kind = 'ONCE'; p.cap ||= 500; }
+        if (f === 'kind' && p.kind === 'ONGOING' && p.type === 'FOC') { p.kind = 'ONCE'; $('pgMsg').textContent = 'FOC (free) is one-time only.'; }
+        if (['type', 'kind'].includes(f)) pgDraw();
+        $('pgMsg').textContent = 'Not saved yet.';
+      };
+    });
+    tr.querySelector('[data-del]').onclick = () => { if (confirm(`Remove "${p.name}"? Approved customers keep what they have.`)) { progs.splice(Number(tr.dataset.i), 1); pgDraw(); $('pgMsg').textContent = 'Not saved yet.'; } };
+  });
+}
+function pgAdd() { progs.push({ id: `p${Date.now().toString(36)}`, on: false, name: 'New programme', about: '', type: 'PCT', value: 10, cap: 0, kind: 'ONCE', months: 0, days: 90, area: 'ALL', proof: 'Tell us briefly.', upload: false }); pgDraw(); }
+async function pgSave() {
+  const bad = progs.find((p) => !String(p.name).trim() || (p.type === 'FOC' ? !(p.cap > 0) : !(p.value > 0)) || (p.type === 'PCT' && p.value > 100));
+  if (bad) { $('pgMsg').textContent = `Check "${bad.name || 'a programme'}": it needs a name and a discount (1–100%, or a FOC cap).`; return; }
+  $('pgMsg').textContent = 'Saving…';
+  try {
+    const rec = { id: 'site', programmes: JSON.stringify(progs.map((p) => ({ ...p, name: String(p.name).trim() }))) };
+    const r = pgSite ? await client.models.SiteSetting.update(rec) : await client.models.SiteSetting.create(rec);
+    if (r.errors?.length) throw new Error(r.errors[0].message);
+    pgSite = r.data; $('pgMsg').textContent = `Saved: ${progs.filter((p) => p.on).length} programmes open to customers.`;
+  } catch (ex) { $('pgMsg').textContent = ex.message; }
+}
+function pgReqDraw() {
+  const reqs = [];
+  for (const c of pgCust) { let apps = []; try { apps = JSON.parse(c.programmes || '[]'); } catch { apps = []; } apps.forEach((a) => reqs.push({ c, a })); }
+  const open = reqs.filter((x) => x.a.status === 'PENDING').sort((x, y) => String(x.a.at).localeCompare(String(y.a.at)));
+  const live = reqs.filter((x) => x.a.status === 'APPROVED' && !x.a.voucher);
+  const done = reqs.filter((x) => x.a.status !== 'PENDING').sort((x, y) => String(y.a.decidedAt).localeCompare(String(x.a.decidedAt))).slice(0, 15);
+  const card = ({ c, a }) => {
+    const p = progs.find((x) => x.id === a.pid);
+    const until = a.until ? a.until.slice(0, 10) : p?.kind === 'ONGOING' && p.months ? new Date(Date.now() + p.months * 30.44 * 864e5).toISOString().slice(0, 10) : '';
+    return `<div class="mk-card" data-code="${esc(c.code)}" data-app="${esc(a.id)}" style="gap:6px"><div><b>${esc(a.name)}</b> · ${esc(a.offer || '')} · <b>${esc(c.name || c.code)}</b> <span class="mono">${esc(c.code)}</span> · ${esc(a.email || c.email || '')} · asked ${esc(day(a.at))}</div>
+      ${a.who ? `<div style="font-size:13px">For: <b>${esc(a.who)}</b></div>` : ''}${a.said ? `<div style="font-size:13px">They say: ${esc(a.said)}</div>` : ''}
+      ${a.proofKey ? `<div style="font-size:13px"><button type="button" class="btn small ghost" data-proof="${esc(a.proofKey)}">View proof file</button> <span class="muted">deleted when you decide</span></div>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end">${p?.kind === 'ONGOING' ? `<label class="field" style="margin:0"><span style="font-size:12px;font-weight:700">Ends on (blank = always)</span><input type="date" data-until value="${esc(until)}"></label>` : ''}
+        <label class="field" style="margin:0;flex:1;min-width:200px"><span style="font-size:12px;font-weight:700">Note to the customer (optional)</span><input data-note maxlength="200"></label>
+        <button type="button" class="btn small" data-dec="APPROVE">Approve</button><button type="button" class="btn small ghost" data-dec="DECLINE">Decline</button><span class="muted" data-msg style="font-size:12px"></span></div></div>`;
+  };
+  const st = { APPROVED: 'approved', DECLINED: 'declined', ENDED: 'ended' };
+  $('pgReq').innerHTML = `<h3 style="margin:0">Requests to decide (${open.length})</h3>${open.length ? open.map(card).join('') : '<p class="muted" style="margin:0">No requests waiting.</p>'}
+    ${live.length ? `<details><summary class="muted">Customers on an ongoing programme (${live.length})</summary>${live.map(({ c, a }) => `<div style="font-size:13px;display:flex;gap:8px;align-items:center;margin-top:4px" data-code="${esc(c.code)}" data-app="${esc(a.id)}">${esc(a.name)} · <b>${esc(c.name || c.code)}</b> ${esc(c.code)} · ${a.until ? `until ${esc(day(a.until))}` : 'always'} <button type="button" class="btn small ghost" data-dec="END">End now</button><span class="muted" data-msg></span></div>`).join('')}</details>` : ''}
+    ${done.length ? `<details><summary class="muted">Recently decided</summary>${done.map(({ c, a }) => `<div class="muted" style="font-size:12px">${esc(day(a.decidedAt))} · ${esc(a.name)} · ${esc(c.name || c.code)} · ${st[a.status] || a.status}${a.voucher ? ` · code <span class="mono">${esc(a.voucher)}</span>` : ''}${a.note ? ` · ${esc(a.note)}` : ''}</div>`).join('')}</details>` : ''}`;
+  $('pgReq').querySelectorAll('[data-proof]').forEach((b) => { b.onclick = async () => { try { const u = await getUrl({ path: b.dataset.proof, options: { expiresIn: 300 } }); window.open(u.url.toString(), '_blank', 'noopener'); } catch (ex) { b.textContent = ex.message; } }; });
+  $('pgReq').querySelectorAll('[data-dec]').forEach((b) => {
+    b.onclick = async () => {
+      const box = b.closest('[data-app]'), m = box.querySelector('[data-msg]');
+      if (b.dataset.dec === 'END' && !confirm('End this programme discount for the customer now?')) return;
+      m.textContent = 'Saving…'; box.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+      try {
+        const r = await client.mutations.marketAdmin({ action: 'decideProgramme', data: JSON.stringify({ code: box.dataset.code, appId: box.dataset.app, decision: b.dataset.dec, note: box.querySelector('[data-note]')?.value.trim() || '', until: box.querySelector('[data-until]')?.value || '' }) });
+        if (r.errors?.length) throw new Error(r.errors[0].message);
+        let o = r.data; try { if (typeof o === 'string') o = JSON.parse(o); } catch { o = {}; }
+        if (o.proofKey) await remove({ path: o.proofKey }).catch(() => {});
+        $('pgMsg').textContent = `${o.status === 'APPROVED' ? 'Approved' : o.status === 'ENDED' ? 'Ended' : 'Declined'}${o.voucher ? `: code ${o.voucher}` : ''}${o.emailed ? ', customer emailed' : ''}.`;
+        await pgLoad(true);
+      } catch (ex) { m.textContent = ex.message; box.querySelectorAll('button').forEach((x) => { x.disabled = false; }); }
+    };
+  });
 }

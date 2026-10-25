@@ -1799,7 +1799,9 @@ async function wireDiscount(e) {
   if (!e.discountType && !priceLocked(e) && e.customerCode && BEFORE_PAYMENT.includes(e.status || 'RECEIVED')) {
     try {
       const c = (await client.models.Customer.get({ code: e.customerCode }))?.data;
-      if (c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value) {
+      const AREA_KINDS = { ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
+      const fits = !c?.discountArea || c.discountArea === 'ALL' || (AREA_KINDS[c.discountArea] || []).includes(e.kind);
+      if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value) {
         $('eDiscT').value = c.discountType; $('eDiscV').value = c.discountValue; $('eDiscNote').value = c.discountNote || 'Customer\'s standard discount';
         show(); renderCost?.();
         $('eDiscOut').insertAdjacentHTML('beforeend', ' <span style="color:var(--gold)">(this customer\'s standard discount: saved with the order when you save)</span>');

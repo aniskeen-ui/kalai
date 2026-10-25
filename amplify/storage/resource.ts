@@ -29,7 +29,7 @@ export const storage = defineStorage({
       allow.entity('identity').to(['read', 'write', 'delete']),
       // ADMINS read everything; write too, because a signed-in admin uses the group's role (not the customer's)
       // when testing the site as a customer (enquiry photos, damage photos).
-      allow.groups(['ADMINS']).to(['read', 'write']),
+      allow.groups(['ADMINS']).to(['read', 'write', 'delete']), // delete: programme proof files, removed once decided
     ],
   }),
 });

@@ -474,6 +474,7 @@ const schema = a.schema({
       inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
       siteLangs: a.string(), // website languages offered (codes, comma-separated; blank = the default set)
       loyalty: a.string(), // Kalai Circle settings (JSON): rates, levels, referral, expiry
+      programmes: a.string(), // Special programmes master (JSON): seniors, Little Artists, students … (Promotions → Programmes)
       siteLangDefault: a.string(), // language a new visitor sees first (blank = English)
       gbpPerAed: a.float(), // pounds per dirham (£ prices), refreshed with the rupee rate
       eurPerAed: a.float(), // euros per dirham (€ prices)
@@ -722,6 +723,8 @@ const schema = a.schema({
       loyaltyExpireAt: a.string(),
       loyaltyLog: a.string(), // JSON [{at, pts, why, ref}]
       referralCode: a.string(),
+      programmes: a.string(), // special programme requests (JSON [{id, pid, name, status, at, who, said, proofKey, voucher, until}])
+      discountArea: a.string(), // where the standard discount applies (ALL | ART | CRAFTS | GIFT)
       editedAt: a.string(),
     })
     .identifier(['code'])
