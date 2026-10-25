@@ -2444,6 +2444,18 @@ async function marketAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  // Studio saved a note for the artist on an order: email it to them too.
+  if (action === 'artistNoteMail') {
+    const e = await enquiryRow(txt(d.id, 80));
+    if (!e) throw new Error('Order not found');
+    const c = (await costingFor([str(e, 'id')])).get(str(e, 'id'));
+    const note = str(c, 'studioNote');
+    if (!note) return { sent: false };
+    const p = await artistContactOf(e);
+    if (!p?.email) return { sent: false, reason: 'no artist email' };
+    await mailArtist(e, `Note from Kalai Art House: ${str(e, 'title')} (${str(e, 'ref')})`, [`About order <b>${h(str(e, 'ref'))}</b> (<b>${h(str(e, 'title'))}</b>):`, `<b>${h(note)}</b>`, paperLine(e) ? `Paper size: ${h(paperLine(e))}` : '']);
+    return { sent: true, to: String(p.email) };
+  }
   // Studio: send the customer the email for the order's current status again (e.g. the email address was added later).
   if (action === 'resendMail') {
     const e = await enquiryRow(txt(d.id, 80));
@@ -4210,6 +4222,63 @@ function mailsFor(rec: StreamRecord): Mail[] {
   return out;
 }
 
+// ---------- Emails to the artist doing the order (Siva or a portal artist) ----------
+let sivaCache: { at: number; p: Dict | null } | null = null;
+async function artistContactOf(e: Img): Promise<Dict | null> {
+  const { S } = mtables();
+  if (str(e, 'artistId')) return plain(await getRow(S, { id: { S: str(e, 'artistId') } }));
+  if (sivaCache && Date.now() - sivaCache.at < 300_000) return sivaCache.p;
+  const all = (await scanAll(S)).map(plain).filter((x): x is Dict => !!x);
+  const p = all.find((x) => x.type === 'ARTIST' && /s+h?iva/i.test(String(x.business ?? '') + ' ' + String(x.contactName ?? '')) && x.status === 'APPROVED' && x.email) ?? null;
+  sivaCache = { at: Date.now(), p };
+  return p;
+}
+function paperLine(e: Img) {
+  const d = parseDetails(str(e, 'details'));
+  const raw = String(d['Size'] ?? '') || (String(d['Artwork'] ?? '').match(/\d{2,3}(?:\.\d)?\s*[x×]\s*\d{2,3}(?:\.\d)?\s*cm/i) || [''])[0];
+  return raw.replace(/\s*\(.*$/, '').trim();
+}
+async function mailArtist(e: Img, subject: string, lines: string[]) {
+  const p = await artistContactOf(e);
+  if (!p?.email || !(await emailsOn())) return;
+  const portal = !!str(e, 'artistId');
+  await sendMail({ to: String(p.email), subject, lines: [`Hello ${h(String(p.contactName || p.business || ''))},`, ...lines.filter(Boolean),
+    `Anything unclear? Please ask before you start: WhatsApp Kalai Art House on <a href="https://wa.me/971552996626">+971 55 299 6626</a>.`],
+    button: { label: portal ? 'Open my commissions' : 'Open my artist desk', url: portal ? `${SITE}/seller.html#commissions` : `${SITE}/artist.html` } })
+    .catch((err) => console.warn('Artist email failed', err));
+}
+async function artistOrderMail(e: Img) {
+  const c = (await costingFor([str(e, 'id')])).get(str(e, 'id'));
+  const d = parseDetails(str(e, 'details'));
+  const paper = paperLine(e), medium = (String(d['Artwork'] ?? '').match(/\(([^,]+),/) || [])[1] || String(d['Style'] ?? '');
+  const ready = str(c, 'artistReadyBy'), note = str(c, 'studioNote');
+  await mailArtist(e, `Order placed: ${str(e, 'title')} (${str(e, 'ref')}): please start`, [
+    `The customer has paid, and Kalai Art House has placed order <b>${h(str(e, 'ref'))}</b> with you: <b>${h(str(e, 'title'))}</b> (${str(e, 'kind') === 'COMMISSION' ? 'commission' : 'collection work'}). Your price is fixed.`,
+    `<b>Paper size:</b> ${paper ? h(paper) : 'not stated, so please ask us before you start'}${medium ? ` · <b>Medium:</b> ${h(medium)}` : ''}${ready ? ` · <b>Ready by:</b> ${h(ready)}` : ''}`,
+    note ? `<b>Note from Kalai Art House:</b> ${h(note)}` : '',
+    str(e, 'kind') === 'COMMISSION' ? "Work from the customer's brief and reference photo on your page." : 'Make it as shown in the picture on your page: same subject, composition and colours.',
+    'Use acid-free art paper, leave about 2 cm clear margin on every side for the mount, and sign at the bottom right inside the picture.',
+    'Tap <b>Started</b> on your page when you begin and <b>Finished</b> when it is done (send us a photo). Pack it flat between stiff boards, send it to the frame shop shown on your page, and enter the courier and AWB.',
+  ]);
+}
+/** Order placed with the artist, put on hold, cancelled or resumed: tell the artist by email (page shows it too). */
+async function artistNotify(rec: StreamRecord) {
+  const img = rec.dynamodb?.NewImage, old = rec.dynamodb?.OldImage;
+  if (rec.eventName !== 'MODIFY' || !img || !old || !['PRICE', 'COMMISSION'].includes(str(img, 'kind'))) return;
+  const ref = str(img, 'ref'), title = str(img, 'title');
+  if (str(img, 'zohoPOId') && !str(old, 'zohoPOId') && str(img, 'refundAction') !== 'DAMAGED_REPLACE') await artistOrderMail(img);
+  if (!str(img, 'zohoPOId')) return;
+  const cs = str(img, 'cancelState'), ocs = str(old, 'cancelState'), cancel = str(img, 'cancelRequest') === 'CANCEL';
+  if (cs !== ocs && cs === 'REQUESTED' && cancel) await mailArtist(img, `On hold: ${title} (${ref})`, [`The customer has asked to cancel order <b>${h(ref)}</b> (<b>${h(title)}</b>). <b>Please pause the work</b> until Kalai Art House confirms.`]);
+  if (cs !== ocs && cs === 'DECLINED' && cancel) await mailArtist(img, `Please continue: ${title} (${ref})`, [`The hold on order <b>${h(ref)}</b> (<b>${h(title)}</b>) is lifted: the order goes ahead. Please continue the work.`]);
+  const st = str(img, 'status'), ost = str(old, 'status');
+  if (st !== ost && ['REFUNDED', 'CANCELLED'].includes(st) && str(img, 'refundAction').startsWith('CANCEL')) {
+    const started = !!str(img, 'artistStartedAt');
+    await mailArtist(img, `Order cancelled: ${title} (${ref}): please stop`, [`The customer cancelled order <b>${h(ref)}</b> (<b>${h(title)}</b>). <b>Please stop work.</b>`,
+      started ? 'You had already started, so you are paid <b>50% of your price</b>: please send your invoice for that amount.' : 'You had not started yet, so there is nothing to invoice.']);
+  }
+}
+
 let mailOffCache: { at: number; list: string[] } | null = null;
 async function mailOff(): Promise<string[]> {
   if (mailOffCache && Date.now() - mailOffCache.at < 60_000) return mailOffCache.list;
@@ -4285,6 +4354,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     try {
       await onStreamRecord(rec);
       await notify(rec);
+      await artistNotify(rec).catch((err) => console.warn('Artist email step failed', err));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`Zoho sync failed for ${str(img, 'ref')}:`, err);
