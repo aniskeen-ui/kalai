@@ -5,13 +5,10 @@
 import { generateClient } from 'aws-amplify/data';
 
 const client = generateClient();
-// English, then the UAE's main communities (Arab world, South Asia, Philippines, Iran…), then Europe and East Asia.
-export const LANGS = [['en', 'English'], ['ar', 'العربية'],
-  ['hi', 'हिन्दी'], ['ur', 'اردو'], ['ta', 'தமிழ்'], ['ml', 'മലയാളം'], ['te', 'తెలుగు'], ['kn', 'ಕನ್ನಡ'], ['mr', 'मराठी'], ['gu', 'ગુજરાતી'], ['pa', 'ਪੰਜਾਬੀ'], ['bn', 'বাংলা'], ['ne', 'नेपाली'], ['si', 'සිංහල'],
-  ['tl', 'Filipino'], ['fa', 'فارسی'], ['ps', 'پښتو'], ['tr', 'Türkçe'], ['id', 'Bahasa Indonesia'], ['ms', 'Bahasa Melayu'], ['sw', 'Kiswahili'],
-  ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português'], ['ru', 'Русский'], ['uk', 'Українська'], ['pl', 'Polski'], ['nl', 'Nederlands'],
-  ['zh', '中文 (简体)'], ['zh-TW', '中文 (繁體)'], ['ja', '日本語'], ['ko', '한국어']];
-const RTL = ['ar', 'ur', 'fa', 'ps'];
+import { ALL_LANGS, DEFAULT_LANGS, RTL_LANGS as RTL } from './langs.js';
+// The languages offered: chosen in Order Management → Settings (window.kalaiSiteLangs), English always first.
+const offered = () => { const pick = String(window.kalaiSiteLangs || '').split(',').map((x) => x.trim()).filter(Boolean); const want = new Set(['en', ...(pick.length ? pick : DEFAULT_LANGS)]); return ALL_LANGS.filter(([k]) => want.has(k)); };
+export const LANGS = ALL_LANGS;
 const orig = new WeakMap(); // text node / element+attr → English
 let lang = 'en';
 try { lang = localStorage.getItem('kalaiLang') || 'en'; } catch { /* */ }
@@ -109,14 +106,19 @@ function paint() {
   if (b) b.textContent = `${(LANGS.find(([k]) => k === lang) || LANGS[0])[1]} ▾`;
 }
 function picker() {
-  const host = document.querySelector('.cur-pick');
-  if (!host || document.getElementById('langBtn')) return;
-  host.insertAdjacentHTML('beforebegin', `<div class="cur-pick lang-pick" data-notranslate><button type="button" class="cur-sel" id="langBtn" aria-haspopup="true" aria-expanded="false" aria-label="Language"></button><div class="cur-menu" id="langMenu" hidden>${LANGS.map(([k, n]) => `<button type="button" data-lang="${k}">${n}</button>`).join('')}</div></div>`);
+  const host = document.querySelector('.cur-pick:not(.lang-pick)');
+  if (!host) return;
+  document.querySelector('.lang-pick')?.remove();
+  const list = offered();
+  if (list.length <= 1) { if (lang !== 'en') setLang('en'); return; } // only English: no picker
+  host.insertAdjacentHTML('beforebegin', `<div class="cur-pick lang-pick" data-notranslate><button type="button" class="cur-sel" id="langBtn" aria-haspopup="true" aria-expanded="false" aria-label="Language"></button><div class="cur-menu" id="langMenu" hidden>${list.map(([k, n]) => `<button type="button" data-lang="${k}">${n}</button>`).join('')}</div></div>`);
   const btn = document.getElementById('langBtn'), menu = document.getElementById('langMenu');
   btn.onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; btn.setAttribute('aria-expanded', String(!menu.hidden)); };
-  document.addEventListener('click', () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); });
+  document.addEventListener('click', () => { const m = document.getElementById('langMenu'), b2 = document.getElementById('langBtn'); if (m) m.hidden = true; b2?.setAttribute('aria-expanded', 'false'); });
   menu.querySelectorAll('[data-lang]').forEach((x) => { x.onclick = () => { menu.hidden = true; setLang(x.dataset.lang); }; });
   paint();
 }
 picker();
 if (lang !== 'en') setLang(lang);
+/** Settings loaded (or changed): rebuild the picker with the studio's languages; a language no longer offered → English. */
+window.kalaiLangPicker = () => { if (!offered().some(([k]) => k === lang)) setLang('en'); picker(); };

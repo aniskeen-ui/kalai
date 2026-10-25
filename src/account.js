@@ -27,6 +27,7 @@ let kuralSec = 10;
     const st = r.data;
     if (!st) return;
     if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
+    window.kalaiSiteLangs = st.siteLangs || ''; window.kalaiLangPicker?.(); // website languages chosen in Settings
     if (st.inrPerAed) window.kalaiInrPerAed = Number(st.inrPerAed);
     if (st.gbpPerAed) window.kalaiGbpPerAed = Number(st.gbpPerAed);
     if (st.eurPerAed) window.kalaiEurPerAed = Number(st.eurPerAed);

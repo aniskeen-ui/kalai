@@ -3763,7 +3763,7 @@ async function dailyKural(force: boolean) {
 }
 
 // ---------- Website in other languages ----------
-const SITE_LANGS = ['ar', 'hi', 'ur', 'ta', 'ml', 'te', 'kn', 'mr', 'gu', 'pa', 'bn', 'ne', 'si', 'tl', 'fa', 'ps', 'tr', 'id', 'ms', 'sw', 'fr', 'de', 'es', 'it', 'pt', 'ru', 'uk', 'pl', 'nl', 'zh', 'zh-TW', 'ja', 'ko'];
+const SITE_LANGS = ['ar', 'af', 'sq', 'am', 'hy', 'az', 'bn', 'bs', 'bg', 'ca', 'zh', 'zh-TW', 'hr', 'cs', 'da', 'fa-AF', 'nl', 'et', 'fa', 'tl', 'fi', 'fr', 'fr-CA', 'ka', 'de', 'el', 'gu', 'ht', 'ha', 'he', 'hi', 'hu', 'is', 'id', 'ga', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml', 'mt', 'mr', 'mn', 'no', 'ps', 'pl', 'pt', 'pt-PT', 'pa', 'ro', 'ru', 'sr', 'si', 'sk', 'sl', 'so', 'es', 'es-MX', 'sw', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'uz', 'vi', 'cy']; // every Amazon Translate language
 const trMemo = new Map<string, string>();
 async function siteTranslate(a: { lang?: string; texts?: string }) {
   const lang = String(a.lang ?? '');

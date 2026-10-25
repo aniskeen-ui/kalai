@@ -441,6 +441,7 @@ const schema = a.schema({
       heroText: a.string(),
       siteLook: a.string(), // classic | green
       inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
+      siteLangs: a.string(), // website languages offered (codes, comma-separated; blank = the default set)
       gbpPerAed: a.float(), // pounds per dirham (£ prices), refreshed with the rupee rate
       eurPerAed: a.float(), // euros per dirham (€ prices)
       kuralHour: a.integer(), // Dubai hour (0–23) the Thirukkural of the day is published (default 6)

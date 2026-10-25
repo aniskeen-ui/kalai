@@ -1,6 +1,7 @@
 // Settings tab: website master (one SiteSetting row, id "site"). The home page reads it on every visit.
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl, remove } from 'aws-amplify/storage';
+import { ALL_LANGS, DEFAULT_LANGS } from './langs.js';
 
 const ROOM_KEY = 'catalogue/site/room.jpg'; // the room photo for "On a wall" (public read)
 
@@ -56,6 +57,10 @@ export async function showSettings() {
       <h3 style="margin:0;font-size:17px">Order screen layout (Order Management)</h3>
       <div class="field" style="max-width:640px"><label for="st-layout">How an order opens in Orders</label><select id="st-layout" style="max-width:340px"><option value="original">Original (list left, details right)</option><option value="a">A · Tabs (full width, action strip on top)</option><option value="b">B · Dashboard (three columns, sticky action panel)</option><option value="c">C · Journey (timeline, action panel on the right)</option></select>
         <span class="muted" style="font-size:12px">Choosing one switches this browser straight away so you can try it on a few orders; Save settings makes it the layout for everyone.</span></div>
+      <h3 style="margin:0;font-size:17px">Website languages</h3>
+      <div class="field"><span class="muted" style="font-size:12px">The language button in the website header offers the languages ticked here. <b>English is the default</b>: every visitor starts in English and can switch. Each sentence is translated once (Amazon Translate) and saved; a language costs nothing until a visitor picks it.</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><button type="button" class="btn small ghost" data-langset="all">All ${ALL_LANGS.length}</button><button type="button" class="btn small ghost" data-langset="default">Recommended (${DEFAULT_LANGS.length})</button><button type="button" class="btn small ghost" data-langset="none">English only</button><span class="muted" id="st-langCount" style="font-size:12px"></span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">${ALL_LANGS.map(([k, n]) => `<label style="display:flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-lang="${k}" ${k === 'en' ? 'checked disabled' : ''} style="width:auto">${n}</label>`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Website theme</h3>
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=green" target="_blank" rel="noopener">preview 2. Monda theme</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview 1. Original theme</a> · <a href="/?look=auto" target="_blank" rel="noopener">end preview</a>. A preview changes only your own browser.</div></div>
@@ -126,6 +131,13 @@ export async function showSettings() {
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? f.def ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
+    { // Website languages: saved list, else the recommended set.
+      const on = new Set(String(row?.siteLangs || '').split(',').map((x) => x.trim()).filter(Boolean).length ? String(row.siteLangs).split(',').map((x) => x.trim()) : DEFAULT_LANGS);
+      const boxes = [...document.querySelectorAll('[data-lang]')];
+      const count = () => { $('st-langCount').textContent = `${boxes.filter((b) => b.checked).length} shown`; };
+      boxes.forEach((b) => { if (b.dataset.lang !== 'en') b.checked = on.has(b.dataset.lang); b.onchange = count; });
+      document.querySelectorAll('[data-langset]').forEach((x) => { x.onclick = () => { const v = x.dataset.langset; boxes.forEach((b) => { if (b.dataset.lang !== 'en') b.checked = v === 'all' || (v === 'default' && DEFAULT_LANGS.includes(b.dataset.lang)); }); count(); }; });
+      count(); }
     { let cur = row?.orderLayout || 'original'; try { cur = localStorage.getItem('kalaiOrderLayout') || cur; } catch { /* */ } $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value); }
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
@@ -162,6 +174,7 @@ async function save() {
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
+  rec.siteLangs = ['en', ...[...document.querySelectorAll('[data-lang]')].filter((b) => b.checked && b.dataset.lang !== 'en').map((b) => b.dataset.lang)].join(',');
   rec.orderLayout = $('st-layout').value;
   window.kalaiSetLayout?.(rec.orderLayout);
   const inr = Number($('st-inr').value);
