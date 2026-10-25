@@ -104,7 +104,7 @@ function row(p) {
         <label class="btn small ${p.printKey ? 'ghost' : ''}" style="cursor:pointer" title="High-quality scan or photo of the work (JPG, PNG or TIFF, up to 200 MB): used for framed prints and sent to licence buyers">${p.printKey ? `✓ Full-size file uploaded${p.printW ? ` (${p.printW} × ${p.printH} px)` : ''} · change` : '⬆ Upload full-size file'}<input type="file" accept="image/*,.tif,.tiff" data-print-file hidden></label>
         <label style="display:inline-flex;gap:5px;align-items:center;font-weight:400;white-space:nowrap" title="Sell image licences (web, media, commercial) of this work from the print file: Licences tab on its page"><input data-f="licensable" type="checkbox" style="width:auto" ${p.licensable ? 'checked' : ''}> Sell licences</label>
         <span class="muted">${p.printable || p.licensable ? `Royalty to the artist: ${p.printRoyalty ?? 0}%` : ''}</span></div>` : ''}
-      <span class="cg-saved muted" aria-live="polite"></span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small ghost" data-clean title="Removes thin dark scan lines or borders along the edges of the picture shown on the website (the original stays in storage)">Clean picture edges</button><span class="cg-saved muted" aria-live="polite"></span></div>
     </div>
   </article>`;
 }
@@ -160,6 +160,24 @@ function wireRows(list) {
         setTimeout(() => { msg.textContent = ''; }, 1500);
       };
     });
+    const cb = el.querySelector('[data-clean]');
+    if (cb) cb.onclick = async () => {
+      const msg = el.querySelector('.cg-saved');
+      if (!p.imageKey) { msg.textContent = 'No picture.'; return; }
+      cb.disabled = true; msg.textContent = 'Checking the edges…';
+      try {
+        const out = await cleanEdges(p.imageKey);
+        if (!out) { msg.textContent = 'No dark line found along the edges.'; return; }
+        if (!cb.dataset.sure) { cb.dataset.sure = '1'; cb.textContent = `Trim ${out.what}? Click again`; msg.textContent = ''; cb._blob = out.blob; return; }
+        msg.textContent = 'Saving the cleaned picture…';
+        const res = await uploadData({ path: `catalogue/clean/${p.id}-${Date.now()}.jpg`, data: cb._blob || out.blob, options: { contentType: 'image/jpeg' } }).result;
+        const r = await client.models.Product.update({ id: p.id, imageKey: res.path });
+        if (r.errors?.length) throw new Error(r.errors[0].message);
+        p.imageKey = res.path; delete cb.dataset.sure; cb.textContent = 'Clean picture edges';
+        const img = el.querySelector('img'); if (img) img.src = (await getUrl({ path: res.path })).url.toString();
+        msg.textContent = 'Done: the website shows the cleaned picture.';
+      } catch (ex) { msg.textContent = 'Not cleaned: ' + ex.message; } finally { cb.disabled = false; }
+    };
     const pf = el.querySelector('[data-print-file]');
     if (pf) pf.onchange = async () => {
       const file = pf.files?.[0]; if (!file) return;
@@ -391,4 +409,33 @@ async function importLinks() {
     btn.disabled = false;
     $('cgLinksErr').textContent = [...new Set(errs)].slice(0, 8).join('\n');
   }
+}
+
+
+/** Finds thin dark lines / borders along the picture's edges (scan artefacts) and returns the trimmed picture, or null. */
+async function cleanEdges(key) {
+  const url = (await getUrl({ path: key, options: { expiresIn: 600 } })).url.toString();
+  const blob = await (await fetch(url)).blob();
+  const bm = await createImageBitmap(blob);
+  const W = bm.width, H = bm.height, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(bm, 0, 0);
+  const px = cx.getImageData(0, 0, W, H).data;
+  const lum = (x, y) => { const i = (y * W + x) * 4; return 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; };
+  const col = (x) => { let s = 0, n = 0; for (let y = 0; y < H; y += 2) { s += lum(x, y); n++; } return s / n; };
+  const row = (y) => { let s = 0, n = 0; for (let x = 0; x < W; x += 2) { s += lum(x, y); n++; } return s / n; };
+  // From each edge inwards: skip lines clearly darker than the area just inside (max 4% of the side).
+  const scan = (len, f, from, dir) => {
+    const max = Math.max(2, Math.floor(len * 0.04));
+    const inner = [6, 8, 10, 12].map((k) => f(from + dir * (max + k))).reduce((a, b) => a + b, 0) / 4;
+    let cut = 0;
+    for (let k = 0; k < max; k++) if (f(from + dir * k) < inner - 35) cut = k + 1;
+    return cut ? cut + 1 : 0; // one more pixel for the soft edge of the line
+  };
+  const l = scan(W, col, 0, 1), r = scan(W, col, W - 1, -1), t = scan(H, row, 0, 1), b = scan(H, row, H - 1, -1);
+  bm.close?.();
+  if (!l && !r && !t && !b) return null;
+  const out = document.createElement('canvas'); out.width = W - l - r; out.height = H - t - b;
+  out.getContext('2d').drawImage(cv, l, t, out.width, out.height, 0, 0, out.width, out.height);
+  const what = [l && `${l}px left`, r && `${r}px right`, t && `${t}px top`, b && `${b}px bottom`].filter(Boolean).join(', ');
+  return { what, blob: await new Promise((ok) => out.toBlob(ok, 'image/jpeg', 0.92)) };
 }
