@@ -423,7 +423,7 @@ function actualOf(c, e) {
 /** The artist's royalty on a framed print of their painting (or an image licence): the % on the order, else Siva's
  *  default from Pricing. Print prices already include it (base × (1 + %)), so it is price × % / (100 + %). */
 function royaltyOf(e) {
-  const pct = Number(e.royaltyPct || 0) || (e.kind === 'PHOTO' && (!e.artistName || /siva/i.test(e.artistName)) && !e.artistId ? Number(rates.sivaRoyalty ?? 10) : 0);
+  const pct = Number(e.royaltyPct || 0) || (e.kind !== 'PHOTO' ? 0 : e.artistId ? Number(artists.find((a) => a.id === e.artistId)?.royaltyPct || 0) : (!e.artistName || /siva/i.test(e.artistName)) ? Number(rates.sivaRoyalty ?? 10) : 0);
   const base = Number(e.listPrice || e.quotedPrice || 0);
   return { pct, amount: pct ? Math.round(base * pct / (e.kind === 'LICENCE' ? 100 : 100 + pct) * 100) / 100 : 0 };
 }

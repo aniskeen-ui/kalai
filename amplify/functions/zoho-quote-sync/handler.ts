@@ -1625,7 +1625,7 @@ async function onStreamRecord(rec: StreamRecord) {
       const d0 = parseDetails(str(img, 'details')), no = String(d0['Artwork no.'] ?? '').trim();
       const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no) : undefined;
       if (pr && str(pr, 'kind') !== 'photo') {
-        const pct = num(pr, 'printRoyalty'); // set from the artist's royalty (Artists & sellers; Siva's in Rates)
+        const pct = await printRoyaltyOf(pr); // the work's %, else the artist's (Artists & sellers; Siva's in Pricing)
         await writeBack(id, { artistName: str(pr, 'artist') || 'Siva Raja', ...(str(pr, 'artistId') ? { artistId: str(pr, 'artistId'), artistCountry: str(pr, 'artistCountry') || 'UAE' } : {}), royaltyPct: pct ?? 0 }).catch(() => {});
       }
     }
@@ -2763,6 +2763,8 @@ async function marketAdmin(ev: ApiEvent) {
           for (const pr of (await scanAll(process.env.PRODUCT_TABLE)).filter((x) => str(x, 'artistId') === id)) {
             await ddb.send(new UpdateItemCommand({ TableName: process.env.PRODUCT_TABLE, Key: { id: { S: str(pr, 'id') } }, UpdateExpression: 'SET printRoyalty = :r', ExpressionAttributeValues: { ':r': { N: String(extra.royaltyPct) } } }));
           }
+          // Their print orders not yet delivered that were placed without a royalty: give them this one.
+          if (process.env.ENQUIRY_TABLE) for (const e of (await scanAll(process.env.ENQUIRY_TABLE)).filter((x) => str(x, 'kind') === 'PHOTO' && str(x, 'artistId') === id && !num(x, 'royaltyPct') && !['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(str(x, 'status')))) await writeBack(str(e, 'id'), { royaltyPct: Number(extra.royaltyPct) });
         }
       }
       if (wasApproved) return { profile: row }; // saving rates: no welcome email again
@@ -2891,6 +2893,14 @@ async function marketOrder(ev: ApiEvent) {
   if (promo) await bumpUses(promo.code, 1);
   console.log(`Crafts shop order ${ref}: ${l.title} × ${qty} = AED ${total}${promo ? ` (code ${promo.code} −${promo.amount})` : ''}`);
   return { ok: true, ref, total };
+}
+
+/** Print royalty % for a work: the work's own, else its portal artist's (Artists & sellers), else Siva's (Pricing). */
+async function printRoyaltyOf(pr: Img): Promise<number> {
+  const own = num(pr, 'printRoyalty');
+  if (own) return own;
+  if (str(pr, 'artistId')) { const { S } = mtables(); const a = plain(await getRow(S, { id: { S: str(pr, 'artistId') } })); return Number(a?.royaltyPct ?? 0) || 0; }
+  try { const row = plain(await getRow(process.env.RATES_TABLE!, { key: { S: 'default' } })); let rd: unknown = row?.data; for (let i = 0; i < 2 && typeof rd === 'string'; i++) rd = JSON.parse(rd); return Number((rd as { sivaRoyalty?: number } | undefined)?.sivaRoyalty ?? 10) || 0; } catch { return 10; }
 }
 
 // ---------- Website cart: checkout of several items, one payment ----------
