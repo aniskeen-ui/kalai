@@ -35,6 +35,7 @@ type ApiEvent = {
   arguments: { data?: string | null; code?: string | null; country?: string | null; pin?: string | null; text?: string; source?: string | null; mode?: string; links?: string; name?: string; emirate?: string; address?: string; landmark?: string | null; ref?: string; title?: string; details?: string | null; customerName?: string; phone?: string; email?: string | null; id?: string; priceInr?: number | null; readyBy?: string | null; note?: string | null; step?: string; courier?: string | null; awb?: string | null; action?: string; reason?: string | null; photos?: string | null };
   info?: { fieldName?: string };
   fieldName?: string;
+  request?: { headers?: Record<string, string> };
 };
 type LineItem = { line_item_id?: string; name?: string; description?: string; rate?: number; quantity?: number; tax_id?: string; discount?: number | string };
 type ZohoBody = {
@@ -1943,6 +1944,28 @@ function mtables() {
   if (!S || !L || !M) throw new Error('Marketplace is not configured');
   return { S, L, M };
 }
+/** The website signs in with the access token, which has no email in it: read the signed-in person's email from
+ *  Cognito with that same token (GetUser needs no other permission), so codes locked to an email, order emails and
+ *  programme requests see who it is. Cached per user for the life of the function. */
+const emailCache = new Map<string, string>();
+async function ensureEmail(ev: ApiEvent) {
+  const c = ev.identity?.claims;
+  if (!ev.identity || !c || c.email) return;
+  const sub = String(ev.identity.sub ?? c.sub ?? '');
+  if (sub && emailCache.has(sub)) { c.email = emailCache.get(sub); return; }
+  const raw = Object.entries(ev.request?.headers ?? {}).find(([k]) => k.toLowerCase() === 'authorization')?.[1] ?? '';
+  const token = String(raw).replace(/^Bearer\s+/i, '').trim();
+  if (!token || String(c.token_use ?? 'access') !== 'access') return;
+  try {
+    const region = String(c.iss ?? '').match(/cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/)?.[1] ?? process.env.AWS_REGION ?? 'us-east-1';
+    const r = await fetch(`https://cognito-idp.${region}.amazonaws.com/`, { method: 'POST', headers: { 'Content-Type': 'application/x-amz-json-1.1', 'X-Amz-Target': 'AWSCognitoIdentityProviderService.GetUser' }, body: JSON.stringify({ AccessToken: token }) });
+    if (!r.ok) return;
+    const body = await r.json() as { UserAttributes?: { Name: string; Value: string }[] };
+    const email = body.UserAttributes?.find((a) => a.Name === 'email')?.Value ?? '';
+    if (email) { c.email = email; if (sub) emailCache.set(sub, email); }
+  } catch (err) { console.warn('Email of the signed-in user not read', err); }
+}
+
 function who(ev: ApiEvent) {
   const sub = ev.identity?.sub ?? String(ev.identity?.claims?.sub ?? '');
   const username = ev.identity?.username ?? sub;
@@ -2956,6 +2979,7 @@ async function basketCheckout(ev: ApiEvent) {
   const mine = (await scanAll(table)).filter((e) => ownsEnquiry(e, ev));
   const custCode = mine.map((e) => str(e, 'customerCode')).find(Boolean) ?? '';
   const cust = custCode ? await loyCustomer(custCode) : null;
+  const myEmail = me.email || String(cust?.email ?? '') || mine.map((e) => str(e, 'email')).find(Boolean) || '';
   const AREA_OF = (k: string, area: string) => (AREA[area || 'ALL'] ?? AREA.ALL).includes(k);
   const disc = lines.map(() => 0);
   let codeUsed: { code: string; v: Img | null; amount: number } | null = null;
@@ -2977,7 +3001,7 @@ async function basketCheckout(ev: ApiEvent) {
     const okIdx = lines.map((l, i) => (v && str(v, 'kind') === 'GIFT') || AREA_OF(l.kind, area) ? i : -1).filter((i) => i >= 0);
     const base = r2(okIdx.reduce((s2, i) => s2 + lines[i].price, 0));
     if (!okIdx.length || !(base > 0)) throw new Error('This code does not apply to the items in your cart.');
-    const pseudo = toAttrs({ email: me.email, customerCode: custCode, kind: lines[okIdx[0]].kind }) as Img;
+    const pseudo = toAttrs({ email: myEmail, customerCode: custCode, kind: lines[okIdx[0]].kind }) as Img;
     const r = v ? voucherAmount(v, pseudo, base) : discountFor(p, lines[okIdx[0]].kind, base);
     if (r.error) throw new Error(r.error);
     const total = Math.min(r.amount, base - 2 * okIdx.length);
@@ -2992,7 +3016,7 @@ async function basketCheckout(ev: ApiEvent) {
     const price = r2(l.price - disc[i]);
     return { id: crypto.randomUUID(), __typename: 'Enquiry', createdAt: now, updatedAt: now, owner: me.owner, ref: newRef(), kind: l.kind, title: l.title,
       details: JSON.stringify({ ...l.details, Basket: `${basketRef} (${lines.length} item${lines.length > 1 ? 's' : ''})`, Name: contactName, Mobile: l.details.Mobile ?? contactPhone, ...(txt(d.note, 300) ? { Message: txt(d.note, 300) } : {}) }),
-      status: l.quote ? 'RECEIVED' : 'PRICE_SENT', customerName: contactName, phone: contactPhone, email: me.email, quotedPrice: price, basketRef, basketLead: i === 0,
+      status: l.quote ? 'RECEIVED' : 'PRICE_SENT', customerName: contactName, phone: contactPhone, email: myEmail, quotedPrice: price, basketRef, basketLead: i === 0,
       ...(l.fileKey ? { fileKey: l.fileKey } : {}),
       ...(a && !l.gift ? { deliveryName: a.name, deliveryPhone: a.phone, deliveryCountry: a.country, deliveryEmirate: a.region, deliveryPin: a.pin, deliveryAddress: a.address, deliveryLandmark: a.landmark, addressAt: now, addressBy: 'Customer' } : {}),
       ...(disc[i] > 0 ? { listPrice: l.price, discountAmount: disc[i], ...(codeUsed ? { discountCode: codeUsed.code, ...(codeUsed.v && str(codeUsed.v, 'kind') === 'REF' ? { referralBy: str(codeUsed.v, 'refOwner') } : {}) } : { discountType: String(cust?.discountType), discountValue: Number(cust?.discountValue), discountNote: stdNote }) } : {}),
@@ -3020,10 +3044,10 @@ async function basketCheckout(ev: ApiEvent) {
   for (const row of rows) await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row), ConditionExpression: 'attribute_not_exists(id)' }));
   if (codeUsed) { if (codeUsed.v) await useVoucher(codeUsed.v, basketRef, codeUsed.amount); else await bumpUses(codeUsed.code, 1); }
   const lineTxt = rows.map((r) => `• ${h(String(r.title))} (${h(String(r.ref))}): <b>${aed(Number(r.quotedPrice))}</b>${Number(r.discountAmount) ? ` <span style="color:#6b6780">(was ${aed(Number(r.listPrice))})</span>` : ''}`).join('<br>');
-  if (me.email && (await emailsOn())) await sendMail({ to: me.email, subject: `We've received your order ${basketRef}`, lines: [`Hello ${h(contactName.split(' ')[0] || 'there')},`, `Thank you for your order of ${rows.length} item${rows.length > 1 ? 's' : ''}:`, lineTxt,
+  if (myEmail && (await emailsOn())) await sendMail({ to: myEmail, subject: `We've received your order ${basketRef}`, lines: [`Hello ${h(contactName.split(' ')[0] || 'there')},`, `Thank you for your order of ${rows.length} item${rows.length > 1 ? 's' : ''}:`, lineTxt,
     quote ? `Total so far <b>${aed(total)}</b>. We'll add the shipping${a && a.country !== 'UAE' ? ` to ${h(a.country)}` : ''} and send you the payment link, usually within 24 hours.` : `Total <b>${aed(total)}</b>, including delivery in the UAE${codeUsed ? ` and your code ${h(codeUsed.code)}` : stdNote ? ` and your ${h(stdNote)} discount` : ''}.`,
     !quote && payUrl ? 'If you did not finish the payment, use the button below; your order is confirmed once it is paid.' : '', 'You can follow each item under My enquiries & orders.'].filter(Boolean), button: payUrl ? { label: `Pay ${aed(total)} securely`, url: payUrl } : MY }).catch(() => {});
-  await sendMail({ to: STUDIO_EMAIL, subject: `New basket order ${basketRef}: ${rows.length} items, ${aed(total)}`, lines: [`${h(contactName)} · ${h(contactPhone)} · ${h(me.email)}`, lineTxt, quote ? '<b>Needs a price/shipping quote</b> before payment.' : payUrl ? 'Payment link sent (one Ziina payment for all items).' : 'No Ziina link: send the payment link yourself.'], button: { label: 'Open Order Management', url: `${SITE}/admin.html` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+  await sendMail({ to: STUDIO_EMAIL, subject: `New basket order ${basketRef}: ${rows.length} items, ${aed(total)}`, lines: [`${h(contactName)} · ${h(contactPhone)} · ${h(myEmail)}`, lineTxt, quote ? '<b>Needs a price/shipping quote</b> before payment.' : payUrl ? 'Payment link sent (one Ziina payment for all items).' : 'No Ziina link: send the payment link yourself.'], button: { label: 'Open Order Management', url: `${SITE}/admin.html` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
   console.log(`Basket ${basketRef}: ${rows.length} orders, AED ${total}${quote ? ' (to quote)' : ''}`);
   return { ok: true, basketRef, total, payUrl, quote, refs: rows.map((r) => r.ref) };
 }
@@ -5041,6 +5065,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
   }
   if ('arguments' in event) {
     const a = event.arguments ?? {};
+    await ensureEmail(event);
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
