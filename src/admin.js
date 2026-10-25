@@ -1939,11 +1939,15 @@ function applyDeskLayout() {
   const e = all.find((x) => x.id === selectedId);
   if (e && $('editForm')) showDetail(e); else desk.classList.remove('open');
 }
+const savedLayout = () => LAYOUT;
 async function showDetail(e) {
   await showDetailBody(e);
   try { arrangeDetail(e); } catch (err) { console.warn('Layout', err); }
 }
 function arrangeDetail(e) {
+  const LAYOUT_SAVED = savedLayout();
+  // On a tablet (iPad) the original side-by-side layout is too narrow: use the stacked one (list on top, order below).
+  const LAYOUT = LAYOUT_SAVED === 'original' && window.innerWidth <= 1366 ? 'b' : LAYOUT_SAVED;
   const desk = $('desk'), box = $('detail');
   desk.dataset.layout = LAYOUT;
   desk.classList.toggle('open', !!$('editForm') && LAYOUT === 'a');

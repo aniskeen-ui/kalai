@@ -120,6 +120,9 @@ details.lay-acc[open] > summary{margin:0 -12px}
 .links a{color:var(--kumkum)}
 .ok{color:var(--ok);font-size:14px;min-height:1em}
 @media (max-width:900px){.desk{grid-template-columns:1fr}.detail{position:static}.dsplit{display:none}}
+/* Tablets (iPad, up to 1366px wide): list on top at full width, the order underneath, so no column is cut off. */
+@media (max-width:1366px){.desk:not([data-layout="c"]){grid-template-columns:1fr}.desk:not([data-layout="c"]) > .detail{position:static}.desk:not([data-layout="c"]) > .deskL > .tablewrap{max-height:45vh}.dsplit{display:none}}
+@media (max-width:1366px) and (min-width:761px){.lay-grid3{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.lay-grid3 > .lay-side{grid-column:1/-1;position:static}.lay-grid3 > .lay-side .lay-act{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}}
 @media (max-width:480px){.two{grid-template-columns:1fr}}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 [hidden]{display:none!important}
