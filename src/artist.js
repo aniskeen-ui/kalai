@@ -90,7 +90,7 @@ async function renderWorks(force = false) {
   if (filter !== 'WORKS') return;
   if (!works.length) { $('list').innerHTML = '<p class="muted">No works in the catalogue yet.</p>'; return; }
   $('list').innerHTML = `<div style="display:flex;gap:8px;align-items:center"><input id="wFind" type="search" placeholder="Find a work: AT-… code or title" aria-label="Find a work" style="max-width:320px"><span class="muted find-count" style="font-size:12px"></span></div><p class="muted" style="margin:0 0 4px">Give each work a real title, as customers will see it on the website (e.g. “Temple Steps at Dawn”). Until then the website shows a tidied-up version of the file name, or just “Original”. Also give <b>your price in rupees</b> for the artwork itself (paper only, no frame): Kalai Art House adds framing and delivery. ${todo ? `<b>${todo} still to name or price.</b>` : '<b class="wdone">All named and priced. Thank you!</b>'}</p>
-    ${works.some((w) => !w.named) ? '<div style="display:flex;gap:10px;align-items:center;margin:0 0 6px"><button type="button" class="btn small" id="saveAllW">Save all titles shown</button><span class="muted" id="saveAllMsg" style="font-size:12px">Saves every work below that has a title (and price, if given).</span></div>' : ''}`
+    <div class="saveall"><button type="button" class="btn small" id="saveAllW">Save all changes</button><span class="muted" id="saveAllMsg" style="font-size:12px">Change titles, sizes, prices or days on as many works as you like, then save them all at once.</span></div>`
     + works.map((w) => `<article class="acard wcard" data-w="${esc(w.id)}" data-code="${esc(w.code)}"><img alt="" data-key="${esc(w.imageKey)}">
       <form novalidate>
         ${w.code ? `<div class="muted" style="font-size:12px;font-family:var(--mono)">${esc(w.code)}</div>` : ''}<div class="field"><label>Title${!w.named && shownTitle(w) ? ` <span class="muted" style="font-weight:400">(${webTitle(w) ? 'as on the website' : 'suggested'}: change it if you like, then Save)</span>` : ''}</label><input name="title" maxlength="80" value="${esc(shownTitle(w))}" placeholder="A short, meaningful title"></div>
@@ -104,11 +104,18 @@ async function renderWorks(force = false) {
   document.querySelectorAll('.wcard img[data-key]').forEach(async (img) => {
     try { img.src = (await getUrl({ path: img.dataset.key, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no picture */ }
   });
+  // Each work remembers whether it was changed; "Save all changes" saves just those (unnamed works with a suggested title too).
+  document.querySelectorAll('.wcard form').forEach((f) => f.addEventListener('input', () => { f.dataset.dirty = '1'; $('saveAllMsg').textContent = `${document.querySelectorAll('.wcard form[data-dirty]').length} work(s) changed: press Save all changes.`; }));
   if ($('saveAllW')) $('saveAllW').onclick = async () => {
-    const forms = [...document.querySelectorAll('.wcard form')].filter((f) => f.title.value.trim().length >= 2 || f.price.value);
-    $('saveAllW').disabled = true; let n = 0;
-    for (const f of forms) { await f.onsubmit(new Event('submit')); n++; $('saveAllMsg').textContent = `Saving… ${n} of ${forms.length}`; }
-    $('saveAllMsg').textContent = `${n} works saved.`; $('saveAllW').disabled = false;
+    const forms = [...document.querySelectorAll('.wcard form')].filter((f) => f.dataset.dirty || (!works.find((x) => x.id === f.closest('.wcard').dataset.w)?.named && f.title.value.trim().length >= 2));
+    if (!forms.length) { $('saveAllMsg').textContent = 'Nothing changed yet.'; return; }
+    $('saveAllW').disabled = true; let n = 0, bad = 0;
+    for (const f of forms) {
+      await f.onsubmit(new Event('submit')); n++;
+      if (f.querySelector('.err')) bad++; else delete f.dataset.dirty;
+      $('saveAllMsg').textContent = `Saving… ${n} of ${forms.length}`;
+    }
+    $('saveAllMsg').textContent = bad ? `${n - bad} saved, ${bad} need a fix (see the red notes).` : `${n} works saved.`; $('saveAllW').disabled = false;
   };
   document.querySelectorAll('.wcard form').forEach((f) => {
     f.onsubmit = async (e) => {
@@ -121,7 +128,7 @@ async function renderWorks(force = false) {
         const w = works.find((x) => x.id === id); Object.assign(w, { title: f.title.value.trim() || w.title, size: f.size.value.trim(), description: f.description.value.trim(), named: f.title.value.trim() ? 'yes' : w.named, artistPrice: f.price.value ? Number(f.price.value) : w.artistPrice, leadDays: f.leadDays.value.trim() === '' ? w.leadDays : Number(f.leadDays.value.match(/\d+/)?.[0]), leadMax: f.leadDays.value.trim() === '' ? w.leadMax : Number((f.leadDays.value.match(/\d+/g) || []).pop()) });
         m.innerHTML = f.title.value.trim() ? '<span class="wdone">✓ Saved: now on the website</span>' : '<span class="wdone">✓ Price saved</span> <span class="muted">· add a title too</span>';
         const todo2 = works.filter((x) => !x.named || x.artistPrice == null).length; $('cWorks').textContent = todo2 ? `(${todo2})` : '';
-      } catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
+      } catch (ex) { m.innerHTML = `<span class="err">${esc(ex.message)}</span>`; } finally { b.disabled = false; }
     };
   });
 }
