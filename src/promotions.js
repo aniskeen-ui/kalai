@@ -38,7 +38,14 @@ async function qrDataUrl(text, cell = 8) { const q = (await loadQr())(0, 'M'); q
 async function cardPng(v) {
   const c = document.createElement('canvas'); c.width = 1000; c.height = 560; const g = c.getContext('2d');
   g.fillStyle = '#1e4d2b'; g.fillRect(0, 0, 1000, 560); g.fillStyle = '#c9a24a'; g.fillRect(0, 520, 1000, 40);
-  g.fillStyle = '#ffffff'; g.font = '600 46px Georgia, serif'; g.fillText('KALAI', 56, 96); g.font = '20px Arial'; g.fillStyle = '#c9dca4'; g.fillText('ART HOUSE · DUBAI', 200, 94);
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = '#ffffff'; g.font = '600 46px Georgia, serif'; g.fillText('KALAI', 56, 96);
+  const kw = g.measureText('KALAI').width; // the subtitle starts after the word, whatever font the browser used
+  g.font = '20px Arial'; g.fillStyle = '#c9dca4'; g.fillText('ART HOUSE · DUBAI', 56 + kw + 16, 94);
+  // Pranix logo, top right: the picture /pranix-logo.png when it is on the site, otherwise the name in letters.
+  const logo = await new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ok(null); im.src = '/pranix-logo.png'; });
+  if (logo) { const sc = Math.min(220 / logo.width, 56 / logo.height), w = logo.width * sc, hh = logo.height * sc; g.fillStyle = '#ffffff'; g.fillRect(944 - w - 12, 48, w + 24, hh + 16); g.drawImage(logo, 944 - w, 56, w, hh); }
+  else { g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = '700 26px Arial'; g.fillText('PRANIX', 944, 82); g.font = '13px Arial'; g.fillStyle = '#c9dca4'; g.fillText('TECHNOLOGIES FZCO', 944, 102); g.textAlign = 'left'; }
   g.fillStyle = '#ffffff'; g.font = '700 54px Arial'; g.fillText(v.kind === 'GIFT' ? `Gift card  AED ${Number(v.value || 0).toLocaleString('en-US')}` : `Voucher  ${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`, 56, 210);
   g.font = '26px Arial'; g.fillStyle = '#e8efe0'; if (v.forName) g.fillText(`For ${v.forName}`, 56, 262);
   g.font = '700 40px monospace'; g.fillStyle = '#ffffff'; g.fillText(v.code, 56, 350);
