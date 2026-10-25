@@ -7,7 +7,7 @@ import { getUrl } from 'aws-amplify/storage';
 import { wireFind } from './find.js';
 import { SUGGEST } from './suggest.js';
 import { cleanTitle } from './title.js';
-import { downloadAwb, printAwb } from './awb.js';
+import { awbButtons, wireAwb } from './awb.js';
 
 const client = generateClient();
 // Shown inside the artist & seller portal (seller.html "Studio orders" tab): no own header there.
@@ -300,8 +300,8 @@ function progressBlock(x) {
   const shop = p ? shopBox(x.frameShop) : ''; // from the moment the artist confirms (Started)
   // Kalai allocated the courier: once finished, the airway bill label to print and stick on the parcel (no typing).
   const ib = x.inbound;
-  const awbBox = !ib ? '' : ib.label && ib.awb ? `<div class="awb-box"><div>Airway bill <b class="mono">${esc(ib.awb)}</b> · courier <b>${esc(ib.courier)}</b></div>
-      <div class="awb-acts"><button type="button" class="btn small" data-awbl="bar">🏷 Download label (barcode)</button><button type="button" class="btn small ghost" data-awbl="qr">🏷 Download label (QR code)</button><button type="button" class="linkbtn" data-awbp="bar">Print barcode label</button><button type="button" class="linkbtn" data-awbp="qr">Print QR label</button></div>
+  const awbBox = !ib ? '' : ib.label && ib.awb ? `<div class="awb-box" data-awbbox><div>Airway bill <b class="mono">${esc(ib.awb)}</b> · courier <b>${esc(ib.courier)}</b></div>
+      ${awbButtons()}
       <div class="muted" style="font-size:12px">Pack it flat between stiff boards, stick this label on the parcel and hand it to the courier: they scan it at pickup.</div></div>`
     : `<div class="awb-box muted">Courier <b>${esc(ib.courier)}</b> collects it from you: the airway bill label appears here when you mark the work finished.</div>`;
   const ship = ib && ib.awb && p === 'FINISHED' ? `<div class="field"><button type="button" class="btn" data-step="SHIPPED">Handed to ${esc(ib.courier)}</button></div>`
@@ -328,18 +328,11 @@ function wireProgress(x) {
   if (fix) fix.onclick = () => { x.editShip = true; render(); };
   const sel = document.getElementById('sc-' + x.id);
   if (sel) sel.onchange = () => { document.getElementById('sco-' + x.id).hidden = sel.value !== 'Other'; };
-  box.querySelectorAll('[data-awbl],[data-awbp]').forEach((b) => {
-    b.onclick = async () => {
-      const msg = document.getElementById('pm-' + x.id); msg.textContent = 'Making the airway bill…';
-      try {
-        const { data, errors } = await client.mutations.artistProgress({ id: x.id, step: 'LABEL' });
-        if (errors?.length) throw new Error(errors[0].message);
-        const l = parse(data).label;
-        if (b.dataset.awbl) await downloadAwb(l, b.dataset.awbl); else await printAwb(l, b.dataset.awbp);
-        msg.textContent = `Airway bill ${l.awb} ready.`;
-      } catch (ex) { msg.textContent = ex.message; }
-    };
-  });
+  wireAwb(box.querySelector('[data-awbbox]'), async () => {
+    const { data, errors } = await client.mutations.artistProgress({ id: x.id, step: 'LABEL' });
+    if (errors?.length) throw new Error(errors[0].message);
+    return parse(data).label;
+  }, (t) => { const m = document.getElementById('pm-' + x.id); if (m) m.textContent = t; });
   box.querySelectorAll('[data-step]').forEach((b) => {
     b.onclick = async () => {
       const msg = document.getElementById('pm-' + x.id);

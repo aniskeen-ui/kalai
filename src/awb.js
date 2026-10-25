@@ -108,12 +108,50 @@ export async function awbCanvas(l, mode = 'bar') {
   }
   return cv;
 }
-/** Downloads the label as AWB-<number>.png. */
-export async function downloadAwb(l, mode) {
+/** The label as a one-page PDF (4 × 6 in), the picture embedded losslessly (greyscale, deflate) so bars stay sharp. */
+export async function awbPdf(l, mode) {
   const cv = await awbCanvas(l, mode);
+  const W = cv.width, H = cv.height;
+  const px = cv.getContext('2d').getImageData(0, 0, W, H).data;
+  const grey = new Uint8Array(W * H);
+  for (let i = 0; i < grey.length; i++) grey[i] = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000;
+  let img, dict;
+  if (typeof CompressionStream === 'function') {
+    img = new Uint8Array(await new Response(new Blob([grey]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+    dict = `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${img.length}`;
+  } else {
+    img = new Uint8Array(await (await fetch(cv.toDataURL('image/jpeg', 1))).arrayBuffer());
+    dict = `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length}`;
+  }
+  const enc = new TextEncoder();
+  const content = 'q 288 0 0 432 0 0 cm /Im0 Do Q';
+  const parts = [], offs = [];
+  let len = 0;
+  const push = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+  push('%PDF-1.4\n%\xE2\xE3\n');
+  const obj = (n, body, stream) => { offs[n] = len; push(`${n} 0 obj\n${body}\n`); if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); } push('endobj\n'); };
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 288 432] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>');
+  obj(4, `<< /Length ${content.length} >>`, enc.encode(content));
+  obj(5, `<< ${dict} >>`, img);
+  obj(6, `<< /Title (Airway bill ${String(l.awb).replace(/[()\\]/g, '')}) /Producer (Kalai Art House) >>`);
+  const xref = len;
+  push(`xref\n0 7\n0000000000 65535 f \n${[1, 2, 3, 4, 5, 6].map((n) => `${String(offs[n]).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts, { type: 'application/pdf' });
+}
+/** Downloads the label as AWB-<number>.pdf. */
+export async function downloadAwb(l, mode) {
+  const blob = await awbPdf(l, mode);
   const a = document.createElement('a');
-  a.href = cv.toDataURL('image/png'); a.download = `AWB-${l.awb}-${mode === 'qr' ? 'QR' : 'barcode'}.png`;
+  a.href = URL.createObjectURL(blob); a.download = `AWB-${l.awb}-${mode === 'qr' ? 'QR' : 'barcode'}.pdf`;
   document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+/** The label as a picture to show on the screen (scan it straight from the phone / screen). */
+export async function awbImage(l, mode) {
+  const cv = await awbCanvas(l, mode);
+  return cv.toDataURL('image/png');
 }
 /** Prints the label at 4 × 6 in (through a hidden frame, so no pop-up is needed). */
 export async function printAwb(l, mode) {
@@ -126,4 +164,37 @@ export async function printAwb(l, mode) {
   const img = d.querySelector('img');
   const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); };
   if (img.complete) go(); else img.onload = go;
+}
+
+/* ---------- buttons shared by the supplier portal, artist desk and artist portal ---------- */
+const AWB_CSS = '.awb-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 2px}.awb-show{margin-top:8px;display:grid;gap:6px;justify-items:start}.awb-show img{width:100%;max-width:400px;border:1px solid #ccc;border-radius:6px;background:#fff}';
+if (typeof document !== 'undefined' && !document.getElementById('awb-css')) { const st = document.createElement('style'); st.id = 'awb-css'; st.textContent = AWB_CSS; document.head.appendChild(st); }
+/** The label buttons: Display (shows it on the screen), PDF download and Print, each as barcode or QR code. */
+export function awbButtons() {
+  const fmt = `<select data-awbfmt aria-label="Label code" style="width:auto"><option value="bar">Barcode</option><option value="qr">QR code</option></select>`;
+  return `<div class="awb-acts">${fmt}<button type="button" class="btn small" data-awbdo="show">👁 Display</button><button type="button" class="btn small ghost" data-awbdo="pdf">📄 Download PDF</button><button type="button" class="btn small ghost" data-awbdo="print">🖨 Print</button></div><div class="awb-show" data-awbshow hidden></div>`;
+}
+/** Wires the buttons in box. getLabel() fetches the label data; say(text, ok) shows a message. */
+export function wireAwb(box, getLabel, say) {
+  if (!box || box.dataset.awbWired) return;
+  box.dataset.awbWired = '1';
+  let cache = null;
+  box.querySelectorAll('[data-awbdo]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const mode = box.querySelector('[data-awbfmt]')?.value || 'bar';
+      const show = box.querySelector('[data-awbshow]');
+      if (b.dataset.awbdo === 'show' && !show.hidden && show.dataset.mode === mode) { show.hidden = true; b.textContent = '👁 Display'; return; }
+      say('Making the airway bill…', true);
+      try {
+        cache = cache || await getLabel();
+        if (b.dataset.awbdo === 'show') {
+          show.innerHTML = `<img alt="Airway bill ${cache.awb}" src="${await awbImage(cache, mode)}"><span class="muted" style="font-size:12px">The courier can scan the ${mode === 'qr' ? 'QR code' : 'barcode'} straight from this screen.</span>`;
+          show.hidden = false; show.dataset.mode = mode; b.textContent = '✕ Hide';
+        } else if (b.dataset.awbdo === 'pdf') await downloadAwb(cache, mode);
+        else await printAwb(cache, mode);
+        say(`Airway bill ${cache.awb} ready.`, true);
+      } catch (ex) { say(ex.message, false); }
+    });
+  });
+  box.querySelector('[data-awbfmt]')?.addEventListener('change', () => { const show = box.querySelector('[data-awbshow]'); if (!show.hidden) box.querySelector('[data-awbdo="show"]').click(); });
 }

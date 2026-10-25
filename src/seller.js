@@ -1,7 +1,7 @@
 // Seller portal: sign up, apply, and (once approved) list products with a price calculator.
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
 import { openPdf } from './pdf.js';
-import { downloadAwb, printAwb } from './awb.js';
+import { awbButtons, wireAwb } from './awb.js';
 import { wireFind } from './find.js';
 import './amplify-config.js';
 import './skin.js';
@@ -426,8 +426,8 @@ function drawComms() {
       ${x.ordered ? `<div class="muted" style="font-size:12px">${['STARTED', 'FINISHED', 'SHIPPED'].map((s) => `${x.progress && ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(x.progress) >= ['STARTED', 'FINISHED', 'SHIPPED'].indexOf(s) ? '✓' : '○'} ${STEP_LABEL[s]}`).join(' · ')}${x.artistAwb ? ` · ${esc(x.artistCourier)} AWB ${esc(x.artistAwb)}` : ''}</div>` : ''}
       ${canWork ? `<div class="acts">${!x.progress ? '<button class="btn small" type="button" data-step="STARTED">I have started</button>' : ''}${['', 'STARTED'].includes(x.progress || '') ? '<button class="btn small ghost" type="button" data-step="FINISHED">Finished</button>' : ''}
         ${x.inbound ? (x.inbound.label && x.inbound.awb ? `<button class="btn small ghost" type="button" data-step="SHIPPED">Handed to ${esc(x.inbound.courier)}</button>` : '') : `<label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Courier</span><input data-f="courier" placeholder="${profile?.country === 'India' ? 'e.g. DHL' : 'optional (e.g. handed over)'}"></label><label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">AWB</span><input data-f="awb"></label><button class="btn small ghost" type="button" data-step="SHIPPED">Sent to frame shop</button>`}</div>` : ''}
-      ${x.ordered && x.inbound && !x.stopped ? (x.inbound.label && x.inbound.awb ? `<div class="awb-box"><div>Airway bill <b class="mono">${esc(x.inbound.awb)}</b> · courier <b>${esc(x.inbound.courier)}</b></div>
-        <div class="awb-acts"><button type="button" class="btn small" data-awbl="bar">🏷 Download label (barcode)</button><button type="button" class="btn small ghost" data-awbl="qr">🏷 Download label (QR code)</button><button type="button" class="linkbtn" data-awbp="bar">Print barcode label</button><button type="button" class="linkbtn" data-awbp="qr">Print QR label</button></div>
+      ${x.ordered && x.inbound && !x.stopped ? (x.inbound.label && x.inbound.awb ? `<div class="awb-box" data-awbbox><div>Airway bill <b class="mono">${esc(x.inbound.awb)}</b> · courier <b>${esc(x.inbound.courier)}</b></div>
+        ${awbButtons()}
         <div class="muted" style="font-size:12px">Pack it flat between stiff boards, stick this label on the parcel and hand it to the courier: they scan it at pickup.</div></div>`
         : x.inbound.label ? `<div class="awb-box muted">Courier <b>${esc(x.inbound.courier)}</b>: open this page again in a moment for the airway bill label.</div>` : `<div class="awb-box muted">Courier <b>${esc(x.inbound.courier)}</b> collects it from you: the airway bill label appears here when you mark the work finished.</div>`) : ''}
       ${x.ordered && (x.progress === 'SHIPPED' || x.stopped) && !x.invoiceNo ? `<form class="acts" data-inv novalidate style="margin-top:6px;padding:10px;border:1px dashed var(--line);border-radius:10px">
@@ -462,13 +462,7 @@ function drawComms() {
       try { await call('commissionQuote', { id, price: f.price.value, readyBy: f.readyBy.value, note: f.note.value }); await loadComms(); }
       catch (ex) { msg.textContent = ex.message; b.disabled = false; }
     };
-    card.querySelectorAll('[data-awbl],[data-awbp]').forEach((b) => {
-      b.onclick = async () => {
-        msg.textContent = 'Making the airway bill…';
-        try { const r = await call('commissionProgress', { id, step: 'LABEL' }); if (b.dataset.awbl) await downloadAwb(r.label, b.dataset.awbl); else await printAwb(r.label, b.dataset.awbp); msg.textContent = `Airway bill ${r.label.awb} ready.`; }
-        catch (ex) { msg.textContent = ex.message; }
-      };
-    });
+    wireAwb(card.querySelector('[data-awbbox]'), async () => (await call('commissionProgress', { id, step: 'LABEL' })).label, (t, ok) => { msg.textContent = t; msg.style.color = ok ? 'var(--ok, #2e7d32)' : ''; });
     card.querySelectorAll('[data-step]').forEach((b) => {
       b.onclick = async () => {
         msg.textContent = ''; b.disabled = true;

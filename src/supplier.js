@@ -1,5 +1,5 @@
 import { openPdf } from './pdf.js';
-import { downloadAwb, printAwb } from './awb.js';
+import { awbButtons, wireAwb } from './awb.js';
 // Supplier portal: frame shops (FRAMER), delivery partners (COURIER) and print shops (PRINTER).
 // They apply, and once approved see the jobs Kalai Art House gives them: the work's photo, frame spec and size,
 // the agreed price, pickup and delivery addresses. They update each step and enter their invoice (a Zoho bill).
@@ -301,8 +301,8 @@ function jobCard(j) {
       </dl>
     </div>
     ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? 'drawing' : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
-    ${j.label ? `<div class="awb-box"><div><span class="muted">Airway bill</span> ${j.label.awb ? `<b class="mono">${esc(j.label.awb)}</b>` : ''} · courier <b>${esc(j.label.courier)}</b></div>
-      <div class="awb-acts"><button type="button" class="btn small" data-label="bar">🏷 Download label (barcode)</button><button type="button" class="btn small ghost" data-label="qr">🏷 Download label (QR code)</button><button type="button" class="linkbtn" data-labelprint="bar">Print barcode label</button><button type="button" class="linkbtn" data-labelprint="qr">Print QR label</button></div>
+    ${j.label ? `<div class="awb-box" data-awbbox><div><span class="muted">Airway bill</span> ${j.label.awb ? `<b class="mono">${esc(j.label.awb)}</b>` : ''} · courier <b>${esc(j.label.courier)}</b></div>
+      ${awbButtons()}
       <div class="muted" style="font-size:12px">${j.role === 'delivery' ? 'The shop sticks this label on the parcel: scan it at pickup.' : 'Print it (4 × 6 in label, or on A4 and cut it out), stick it on the packed parcel: the courier scans it at pickup.'}</div></div>`
       : j.courier !== undefined && !j.cancelled && !j.invoiceNo ? `<div class="awb-box muted">${j.courier ? `Courier <b>${esc(j.courier)}</b> collects it from you: the airway bill (barcode / QR label) appears here when you mark it ${pr ? 'printed' : 'ready'}.` : 'Kalai Art House allocates the courier: the airway bill label appears here once it is.'}</div>` : ''}
     ${supGuide(j, fr, pr)}
@@ -317,10 +317,7 @@ function drawJobs() {
     const [id, role] = card.dataset.key.split(':');
     const msg = card.querySelector('[data-msg]');
     const labelOf = async () => (await call('jobLabel', { id, role })).label;
-    card.querySelectorAll('[data-label],[data-labelprint]').forEach((b) => b.addEventListener('click', async () => {
-      msg.textContent = 'Making the airway bill…';
-      try { const l = await labelOf(); if (b.dataset.label) await downloadAwb(l, b.dataset.label); else await printAwb(l, b.dataset.labelprint); msg.textContent = `Airway bill ${l.awb} ready.`; } catch (ex) { msg.textContent = ex.message; }
-    }));
+    wireAwb(card.querySelector('[data-awbbox]'), labelOf, (t, ok) => { msg.textContent = t; msg.style.color = ok ? 'var(--ok, #2e7d32)' : ''; });
     card.querySelector('[data-invpdf]')?.addEventListener('click', () => openPdf(() => call('jobInvoicePdf', { id, role }), (ex) => { msg.textContent = ex.message; }));
     const dl = card.querySelector('[data-dl]');
     if (dl) dl.onclick = async () => {
