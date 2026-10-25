@@ -894,6 +894,7 @@ function card(e) {
     <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')} · ${esc(date)}</div>
     ${!['CANCELLED', 'REFUNDED', 'REPLACEMENT'].includes(st) ? `<div class="steps-bar" aria-hidden="true" style="grid-template-columns:repeat(${steps.length},1fr)">${steps.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">⃃ ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
+    ${e.loyaltyAt && e.loyaltyPoints ? `<div class="acct-info" style="font-size:13px">✦ You earned <b>${Number(e.loyaltyPoints).toLocaleString('en-US')} Kalai Circle points</b> on this order.</div>` : e.status === 'DELIVERED' && circle ? '<div class="acct-info" style="font-size:13px">✦ Your Kalai Circle points for this order arrive 48 hours after delivery.</div>' : ''}
     ${codeBox(e)}
     ${pointsBox(e)}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
