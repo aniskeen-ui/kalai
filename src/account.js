@@ -110,6 +110,13 @@ const css = `
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px);box-shadow:-10px 0 40px rgba(0,0,0,.3)}
 .acct-panel header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
 .acct-panel h2{font-size:24px;margin:0}
+.acct-panel .acct-hbtn{background:none;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--fg);cursor:pointer;margin-left:auto}
+.acct-grip{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:2}
+.acct-panel.wide{width:100%!important;box-shadow:none}.acct-panel.wide .acct-grip{display:none}
+.acct-panel.wide .acct-body{width:100%;max-width:1440px;margin:0 auto;box-sizing:border-box}
+.acct-top{display:grid;gap:12px}.acct-top>div:empty{display:none}.acct-panel.wide #enqList>:not(article){grid-column:1/-1}
+@media (min-width:900px){.acct-panel.wide .acct-top{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start}
+  .acct-panel.wide #enqList{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))!important;align-items:start}}
 .acct-body{flex:1;overflow:auto;padding:20px;display:grid;gap:14px;align-content:start}
 .acct-body form{display:grid;gap:12px}
 .acct-body .field{display:grid;gap:6px}
@@ -188,9 +195,22 @@ const scrim = document.createElement('div');
 scrim.className = 'acct-scrim'; scrim.hidden = true;
 const panel = document.createElement('aside');
 panel.className = 'acct-panel'; panel.hidden = true; panel.setAttribute('aria-label', 'Your account');
-panel.innerHTML = `<header><h2 id="acctTitle">Sign in</h2><button class="x" id="acctClose" aria-label="Close">×</button></header><div class="acct-body" id="acctBody"></div>`;
+panel.innerHTML = `<div class="acct-grip" title="Drag to resize"></div><header><h2 id="acctTitle">Sign in</h2><button type="button" class="acct-hbtn" id="acctWide" title="Full screen or side panel">⤢ Full screen</button><button class="x" id="acctClose" aria-label="Close">×</button></header><div class="acct-body" id="acctBody"></div>`;
 document.body.append(scrim, panel);
 const body = panel.querySelector('#acctBody');
+// Full screen (remembered) or a side panel the customer can widen by dragging its left edge.
+const lsG = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsS = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+const setWide = (on) => { panel.classList.toggle('wide', on); const b = panel.querySelector('#acctWide'); if (b) b.textContent = on ? '⤡ Side panel' : '⤢ Full screen'; lsS('kalai-acct-wide', on ? '1' : '0'); };
+setWide(lsG('kalai-acct-wide') !== '0' && innerWidth >= 900);
+{ const w = Number(lsG('kalai-acct-w')); if (w > 300) panel.style.width = `min(${w}px,100%)`; }
+panel.querySelector('#acctWide').onclick = () => setWide(!panel.classList.contains('wide'));
+panel.querySelector('.acct-grip').addEventListener('pointerdown', (ev) => {
+  ev.preventDefault(); const grip = ev.currentTarget; grip.setPointerCapture(ev.pointerId);
+  const move = (e) => { const w = Math.max(360, Math.min(innerWidth, innerWidth - e.clientX)); panel.style.width = `${w}px`; };
+  const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); lsS('kalai-acct-w', String(parseInt(panel.style.width, 10) || 460)); if (parseInt(panel.style.width, 10) >= innerWidth - 20) setWide(true); };
+  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+});
 const title = panel.querySelector('#acctTitle');
 const open = () => { panel.hidden = false; scrim.hidden = false; };
 const close = () => { panel.hidden = true; scrim.hidden = true; };
@@ -1007,12 +1027,12 @@ async function showList() {
   try { admin = ((await fetchAuthSession()).tokens?.accessToken?.payload?.['cognito:groups'] || []).includes('ADMINS'); } catch { /* not admin */ }
   body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b><span id="custNo"></span></p>
     ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
-    <div id="circleBox"></div>
+    <div class="acct-top"><div id="circleBox"></div>
     <div id="progBox"></div>
     <details class="redeem" id="redeemBox"><summary>🎁 Have a gift card, voucher or code?</summary>
       <form id="redeemForm" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><input name="code" id="redeemCode" placeholder="Enter the code" maxlength="30" style="max-width:200px;text-transform:uppercase;padding:6px 8px;font-size:14px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Check</button><button class="btn ghost-dark" type="button" id="redeemScan" style="padding:6px 12px;font-size:13px">📷 Scan QR</button></form>
       <video id="redeemCam" playsinline muted hidden style="width:100%;max-width:320px;border-radius:8px;margin-top:8px"></video>
-      <div id="redeemOut" class="acct-info" style="font-size:13px;margin-top:6px"></div></details>
+      <div id="redeemOut" class="acct-info" style="font-size:13px;margin-top:6px"></div></details></div>
     <nav class="acct-tabs" role="tablist" id="acctTabs"></nav>
     <div id="enqList" class="acct-info">Loading…</div>
     <button class="acct-link" id="myDetails">My details</button><button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;
