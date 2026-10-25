@@ -196,6 +196,15 @@ table.report tbody tr{cursor:pointer}
 fieldset.cost{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px 12px;display:grid;gap:10px;margin:0;min-width:0}
 fieldset.cost legend{font-size:13px;font-weight:700;padding:0 6px}
 fieldset.cost summary{font-size:13px;cursor:pointer;color:var(--muted)}
+/* Order screen: every section is a card like the Zoho box (tinted card, title inside, white inner panels). */
+fieldset.cost{background:var(--sunk);border-radius:10px;padding:12px 14px 14px}
+fieldset.cost>legend{float:left;width:100%;padding:0;margin:0 0 2px;font-size:14px;font-weight:700}
+fieldset.cost>legend+*{clear:both}
+fieldset.cost table,fieldset.cost .awb-box,fieldset.cost [data-podbox],fieldset.cost [style*="border:1px solid var(--line)"]{background:var(--surface)}
+#supplierBox>div[style*="border-top"]{background:var(--surface);border:1px solid var(--line) !important;border-radius:8px;padding:10px 12px !important}
+#detail .dtop{background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+#detail .dtop .kv{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+#detail .dthumb img{background:var(--surface)}
 .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 table.costs{font-size:13px;width:100%}
 table.costs td,table.costs th{padding:5px 8px;white-space:normal}

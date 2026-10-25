@@ -1959,8 +1959,8 @@ function arrangeDetail(e) {
   const head = put(el('lay-head'), q('.dtop'), $('fileLinks'));
   const act = put(el('lay-act'), rowOf('eStatus'), fieldOf('eMsg'), $('autoHint'), $('saveMsg'), $('eSave'), $('waLinks'));
   const parts = {
-    order: [fieldOf('ePhone'), $('addrBox'), q('#editForm > fieldset.cost:not([id])')],
-    pay: [$('zohoBox'), $('ziinaCard'), payRow, payNote, fieldOf('eLink'), $('flowSlot')],
+    order: [$('custBox'), $('addrBox'), q('#editForm > fieldset.cost:not([id])')],
+    pay: [$('zohoBox'), $('ziinaCard'), $('payBox'), $('flowSlot')],
     ship: [$('shipBox'), $('supplierBox'), $('purchase'), $('marketBox'), $('reworkBox')],
     cost: [$('costing'), $('actualBox')],
     after: [$('afterBox')],
@@ -1993,7 +1993,7 @@ function arrangeDetail(e) {
   const main = put(el('lay-col'), head, journeyCard(e), parts.ship, parts.order.slice(1), parts.after);
   const accs = [['Costing', parts.cost], ['Payment & Zoho', parts.pay.filter((x) => x && x.id !== 'flowSlot')]].map(([t, nodes]) => { const d = document.createElement('details'); d.className = 'lay-acc'; d.innerHTML = `<summary>${t}</summary>`; put(d, nodes); return d; });
   put(main, accs);
-  const side = put(el('lay-col lay-side'), el('lay-h', '<b>Action</b>'), act, fieldOf('ePhone'), parts.review, $('flowSlot'));
+  const side = put(el('lay-col lay-side'), el('lay-h', '<b>Action</b>'), act, $('custBox'), parts.review, $('flowSlot'));
   box.prepend(put(el('lay-grid2'), main, side));
   form.style.display = 'none';
 }
@@ -2039,8 +2039,8 @@ async function showDetailBody(e) {
     ${reviews.has(e.id) ? `<fieldset class="cost" id="reviewBox"><legend>Customer review</legend>${reviewCard(reviews.get(e.id), false)}</fieldset>` : e.status === 'DELIVERED' ? '<div class="muted" style="font-size:13px">Delivered: the customer can now rate this order under My enquiries & orders.</div>' : ''}
     ${offerPanel(e)}
     <form id="editForm" novalidate style="display:grid;gap:12px">
-      <div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
-        <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div>
+      <fieldset class="cost" id="custBox"><legend>Customer</legend><div class="field"><label for="ePhone">Customer mobile / WhatsApp</label><input id="ePhone" type="tel" inputmode="tel" placeholder="+971 50 123 4567" value="${esc(e.phone)}">
+        <span class="muted" style="font-size:12px">Correct it here if the customer typed it wrongly, then save.</span></div></fieldset>
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once ${esc(artistOf(e))} marks it <b>Sent to frame shop</b> (you can do it for them in ${artistPage(e)}).</span>` : ''}</div>
@@ -2061,6 +2061,7 @@ async function showDetailBody(e) {
       ${costingSection(e)}`}
       ${supplierSection(e)}
       ${actualSection(e)}
+      <fieldset class="cost" id="payBox"><legend>Payment</legend>
       <div class="two">
         <div class="field"><label for="ePayMethod">Paid by</label><select id="ePayMethod">
           ${[['', '–'], ['ZIINA', 'Ziina'], ['BANK', 'Bank transfer'], ['CASH', 'Cash'], ['CARD', 'Card (other)'], ['OTHER', 'Other']].map(([k, v]) => `<option value="${k}" ${k === (e.paymentMethod || (e.ziinaPaidAt ? 'ZIINA' : '')) ? 'selected' : ''}>${v}</option>`).join('')}
@@ -2069,12 +2070,13 @@ async function showDetailBody(e) {
       </div>
       ${e.ziinaPaidAt && e.paymentMethod !== 'ZIINA' ? `<div class="muted" style="font-size:12px;color:var(--gold)">Ziina recorded the customer's payment through the link on ${esc(when(e.ziinaPaidAt))}, but "Paid by" says ${esc(e.paymentMethod || 'nothing')}: choose Ziina and save, unless the money really came another way.</div>` : ''}
       <div class="muted" style="font-size:12px">Prices include VAT where it applies. When you save with status <b>Paid</b>, Zoho Books creates the invoice (KAH-INV-…) and records the payment automatically${hasArtist(e) ? `, then records ${esc(artistOf(e))}’s order` : ''}.</div>
+      <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="Leave empty: a Ziina link is created when you save as Price sent" value="${esc(e.paymentLink)}">
+        <span class="muted" style="font-size:12px">${e.ziinaIntentId ? 'Created by Ziina automatically. Change the price and save again (still Price sent) to get a new link.' : 'Leave empty and save as <b>Price sent</b>: the Ziina link is made for you and emailed to the customer.'}</span></div>
+      </fieldset>
       ${purchaseSection(e)}
       ${marketSection(e)}
       ${reworkSection(e)}
       ${afterSection(e)}
-      <div class="field"><label for="eLink">Payment link</label><input id="eLink" type="url" placeholder="Leave empty: a Ziina link is created when you save as Price sent" value="${esc(e.paymentLink)}">
-        <span class="muted" style="font-size:12px">${e.ziinaIntentId ? 'Created by Ziina automatically. Change the price and save again (still Price sent) to get a new link.' : 'Leave empty and save as <b>Price sent</b>: the Ziina link is made for you and emailed to the customer.'}</span></div>
       <div class="field"><label for="eMsg">Message to customer <span class="muted" style="font-weight:400;font-size:12px">· emails go to ${e.email ? esc(e.email) : 'no email on this order'}</span></label><textarea id="eMsg" rows="3" placeholder="Available. Framed in teak, delivered by Thursday.">${esc(e.adminMessage)}</textarea></div>
       <div class="ok" id="saveMsg" role="status"></div>
       <div class="muted" id="autoHint" style="font-size:12px;color:var(--gold)" hidden></div>
