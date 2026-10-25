@@ -15,6 +15,8 @@ import { showPricing } from './pricing.js';
 import { showPrintsMaster, showLicMaster } from './pricemasters.js';
 import { showCustomers } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
+import { awbButtons, wireAwb } from './awb.js';
+import { downloadPod, podImage } from './pod.js';
 import outputs from '../amplify_outputs.json';
 
 const client = generateClient();
@@ -696,6 +698,7 @@ function supplierSection(e) {
     const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc((role === 'printer' && cur.stage === 'READY' ? 'printed, ready to collect' : JOB_STAGE[cur.stage]) || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
+      ${role === 'delivery' && cur ? deliveryDocs(cur) : ''}
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
         <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : role === 'printer' ? 'Print shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `⃃ ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
           ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'printer' ? `Print ${esc(spec.size)}${copies > 1 ? ` × ${copies}` : ''}, fine-art matte` : role === 'framer' ? `${gift ? `${j.printer ? 'Frame only' : 'Print + frame'}${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(e.deliveryEmirate || e.deliveryCountry || 'address not set')}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} ⃃ ${best.cost}` : ' · no price lists yet'}</span></div>
@@ -710,6 +713,14 @@ function supplierSection(e) {
     <div class="muted" style="font-size:12px">They see this order in their supplier portal: the photo, frame spec and size, your price, and the pickup and delivery addresses. Their steps update the order (Being framed, Shipped, Delivered) and their invoice becomes a Zoho bill.</div>
     ${['PRICE', 'COMMISSION'].includes(e.kind) ? inboundRow(e, j) : ''}${gift ? row('printer', 'Printing', 'PRINTER') : ''}${row('framer', 'Framing', 'FRAMER')}${row('delivery', 'Delivery', 'COURIER')}</fieldset>`;
 }
+// Delivery row: the airway bill label (display / PDF / print) and the customer's proof of delivery document.
+function deliveryDocs(dj) {
+  const awb = dj.awb ? `<div class="awb-box" data-awbbox data-awbleg="delivery" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px"><div style="font-size:13px"><span class="muted">Airway bill</span> <b class="mono">${esc(dj.awb)}</b> · ${esc(dj.name)}</div>${awbButtons()}<span class="muted" data-awbmsg style="font-size:12px"></span></div>` : '';
+  const pod = dj.pod ? `<div data-podbox style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:6px"><div style="font-size:13px">✓ <b>Proof of delivery</b>: received by <b>${esc(dj.pod.name)}</b> · ${esc(day(dj.pod.at))}${dj.pod.signKey ? ' · signed' : ''}${dj.pod.photoKeys?.length ? ` · ${dj.pod.photoKeys.length} photo${dj.pod.photoKeys.length > 1 ? 's' : ''}` : ''}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn small" data-pod="show">👁 Display POD</button><button type="button" class="btn small ghost" data-pod="pdf">📄 Download POD (PDF)</button></div><div data-podshow hidden></div><span class="muted" data-podmsg style="font-size:12px"></span></div>`
+    : dj.deliveredAt ? `<div class="muted" style="font-size:12px;color:var(--kumkum)">Delivered, no proof of delivery yet: ${esc(dj.name)} can add it in their portal.</div>` : '';
+  return awb + pod;
+}
 // The courier for the artist's parcel (artist → frame shop). The artist prints its airway bill label when the work is finished.
 function inboundRow(e, j) {
   const ib = j.inbound, sent = e.artistStage === 'SHIPPED';
@@ -721,12 +732,39 @@ function inboundRow(e, j) {
       <div class="field" style="grid-column:span 2"><label>Pickup address (blank = the artist's profile)</label><input data-ib="addr" maxlength="300" value="${esc(ib?.from?.address || '')}" placeholder="Artist's address for the courier"></div></div>
       <div class="three" style="align-items:end"><div class="field"><label>Artist name on the label</label><input data-ib="name" maxlength="120" value="${esc(ib?.from?.name || (e.artistId ? '' : 'Siva Raja'))}"></div><div class="field"><label>Artist phone</label><input data-ib="phone" maxlength="30" value="${esc(ib?.from?.phone || '')}"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-ibsave>${ib ? 'Update courier' : 'Allocate courier'}</button>${ib ? '<button type="button" class="btn small ghost" data-ibremove>Remove</button>' : ''}</div></div>`}
+    ${ib?.awb ? `<div class="awb-box" data-awbbox data-awbleg="inbound" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px"><div style="font-size:13px"><span class="muted">Artist's airway bill</span> <b class="mono">${esc(ib.awb)}</b> · ${esc(ib.name)}</div>${awbButtons()}<span class="muted" data-awbmsg style="font-size:12px"></span></div>` : ''}
     <span class="muted" data-ibmsg style="font-size:12px"></span>
   </div>`;
 }
 function wireSuppliers(e) {
   const box = $('supplierBox'); if (!box) return;
   const v = (k) => box.querySelector(`[data-js="${k}"]`);
+  box.querySelectorAll('[data-awbbox]').forEach((ab) => {
+    const m = ab.querySelector('[data-awbmsg]');
+    wireAwb(ab, async () => {
+      const r = await client.mutations.marketAdmin({ action: 'adminLabel', data: JSON.stringify({ id: e.id, leg: ab.dataset.awbleg }) });
+      if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+      return (typeof r.data === 'string' ? JSON.parse(r.data) : r.data).label;
+    }, (t, ok) => { m.textContent = t; m.style.color = ok ? '' : 'var(--kumkum)'; });
+  });
+  const pb = box.querySelector('[data-podbox]');
+  if (pb) {
+    const dj = jobsOf(e).delivery;
+    const data = () => ({ ref: e.ref, title: e.title, awb: dj.awb, courier: dj.name, pickedAt: dj.pickedAt, deliveredAt: dj.deliveredAt, pod: dj.pod,
+      to: { name: e.deliveryName || e.customerName, phone: e.deliveryPhone || e.phone, address: addressLine(e) } });
+    const pm = pb.querySelector('[data-podmsg]'), ps = pb.querySelector('[data-podshow]');
+    pb.querySelectorAll('[data-pod]').forEach((b) => {
+      b.onclick = async () => {
+        if (b.dataset.pod === 'show' && !ps.hidden) { ps.hidden = true; ps.innerHTML = ''; b.textContent = '👁 Display POD'; return; }
+        pm.textContent = 'Making the proof of delivery…';
+        try {
+          if (b.dataset.pod === 'show') { ps.innerHTML = `<img alt="Proof of delivery ${esc(e.ref)}" src="${await podImage(data())}" style="width:100%;max-width:560px;border:1px solid var(--line);border-radius:6px;background:#fff">`; ps.hidden = false; b.textContent = '✕ Hide POD'; }
+          else await downloadPod(data());
+          pm.textContent = '';
+        } catch (ex) { pm.textContent = ex.message; }
+      };
+    });
+  }
   box.querySelectorAll('[data-ibsave],[data-ibremove]').forEach((b) => {
     b.onclick = async () => {
       const ib = (k) => box.querySelector(`[data-ib="${k}"]`)?.value.trim() || '';
@@ -2112,6 +2150,8 @@ async function showDetailBody(e) {
     ];
     const lockSet = new Set(), all = new Set();
     for (const [on, sel] of groups) $('detail').querySelectorAll(sel).forEach((el) => { all.add(el); if (on) lockSet.add(el); });
+    // Documents stay usable on a closed order: the airway bill label and the proof of delivery.
+    [...lockSet].forEach((el) => { if (el.closest('[data-awbbox],[data-podbox]')) lockSet.delete(el); });
     all.forEach((el) => {
       if (lockSet.has(el)) { if (!el.disabled) { el.disabled = true; el.dataset.doneLock = '1'; } }
       else if (el.dataset.doneLock) { el.disabled = false; delete el.dataset.doneLock; }

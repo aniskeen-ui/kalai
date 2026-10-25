@@ -110,21 +110,21 @@ export async function awbCanvas(l, mode = 'bar') {
 }
 const modesOf = (mode) => (mode === 'both' ? ['qr', 'bar'] : [mode === 'qr' ? 'qr' : 'bar']);
 const nameOf = (l, mode) => `AWB-${l.awb}-${mode === 'both' ? 'QR+barcode' : mode === 'qr' ? 'QR' : 'barcode'}`;
-/** The label as a PDF (4 × 6 in; "both" = 2 pages: QR, then barcode), pictures embedded losslessly so codes stay sharp. */
-export async function awbPdf(l, mode) {
+/** A PDF with one picture per page (each canvas fills a page of wPt × hPt points), embedded losslessly in greyscale
+ * (colour: JPEG) so text and codes stay sharp. */
+export async function pdfFromCanvases(canvases, wPt, hPt, title = '', colour = false) {
   const enc = new TextEncoder();
   const images = [];
-  for (const m of modesOf(mode)) {
-    const cv = await awbCanvas(l, m);
+  for (const cv of canvases) {
     const W = cv.width, H = cv.height;
-    const px = cv.getContext('2d').getImageData(0, 0, W, H).data;
-    const grey = new Uint8Array(W * H);
-    for (let i = 0; i < grey.length; i++) grey[i] = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000;
-    if (typeof CompressionStream === 'function') {
+    if (!colour && typeof CompressionStream === 'function') {
+      const px = cv.getContext('2d').getImageData(0, 0, W, H).data;
+      const grey = new Uint8Array(W * H);
+      for (let i = 0; i < grey.length; i++) grey[i] = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000;
       const data = new Uint8Array(await new Response(new Blob([grey]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
       images.push({ data, dict: `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${data.length}` });
     } else {
-      const data = new Uint8Array(await (await fetch(cv.toDataURL('image/jpeg', 1))).arrayBuffer());
+      const data = new Uint8Array(await (await fetch(cv.toDataURL('image/jpeg', 0.92))).arrayBuffer());
       images.push({ data, dict: `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${data.length}` });
     }
   }
@@ -137,16 +137,22 @@ export async function awbPdf(l, mode) {
   push('%PDF-1.4\n%\xE2\xE3\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, `<< /Type /Pages /Kids [${images.map((_, i) => `${pageNo(i)} 0 R`).join(' ')}] /Count ${n} >>`);
-  obj(3, `<< /Title (Airway bill ${String(l.awb).replace(/[()\\]/g, '')}) /Producer (Kalai Art House) >>`);
+  obj(3, `<< /Title (${String(title).replace(/[()\\]/g, '').replace(/[^\x20-\x7e]/g, '')}) /Producer (Kalai Art House) >>`);
   images.forEach((im, i) => {
-    const pg = pageNo(i), content = 'q 288 0 0 432 0 0 cm /Im0 Do Q';
-    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 288 432] /Resources << /XObject << /Im0 ${pg + 2} 0 R >> >> /Contents ${pg + 1} 0 R >>`);
+    const pg = pageNo(i), content = `q ${wPt} 0 0 ${hPt} 0 0 cm /Im0 Do Q`;
+    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${wPt} ${hPt}] /Resources << /XObject << /Im0 ${pg + 2} 0 R >> >> /Contents ${pg + 1} 0 R >>`);
     obj(pg + 1, `<< /Length ${content.length} >>`, enc.encode(content));
     obj(pg + 2, `<< ${im.dict} >>`, im.data);
   });
   const total = 3 + n * 3, xref = len;
   push(`xref\n0 ${total + 1}\n0000000000 65535 f \n${Array.from({ length: total }, (_, i) => `${String(offs[i + 1]).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${total + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: 'application/pdf' });
+}
+/** The label as a PDF (4 × 6 in; "both" = 2 pages: QR, then barcode). */
+export async function awbPdf(l, mode) {
+  const cvs = [];
+  for (const m of modesOf(mode)) cvs.push(await awbCanvas(l, m));
+  return pdfFromCanvases(cvs, 288, 432, `Airway bill ${l.awb}`);
 }
 /** Downloads the label as AWB-<number>-….pdf. */
 export async function downloadAwb(l, mode) {

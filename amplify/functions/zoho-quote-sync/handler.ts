@@ -139,6 +139,24 @@ async function ensureAwb(jobs: Jobs): Promise<boolean> {
   return true;
 }
 
+/** Label data for the parcel to the customer (from the shop the courier collects from). */
+async function deliveryLabel(e: Img, jobs: Jobs) {
+  const sr = shipRole(jobs), dj = jobs.delivery;
+  if (!sr || !dj) throw new Error('No courier allocated for this order yet.');
+  if (!dj.awb) throw new Error('No airway bill yet: it is made when the shop marks the job ready (or the courier gives it).');
+  const { S } = mtables();
+  const shop = plain(await getRow(S, { id: { S: jobs[sr]!.supplierId } }));
+  const det = parseDetails(str(e, 'details'));
+  const kind = str(e, 'kind');
+  const parcel = sr === 'printer' && !['GIFT', 'PHOTO'].includes(kind) ? 'Print' : sr === 'printer' ? 'Print (flat, do not bend)' : parcelOf(det);
+  return {
+    awb: dj.awb, courier: dj.name, ref: str(e, 'ref'), date: dubaiToday(), service: 'Prepaid · Standard', pieces: '1 of 1',
+    contents: parcel, fragile: sr === 'framer' && !/unframed/i.test(parcel),
+    from: { name: String(shop?.business ?? jobs[sr]!.name), phone: String(shop?.phone ?? ''), address: String(shop?.address ?? '') },
+    to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
+    returnTo: 'Kalai Art House, Dubai · +971 55 299 6626',
+  };
+}
 /** The artist's parcel gets its airway bill once the work is finished and a courier is allocated. */
 async function ensureArtistAwb(e: Img, jobs: Jobs): Promise<boolean> {
   const ib = jobs.inbound;
@@ -2618,19 +2636,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (!['READY', 'COLLECTED'].includes(jobs[sr]!.stage)) throw new Error(sr === 'printer' ? 'Mark it printed first.' : 'Mark it framed and ready first.');
     if (!jobs.delivery) throw new Error('Kalai Art House has not allocated the courier yet: we will let you know.');
     if (await ensureAwb(jobs)) await saveJobs(id, jobs);
-    const dj = jobs.delivery;
-    if (!dj.awb) throw new Error('The courier gives the airway bill number for this order: it shows here once they have it.');
-    const shop = plain(await getRow(S, { id: { S: jobs[sr]!.supplierId } }));
-    const det = parseDetails(str(e, 'details'));
-    const kind = str(e, 'kind');
-    const parcel = sr === 'printer' && !['GIFT', 'PHOTO'].includes(kind) ? 'Print' : sr === 'printer' ? 'Print (flat, do not bend)' : parcelOf(det);
-    return { label: {
-      awb: dj.awb, courier: dj.name, ref, date: dubaiToday(), service: 'Prepaid · Standard', pieces: '1 of 1',
-      contents: parcel, fragile: sr === 'framer' && !/unframed/i.test(parcel),
-      from: { name: String(shop?.business ?? jobs[sr]!.name), phone: String(shop?.phone ?? ''), address: String(shop?.address ?? '') },
-      to: { name: str(e, 'deliveryName') || str(e, 'customerName'), phone: str(e, 'deliveryPhone') || str(e, 'phone'), address: addressText(e) },
-      returnTo: 'Kalai Art House, Dubai · +971 55 299 6626',
-    } };
+    return { label: await deliveryLabel(e, jobs) };
   }
   if (action === 'jobPhoto') {
     if (role === 'delivery') throw new Error('The artwork photo is for the frame shop and print shop.');
@@ -2778,6 +2784,18 @@ async function marketAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  // Studio: the airway bill label of an order (the parcel to the customer, or the artist's parcel to the frame shop).
+  if (action === 'adminLabel') {
+    const id = txt(d.id, 80);
+    const e = await enquiryRow(id);
+    if (!e) throw new Error('Order not found');
+    const jobs = await jobsOf(id);
+    if (d.leg === 'inbound') {
+      if (!jobs.inbound?.awb) throw new Error('No airway bill for the artist\'s parcel yet: it is made when the artist marks the work finished.');
+      return { label: await artistLabel(e, jobs) };
+    }
+    return { label: await deliveryLabel(e, jobs) };
+  }
   // The courier for the artist's parcel (artist → frame shop): allocated here; the artist prints the airway bill.
   if (action === 'artistCourier') {
     const id = txt(d.id, 80);
