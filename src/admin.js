@@ -1404,7 +1404,7 @@ async function mailNote(e, oldSt, newSt, prevMsg) {
     return `Email sent ${to} (${STATUS[newSt] || newSt}${(e.adminMessage || '') ? ', with your message' : ''}).`;
   }
   if ((e.adminMessage || '') && (e.adminMessage || '') !== prevMsg) return `Your message was emailed ${to}.`;
-  return `No email this time (status and message unchanged). Customer email: ${e.email}.`;
+  return `No email this time (status and message unchanged). To send it anyway, use “Email the customer again” below.`;
 }
 async function saveCosting(e) {
   const { local, ...inp } = readCosting();
@@ -1924,10 +1924,21 @@ async function showDetailBody(e) {
       <div class="muted" id="autoHint" style="font-size:12px;color:var(--gold)" hidden></div>
       <button class="btn" type="submit" id="eSave">Save and update customer</button>
     </form>
-    <div class="links" id="waLinks"></div>`;
+    <div class="links" id="waLinks"></div>
+    ${e.email ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="linkbtn" id="resendMail" style="font-size:13px">Email the customer again (${esc(STATUS[e.status] || e.status)})</button><span class="muted" id="resendMsg" style="font-size:12px"></span></div>` : ''}`;
 
   wireDiscount(e);
   wireOffer(e);
+  if ($('resendMail')) $('resendMail').onclick = async () => {
+    const b = $('resendMail'), m = $('resendMsg');
+    b.disabled = true; m.textContent = 'Sending…';
+    try {
+      const r = await client.mutations.marketAdmin({ action: 'resendMail', data: JSON.stringify({ id: e.id }) });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      let o = r.data; try { if (typeof o === 'string') o = JSON.parse(o); } catch { o = {}; }
+      m.textContent = `Sent to ${o?.to || e.email}: “${(o?.sent || []).join('”, “')}”. Save changes first if you edited the message.`;
+    } catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
+  };
   syncFramer(e);
   // Automatic next status from what was just done on the desk (unless the status was changed by hand):
   // price entered on a new enquiry → Price sent (the customer gets the price and Ziina link);

@@ -2441,6 +2441,20 @@ async function marketAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  // Studio: send the customer the email for the order's current status again (e.g. the email address was added later).
+  if (action === 'resendMail') {
+    const e = await enquiryRow(txt(d.id, 80));
+    if (!e) throw new Error('Order not found');
+    const to = str(e, 'email');
+    if (!to) throw new Error('No email on this order: send the update on WhatsApp.');
+    const old = { ...e, status: { S: '__resend' }, adminMessage: { S: '' } } as Img;
+    let mails = mailsFor({ eventName: 'MODIFY', dynamodb: { NewImage: e, OldImage: old } }).filter((m) => m.to === to);
+    if (!mails.length && str(e, 'adminMessage')) mails = mailsFor({ eventName: 'MODIFY', dynamodb: { NewImage: e, OldImage: { ...e, adminMessage: { S: '' } } as Img } }).filter((m) => m.to === to);
+    if (!mails.length) throw new Error('There is no customer email for this status. Add a message and save, or use WhatsApp.');
+    if (!(await emailsOn())) throw new Error('Emails are switched off (Settings).');
+    for (const m of mails) await sendMail(m);
+    return { sent: mails.map((m) => m.subject), to };
+  }
   // Sample price lists for the frame shops (studio, Pricing → Margin & charges): Dubai trade framing prices, a different
   // level per shop (so "cheapest" picks one), only in empty cells: prices a shop typed itself are kept. Not couriers.
   if (action === 'sampleFrameRates') {
