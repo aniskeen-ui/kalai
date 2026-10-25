@@ -441,6 +441,8 @@ const schema = a.schema({
       heroText: a.string(),
       siteLook: a.string(), // classic | green
       inrPerAed: a.float(), // rupees per dirham, for prices shown in ₹ on the website
+      gbpPerAed: a.float(), // pounds per dirham (£ prices), refreshed with the rupee rate
+      eurPerAed: a.float(), // euros per dirham (€ prices)
       kuralHour: a.integer(), // Dubai hour (0–23) the Thirukkural of the day is published (default 6)
       showArtists: a.boolean(), // artist portfolio on the website (false = hide)
       inrAuto: a.boolean(), // false = keep the rate typed in; otherwise updated every morning (ECB rate via Frankfurter)

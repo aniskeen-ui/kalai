@@ -3670,15 +3670,18 @@ async function refreshInr() {
   if (!table) return;
   const row = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: 'site' } } }));
   if (row.Item && row.Item.inrAuto?.BOOL === false) return;
-  const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=INR');
+  const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=INR,GBP,EUR');
   if (!r.ok) throw new Error(`Frankfurter ${r.status}`);
-  const usdInr = Number(((await r.json()) as { rates?: { INR?: number } }).rates?.INR);
+  const rates = ((await r.json()) as { rates?: { INR?: number; GBP?: number; EUR?: number } }).rates ?? {};
+  const usdInr = Number(rates.INR), usdGbp = Number(rates.GBP), usdEur = Number(rates.EUR);
   if (!(usdInr > 50 && usdInr < 200)) throw new Error('Odd rate');
-  const rate = Math.round((usdInr / 3.6725) * 100) / 100, now = new Date().toISOString();
+  const per = (v: number, dp: number) => Math.round((v / 3.6725) * 10 ** dp) / 10 ** dp;
+  const rate = per(usdInr, 2), now = new Date().toISOString();
+  const extra = usdGbp > 0.4 && usdGbp < 1.5 && usdEur > 0.5 && usdEur < 1.5; // pounds and euros per dirham too
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: 'site' } },
-    UpdateExpression: 'SET inrPerAed = :r, inrRateAt = :t, updatedAt = :t, createdAt = if_not_exists(createdAt, :t), #tn = :tn',
-    ExpressionAttributeNames: { '#tn': '__typename' }, ExpressionAttributeValues: { ':r': { N: String(rate) }, ':t': { S: now }, ':tn': { S: 'SiteSetting' } } }));
-  console.log(`INR per AED ${rate}`);
+    UpdateExpression: `SET inrPerAed = :r, inrRateAt = :t, updatedAt = :t, createdAt = if_not_exists(createdAt, :t), #tn = :tn${extra ? ', gbpPerAed = :g, eurPerAed = :e' : ''}`,
+    ExpressionAttributeNames: { '#tn': '__typename' }, ExpressionAttributeValues: { ':r': { N: String(rate) }, ':t': { S: now }, ':tn': { S: 'SiteSetting' }, ...(extra ? { ':g': { N: String(per(usdGbp, 4)) }, ':e': { N: String(per(usdEur, 4)) } } : {}) } }));
+  console.log(`INR per AED ${rate}${extra ? ` · GBP ${per(usdGbp, 4)} · EUR ${per(usdEur, 4)}` : ''}`);
 }
 
 // Amazon Translate codes. Each day's meaning is translated from the plain English meaning, not the poem.

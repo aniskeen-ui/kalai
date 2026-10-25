@@ -27,6 +27,8 @@ let kuralSec = 10;
     if (!st) return;
     if (st.heroSeconds != null) window.kalaiHeroEvery?.(st.heroSeconds);
     if (st.inrPerAed) window.kalaiInrPerAed = Number(st.inrPerAed);
+    if (st.gbpPerAed) window.kalaiGbpPerAed = Number(st.gbpPerAed);
+    if (st.eurPerAed) window.kalaiEurPerAed = Number(st.eurPerAed);
     window.kalaiRound = { usd: Number(st.usdRound) || 5, inr: Number(st.inrRound) || 50, up: st.roundUp === true, approx: st.approxSign !== false };
     try { window.kalaiShipZones = JSON.parse(st.shipZones || '{}') || {}; } catch { window.kalaiShipZones = {}; }
     try { window.kalaiPhotoPrices = JSON.parse(st.photoPrices || '{}') || {}; } catch { window.kalaiPhotoPrices = {}; }
