@@ -478,6 +478,12 @@ start();
 new MutationObserver(() => {
   document.querySelectorAll('img[data-okey]:not([src])').forEach(async (img) => {
     img.setAttribute('src', '');
-    try { img.src = (await getUrl({ path: img.dataset.okey, options: { expiresIn: 3600 } })).url.toString(); } catch { img.remove(); }
+    // If the picture can't be read directly (folder rules, expired link), ask the server to sign it for this order.
+    img.onerror = async () => {
+      img.onerror = null;
+      const id = img.closest('.acard')?.id?.replace(/^c-/, '');
+      try { const { data } = await client.queries.artistPhoto({ id }); const u = (typeof data === 'string' ? JSON.parse(data) : data)?.url; if (u) img.src = u; else img.remove(); } catch { img.remove(); }
+    };
+    try { img.src = (await getUrl({ path: img.dataset.okey, options: { expiresIn: 3600 } })).url.toString(); } catch { img.onerror?.(); }
   });
 }).observe(document.body, { childList: true, subtree: true });

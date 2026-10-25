@@ -1380,7 +1380,15 @@ async function artistPhoto(id: string) {
   if (!table || !bucket) throw new Error('Not configured');
   const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
   const e = got.Item as Img | undefined;
-  const key = str(e, 'fileKey');
+  let key = str(e, 'fileKey');
+  // A collection order: the catalogue work's picture (signed here, so it opens whatever folder it is in).
+  if (e && str(e, 'kind') === 'PRICE' && process.env.PRODUCT_TABLE) {
+    const no = String(parseDetails(str(e, 'details'))['Artwork no.'] ?? '').trim();
+    const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no) : undefined;
+    key = str(pr, 'imageKey');
+    if (!key) throw new Error('No picture for this work');
+    return { url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 3600 }) };
+  }
   if (!e || str(e, 'kind') !== 'COMMISSION' || !key.startsWith('uploads/')) throw new Error('No reference photo for this enquiry');
   const url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 900 });
   return { url };
