@@ -1982,8 +1982,10 @@ async function showDetailBody(e) {
     const digits = waDigits($('ePhone').value);
     if (!digits) { $('waLinks').innerHTML = '<span class="muted">No mobile number to message.</span>'; return; }
     const price = finalPriceStr(), link = $('eLink').value.trim(), msg = $('eMsg').value.trim();
-    const text = [`Hello ${e.customerName || ''}, this is ${STUDIO_WHATSAPP_NAME} about your enquiry ${e.ref} (${e.title}).`,
-      price ? `Price: AED ${price}` : '', msg, link ? `Pay securely here: ${link}` : '',
+    const st = $('eStatus').value, unpaid = ['RECEIVED', 'PRICE_SENT'].includes(st);
+    const text = [`Hello ${e.customerName || ''}, this is ${STUDIO_WHATSAPP_NAME} about your ${unpaid ? 'enquiry' : 'order'} ${e.ref} (${e.title}).`,
+      unpaid ? (price ? `Price: AED ${price}` : '') : ['REFUNDED', 'CANCELLED'].includes(st) ? `Status: ${STATUS[st]}` : `Status: ${STATUS[st] || st}${price ? ` · paid AED ${price}, thank you` : ''}`,
+      msg, unpaid && link ? `Pay securely here: ${link}` : '',
       SHIP_STATUSES.includes($('eStatus').value) && $('eCourier').value.trim()
         ? `${$('eStatus').value === 'DELIVERED' ? 'Delivered' : 'Shipped'} with ${$('eCourier').value.trim()}${$('eAwb').value.trim() ? `, tracking no. ${$('eAwb').value.trim()}` : ''}` : '',
       'You can also track it under My enquiries & orders on art.pranixtechno.com'].filter(Boolean).join('\n');
@@ -2253,7 +2255,9 @@ async function showDetailBody(e) {
         paymentRef: $('ePayRef').value.trim() || null,
         ...(priceLocked(e) ? {} : { quotedPrice: priceVal === '' ? null : Number(priceVal), ...disc }),
         paymentLink: $('eLink').value.trim() || null,
-        adminMessage: $('eMsg').value.trim() || null,
+        // A message left from an earlier step (unchanged while the status moves on) is cleared, so the customer
+        // doesn't keep seeing e.g. "pay with the link" after paying.
+        adminMessage: (newSt !== s && $('eMsg').value.trim() === prevMsg.trim()) ? null : $('eMsg').value.trim() || null,
       });
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(e, data || {});

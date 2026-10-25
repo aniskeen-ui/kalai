@@ -3209,7 +3209,7 @@ async function ziinaWebhook(ev: UrlEvent) {
       const paidOk = Number(pi.amount) === fils(num(e, 'quotedPrice') ?? 0);
       const card = pi.card_details ? `${pi.card_details.card_brand ?? 'card'} ••${pi.card_details.card_last_four ?? ''}` : '';
       if (['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') && paidOk) {
-        await updateEnquiry(str(e, 'id'), { status: 'PAID', paymentMethod: 'ZIINA', paymentRef: String(pi.id), ziinaPaidAt: now, ...(card ? { ziinaCard: card } : {}) });
+        await updateEnquiry(str(e, 'id'), { status: 'PAID', paymentMethod: 'ZIINA', paymentRef: String(pi.id), ziinaPaidAt: now, adminMessage: null, ...(card ? { ziinaCard: card } : {}) }); // the price message ("pay with the link") is done
         console.log(`Ziina paid ${str(e, 'ref')}: AED ${Number(pi.amount) / 100}`);
       } else {
         await writeBack(str(e, 'id'), { ziinaPaidAt: now, ziinaMessage: paidOk ? `Ziina payment received (order was already ${str(e, 'status')}).` : `Ziina payment of AED ${Number(pi.amount) / 100} does not match the price AED ${num(e, 'quotedPrice')}: check it and mark Paid yourself.` });
@@ -4063,7 +4063,8 @@ function mailsFor(rec: StreamRecord): Mail[] {
   const id = str(img, 'id');
   const price = num(img, 'quotedPrice');
   const msg = str(img, 'adminMessage');
-  const msgLine = msg ? `<b>Message from us:</b> ${h(msg)}` : '';
+  // Only a new message goes into a status email (a message written for an earlier step, e.g. "pay with the link", is not repeated).
+  const msgLine = msg && (rec.eventName !== 'MODIFY' || msg !== str(rec.dynamodb?.OldImage, 'adminMessage')) ? `<b>Message from us:</b> ${h(msg)}` : '';
   const hi = `Hello ${h(name)},`;
   const out: Mail[] = [];
   // key: which customer email this is (each can be switched off in Order Management → Settings → Customer emails).
