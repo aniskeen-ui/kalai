@@ -108,93 +108,147 @@ export async function awbCanvas(l, mode = 'bar') {
   }
   return cv;
 }
-/** The label as a one-page PDF (4 × 6 in), the picture embedded losslessly (greyscale, deflate) so bars stay sharp. */
+const modesOf = (mode) => (mode === 'both' ? ['qr', 'bar'] : [mode === 'qr' ? 'qr' : 'bar']);
+const nameOf = (l, mode) => `AWB-${l.awb}-${mode === 'both' ? 'QR+barcode' : mode === 'qr' ? 'QR' : 'barcode'}`;
+/** The label as a PDF (4 × 6 in; "both" = 2 pages: QR, then barcode), pictures embedded losslessly so codes stay sharp. */
 export async function awbPdf(l, mode) {
-  const cv = await awbCanvas(l, mode);
-  const W = cv.width, H = cv.height;
-  const px = cv.getContext('2d').getImageData(0, 0, W, H).data;
-  const grey = new Uint8Array(W * H);
-  for (let i = 0; i < grey.length; i++) grey[i] = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000;
-  let img, dict;
-  if (typeof CompressionStream === 'function') {
-    img = new Uint8Array(await new Response(new Blob([grey]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
-    dict = `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${img.length}`;
-  } else {
-    img = new Uint8Array(await (await fetch(cv.toDataURL('image/jpeg', 1))).arrayBuffer());
-    dict = `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length}`;
-  }
   const enc = new TextEncoder();
-  const content = 'q 288 0 0 432 0 0 cm /Im0 Do Q';
+  const images = [];
+  for (const m of modesOf(mode)) {
+    const cv = await awbCanvas(l, m);
+    const W = cv.width, H = cv.height;
+    const px = cv.getContext('2d').getImageData(0, 0, W, H).data;
+    const grey = new Uint8Array(W * H);
+    for (let i = 0; i < grey.length; i++) grey[i] = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000;
+    if (typeof CompressionStream === 'function') {
+      const data = new Uint8Array(await new Response(new Blob([grey]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+      images.push({ data, dict: `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${data.length}` });
+    } else {
+      const data = new Uint8Array(await (await fetch(cv.toDataURL('image/jpeg', 1))).arrayBuffer());
+      images.push({ data, dict: `/Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${data.length}` });
+    }
+  }
+  // Objects: 1 catalog, 2 pages, 3 info, then per page: page, content, image.
+  const n = images.length, pageNo = (i) => 4 + i * 3;
   const parts = [], offs = [];
   let len = 0;
   const push = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+  const obj = (k, body, stream) => { offs[k] = len; push(`${k} 0 obj\n${body}\n`); if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); } push('endobj\n'); };
   push('%PDF-1.4\n%\xE2\xE3\n');
-  const obj = (n, body, stream) => { offs[n] = len; push(`${n} 0 obj\n${body}\n`); if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); } push('endobj\n'); };
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 288 432] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>');
-  obj(4, `<< /Length ${content.length} >>`, enc.encode(content));
-  obj(5, `<< ${dict} >>`, img);
-  obj(6, `<< /Title (Airway bill ${String(l.awb).replace(/[()\\]/g, '')}) /Producer (Kalai Art House) >>`);
-  const xref = len;
-  push(`xref\n0 7\n0000000000 65535 f \n${[1, 2, 3, 4, 5, 6].map((n) => `${String(offs[n]).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  obj(2, `<< /Type /Pages /Kids [${images.map((_, i) => `${pageNo(i)} 0 R`).join(' ')}] /Count ${n} >>`);
+  obj(3, `<< /Title (Airway bill ${String(l.awb).replace(/[()\\]/g, '')}) /Producer (Kalai Art House) >>`);
+  images.forEach((im, i) => {
+    const pg = pageNo(i), content = 'q 288 0 0 432 0 0 cm /Im0 Do Q';
+    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 288 432] /Resources << /XObject << /Im0 ${pg + 2} 0 R >> >> /Contents ${pg + 1} 0 R >>`);
+    obj(pg + 1, `<< /Length ${content.length} >>`, enc.encode(content));
+    obj(pg + 2, `<< ${im.dict} >>`, im.data);
+  });
+  const total = 3 + n * 3, xref = len;
+  push(`xref\n0 ${total + 1}\n0000000000 65535 f \n${Array.from({ length: total }, (_, i) => `${String(offs[i + 1]).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${total + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: 'application/pdf' });
 }
-/** Downloads the label as AWB-<number>.pdf. */
+/** Downloads the label as AWB-<number>-….pdf. */
 export async function downloadAwb(l, mode) {
   const blob = await awbPdf(l, mode);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `AWB-${l.awb}-${mode === 'qr' ? 'QR' : 'barcode'}.pdf`;
+  a.href = URL.createObjectURL(blob); a.download = `${nameOf(l, mode)}.pdf`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
-/** The label as a picture to show on the screen (scan it straight from the phone / screen). */
+/** The label as a picture to show on the screen (the courier can scan it from the screen). */
 export async function awbImage(l, mode) {
-  const cv = await awbCanvas(l, mode);
-  return cv.toDataURL('image/png');
+  return (await awbCanvas(l, mode)).toDataURL('image/png');
 }
-/** Prints the label at 4 × 6 in (through a hidden frame, so no pop-up is needed). */
+/** Prints the label at 4 × 6 in ("both" = 2 labels), through a hidden frame so no pop-up is needed. */
 export async function printAwb(l, mode) {
-  const cv = await awbCanvas(l, mode);
+  const srcs = [];
+  for (const m of modesOf(mode)) srcs.push(await awbImage(l, m));
   const f = document.createElement('iframe');
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
   document.body.appendChild(f);
   const d = f.contentDocument;
-  d.open(); d.write(`<!doctype html><html><head><title>AWB ${l.awb}</title><style>@page{size:4in 6in;margin:0}html,body{margin:0}img{width:4in;height:6in;display:block}</style></head><body><img src="${cv.toDataURL('image/png')}"></body></html>`); d.close();
-  const img = d.querySelector('img');
+  d.open(); d.write(`<!doctype html><html><head><title>AWB ${l.awb}</title><style>@page{size:4in 6in;margin:0}html,body{margin:0}img{width:4in;height:6in;display:block;page-break-after:always}img:last-child{page-break-after:auto}</style></head><body>${srcs.map((s) => `<img src="${s}">`).join('')}</body></html>`); d.close();
+  const imgs = [...d.querySelectorAll('img')];
   const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); };
-  if (img.complete) go(); else img.onload = go;
+  Promise.all(imgs.map((im) => (im.complete ? 1 : new Promise((ok) => { im.onload = ok; })))).then(go);
 }
 
 /* ---------- buttons shared by the supplier portal, artist desk and artist portal ---------- */
-const AWB_CSS = '.awb-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 2px}.awb-show{margin-top:8px;display:grid;gap:6px;justify-items:start}.awb-show img{width:100%;max-width:400px;border:1px solid #ccc;border-radius:6px;background:#fff}';
+const AWB_CSS = `.awb-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 2px}.awb-acts select{width:auto}
+.awb-show{margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.awb-show figure{margin:0;display:grid;gap:4px;justify-items:center;flex:1 1 260px;max-width:400px}.awb-show img,.awb-side img{width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;display:block}
+.awb-show figcaption,.awb-side figcaption{font-size:12px;color:#777}
+.awb-side{position:fixed;top:90px;z-index:40;display:grid;gap:6px;justify-items:center;max-height:calc(100vh - 110px);overflow:auto}.awb-side .awb-x{justify-self:end;border:1px solid #ccc;background:#fff;color:#333;border-radius:999px;padding:2px 10px;font:inherit;font-size:12px;cursor:pointer}
+@media print{.awb-side{display:none}}`;
 if (typeof document !== 'undefined' && !document.getElementById('awb-css')) { const st = document.createElement('style'); st.id = 'awb-css'; st.textContent = AWB_CSS; document.head.appendChild(st); }
-/** The label buttons: Display (shows it on the screen), PDF download and Print, each as barcode or QR code. */
+/** The label buttons: code (QR / barcode / both), where to show it (beside the page / in the card), Display, PDF, Print. */
 export function awbButtons() {
-  const fmt = `<select data-awbfmt aria-label="Label code" style="width:auto"><option value="bar">Barcode</option><option value="qr">QR code</option></select>`;
-  return `<div class="awb-acts">${fmt}<button type="button" class="btn small" data-awbdo="show">👁 Display</button><button type="button" class="btn small ghost" data-awbdo="pdf">📄 Download PDF</button><button type="button" class="btn small ghost" data-awbdo="print">🖨 Print</button></div><div class="awb-show" data-awbshow hidden></div>`;
+  let fmt = 'both', pos = 'side';
+  try { fmt = localStorage.getItem('kalai-awb-fmt') || fmt; pos = localStorage.getItem('kalai-awb-pos') || pos; } catch { /* defaults */ }
+  const opt = (v, l, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`;
+  return `<div class="awb-acts"><select data-awbfmt aria-label="Code on the label">${opt('both', 'QR code + barcode', fmt)}${opt('qr', 'QR code', fmt)}${opt('bar', 'Barcode', fmt)}</select>
+    <select data-awbpos aria-label="Where to show it">${opt('side', 'Show beside the page', pos)}${opt('card', 'Show here in the card', pos)}</select>
+    <button type="button" class="btn small" data-awbdo="show">👁 Display</button><button type="button" class="btn small ghost" data-awbdo="pdf">📄 Download PDF</button><button type="button" class="btn small ghost" data-awbdo="print">🖨 Print</button></div><div class="awb-show" data-awbshow hidden></div>`;
 }
+// The side panels (left: QR code, right: barcode) use the empty margins beside the page; one order's label at a time.
+let sideOwner = null;
+function closeSide() { document.querySelectorAll('.awb-side').forEach((x) => x.remove()); if (sideOwner) { sideOwner.textContent = '👁 Display'; sideOwner = null; } }
+function placeSide(anchor) {
+  const r = anchor.getBoundingClientRect();
+  const L = document.getElementById('awbSideL'), R = document.getElementById('awbSideR');
+  const gl = r.left - 24, gr = window.innerWidth - r.right - 24;
+  if (L) { L.style.left = '12px'; L.style.width = `${Math.min(420, gl)}px`; }
+  if (R) { R.style.right = '12px'; R.style.width = `${Math.min(420, gr)}px`; }
+}
+const sideFits = (anchor, n) => { const r = anchor.getBoundingClientRect(); const gl = r.left - 24, gr = window.innerWidth - r.right - 24; return n === 'both' ? gl >= 230 && gr >= 230 : Math.max(gl, gr) >= 230; };
+if (typeof window !== 'undefined') window.addEventListener('resize', () => { const a = document.querySelector('[data-awbanchor]'); if (a && document.querySelector('.awb-side')) { if (sideFits(a, document.getElementById('awbSideL') && document.getElementById('awbSideR') ? 'both' : 'one')) placeSide(a); else closeSide(); } });
 /** Wires the buttons in box. getLabel() fetches the label data; say(text, ok) shows a message. */
 export function wireAwb(box, getLabel, say) {
   if (!box || box.dataset.awbWired) return;
   box.dataset.awbWired = '1';
   let cache = null;
+  const fmtSel = box.querySelector('[data-awbfmt]'), posSel = box.querySelector('[data-awbpos]');
+  const showBtn = box.querySelector('[data-awbdo="show"]'), show = box.querySelector('[data-awbshow]');
+  const fig = (src, m) => `<figure><img alt="Airway bill ${cache.awb} (${m === 'qr' ? 'QR code' : 'barcode'})" src="${src}"><figcaption>${m === 'qr' ? 'QR code' : 'Barcode'}: the courier can scan it from the screen</figcaption></figure>`;
+  const isOpen = () => !show.hidden || sideOwner === showBtn;
+  const hide = () => { show.hidden = true; show.innerHTML = ''; if (sideOwner === showBtn) closeSide(); showBtn.textContent = '👁 Display'; };
+  const display = async () => {
+    const mode = fmtSel.value, modes = modesOf(mode);
+    const imgs = {}; for (const m of modes) imgs[m] = await awbImage(cache, m);
+    const anchor = box.closest('article, .ocard, .card, .progress') || box;
+    hide(); closeSide();
+    if (posSel.value === 'side' && sideFits(anchor, mode)) {
+      document.querySelectorAll('[data-awbanchor]').forEach((x) => x.removeAttribute('data-awbanchor'));
+      anchor.setAttribute('data-awbanchor', '');
+      const panel = (id, m) => { const d = document.createElement('div'); d.className = 'awb-side'; d.id = id; d.innerHTML = `<button type="button" class="awb-x">✕ Close</button>${fig(imgs[m], m)}`; d.querySelector('.awb-x').onclick = hide; document.body.appendChild(d); };
+      // QR on the left, barcode on the right (one code alone: its own side).
+      if (imgs.qr) panel('awbSideL', 'qr');
+      if (imgs.bar) panel('awbSideR', 'bar');
+      placeSide(anchor);
+      sideOwner = showBtn;
+    } else {
+      show.innerHTML = modes.map((m) => fig(imgs[m], m)).join('');
+      show.hidden = false;
+      if (posSel.value === 'side') say('Not enough room beside the page on this screen: shown here instead.', true);
+    }
+    showBtn.textContent = '✕ Hide';
+  };
   box.querySelectorAll('[data-awbdo]').forEach((b) => {
     b.addEventListener('click', async () => {
-      const mode = box.querySelector('[data-awbfmt]')?.value || 'bar';
-      const show = box.querySelector('[data-awbshow]');
-      if (b.dataset.awbdo === 'show' && !show.hidden && show.dataset.mode === mode) { show.hidden = true; b.textContent = '👁 Display'; return; }
+      if (b === showBtn && isOpen()) { hide(); return; }
       say('Making the airway bill…', true);
       try {
         cache = cache || await getLabel();
-        if (b.dataset.awbdo === 'show') {
-          show.innerHTML = `<img alt="Airway bill ${cache.awb}" src="${await awbImage(cache, mode)}"><span class="muted" style="font-size:12px">The courier can scan the ${mode === 'qr' ? 'QR code' : 'barcode'} straight from this screen.</span>`;
-          show.hidden = false; show.dataset.mode = mode; b.textContent = '✕ Hide';
-        } else if (b.dataset.awbdo === 'pdf') await downloadAwb(cache, mode);
+        const mode = fmtSel.value;
+        if (b === showBtn) await display();
+        else if (b.dataset.awbdo === 'pdf') await downloadAwb(cache, mode);
         else await printAwb(cache, mode);
         say(`Airway bill ${cache.awb} ready.`, true);
       } catch (ex) { say(ex.message, false); }
     });
   });
-  box.querySelector('[data-awbfmt]')?.addEventListener('change', () => { const show = box.querySelector('[data-awbshow]'); if (!show.hidden) box.querySelector('[data-awbdo="show"]').click(); });
+  [fmtSel, posSel].forEach((sel) => sel.addEventListener('change', () => {
+    try { localStorage.setItem('kalai-awb-fmt', fmtSel.value); localStorage.setItem('kalai-awb-pos', posSel.value); } catch { /* */ }
+    if (isOpen() && cache) display().catch((ex) => say(ex.message, false));
+  }));
 }
