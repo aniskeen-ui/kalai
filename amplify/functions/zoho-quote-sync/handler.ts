@@ -1358,6 +1358,14 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   // The order's status follows the artist: Started → Artist working, Finished → Artist finished, sent with an AWB →
   // Sent by artist (or straight to Being framed when the frame shop has already accepted the job). Only forward.
   await followArtist(e, PROGRESS[Math.max(target, current)]);
+  // Just sent: tell the frame shop that has the job that the artwork is on its way (courier and AWB).
+  if (target >= 2 && current < 2) {
+    try {
+      const fj = (await jobsOf(id)).framer;
+      const fp = fj ? plain(await getRow(mtables().S, { id: { S: fj.supplierId } })) : null;
+      if (fp?.email) await sendMail({ to: String(fp.email), subject: `Artwork on its way to you: ${str(e, 'ref')}`, lines: [`Hello ${h(fp.contactName || fp.business)},`, `The artist has sent <b>${h(str(e, 'title'))}</b> (order ${h(str(e, 'ref'))}) to you for framing: <b>${h(courier)}</b>, AWB / tracking <b>${h(awb)}</b>.`, 'When it arrives, check it against the photo in your portal before you cut anything, then frame it and tap <b>Framed, ready for pickup</b>.'], button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } });
+    } catch (err) { console.warn('Frame shop not told about the artwork', err); }
+  }
   return { ok: true, ref: str(e, 'ref'), ...set };
 }
 /** The order's status follows the artist's step (paid orders only, forward only). Also catches up older orders. */
@@ -2374,6 +2382,8 @@ function jobView(e: Img, jobs: Jobs, role: Role, framerProfile: Dict | null, pri
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
     stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null, hasBill: !!j.billId,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
+    // Collection / commission: the artist makes the work first; the frame shop sees where it is.
+    artist: role === 'framer' && ['PRICE', 'COMMISSION'].includes(str(e, 'kind')) ? { stage: str(e, 'artistStage') || '', startedAt: str(e, 'artistStartedAt'), finishedAt: str(e, 'artistFinishedAt'), sentAt: str(e, 'artistShippedAt'), courier: str(e, 'artistCourier'), awb: str(e, 'artistAwb') } : null,
     pod: j.pod ? { name: j.pod.name, at: j.pod.at, signed: !!j.pod.signKey, photos: j.pod.photoKeys?.length ?? 0 } : null,
     specs: role === 'printer' ? [['Print', str(e, 'kind') === 'GIFT' ? giftPrintSpec(det) : photoPrintSpec(det)]]
       : role === 'framer' ? [...(printed && jobs.printer ? [['Print', `Printed by ${jobs.printer.name}: collect it from them (see below), then frame it.`]] : str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
@@ -2484,6 +2494,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   if (role === 'framer' && action === 'jobReady') {
     if (j.stage !== 'ACCEPTED') throw new Error(j.stage === 'ASSIGNED' ? 'Accept the job first.' : 'Already marked ready.');
     if (jobs.printer && !['READY', 'COLLECTED'].includes(jobs.printer.stage)) throw new Error(`${jobs.printer.name} hasn't marked the print ready yet.`);
+    if (['PRICE', 'COMMISSION'].includes(str(e, 'kind')) && str(e, 'artistStage') !== 'SHIPPED' && str(e, 'refundAction') !== 'DAMAGED_REPLACE') throw new Error('The artist hasn\'t sent the artwork yet: you can mark it framed once it has arrived.');
     if (jobs.printer) jobs.printer.stage = 'COLLECTED';
     j.stage = 'READY'; j.readyAt = now; j.note = j.note; await saveJobs(id, jobs);
     await studio(`Framed and ready: ${ref}`, [`${h(by)} has framed <b>${h(str(e, 'title'))}</b> (${h(ref)}). It is ready for pickup at ${h(String(profile.address ?? ''))}.`]);

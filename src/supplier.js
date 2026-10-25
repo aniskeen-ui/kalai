@@ -269,6 +269,7 @@ function jobCard(j) {
       act = `${fr && j.canDeliver ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-deliver style="width:auto"> We will also deliver it to the customer${j.deliveryPrice != null ? ` (${aed(j.deliveryPrice)})` : ''}</label>` : ''}
         <button class="btn small" data-a="jobAccept">Accept the job</button>`;
     } else if (pr && j.stage === 'ACCEPTED') act = '<button class="btn small" data-a="jobPrinted">Printed, ready to collect</button>';
+    else if (fr && j.stage === 'ACCEPTED' && j.artist && j.artist.stage !== 'SHIPPED') act = `<span class="muted">Waiting for the artist to send the artwork. You'll be emailed with the courier and AWB when it's on its way.</span>`;
     else if (fr && j.stage === 'ACCEPTED') act = j.collectFrom && !j.collectFrom.ready ? `<span class="muted">Waiting: ${esc(j.collectFrom.name)} hasn't printed it yet.</span>` : '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
     else if (!fr && !pr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
       act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't finished framing yet.</span>`
@@ -287,6 +288,7 @@ function jobCard(j) {
         <dt>Agreed price</dt><dd><b>${aed(j.price)}</b></dd>
         ${j.due ? `<dt>Please finish by</dt><dd>${esc(j.due)}</dd>` : ''}
         ${j.note ? `<dt>Note from us</dt><dd>${esc(j.note)}</dd>` : ''}
+        ${j.artist ? `<dt>The artwork</dt><dd>${j.artist.stage === 'SHIPPED' ? `<b>On its way to you</b> since ${esc(day(j.artist.sentAt))}${j.artist.courier ? ` · ${esc(j.artist.courier)}` : ''}${j.artist.awb && j.artist.awb !== '–' ? ` · AWB <b>${esc(j.artist.awb)}</b>` : ''}` : j.artist.stage === 'FINISHED' ? `Finished by the artist ${esc(day(j.artist.finishedAt))}, not sent yet` : j.artist.stage === 'STARTED' ? `The artist is making it (started ${esc(day(j.artist.startedAt))})` : 'The artist hasn\'t started yet'}</dd>` : ''}
         ${fr && j.delivering ? '<dt>Delivery</dt><dd>You deliver this one too (see the delivery job)</dd>' : ''}
         ${j.specs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
         ${j.awb ? `<dt>Tracking</dt><dd>${esc(j.awb)}</dd>` : ''}
