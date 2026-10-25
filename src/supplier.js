@@ -224,6 +224,33 @@ $('jReload').onclick = loadJobs;
 $('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'details') { openDetails(); return; } if (b.dataset.t === 'rates') { openRates('jobsView'); return; } if (b.dataset.t === 'frames') { openFrames('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
 
 function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
+const STUDIO_WA = '971552996626'; // Kalai Art House WhatsApp
+/** Clear instructions on each open job (frame shop, print shop, delivery partner), and who to ask. */
+function supGuide(j, fr, pr) {
+  if (j.cancelled || j.invoiceNo || ['DELIVERED', 'COLLECTED'].includes(j.stage)) return '';
+  const spec = (k) => (j.specs.find(([a]) => a.toLowerCase() === k) || [])[1] || '';
+  const ask = `https://wa.me/${STUDIO_WA}?text=${encodeURIComponent(`Hello Kalai Art House, a question about ${pr ? 'printing' : fr ? 'framing' : 'delivery'} job ${j.ref} (${j.title}): `)}`;
+  const steps = fr ? [
+    `Frame: <b>${esc(spec('framing') || spec('frame') || 'as given in the details above')}</b>.${spec('size') ? ` Size: <b>${esc(spec('size'))}</b>.` : ''} The frame size is the outer size; the artwork keeps its own size and the white mount fills the space around it.`,
+    j.printJob ? 'Print first (or collect the print from the print shop shown), then frame it.' : 'When the artwork arrives, check it against the photo here: same picture, same size, no creases, stains or damage. If anything is different or damaged, <b>stop and send us photos</b> before you cut anything.',
+    'Mount: acid-free white mount, artwork centred, the mount window overlapping the paper edge by about 5 mm. Keep the artist\'s signature visible. Never trim, glue or fold the artwork: hinge it with acid-free tape only.',
+    'Glass: clean on both sides, no dust, hair or fingerprints inside. Close the back neatly and fit D-rings or a hanging wire.',
+    `Finish by the date above${j.due ? ` (<b>${esc(j.due)}</b>)` : ''}. If you can't, tell us straight away.`,
+    'When it\'s done: send us a photo of the front and back on WhatsApp, then tap <b>Framed, ready for pickup</b>.',
+    'Packing: corner protectors, bubble wrap and a stiff carton, with the order number on the box.',
+  ] : pr ? [
+    `Print from the full-size file (<b>Download the full-size file to print</b>), at <b>${esc(spec('size') || 'the size given above')}</b>, on matte fine-art paper. Don\'t crop or stretch the picture.`,
+    'Check the print before handing it over: sharp, true colours, no banding or marks. If the file looks soft or the colours look wrong, <b>ask us before printing</b>.',
+    'Keep it flat in a clean sleeve, never rolled or folded, and hand it to the frame shop shown here. Then tap <b>Printed, ready to collect</b>.',
+  ] : [
+    'Pick up from the address here and check the parcel: corners and glass intact, box not crushed. If it looks damaged, take photos and <b>tell us before you take it</b>.',
+    'Framed glass: keep it upright, never under heavy boxes, and keep it dry.',
+    'Call the customer before you go, and get a name or photo as proof of delivery. Tap <b>Picked up</b> and <b>Delivered</b> as you go.',
+  ];
+  return `<details class="guide" ${j.stage === 'ASSIGNED' ? 'open' : ''}><summary><b>How to do this job</b> · ${pr ? 'print size and paper' : fr ? 'frame, mount, glass and packing' : 'pickup and delivery'}</summary>
+    <ol>${steps.map((t) => `<li>${t}</li>`).join('')}</ol>
+    <div class="guide-ask">Not sure about the ${pr ? 'size, paper or colours' : fr ? 'frame, size, mount or glass' : 'address or timing'}? <b>Please ask before you start.</b> <a href="${esc(ask)}" target="_blank" rel="noopener">Ask Kalai Art House on WhatsApp</a></div></details>`;
+}
 function jobCard(j) {
   const fr = j.role === 'framer', pr = j.role === 'printer';
   const steps = fr ? FR_STEPS : pr ? PR_STEPS : DL_STEPS;
@@ -263,6 +290,7 @@ function jobCard(j) {
       </dl>
     </div>
     ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? 'drawing' : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
+    ${supGuide(j, fr, pr)}
     <div style="display:grid;gap:8px;justify-items:start">${act}</div>
     <div class="err" data-msg></div>
   </article>`;

@@ -2322,7 +2322,10 @@ async function assignJob(action: string, d: Dict) {
     await sendMail({ to: String(p.email), subject: `New ${ROLE_WORD[role]} job: ${str(e, 'ref')}`,
       lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has a ${ROLE_WORD[role]} job for you: <b>${h(str(e, 'title'))}</b> (order ${h(str(e, 'ref'))}).`,
         job.price != null ? `Agreed price: <b>${aed(job.price)}</b>.` : '', job.canDeliver ? `We'd also like you to deliver it to the customer${job.deliveryPrice != null ? ` for <b>${aed(job.deliveryPrice)}</b>` : ''}: please confirm when you accept.` : '', job.due ? `Please complete it by <b>${h(job.due)}</b>.` : '', job.note ? `Note: ${h(job.note)}` : '',
-        'Open your supplier portal to see the details and accept the job.'],
+        role === 'framer' ? 'Before you cut: check the artwork you receive against the photo and the frame spec (frame, outer size, mount, glass). If anything is unclear, or the artwork arrives damaged or a different size, <b>please ask us first</b> on WhatsApp +971 55 299 6626.'
+          : role === 'printer' ? 'Print from the full-size file in your portal, at the size given, on matte fine-art paper. If the file looks soft or the colours are off, <b>ask us before printing</b> on WhatsApp +971 55 299 6626.'
+          : 'Handle it as fragile framed glass. If the parcel looks damaged at pickup, take photos and <b>tell us before you take it</b> on WhatsApp +971 55 299 6626.',
+        'Open your supplier portal to see the details, the step-by-step instructions, and accept the job.'],
       button: { label: 'Open my jobs', url: `${SITE}/supplier.html#jobs` } }).catch((err) => console.warn('Supplier email failed', err));
   }
   if (cur && cur.supplierId !== sid) {
