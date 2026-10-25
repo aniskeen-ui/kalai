@@ -2457,6 +2457,8 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   if (action === 'jobAccept') {
     if (j.stage !== 'ASSIGNED') throw new Error('Already accepted.');
     j.stage = 'ACCEPTED'; j.acceptedAt = now;
+    // The print shop has it: the order is "Printing".
+    if (role === 'printer' && ['PAID'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'PRINTING' });
     // The frame shop confirms it will also deliver: the delivery job is its own.
     const delivering = role === 'framer' && j.canDeliver && !jobs.delivery && d.deliver === true;
     if (delivering) jobs.delivery = { supplierId: sub, name: by, price: j.deliveryPrice ?? null, due: j.due, note: '', stage: 'ACCEPTED', assignedAt: now, acceptedAt: now, byFramer: true };
@@ -2470,6 +2472,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   if (role === 'printer' && action === 'jobPrinted') {
     if (j.stage !== 'ACCEPTED') throw new Error(j.stage === 'ASSIGNED' ? 'Accept the job first.' : 'Already marked printed.');
     j.stage = 'READY'; j.readyAt = now; await saveJobs(id, jobs);
+    if (['PAID', 'PRINTING'].includes(str(e, 'status'))) await updateEnquiry(id, { status: 'PRINTED' });
     await studio(`Printed: ${ref}`, [`${h(by)} has printed <b>${h(str(e, 'title'))}</b> (${h(ref)}). Ready to collect at ${h(String(profile.address ?? ''))}.`]);
     const fj = jobs.framer;
     if (fj) {
@@ -3434,8 +3437,8 @@ async function sellerOrders(action: string, d: Dict, sellerId: string, profile: 
 // the order turns Paid (method Ziina, reference = payment id) and the usual Zoho invoice follows.
 // A refund approved on the desk with "Refund via Ziina" goes back to the customer's card through Ziina.
 // Paid, then the artist's own steps (status follows the artist's desk): all count as paid orders.
-const PAID_LIKE = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'];
-const STATUS_RANK = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+const PAID_LIKE = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED']; // paid, not yet with the framer
+const STATUS_RANK = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED'];
 const ZIINA_API = 'https://api-v2.ziina.com/api';
 const ZIINA_IPS = ['3.29.184.186', '3.29.190.95', '20.233.47.127', '13.202.161.181'];
 const secureCache = new Map<string, { v: string | null; at: number }>();
@@ -3746,7 +3749,7 @@ const pad = (n: number) => String(n).padStart(7, '0');
 const recode = (prefix: string, c: string) => (c && !c.startsWith(prefix) ? `${prefix}${pad(codeNum(c))}` : c);
 // ---------- Customer master ----------
 const CLOSED_ORDER = ['DELIVERED', 'REFUNDED', 'CANCELLED'];
-const PAID_ORDER = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+const PAID_ORDER = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
 /** One row per customer code: contact and last address from their latest order (unless the studio or the customer
  *  edited it), plus order counts and spend. */
 async function syncCustomers(byCode: Map<string, Img[]>) {
@@ -4649,7 +4652,7 @@ function cancelTerms(e: Img, action: string, now = Date.now()): Terms {
     if (str(e, 'kind') === 'LICENCE') return t('NONE', 0, 'Image licences are digital: once paid, the file is yours to download and the licence can\'t be cancelled.', false);
     if ([...PAID_LIKE, 'FRAMING'].includes(status)) {
       // Crafts shop: a full refund until it is dispatched (then it is Shipped and can't be cancelled).
-      const started = str(e, 'kind') === 'MARKET' ? false : ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? status === 'FRAMING' : !!str(e, 'artistStartedAt') || status === 'FRAMING';
+      const started = str(e, 'kind') === 'MARKET' ? false : ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? ['PRINTING', 'PRINTED', 'FRAMING'].includes(status) : !!str(e, 'artistStartedAt') || status === 'FRAMING';
       return started
         ? t('HALF', 0.5, ['GIFT', 'PHOTO'].includes(str(e, 'kind')) ? 'Framing has started, so 50% is refunded.' : 'The artist has started your work, so 50% is refunded to cover the artist\'s time.')
         : t('FULL', 1, 'The work has not started yet, so the full amount is refunded.');
@@ -4963,7 +4966,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
 
 // A message asking the customer to pay is out of date once the order is paid.
 const PAY_MSG = /pay (with|securely|now|using)|link below|payment link|to confirm your order/i;
-const PAIDISH = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+const PAIDISH = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
 /** When the status moves on (by anyone: studio, artist, supplier, payment) and the message didn't change with it, the
  *  message belonged to the earlier step: clear it so the customer page, emails and WhatsApp don't repeat it. */
 async function clearStaleMessage(rec: StreamRecord) {

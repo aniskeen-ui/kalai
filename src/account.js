@@ -98,6 +98,8 @@ export const STATUS = {
   ARTIST_WORKING: 'Artist at work',
   ARTIST_DONE: 'Artwork finished',
   ARTIST_SENT: 'On its way to the framer',
+  PRINTING: 'Printing',
+  PRINTED: 'Printed',
   FRAMING: 'Being framed',
   SHIPPED: 'Shipped',
   DELIVERED: 'Delivered',
@@ -109,7 +111,7 @@ const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE'
 const KIND = { PRICE: 'Collection', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed Prints', LICENCE: 'Image licence' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
 // Framed Prints and Little Artists: no artist steps (printed / framed in Dubai).
-const FRAME_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+const FRAME_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED'];
 const LICENCE_STEPS = ['RECEIVED', 'PRICE_SENT', 'DELIVERED'];
 
 /* ---------- styles ---------- */
@@ -423,7 +425,7 @@ function cancelTerms(e) {
   const st = e.status || 'RECEIVED';
   const price = Number(e.quotedPrice || 0);
   if (['RECEIVED', 'PRICE_SENT'].includes(st)) return { type: 'FREE', due: 0, text: "Nothing has been paid, so there's nothing to refund. Your enquiry is cancelled straight away." };
-  if (['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING'].includes(st)) {
+  if (['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING'].includes(st)) {
     const started = e.kind === 'GIFT' || e.kind === 'PHOTO' ? st === 'FRAMING' : !!e.artistStartedAt || st === 'FRAMING';
     return started
       ? { type: 'HALF', due: Math.round(price * 50) / 100, text: e.kind === 'GIFT' || e.kind === 'PHOTO' ? `Framing has started, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>.` : `The artist started your work${e.artistStartedAt ? ` on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}, so under our terms <b>50% is refunded: ${aedTxt(price / 2)}</b>. The rest covers the artist's time.` }
@@ -497,7 +499,7 @@ function licenceBlock(e) {
 const COA_KINDS = ['PRICE', 'COMMISSION', 'MARKET'];
 function coaBlock(e) {
   const st = e.status || 'RECEIVED';
-  if (!COA_KINDS.includes(e.kind) || !['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(st)) return '';
+  if (!COA_KINDS.includes(e.kind) || !['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(st)) return '';
   if (e.kind === 'MARKET' && parseDet(e.details).Maker !== 'Artist') return '';
   return `<div style="font-size:13px"><button type="button" class="linkbtn" data-coa="${esc(e.id)}">🏅 Certificate of authenticity (PDF)</button></div>`;
 }
@@ -677,7 +679,7 @@ function replacementTracker(e) {
 }
 
 /* ---------- delivery address (from the price onwards, until it ships) ---------- */
-const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'REPLACEMENT'];
+const ADDR_OPEN = ['PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'REPLACEMENT'];
 function addressBlock(e) {
   if (!(ADDR_OPEN.includes(e.status) || (e.kind === 'MARKET' && (e.status || 'RECEIVED') === 'RECEIVED')) || e.cancelState === 'REQUESTED') return '';
   if (e.deliveryAddress) {
@@ -944,7 +946,7 @@ function card(e) {
   </article>`;
 }
 
-const ORDER_ST = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+const ORDER_ST = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
 /* ---------- Tracker: every step of each open order, live (no need to wait for an email) ---------- */
 const TRACK_STEPS = {
   ART: [['RECEIVED', 'Enquiry received', 'We have your request.'], ['PRICE_SENT', 'Price sent', 'The price and payment link are ready.'], ['PAID', 'Paid', 'Your order is confirmed.'],
@@ -952,7 +954,8 @@ const TRACK_STEPS = {
     ['ARTIST_SENT', 'On its way to our framer', 'Sent from the artist\'s studio to our framer in Dubai.'], ['FRAMING', 'Being framed', 'Our framer in Dubai is mounting and framing it.'],
     ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it! Please rate your order.']],
   FRAME: [['RECEIVED', 'Order received', 'We have your order.'], ['PRICE_SENT', 'Payment link sent', 'Ready for payment.'], ['PAID', 'Paid', 'Your order is confirmed.'],
-    ['FRAMING', 'Printing and framing', 'Our team in Dubai is printing and framing it.'], ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it! Please rate your order.']],
+    ['PRINTING', 'Printing', 'Printed on fine-art paper in Dubai.'], ['PRINTED', 'Printed', 'Printed and checked, on its way to our framer.'],
+    ['FRAMING', 'Being framed', 'Our framer in Dubai is mounting and framing it.'], ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it! Please rate your order.']],
   MARKET: [['RECEIVED', 'Order received', 'We are confirming it with the maker.'], ['PRICE_SENT', 'Payment link sent', 'Ready for payment.'], ['PAID', 'Paid', 'The maker is preparing it.'],
     ['READY', 'Packed by the maker', 'Packed and ready for the courier.'], ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it!']],
   LICENCE: [['RECEIVED', 'Order received', ''], ['PRICE_SENT', 'Payment link sent', ''], ['DELIVERED', 'Paid · file ready', 'Download the full-size file under Orders.']],
@@ -965,7 +968,7 @@ function trackCard(e) {
   const at = {
     RECEIVED: e.createdAt, PRICE_SENT: firstAt('PRICE_SENT'), PAID: firstAt('PAID'),
     ARTIST_WORKING: e.artistStartedAt || firstAt('ARTIST_WORKING'), ARTIST_DONE: e.artistFinishedAt || firstAt('ARTIST_DONE'), ARTIST_SENT: e.artistShippedAt || firstAt('ARTIST_SENT'),
-    FRAMING: firstAt('FRAMING'), READY: e.sellerReadyAt, SHIPPED: firstAt('SHIPPED') || e.sellerDispatchedAt, DELIVERED: e.deliveredAt || firstAt('DELIVERED'),
+    PRINTING: firstAt('PRINTING'), PRINTED: firstAt('PRINTED'), FRAMING: firstAt('FRAMING'), READY: e.sellerReadyAt, SHIPPED: firstAt('SHIPPED') || e.sellerDispatchedAt, DELIVERED: e.deliveredAt || firstAt('DELIVERED'),
   };
   // How far it has got: the status, or a later step already recorded (e.g. the artist's own steps).
   let cur = steps.findIndex(([k]) => k === st);

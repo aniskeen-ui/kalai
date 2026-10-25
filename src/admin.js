@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const STATUS = {
-  RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', ARTIST_WORKING: 'Artist working', ARTIST_DONE: 'Artist finished', ARTIST_SENT: 'Sent by artist', FRAMING: 'Being framed',
+  RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', ARTIST_WORKING: 'Artist working', ARTIST_DONE: 'Artist finished', ARTIST_SENT: 'Sent by artist', PRINTING: 'Printing', PRINTED: 'Printed', FRAMING: 'Being framed',
   SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
 // Sales category, as on the website menu (Collection, Commission, Little Artists, Framed Prints), plus licences and crafts.
@@ -356,7 +356,7 @@ function renderFeedback() {
 $('fbFilter').addEventListener('change', renderFeedback);
 
 // ---------- Reports: sales, cost and margin per order ----------
-const SOLD = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT', 'REFUNDED'];
+const SOLD = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT', 'REFUNDED'];
 const r2 = (n) => Math.round(n * 100) / 100;
 const money = (v) => (v == null ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 function parseCosts(c) {
@@ -913,19 +913,21 @@ const artistPage = (e) => (e.artistId ? `<a href="/seller.html?view=${encodeURIC
 const NEXT = {
   RECEIVED: ['PRICE_SENT', 'CANCELLED'],
   PRICE_SENT: ['RECEIVED', 'PAID', 'CANCELLED'],
-  PAID: ['PRICE_SENT', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'REFUNDED'],
+  PAID: ['PRICE_SENT', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'REFUNDED'],
+  PRINTING: ['PAID', 'PRINTED', 'FRAMING', 'REFUNDED'],
+  PRINTED: ['PRINTING', 'FRAMING', 'SHIPPED', 'REFUNDED'],
   // The artist's steps (set automatically from the artist's desk; can be set by hand too).
   ARTIST_WORKING: ['PAID', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'REFUNDED'],
   ARTIST_DONE: ['ARTIST_WORKING', 'ARTIST_SENT', 'FRAMING', 'REFUNDED'],
   ARTIST_SENT: ['ARTIST_DONE', 'FRAMING', 'SHIPPED', 'REFUNDED'],
-  FRAMING: ['PAID', 'ARTIST_SENT', 'SHIPPED', 'REFUNDED'],
+  FRAMING: ['PAID', 'ARTIST_SENT', 'PRINTED', 'SHIPPED', 'REFUNDED'],
   SHIPPED: ['FRAMING', 'DELIVERED', 'REFUNDED'],
   DELIVERED: ['REPLACEMENT', 'REFUNDED'],
   REPLACEMENT: ['FRAMING', 'SHIPPED', 'REFUNDED'],
   REFUNDED: [],
   CANCELLED: ['RECEIVED', 'PRICE_SENT'],
 };
-const WHY = { RECEIVED: 'already priced', PRICE_SENT: 'not now', PAID: 'send the price first', FRAMING: 'mark Paid first', SHIPPED: 'mark Paid first',
+const WHY = { RECEIVED: 'already priced', PRICE_SENT: 'not now', PAID: 'send the price first', PRINTING: 'mark Paid first', PRINTED: 'mark Paid first', FRAMING: 'mark Paid first', SHIPPED: 'mark Paid first',
   DELIVERED: 'ship it first', REPLACEMENT: 'after delivery', REFUNDED: 'not paid', CANCELLED: 'paid: refund instead' };
 function statusBlock(e, k, s) {
   if (k === s) return '';
@@ -933,12 +935,17 @@ function statusBlock(e, k, s) {
   // Only collection works and commissions have an artist making them: prints, gifts, crafts and licences don't.
   if (ARTIST_ST.includes(k) && !hasArtist(e)) return 'no artist on this order';
   if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
+  // Printing steps: only orders printed from a file (Framed Prints, Little Artists).
+  if (['PRINTING', 'PRINTED'].includes(k) && !['PHOTO', 'GIFT'].includes(e.kind)) return 'nothing to print';
   if (e.kind === 'LICENCE' && ['PAID', 'FRAMING', 'SHIPPED', 'REPLACEMENT'].includes(k)) return 'digital licence';
   // A print / gift / crafts order put on an artist step by mistake: back to Paid (or on to framing) is allowed.
   if (ARTIST_ST.includes(s) && !hasArtist(e) && ['PAID', 'FRAMING'].includes(k)) return '';
   // The print shop, frame shop and delivery partner set these steps from their portal (dates and AWB recorded there).
-  { const jj = jobsOf(e), fj = jj.framer, dj = jj.delivery, FL = ['PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+  { const jj = jobsOf(e), pj = jj.printer, fj = jj.framer, dj = jj.delivery, FL = ['PAID', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED'];
     if (s !== 'REPLACEMENT' && e.refundAction !== 'DAMAGED_REPLACE' && FL.includes(k) && FL.indexOf(k) > Math.max(0, FL.indexOf(s))) {
+      if (k === 'PRINTING' && pj && pj.stage === 'ASSIGNED') return `set when ${pj.name || 'the print shop'} accepts`;
+      if (k === 'PRINTED' && pj && !['READY', 'COLLECTED'].includes(String(pj.stage))) return `set by ${pj.name || 'the print shop'}'s step`;
+      if (k === 'FRAMING' && pj && !fj && !['READY', 'COLLECTED'].includes(String(pj.stage))) return `waiting for ${pj.name || 'the print shop'}`;
       if (k === 'FRAMING' && fj && !['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage))) return `set when ${fj.name || 'the frame shop'} accepts`;
       if (['SHIPPED', 'DELIVERED'].includes(k) && dj && !(k === 'SHIPPED' ? dj.pickedAt : dj.deliveredAt)) return `set by ${dj.name || 'the delivery partner'}'s step`;
       if (['SHIPPED', 'DELIVERED'].includes(k) && !dj && fj && !['READY', 'COLLECTED'].includes(String(fj.stage))) return `waiting for ${fj.name || 'the frame shop'} to finish`;
@@ -951,12 +958,13 @@ function statusBlock(e, k, s) {
   if (hasArtist(e) && !sivaDone(e) && AFTER_SIVA.includes(k) && e.refundAction !== 'DAMAGED_REPLACE' && s !== 'REPLACEMENT') return `waiting for ${artistOf(e)} to send it`;
   // Steps a supplier has confirmed (frame shop accepted, delivery partner picked up / delivered, delivery challan in
   // Zoho) are facts: the status can't go back behind them.
-  const FLOW = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+  const FLOW = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED'];
   if (FLOW.includes(k) && s !== 'REPLACEMENT' && e.refundAction !== 'DAMAGED_REPLACE') {
-    const jj = jobsOf(e), fj = jj.framer, dj = jj.delivery;
+    const jj = jobsOf(e), fj = jj.framer, dj = jj.delivery, pj = jj.printer;
     const floor = dj?.deliveredAt ? 'DELIVERED' : dj?.pickedAt || dj?.awb || e.zohoChallanId || ['DRAFT', 'OPEN', 'DELIVERED'].includes(e.deliveryState) ? 'SHIPPED'
-      : fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage)) ? 'FRAMING' : '';
-    if (floor && FLOW.indexOf(k) < FLOW.indexOf(floor)) return floor === 'FRAMING' ? `${fj.name || 'frame shop'} accepted the job` : floor === 'SHIPPED' ? `already shipped${dj?.name ? ` by ${dj.name}` : ''}` : 'already delivered';
+      : fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage)) ? 'FRAMING'
+      : pj && ['READY', 'COLLECTED'].includes(String(pj.stage)) ? 'PRINTED' : pj && pj.stage === 'ACCEPTED' ? 'PRINTING' : '';
+    if (floor && FLOW.indexOf(k) < FLOW.indexOf(floor)) return floor === 'PRINTED' ? `${pj.name || 'print shop'} already printed it` : floor === 'PRINTING' ? `${pj.name || 'print shop'} accepted the job` : floor === 'FRAMING' ? `${fj.name || 'frame shop'} accepted the job` : floor === 'SHIPPED' ? `already shipped${dj?.name ? ` by ${dj.name}` : ''}` : 'already delivered';
   }
   // The artist's steps set these statuses: not back behind what the artist marked, and not ahead of it by hand
   // (mark the step on the artist page instead, so the AWB and dates are recorded).
@@ -1020,7 +1028,7 @@ function giftAddress(e) {
 function addressSection(e) {
   const g = giftAddress(e);
   const has = !!e.deliveryAddress;
-  const need = !has && !g && ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'REPLACEMENT'].includes(e.status);
+  const need = !has && !g && ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'REPLACEMENT'].includes(e.status);
   const emi = e.deliveryEmirate || (g && EMIRATES.find((x) => g.emirate.includes(x))) || '';
   return `<fieldset class="cost" id="addrBox" ${need ? 'style="border-color:var(--kumkum)"' : ''}>
     <legend>Delivery address ${has ? `<span class="muted">· ${esc(e.addressBy === 'Customer' ? 'from the customer' : 'entered by you')} ${esc(when(e.addressAt))}</span>` : ''}</legend>
