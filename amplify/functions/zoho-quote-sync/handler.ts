@@ -60,6 +60,66 @@ const INVOICE_PREFIX = 'KAH-INV-';
 // Kalai's own credit note series. Like KAH-INV, the next number is worked out from the credit notes that exist,
 // so deleting the test drafts before going live makes the live series start again at KAH-CN-0001.
 const CREDIT_PREFIX = 'KAH-CN-';
+
+/* ---------- Number series (Settings → Number series; Rates key "numberSeries") ----------
+ * Per document: prefix, mode (alpha = prefix + digits, numeric = digits only), source (internal = Kalai numbers it,
+ * external = typed by the supplier / numbered by Zoho), digits. Supplier invoices: each supplier has its own 2-letter
+ * code (Master Frames → MF) and running number: MF00000001, MF00000002 … */
+type SeriesDoc = { prefix: string; mode: 'alpha' | 'numeric'; source: 'internal' | 'external'; digits: number };
+type NumberSeries = { docs: Record<string, SeriesDoc>; sup: Record<string, { code: string; next: number; name?: string }> };
+const SERIES_DEF: Record<string, SeriesDoc> = {
+  supInv: { prefix: '', mode: 'alpha', source: 'internal', digits: 8 },
+  inv: { prefix: INVOICE_PREFIX, mode: 'alpha', source: 'internal', digits: 4 },
+  cn: { prefix: CREDIT_PREFIX, mode: 'alpha', source: 'internal', digits: 4 },
+  qt: { prefix: 'KAH-QT-', mode: 'alpha', source: 'external', digits: 4 },
+  dc: { prefix: 'KAH-DC-', mode: 'alpha', source: 'external', digits: 4 },
+};
+async function numberSeries(): Promise<NumberSeries> {
+  let d: unknown = null;
+  try { const row = plain(await getRow(process.env.RATES_TABLE!, { key: { S: 'numberSeries' } })); d = row?.data; for (let i = 0; i < 2 && typeof d === 'string'; i++) d = JSON.parse(d); } catch { d = null; }
+  const o = (d && typeof d === 'object' ? d : {}) as Partial<NumberSeries>;
+  const docs: Record<string, SeriesDoc> = {};
+  for (const [k, def] of Object.entries(SERIES_DEF)) {
+    const x = (o.docs?.[k] ?? {}) as Partial<SeriesDoc>;
+    docs[k] = {
+      prefix: typeof x.prefix === 'string' ? x.prefix.slice(0, 12) : def.prefix,
+      mode: x.mode === 'numeric' ? 'numeric' : x.mode === 'alpha' ? 'alpha' : def.mode,
+      source: x.source === 'external' ? 'external' : x.source === 'internal' ? 'internal' : def.source,
+      digits: Math.min(12, Math.max(3, Number(x.digits) || def.digits)),
+    };
+  }
+  return { ...(o as object), docs: { ...((o.docs ?? {}) as Record<string, SeriesDoc>), ...docs }, sup: (o.sup && typeof o.sup === 'object' ? o.sup : {}) } as NumberSeries;
+}
+async function saveSeries(ns: NumberSeries) {
+  const row = plain(await getRow(process.env.RATES_TABLE!, { key: { S: 'numberSeries' } }));
+  const now = new Date().toISOString();
+  await putRow(process.env.RATES_TABLE!, { ...(row ?? {}), key: 'numberSeries', __typename: 'Rates', data: JSON.stringify(ns), createdAt: String(row?.createdAt ?? now), updatedAt: now });
+}
+const seriesNo = (doc: SeriesDoc, n: number) => `${doc.mode === 'numeric' ? '' : doc.prefix}${String(n).padStart(doc.digits, '0')}`;
+/** 2 letters from the supplier's name, not used by another supplier: Master Frames → MF, Glassworks → GL. */
+function supplierCode(name: string, taken: Set<string>) {
+  const w = name.toUpperCase().replace(/[^A-Z ]/g, ' ').split(/\s+/).filter(Boolean);
+  const letters = w.join('');
+  const tries: string[] = [];
+  if (w.length >= 2) tries.push(w[0][0] + w[1][0]);
+  for (let i = 1; i < letters.length; i++) tries.push((letters[0] ?? 'S') + letters[i]);
+  for (const a of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') for (const b of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') tries.push(a + b);
+  return tries.find((c) => c.length === 2 && !taken.has(c))!;
+}
+/** The supplier's next invoice number (peek; take = true also moves the counter on). Null when suppliers type their own. */
+async function supplierInvoiceNo(sellerId: string, name: string, take = false): Promise<string | null> {
+  const ns = await numberSeries();
+  const doc = ns.docs.supInv;
+  if (doc.source !== 'internal') return null;
+  let s = ns.sup[sellerId];
+  if (!s?.code) {
+    const taken = new Set(Object.entries(ns.sup).filter(([k]) => k !== sellerId).map(([, v]) => v.code));
+    s = { code: supplierCode(name || 'Supplier', taken), next: s?.next || 1, name };
+  }
+  const no = `${doc.mode === 'numeric' ? '' : s.code}${String(s.next || 1).padStart(doc.digits, '0')}`;
+  if (take) { ns.sup[sellerId] = { ...s, next: (s.next || 1) + 1, name }; await saveSeries(ns); }
+  return no;
+}
 const VAT_PARAM = '/kalai/zoho/vat_tax_id';
 // Test mode (default ON until /kalai/zoho/test_mode is set to "off"): drafts only, nothing posted to the accounts.
 const TEST_PARAM = '/kalai/zoho/test_mode';
@@ -345,10 +405,14 @@ async function createQuote(img: Img, rate?: number) {
   const pl = priceLine(img, start);
   const customerId = await customerIdFor(img);
   const vat = await vatFields();
-  const r = await zoho('/estimates', {
+  const doc = (await numberSeries()).docs.qt;
+  const own = doc.source === 'internal';
+  const qn = own ? seriesNo(doc, await nextSeriesNumber(doc.mode === 'numeric' ? '' : doc.prefix, '/estimates', 'estimates', 'estimate_number')) : '';
+  const r = await zoho(own ? '/estimates?ignore_auto_number_generation=true' : '/estimates', {
     method: 'POST',
     body: JSON.stringify({
       customer_id: customerId,
+      ...(own ? { estimate_number: qn } : {}),
       reference_number: q.ref,
       ...vat.header,
       ...pl.header,
@@ -423,13 +487,16 @@ async function findInvoice(ref: string) {
 }
 
 /** Next number in the Kalai series: KAH-INV-0001, KAH-INV-0002 … */
-async function nextInvoiceNumber(): Promise<number> {
-  const r = await zoho(`/invoices?invoice_number_startswith=${encodeURIComponent(INVOICE_PREFIX)}&per_page=200&filter_by=Status.All`);
+async function nextInvoiceNumber(doc: SeriesDoc): Promise<number> {
+  const pre = doc.mode === 'numeric' ? '' : doc.prefix;
+  const r = await zoho(`/invoices?${pre ? `invoice_number_startswith=${encodeURIComponent(pre)}&` : ''}per_page=200&filter_by=Status.All`);
   if (!r.ok) throw new Error(`Zoho invoice numbering failed (${r.status}): ${r.body.message}`);
   let max = 0;
   for (const i of r.body.invoices ?? []) {
-    if (!i.invoice_number.startsWith(INVOICE_PREFIX)) continue;
-    const n = Number(i.invoice_number.slice(INVOICE_PREFIX.length));
+    if (!i.invoice_number.startsWith(pre)) continue;
+    const rest = i.invoice_number.slice(pre.length);
+    if (!/^\d+$/.test(rest)) continue;
+    const n = Number(rest);
     if (Number.isFinite(n) && n > max) max = n;
   }
   return max + 1;
@@ -444,7 +511,9 @@ async function nextSeriesNumber(prefix: string, listPath: string, listKey: strin
   for (const d of rows) {
     const num = String(d[numberKey] ?? '');
     if (!num.startsWith(prefix)) continue;
-    const n = Number(num.slice(prefix.length));
+    const rest = num.slice(prefix.length);
+    if (!/^\d+$/.test(rest)) continue;
+    const n = Number(rest);
     if (Number.isFinite(n) && n > max) max = n;
   }
   return max + 1;
@@ -472,14 +541,16 @@ async function createInvoice(img: Img, price: number) {
   const pl = priceLine(img, price);
   const customerId = await customerIdFor(img);
   const vat = await vatFields();
-  let n = await nextInvoiceNumber();
+  const doc = (await numberSeries()).docs.inv;
+  const own = doc.source === 'internal';
+  let n = own ? await nextInvoiceNumber(doc) : 0;
   for (let attempt = 0; attempt < 4; attempt++, n++) {
-    const number = `${INVOICE_PREFIX}${String(n).padStart(4, '0')}`;
-    const r = await zoho('/invoices?ignore_auto_number_generation=true', {
+    const number = seriesNo(doc, n);
+    const r = await zoho(own ? '/invoices?ignore_auto_number_generation=true' : '/invoices', {
       method: 'POST',
       body: JSON.stringify({
         customer_id: customerId,
-        invoice_number: number,
+        ...(own ? { invoice_number: number } : {}),
         reference_number: q.ref,
         date: dubaiToday(),
         ...vat.header,
@@ -493,11 +564,11 @@ async function createInvoice(img: Img, price: number) {
       return { id: r.body.invoice.invoice_id, number: r.body.invoice.invoice_number };
     }
     // Number taken (another invoice raced us): try the next one.
-    if (!/already|exist|duplicate/i.test(r.body.message ?? '')) {
+    if (!own || !/already|exist|duplicate/i.test(r.body.message ?? '')) {
       throw new Error(`Zoho invoice create failed (${r.status}): ${r.body.message}`);
     }
   }
-  throw new Error('Zoho invoice create failed: could not find a free KAH-INV number');
+  throw new Error('Zoho invoice create failed: could not find a free invoice number');
 }
 
 async function invoicePayments(invoiceId: string) {
@@ -828,10 +899,14 @@ async function createChallan(img: Img) {
     line_items: [{ name: q.name, description: q.description, rate: price, quantity: 1 }],
     notes,
   };
-  let r = await zoho('/deliverychallans', { method: 'POST', body: JSON.stringify(body) });
+  const doc = (await numberSeries()).docs.dc;
+  const own = doc.source === 'internal';
+  if (own) body.deliverychallan_number = seriesNo(doc, await nextSeriesNumber(doc.mode === 'numeric' ? '' : doc.prefix, '/deliverychallans', 'deliverychallans', 'deliverychallan_number'));
+  const dcPath = own ? '/deliverychallans?ignore_auto_number_generation=true' : '/deliverychallans';
+  let r = await zoho(dcPath, { method: 'POST', body: JSON.stringify(body) });
   if (!r.ok && /challan_type/i.test(r.body.message ?? '')) {
     delete body.challan_type; // not used in every edition
-    r = await zoho('/deliverychallans', { method: 'POST', body: JSON.stringify(body) });
+    r = await zoho(dcPath, { method: 'POST', body: JSON.stringify(body) });
   }
   const dc = (r.body as ChallanBody).deliverychallan;
   if (!r.ok || !dc) throw new Error(`Zoho delivery challan failed (${r.status}): ${r.body.message}`);
@@ -937,20 +1012,23 @@ async function creditNoteAndRefund(img: Img, amount: number) {
 
 /** Credit note in Kalai's own series (KAH-CN-0001…). Retries the next number if one is taken. */
 async function postCreditNote(body: Record<string, unknown>) {
-  let n = await nextSeriesNumber(CREDIT_PREFIX, '/creditnotes', 'creditnotes', 'creditnote_number');
+  const doc = (await numberSeries()).docs.cn;
+  const own = doc.source === 'internal';
+  const path = own ? '/creditnotes?ignore_auto_number_generation=true' : '/creditnotes';
+  let n = own ? await nextSeriesNumber(doc.mode === 'numeric' ? '' : doc.prefix, '/creditnotes', 'creditnotes', 'creditnote_number') : 0;
   for (let attempt = 0; attempt < 4; attempt++, n++) {
-    const b = { ...body, creditnote_number: `${CREDIT_PREFIX}${String(n).padStart(4, '0')}` };
+    const b = { ...body, ...(own ? { creditnote_number: seriesNo(doc, n) } : {}) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let r = await zoho('/creditnotes?ignore_auto_number_generation=true', { method: 'POST', body: JSON.stringify(b) }) as any;
+    let r = await zoho(path, { method: 'POST', body: JSON.stringify(b) }) as any;
     // Not allowed against this invoice (e.g. a draft invoice in test mode): create it without the link.
     if (!r.ok && /invoice/i.test(r.body.message ?? '') && (b as Record<string, unknown>).invoice_id) {
       delete (b as Record<string, unknown>).invoice_id;
-      r = await zoho('/creditnotes?ignore_auto_number_generation=true', { method: 'POST', body: JSON.stringify(b) });
+      r = await zoho(path, { method: 'POST', body: JSON.stringify(b) });
     }
     if (r.ok && r.body.creditnote) return r.body.creditnote as { creditnote_id: string; creditnote_number: string; status?: string };
-    if (!/already|exist|duplicate/i.test(r.body.message ?? '')) throw new Error(`Zoho credit note failed (${r.status}): ${r.body.message}`);
+    if (!own || !/already|exist|duplicate/i.test(r.body.message ?? '')) throw new Error(`Zoho credit note failed (${r.status}): ${r.body.message}`);
   }
-  throw new Error('Zoho credit note failed: could not find a free KAH-CN number');
+  throw new Error('Zoho credit note failed: could not find a free credit note number');
 }
 
 /** Test mode: the credit note only, kept as a draft (no refund, nothing posted). */
@@ -2421,6 +2499,8 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   const ct = process.env.COSTING_TABLE;
   if (!ct) throw new Error('Not configured');
   const { S } = mtables();
+  const supName = String(profile.business || profile.contactName || '');
+  const autoNo = ['jobs', 'jobInvoice'].includes(action) ? await supplierInvoiceNo(sub, supName).catch(() => null) : null;
   if (action === 'jobs') {
     const rows = (await scanAll(ct)).map((c) => ({ id: str(c, 'enquiryId'), jobs: parseJobs(c.supplierJobs?.S) })).filter((x) => roles.some((r) => x.jobs[r]?.supplierId === sub));
     const out = [];
@@ -2429,7 +2509,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
       if (!e) continue;
       for (const r of roles.filter((r) => x.jobs[r]?.supplierId === sub)) {
         const [fp, pp] = await profilesFor(x.jobs, r);
-        out.push(jobView(e, x.jobs, r, fp, pp));
+        out.push({ ...jobView(e, x.jobs, r, fp, pp), autoInvoiceNo: autoNo });
       }
     }
     return { role: own, jobs: out.sort((a, b) => String(b.assignedAt).localeCompare(String(a.assignedAt))) };
@@ -2440,7 +2520,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   const j = jobs[role];
   if (!e || !j || j.supplierId !== sub) throw new Error('Job not found');
   const ref = str(e, 'ref'), now = new Date().toISOString(), by = String(profile.business || profile.contactName);
-  const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const [fp, pp] = await profilesFor(js, role); return { job: jobView(fresh!, js, role, fp, pp) }; };
+  const view = async () => { const fresh = await enquiryRow(id); const js = await jobsOf(id); const [fp, pp] = await profilesFor(js, role); return { job: { ...jobView(fresh!, js, role, fp, pp), autoInvoiceNo: await supplierInvoiceNo(sub, supName).catch(() => null) } }; };
   // Their invoice as recorded with us (our Zoho bill), as a PDF.
   if (action === 'jobInvoicePdf') {
     if (!j.billId) throw new Error('Your invoice is not recorded yet.');
@@ -2543,9 +2623,11 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     const ok = role === 'delivery' ? j.stage === 'DELIVERED' : ['READY', 'COLLECTED'].includes(j.stage);
     if (!ok) throw new Error(role === 'framer' ? 'Mark it framed and ready first.' : role === 'printer' ? 'Mark it printed first.' : 'Mark it delivered first.');
     if (j.billId) throw new Error(`Invoice ${j.invoiceNo} is already with us.`);
-    const no = txt(d.invoiceNo, 40), amt = numIn(d.amount, 100000);
-    if (!no) throw new Error('Enter your invoice number.');
+    const amt = numIn(d.amount, 100000);
     if (!(amt > 0)) throw new Error('Enter the invoice amount in AED.');
+    // Kalai numbers supplier invoices (Settings → Number series): the next number in this supplier's own series.
+    const no = autoNo ? (await supplierInvoiceNo(sub, supName, true))! : txt(d.invoiceNo, 40);
+    if (!no) throw new Error('Enter your invoice number.');
     j.invoiceNo = no; j.invoiceAmt = r2(amt); j.invoiceAt = now;
     try {
       const vendor = await sellerVendorId(sub);

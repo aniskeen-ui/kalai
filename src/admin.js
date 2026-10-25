@@ -10,6 +10,7 @@ import { showMessages } from './messages.js';
 import { showMarket } from './market.js';
 import { showPromotions } from './promotions.js';
 import { showSettings } from './settings.js';
+import { showNumbers } from './numbers.js';
 import { showPricing } from './pricing.js';
 import { showPrintsMaster, showLicMaster } from './pricemasters.js';
 import { showCustomers } from './customers.js';
@@ -272,7 +273,10 @@ function showPane(pane, tabId) {
   if (pane === 'messages') showMessages();
   if (pane === 'sellers') showMarket();
   if (pane === 'offers') showPromotions();
-  if (pane === 'settings') showSettings();
+  if (pane === 'settings') {
+    let t = 'site'; try { t = localStorage.getItem('kalai-st-tab') || 'site'; } catch { /* */ }
+    stTab(t);
+  }
   if (pane === 'pricing') showPriceTab(priceTab);
   if (pane === 'customers') showCustomers();
 }
@@ -2356,12 +2360,26 @@ document.addEventListener('click', async (ev) => {
   try { const { url } = await getUrl({ path: b.dataset.podkey, options: { expiresIn: 600 } }); window.open(url.toString(), '_blank', 'noopener'); } catch (ex) { b.textContent = ex.message; }
 });
 
+/* Settings sub-tabs: Website settings | Number series. */
+function stTab(t) {
+  document.querySelectorAll('#stTabs [data-st]').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.st === t)); b.onclick = () => stTab(b.dataset.st); });
+  $('stSite').hidden = t !== 'site'; $('nsBox').hidden = t !== 'numbers';
+  try { localStorage.setItem('kalai-st-tab', t); } catch { /* */ }
+  if (t === 'numbers') showNumbers(); else showSettings();
+}
+
 /* ---------- Variants: saved selections of orders (VARNT1001, VARNT1002 …), shared by everyone in Order Management ---------- */
 // Stored in Rates (key "variants"): { next, list: [{ id, name, refs: [KA-…], at, by }] }.
 let variants = { next: 1001, list: [] }, varSaved = false, varPicking = false;
 const varPick = new Set();
 let varEditing = null;
 const variantOn = () => variants.list.find((v) => v.id === $('fVar').value) || null;
+// Variant numbers follow Settings → Number series (default VARNT + 4 digits: VARNT1001).
+async function varId(n) {
+  let pre = 'VARNT', dg = 4;
+  try { const { data } = await client.models.Rates.get({ key: 'numberSeries' }); let d = data?.data; for (let i = 0; i < 2 && typeof d === 'string'; i++) d = JSON.parse(d); const v = d?.docs?.varnt; if (v) { pre = v.mode === 'numeric' ? '' : (v.prefix ?? pre); dg = Number(v.digits) || dg; } } catch { /* defaults */ }
+  return `${pre}${String(n).padStart(dg, '0')}`;
+}
 async function varLoad() {
   try {
     const { data } = await client.models.Rates.get({ key: 'variants' });
@@ -2412,7 +2430,7 @@ function varOpen(v) {
     const by = $('who')?.textContent || '';
     let id;
     if (v) { Object.assign(v, { name, refs, at: new Date().toISOString() }); id = v.id; }
-    else { id = `VARNT${variants.next}`; variants.next += 1; variants.list.push({ id, name, refs, at: new Date().toISOString(), by }); }
+    else { id = await varId(variants.next); variants.next += 1; variants.list.push({ id, name, refs, at: new Date().toISOString(), by }); }
     $('varMsg').textContent = 'Saving…';
     try { await varSave(); varSelect(); $('fVar').value = id; try { localStorage.setItem('kalai-variant', id); } catch { /* */ } varPicking = false; box.hidden = true; render(); }
     catch (ex) { if (!v) variants.next -= 1, variants.list.pop(); $('varMsg').textContent = ex.message; }

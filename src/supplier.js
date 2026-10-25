@@ -277,7 +277,7 @@ function jobCard(j) {
     } else if (!fr && !pr && j.stage === 'PICKED') act = podForm(j, 'Delivered to the customer', 'jobDelivered');
     else if (!fr && !pr && j.stage === 'DELIVERED' && !j.pod) act = podForm(j, 'Save proof of delivery', 'jobPod');
     const canInvoice = fr || pr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
-    if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (⃃)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
+    if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label>${j.autoInvoiceNo ? `<input data-inv value="${esc(j.autoInvoiceNo)}" readonly title="Numbered for you by Kalai Art House: your own running series" style="background:var(--sunk,#f3f0ea);font-family:monospace">` : '<input data-inv maxlength="40">'}</div><div class="field"><label>Amount (⃃)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
   }
   return `<article class="job" data-key="${esc(key)}">
     <div class="row"><h3>${pr ? 'Printing' : fr ? (j.printJob ? 'Print & frame' : 'Framing') : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
