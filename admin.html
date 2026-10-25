@@ -300,7 +300,7 @@ a.df[href]:hover{transform:translateY(-2px)}
         <option value="">All statuses</option>
       </select>
       <select id="fKind" aria-label="Filter by type">
-        <option value="">All types</option><option value="PRICE">Price enquiries</option><option value="COMMISSION">Commissions</option><option value="GIFT">Little Artists</option><option value="PHOTO">Framed prints</option><option value="MARKET">Crafts shop</option>
+        <option value="">All categories</option><option value="PRICE">Collection</option><option value="COMMISSION">Commission</option><option value="GIFT">Little Artists</option><option value="PHOTO">Framed Prints</option><option value="LICENCE">Image licences</option><option value="MARKET">Crafts shop</option>
       </select>
       <button class="btn" id="reload" type="button">Refresh</button>
     </div>
@@ -313,7 +313,7 @@ a.df[href]:hover{transform:translateY(-2px)}
     <div class="counts" id="counts"></div>
     <div class="desk" id="desk">
       <div class="deskL"><div class="tablewrap"><table>
-        <thead><tr><th>Date</th><th>Ref</th><th>Type</th><th>Order</th><th>Customer</th><th>Status</th><th>Price</th></tr></thead>
+        <thead><tr><th>Date</th><th>Ref</th><th>Category</th><th>Order</th><th>Customer</th><th>Status</th><th>Price</th></tr></thead>
         <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
       </table></div>
       <section id="flowSlot" class="flowcard" hidden></section></div>
@@ -326,7 +326,7 @@ a.df[href]:hover{transform:translateY(-2px)}
         <h1 style="font-size:28px;margin-right:auto">Reports</h1>
         <label class="muted" for="rFrom" style="font-weight:400">From</label><input type="date" id="rFrom" style="width:auto">
         <label class="muted" for="rTo" style="font-weight:400">To</label><input type="date" id="rTo" style="width:auto">
-        <select id="rKind" aria-label="Type"><option value="">All types</option><option value="PRICE">Catalogue works</option><option value="COMMISSION">Commissions</option><option value="GIFT">Little Artists</option><option value="MARKET">Crafts shop</option></select>
+        <select id="rKind" aria-label="Category"><option value="">All categories</option><option value="PRICE">Collection</option><option value="COMMISSION">Commission</option><option value="GIFT">Little Artists</option><option value="PHOTO">Framed Prints</option><option value="LICENCE">Image licences</option><option value="MARKET">Crafts shop</option></select>
         <select id="rCur" aria-label="Currency" style="width:auto"><option value="AED">⃃ AED</option><option value="USD">$ USD</option><option value="INR">₹ INR</option></select>
         <select id="rBasis" aria-label="Cost columns"><option value="plan">Cost columns: planned</option><option value="actual">Cost columns: actual (planned where no bill yet)</option></select>
         <button class="btn ghost" id="rZoho" type="button">Get actual costs from Zoho</button>

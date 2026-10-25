@@ -93,7 +93,7 @@ export const STATUS = {
   CANCELLED: 'Cancelled',
 };
 const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
-const KIND = { PRICE: 'Price enquiry', COMMISSION: 'Commission', GIFT: 'Little Artists gift', MARKET: 'Crafts shop', PHOTO: 'Framed print', LICENCE: 'Image licence' };
+const KIND = { PRICE: 'Collection', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed Prints', LICENCE: 'Image licence' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
 const LICENCE_STEPS = ['RECEIVED', 'PRICE_SENT', 'DELIVERED'];
 

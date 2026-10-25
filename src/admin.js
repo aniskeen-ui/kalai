@@ -24,7 +24,8 @@ const STATUS = {
   RECEIVED: 'Received', PRICE_SENT: 'Price sent', PAID: 'Paid', ARTIST_WORKING: 'Artist working', ARTIST_DONE: 'Artist finished', ARTIST_SENT: 'Sent by artist', FRAMING: 'Being framed',
   SHIPPED: 'Shipped', DELIVERED: 'Delivered', REPLACEMENT: 'Replacement', REFUNDED: 'Refunded', CANCELLED: 'Cancelled',
 };
-const KIND = { PRICE: 'Price', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed print', LICENCE: 'Image licence' };
+// Sales category, as on the website menu (Collection, Commission, Little Artists, Framed Prints), plus licences and crafts.
+const KIND = { PRICE: 'Collection', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed Prints', LICENCE: 'Image licence' };
 // Once Zoho holds the payment the enquiry can't go back to these (reverse it in Zoho, then Check Zoho).
 const BEFORE_PAYMENT = ['RECEIVED', 'PRICE_SENT', 'CANCELLED'];
 const ZOHO_LABEL = { QUOTED: 'Quote in Zoho', PAID: 'Paid in Zoho', ERROR: 'Zoho error', REVERSED: 'Reversed in Zoho', NONE: 'Not in Zoho', TEST: 'Test mode: drafts only' };
@@ -790,7 +791,7 @@ function render() {
     const s = e.status || 'RECEIVED';
     const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
-      <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}</td>
+      <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}${e.kind === 'PRICE' && offerOf(e) != null ? '<br><span class="muted" style="font-size:11px">offer</span>' : e.kind === 'PRICE' ? '<br><span class="muted" style="font-size:11px">original</span>' : ''}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}${e.customerCode ? `<br><span class="muted mono" style="font-size:11px">${esc(e.customerCode)}</span>` : ''}</td>
       <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${offerOf(e) != null && ['RECEIVED', 'PRICE_SENT'].includes(s) ? ` <span class="chip req" title="The customer made an offer">Offer ⃃ ${offerOf(e).toLocaleString('en-US')}</span>` : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? '⃃ ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
