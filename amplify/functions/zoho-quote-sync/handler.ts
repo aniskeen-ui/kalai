@@ -2580,6 +2580,24 @@ async function marketAdmin(ev: ApiEvent) {
   }
   // A supplier prospect (e.g. a print shop that sent its quote) becomes an approved supplier, without the sign-up email:
   // it works through the studio view of the supplier portal until the shop signs up with the same email.
+  // Studio edits any profile's details (status, type and approvals unchanged).
+  if (action === 'editProfile') {
+    const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
+    if (!p) throw new Error('Profile not found');
+    const f: Dict = {
+      business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), email: txt(d.email, 120).toLowerCase(), emirate: txt(d.emirate, 60),
+      address: txt(d.address, 300), about: txt(d.about, 2000), tradeLicence: txt(d.tradeLicence, 60), portfolio: txt(d.portfolio, 300),
+      bankName: txt(d.bankName, 80), accountName: txt(d.accountName, 120), iban: txt(d.iban, 40).toUpperCase().replace(/\s+/g, ''),
+    };
+    if (!f.business) throw new Error('Add the business / artist name.');
+    if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(f.email))) throw new Error('Check the email address.');
+    if (f.portfolio && !/^https?:\/\//i.test(String(f.portfolio))) f.portfolio = `https://${f.portfolio}`;
+    if (f.iban && (p.country || 'UAE') === 'UAE' && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(String(f.iban))) throw new Error('Check the IBAN (e.g. AE07 0331 2345 6789 0123 456).');
+    const row: Dict = { ...p, ...Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v || undefined])), updatedAt: new Date().toISOString() };
+    await putRow(S, row);
+    if (row.status === 'APPROVED' && row.type === 'ARTIST') await publishArtist(row);
+    return { profile: row };
+  }
   if (action === 'promoteSupplier') {
     const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
     if (!p || p.status !== 'PROSPECT' || !ROLE_OF[String(p.type)]) throw new Error('Supplier prospect not found');

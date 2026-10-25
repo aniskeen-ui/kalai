@@ -194,6 +194,15 @@ const priceText = (s) => s.type === 'PRINTER'
   : s.type === 'FRAMER'
   ? `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and are choosing our framing partners now. We frame original artworks and children's drawings for our customers and would like your trade prices for regular orders:\n\n• Sizes: A4, A3, 30×40, 40×50, 50×70, 60×80, 70×100 cm\n• Styles: black slim, white, natural oak, walnut, gold\n• With white mount and glass or acrylic: fixing charge per size, or included?\n• Delivery to the customer within Dubai and other emirates: your charge?\n\nYou can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`
   : `Hello${s.contactName ? ` ${s.contactName}` : ''}, Anis from Kalai Art House, Dubai (art.pranixtechno.com). We are launching shortly and are choosing our delivery partners now. We deliver framed artworks to customers and would like your rates for regular jobs: one framed work picked up in Dubai, delivered to each emirate, by frame size (30×40, 40×50, 50×70, 60×80 and 70×100 cm, packed with glass), and same-day if available. You can also enter them in our supplier portal: art.pranixtechno.com/supplier.html. Thank you!`;
+// Studio edits a profile's details directly (frame shops, print shops, delivery partners, artists, sellers).
+const EDIT_FIELDS = [['business', 'Business / artist name'], ['contactName', 'Contact person'], ['phone', 'Mobile'], ['email', 'Email'], ['emirate', 'Emirate / city'],
+  ['address', 'Address (workshop / shop / base)'], ['about', 'Services / about', 'area'], ['tradeLicence', 'Trade licence no.'], ['portfolio', 'Website'],
+  ['bankName', 'Bank'], ['accountName', 'Account name'], ['iban', 'IBAN']];
+function editBox(s) {
+  return `<details class="edit-box"><summary class="btn small ghost" style="display:inline-block">Edit details</summary>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:8px">${EDIT_FIELDS.map(([k, l, t]) => `<label class="field" style="${t ? 'grid-column:1/-1' : ''}"><span style="font-size:12px;font-weight:700">${l}</span>${t ? `<textarea data-e="${k}" rows="2">${esc(s[k] || '')}</textarea>` : `<input data-e="${k}" value="${esc(s[k] || '')}">`}</label>`).join('')}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small" type="button" data-edit-save>Save details</button><span class="muted" data-edit-msg style="font-size:12px"></span></div></details>`;
+}
 function supplierCard(s) {
   const fr = s.type === 'FRAMER';
   return `<article class="mk-card" data-seller="${esc(s.id)}">
@@ -204,6 +213,7 @@ function supplierCard(s) {
     ${fr ? frameStrip(s) : ''}
     <div class="muted">${fr ? 'Workshop' : s.type === 'PRINTER' ? 'Shop' : 'Base'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
+    ${editBox(s)}
     <div class="mk-act">
       <label>Note to ${fr ? 'frame shop' : 'delivery partner'}<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
@@ -230,6 +240,7 @@ function sellerCard(s) {
       <div class="mk-imgs">${samplesOf(s).map((k) => `<a data-key="${esc(k)}" target="_blank" rel="noopener"><img alt="Product photo" data-key="${esc(k)}"></a>`).join('') || '<span class="muted">No product photos</span>'}</div>`}
     <div class="muted">${s.type === 'ARTIST' ? 'Address' : 'Pickup'}: ${esc(s.address) || '—'} · Bank: ${esc(s.bankName) || '—'} ${esc(s.accountName)} ${s.country === 'India' ? (s.accountNumber ? `· A/c ${esc(s.accountNumber)} · IFSC ${esc(s.ifsc)}` : '· <b>no bank account yet</b>') : s.iban ? `· IBAN ${esc(s.iban)}` : '· <b>no IBAN yet</b>'}</div>
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
+    ${editBox(s)}
     <div class="mk-act">
       ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? DEF_PCT)}"></label>
       <label>Kalai delivery fee (⃃)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
@@ -340,6 +351,15 @@ function wireCards() {
     if (el.dataset.pr === 'copy') el.onclick = async () => { try { await navigator.clipboard.writeText(artistInvite(p)); msg.textContent = 'Copied: paste it in their Instagram / Artmajeur message.'; } catch { msg.textContent = 'Copy not allowed here.'; } };
     if (el.dataset.pr === 'promote') el.onclick = async () => { if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Prices checked? Click again'; return; } if (await run('promoteSupplier', {})) draw(); };
     if (el.dataset.pr === 'remove') el.onclick = async () => { if (el.dataset.sure) { if (await run('removeProspect', {})) { sellers = sellers.filter((s) => s.id !== id); draw(); } } else { el.dataset.sure = '1'; el.textContent = 'Sure?'; } };
+  });
+  document.querySelectorAll('#mkBody [data-edit-save]').forEach((b) => {
+    b.onclick = async () => {
+      const card = b.closest('[data-seller]'), id = card.dataset.seller, m = card.querySelector('[data-edit-msg]');
+      const data = { id }; card.querySelectorAll('[data-e]').forEach((el) => { data[el.dataset.e] = el.value.trim(); });
+      b.disabled = true; m.textContent = 'Saving…';
+      try { const r = await act('editProfile', data); const p = sellers.find((x) => x.id === id); if (p && r.profile) Object.assign(p, r.profile); m.textContent = 'Saved.'; setTimeout(draw, 700); }
+      catch (ex) { m.textContent = ex.message; } finally { b.disabled = false; }
+    };
   });
   document.querySelectorAll('#mkBody [data-a]').forEach((b) => {
     b.onclick = async () => {
