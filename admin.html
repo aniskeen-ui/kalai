@@ -266,6 +266,14 @@ a.df[href]:hover{transform:translateY(-2px)}
 .df.draft{border-color:var(--fdraftbd);background:var(--fdraft)}.df.draft .tag{color:var(--fdrafttg)}
 .df.todo{border-style:dashed;background:transparent;opacity:.75}
 .df.void{border-color:#f87171;text-decoration:line-through}
+/* Same look as the other order cards (theme colours, light and dark): overrides the three palettes. */
+.flowcard,.flowcard[data-fp]{--fbg:var(--sunk);--fbd:var(--line);--ftx:var(--fg);--fmu:var(--muted);--flane:var(--surface);--fbox:var(--surface);--fboxbd:var(--line);--fdone:var(--surface);--fdonebd:var(--ok);--fdonetg:var(--ok);--fdraft:var(--surface);--fdraftbd:var(--gold);--fdrafttg:var(--gold);--fh:none}
+.flowcard{border-radius:10px;box-shadow:none;padding:12px 14px}
+.flowhead h3{background:none;color:var(--fg);font-size:14px;-webkit-text-fill-color:currentColor}
+.fp-pick{display:none}
+.dfl.cust,.dfl.art,.dfl.sup{--lc:var(--muted)}
+.dfl{border:1px solid var(--line);border-left:4px solid var(--line)}
+.df{box-shadow:none}
 @media (max-width:640px){.dfl{grid-template-columns:1fr}}
 @container (max-width:720px){.dfl{grid-template-columns:1fr;gap:6px}.dft i{display:inline;margin-right:6px}.df{min-width:96px}}
 </style>
