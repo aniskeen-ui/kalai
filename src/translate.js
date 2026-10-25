@@ -1,0 +1,107 @@
+// Website in other languages: the visitor picks a language in the header and every text on the page (including
+// what appears later: product pages, forms, My enquiries) is translated by Amazon Translate through the function,
+// which keeps each translation (so a sentence is translated once for all visitors). Prices, codes and the
+// Thirukkural card (data-notranslate) stay as they are. Orders still reach the studio in English (kalaiEN).
+import { generateClient } from 'aws-amplify/data';
+
+const client = generateClient();
+export const LANGS = [['en', 'English'], ['ar', 'العربية'], ['ta', 'தமிழ்'], ['hi', 'हिन्दी'], ['ml', 'മലയാളം'], ['te', 'తెలుగు'], ['ur', 'اردو'], ['tl', 'Filipino'], ['ru', 'Русский'], ['fr', 'Français'], ['zh', '中文']];
+const RTL = ['ar', 'ur'];
+const orig = new WeakMap(); // text node / element+attr → English
+let lang = 'en';
+try { lang = localStorage.getItem('kalaiLang') || 'en'; } catch { /* */ }
+if (!LANGS.some(([k]) => k === lang)) lang = 'en';
+const memo = new Map(); // `${lang}|${text}` → translation
+function loadCache(l) { try { const o = JSON.parse(localStorage.getItem(`kalaiTr_${l}`) || '{}'); Object.entries(o).forEach(([k, v]) => memo.set(`${l}|${k}`, v)); } catch { /* */ } }
+function saveCache(l) { try { const o = {}; let n = 0; for (const [k, v] of memo) if (k.startsWith(`${l}|`) && n++ < 4000) o[k.slice(l.length + 1)] = v; localStorage.setItem(`kalaiTr_${l}`, JSON.stringify(o)); } catch { /* storage full */ } }
+
+const SKIP = 'script,style,noscript,code,pre,textarea,svg,[data-notranslate],.notranslate,.mono,.dhs';
+const worth = (t) => (t.match(/[A-Za-z]/g) || []).length >= 2; // prices, codes and numbers stay
+const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+
+function collect(root) {
+  const nodes = [], attrs = [];
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement && !n.parentElement.closest(SKIP) && worth(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
+  for (let n = w.nextNode(); n; n = w.nextNode()) nodes.push(n);
+  (root.querySelectorAll ? [root, ...root.querySelectorAll('[placeholder],[title],[aria-label],img[alt]')] : []).forEach((el) => {
+    if (!el.getAttribute || el.closest(SKIP)) return;
+    ATTRS.forEach((a) => { const v = el.getAttribute(a); if (v && worth(v)) attrs.push([el, a]); });
+  });
+  return { nodes, attrs };
+}
+const enOf = (n) => { const o = orig.get(n); return o !== undefined ? o : n.nodeValue; };
+const attrKey = (el, a) => { let m = orig.get(el); if (!m) orig.set(el, (m = {})); return m; };
+
+let busy = false, again = false;
+async function translate(root = document.body) {
+  if (busy) { again = true; return; }
+  busy = true;
+  try {
+    const { nodes, attrs } = collect(root);
+    if (lang === 'en') { // back to English
+      nodes.forEach((n) => { const o = orig.get(n); if (o !== undefined && n.nodeValue !== o) n.nodeValue = o; });
+      attrs.forEach(([el, a]) => { const m = orig.get(el); if (m && m[a] !== undefined) el.setAttribute(a, m[a]); });
+      return;
+    }
+    const items = [];
+    nodes.forEach((n) => { if (!orig.has(n)) orig.set(n, n.nodeValue); items.push([enOf(n).trim(), (t) => { const o = enOf(n); n.nodeValue = o.replace(o.trim(), t); }]); });
+    attrs.forEach(([el, a]) => { const m = attrKey(el, a); if (m[a] === undefined) m[a] = el.getAttribute(a); items.push([m[a].trim(), (t) => el.setAttribute(a, t)]); });
+    const need = [...new Set(items.map(([t]) => t).filter((t) => t && !memo.has(`${lang}|${t}`)))];
+    for (let i = 0; i < need.length; i += 80) {
+      const part = need.slice(i, i + 80);
+      try {
+        const r = await client.mutations.siteTranslate({ lang, texts: JSON.stringify(part) }, { authMode: 'apiKey' });
+        const out = JSON.parse(typeof r.data === 'string' ? r.data : '[]');
+        part.forEach((t, k) => { if (out[k]) memo.set(`${lang}|${t}`, out[k]); });
+      } catch (ex) { console.warn('Translation failed', ex); break; }
+    }
+    paused = true;
+    items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); if (v) put(v); });
+    setTimeout(() => { paused = false; }, 0);
+    saveCache(lang);
+  } finally {
+    busy = false;
+    if (again) { again = false; setTimeout(() => translate(), 50); }
+  }
+}
+
+// New content (product pages, forms, lists) is translated as it appears.
+let paused = false, timer = null;
+new MutationObserver(() => { if (paused || lang === 'en') return; clearTimeout(timer); timer = setTimeout(() => translate(), 250); })
+  .observe(document.body, { childList: true, subtree: true, characterData: true });
+
+/** The English text of an element (what the studio receives in an order), whatever the visitor's language. */
+window.kalaiEN = (el) => {
+  if (!el) return '';
+  if (lang === 'en') return el.textContent;
+  let s = '';
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) s += enOf(n);
+  return s;
+};
+
+export function setLang(l) {
+  lang = LANGS.some(([k]) => k === l) ? l : 'en';
+  try { localStorage.setItem('kalaiLang', lang); } catch { /* */ }
+  document.documentElement.lang = lang;
+  document.documentElement.dir = RTL.includes(lang) ? 'rtl' : 'ltr';
+  loadCache(lang);
+  paint();
+  translate();
+}
+function paint() {
+  const b = document.getElementById('langBtn');
+  if (b) b.textContent = `${(LANGS.find(([k]) => k === lang) || LANGS[0])[1]} ▾`;
+}
+function picker() {
+  const host = document.querySelector('.cur-pick');
+  if (!host || document.getElementById('langBtn')) return;
+  host.insertAdjacentHTML('beforebegin', `<div class="cur-pick lang-pick" data-notranslate><button type="button" class="cur-sel" id="langBtn" aria-haspopup="true" aria-expanded="false" aria-label="Language"></button><div class="cur-menu" id="langMenu" hidden>${LANGS.map(([k, n]) => `<button type="button" data-lang="${k}">${n}</button>`).join('')}</div></div>`);
+  const btn = document.getElementById('langBtn'), menu = document.getElementById('langMenu');
+  btn.onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; btn.setAttribute('aria-expanded', String(!menu.hidden)); };
+  document.addEventListener('click', () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); });
+  menu.querySelectorAll('[data-lang]').forEach((x) => { x.onclick = () => { menu.hidden = true; setLang(x.dataset.lang); }; });
+  paint();
+}
+picker();
+if (lang !== 'en') setLang(lang);

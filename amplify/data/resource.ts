@@ -487,6 +487,11 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
   // Master rates (framing and India courier per size tier, local courier, customs, fee, margin, VAT, FX).
+  // Saved website translations (siteTranslate): id = language|hash of the English text. Function only.
+  Translation: a
+    .model({ id: a.id().required(), text: a.string() })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   Rates: a
     .model({
       key: a.id().required(),
@@ -603,6 +608,14 @@ const schema = a.schema({
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Visitor NOT signed in: price enquiry saved for the studio (no account, so the visitor can't track it).
+  // Website in other languages (header picker): texts → translations, kept so each sentence is translated once.
+  siteTranslate: a
+    .mutation()
+    .arguments({ lang: a.string().required(), texts: a.string().required() })
+    .returns(a.string())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
   guestEnquiry: a
     .mutation()
     .arguments({ ref: a.string().required(), title: a.string().required(), details: a.string(), customerName: a.string().required(), phone: a.string().required(), email: a.string() })

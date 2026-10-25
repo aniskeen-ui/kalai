@@ -14,6 +14,7 @@ import { autoPhones, countryRegionHtml, wireRegion, addressLine, COUNTRIES } fro
 window.kalaiCountries = COUNTRIES;
 window.kalaiKidsCountries?.(COUNTRIES);
 import { cleanTitle } from './title.js';
+import './translate.js'; // language picker in the header (whole site)
 
 autoPhones();
 
@@ -1094,9 +1095,9 @@ async function showDailyMessage() {
 @media (prefers-reduced-motion:reduce){.kmsg{animation:none}.kmsg-rot{transition:none}}
 </style>`);
     const box = document.createElement('aside');
-    box.className = 'kmsg'; box.setAttribute('aria-label', 'Thirukkural of the day'); box.lang = 'ta';
+    box.className = 'kmsg'; box.setAttribute('aria-label', 'Thirukkural of the day'); box.lang = 'ta'; box.dataset.notranslate = ''; // has its own languages
     const tab = document.createElement('button');
-    tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true; tab.textContent = `📜 ${KURAL_TITLE.ta}`;
+    tab.dataset.notranslate = ''; tab.className = 'kmsg-tab'; tab.type = 'button'; tab.hidden = true; tab.textContent = `📜 ${KURAL_TITLE.ta}`;
     document.body.append(box, tab);
     // Thiruvalluvar picture: the one uploaded in Order Management → Messages, else our emblem.
     let picture = '/valluvar.svg';

@@ -3743,6 +3743,41 @@ async function dailyKural(force: boolean) {
   return { ok: true, id, n };
 }
 
+// ---------- Website in other languages ----------
+const SITE_LANGS = ['ar', 'ta', 'hi', 'ml', 'te', 'ur', 'tl', 'ru', 'fr', 'zh'];
+const trMemo = new Map<string, string>();
+async function siteTranslate(a: { lang?: string; texts?: string }) {
+  const lang = String(a.lang ?? '');
+  if (!SITE_LANGS.includes(lang)) throw new Error('Language not offered');
+  let texts: string[] = [];
+  try { texts = JSON.parse(String(a.texts ?? '[]')); } catch { texts = []; }
+  texts = (Array.isArray(texts) ? texts : []).slice(0, 80).map((t) => String(t ?? '').slice(0, 600));
+  if (texts.reduce((n, t) => n + t.length, 0) > 16000) throw new Error('Too much text at once');
+  const T = process.env.TRANSLATION_TABLE;
+  const id = (t: string) => `${lang}|${createHash('sha1').update(t).digest('hex')}`;
+  const out: string[] = texts.map((t) => trMemo.get(id(t)) ?? '');
+  // Saved translations first.
+  const want = [...new Set(texts.filter((t, i) => t && !out[i]).map(id))];
+  if (T) for (let i = 0; i < want.length; i += 100) {
+    const r = await ddb.send(new BatchGetItemCommand({ RequestItems: { [T]: { Keys: want.slice(i, i + 100).map((k) => ({ id: { S: k } })) } } }));
+    for (const it of (r.Responses?.[T] ?? []) as Img[]) trMemo.set(str(it, 'id'), it.text?.S ?? '');
+  }
+  // The rest: Amazon Translate, a few at a time, then kept.
+  const todo = texts.map((t, i) => ({ t, i })).filter(({ t, i }) => t && !(out[i] = trMemo.get(id(t)) ?? ''));
+  const now = new Date().toISOString();
+  for (let k = 0; k < todo.length; k += 8) {
+    await Promise.all(todo.slice(k, k + 8).map(async ({ t, i }) => {
+      try {
+        const tr = (await translator.send(new TranslateTextCommand({ Text: t, SourceLanguageCode: 'en', TargetLanguageCode: lang }))).TranslatedText ?? '';
+        out[i] = tr; trMemo.set(id(t), tr);
+        if (T && tr) await ddb.send(new PutItemCommand({ TableName: T, Item: { id: { S: id(t) }, text: { S: tr }, en: { S: t.slice(0, 600) }, __typename: { S: 'Translation' }, createdAt: { S: now }, updatedAt: { S: now } } })).catch(() => {});
+      } catch (err) { console.warn('Translate failed', err); }
+    }));
+  }
+  texts.forEach((t, i) => { if (!out[i]) out[i] = trMemo.get(id(t)) ?? ''; });
+  return out;
+}
+
 // ---------- Daily message translation ----------
 const translator = new TranslateClient({});
 async function translateMessage(a: { text?: string; source?: string | null }) {
@@ -4409,6 +4444,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
     if (field === 'licenceOrder') return JSON.stringify(await licenceOrder(event));
+    if (field === 'siteTranslate') return JSON.stringify(await siteTranslate(event.arguments as { lang?: string; texts?: string }));
     if (field === 'verifyCertificate') return JSON.stringify(await verifyCertificate(String(event.arguments.code ?? '')));
     if (field === 'ziinaAdmin') return JSON.stringify(await ziinaAdmin(event));
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
