@@ -160,6 +160,8 @@ function wireRows(list) {
         Object.assign(p, r.data || patch);
         if (patch.medium) el.querySelector('[data-f="medium"]').value = patch.medium;
         msg.textContent = 'Saved';
+        // Prints / licences switched on or off: show or hide their royalty boxes straight away.
+        if (['printable', 'licensable'].includes(f)) { const y = scrollY; draw(); scrollTo(0, y); return; }
         setTimeout(() => { msg.textContent = ''; }, 1500);
       };
     });
