@@ -225,6 +225,8 @@ function drawBulk() {
   const n = selected.size;
   $('cgBulk').hidden = n === 0;
   $('cgSelCount').textContent = `${n} selected`;
+  if ($('cgMassSel')) $('cgMassSel').textContent = n ? `${n} selected` : 'tick works first (or Select all shown)';
+  if ($('cgMassGo')) $('cgMassGo').disabled = n === 0;
 }
 
 async function bulk(label, fn) {
