@@ -193,14 +193,26 @@ function render() {
   list.forEach((x) => wire(x));
 }
 
+/** The paper size to work on: the commission's chosen size, or the collection work's size (from "Artwork"). */
+function paperOf(x) {
+  const get = (k) => (x.brief.find((b) => b.k.toLowerCase() === k) || {}).v || '';
+  const raw = get('size') || get('frame size') || (get('artwork').match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)\s*cm/i) || [])[0] || '';
+  if (!raw) return '';
+  const m = raw.match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)/);
+  const [a, b] = m ? [Number(m[1]), Number(m[2])].sort((p, q) => p - q) : [0, 0];
+  const iso = a >= 20 && a <= 22 && b >= 28 && b <= 31 ? 'A4' : a >= 28 && a <= 31 && b >= 40 && b <= 43 ? 'A3' : a >= 14 && a <= 15.5 && b >= 20 && b <= 22 ? 'A5' : '';
+  return raw.replace(/\s*\(.*$/, '').trim() + (iso && !new RegExp(iso).test(raw) ? ` (${iso})` : '');
+}
 function card(x) {
   const brief = x.brief.map(({ k, v }) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+  const paper = paperOf(x);
   const dis = x.locked ? 'disabled' : '';
   return `<article class="acard" id="c-${esc(x.id)}">
     <div class="ameta"><span class="mono">${esc(x.ref)}</span><span>${esc(day(x.createdAt))}</span><span class="catchip" title="Sales category">${x.kind === 'COMMISSION' ? 'Commission' : 'Collection'}</span>${x.customerCode ? `<span class="mono" title="Customer">${x.customerName ? esc(x.customerName) + ' · ' : ''}${esc(x.customerCode)}</span>` : ''}${x.orderStatus === 'DELIVERED' ? '<span class="stage PAID" title="The customer has received it">Delivered to customer</span>' : ''}<span class="stage ${esc(x.stage)}">${esc(x.label)}</span></div>
     ${x.studioNote ? `<div class="studionote"><b>Note from Kalai Art House</b>${x.studioNoteAt ? ` <span class="muted" style="font-size:11px">${esc(day(x.studioNoteAt))}</span>` : ''}<div>${esc(x.studioNote)}</div></div>` : ''}
     <h2>${esc(x.title)}</h2>
     ${x.imageKey ? `<img class="opic" alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:220px;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
+    ${paper ? `<div class="paper">Paper size: <b>${esc(paper)}</b>${x.kind === 'PRICE' ? ' <span class="muted">· same size as the work on the website</span>' : ' <span class="muted">· as the customer chose</span>'}</div>` : ''}
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
     ${reworkBlock(x)}
