@@ -137,6 +137,8 @@ const css = `
 .trk-list li.todo{opacity:.55}
 .trk-at{font-size:12px;opacity:.75;margin-left:4px}
 .trk-note{font-size:13px;margin-top:2px}
+.redeem{border:1px dashed var(--gold);border-radius:10px;padding:8px 12px;margin:6px 0}
+.redeem summary{cursor:pointer;font-weight:700;font-size:14px}
 .enq-msg{font-size:13px;line-height:1.45;background:var(--surface);border-left:3px solid var(--gold);padding:8px 10px}
 .enq-price{font-family:var(--mono);font-size:14px}
 .rate{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:10px}
@@ -699,11 +701,67 @@ function wireAddress(root, items) {
 
 const parseDet = (d) => { try { const v = typeof d === 'string' ? JSON.parse(d) : d; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
 // Discount code on an order that has a price and isn't paid yet.
+/* ---------- Gift cards, vouchers and private codes: check, scan the QR, apply to an order ---------- */
+const PENDING = 'kalaiRedeem';
+const pendingCode = () => { try { return localStorage.getItem(PENDING) || ''; } catch { return ''; } };
+function wireRedeem(items) {
+  const box = body.querySelector('#redeemBox'); if (!box) return;
+  const out = body.querySelector('#redeemOut'), inp = body.querySelector('#redeemCode');
+  const pend = pendingCode(); if (pend) { inp.value = pend; box.open = true; }
+  const open = () => items.filter((e) => e.quotedPrice && ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED') && !e.discountCode && !e.discountType && e.cancelState !== 'REQUESTED');
+  const check = async (code) => {
+    code = String(code || '').trim().toUpperCase(); if (!code) return;
+    out.innerHTML = 'Checking…';
+    try {
+      const r = await client.mutations.checkCode({ code });
+      if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+      const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+      try { localStorage.setItem(PENDING, code); } catch { /* */ }
+      const os = open();
+      out.innerHTML = `<b style="color:var(--ok)">✓ ${esc(d.text)}</b><br>${os.length ? `Use it on: ${os.map((e) => `<button type="button" class="btn" data-redeem="${esc(e.id)}" style="padding:4px 10px;font-size:12px;margin:4px 4px 0 0">${esc(e.title)} · ⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}</button>`).join('')}`
+        : "Saved: it's filled in for you on your next order once we send you the price (or ask for the price on any artwork now)."}`;
+      out.querySelectorAll('[data-redeem]').forEach((b) => { b.onclick = async () => {
+        b.disabled = true;
+        try {
+          const a = await client.mutations.applyCode({ id: b.dataset.redeem, code });
+          if (a.errors?.length) throw new Error(a.errors[0].message.replace(/^.*?Error: /, ''));
+          try { localStorage.removeItem(PENDING); } catch { /* */ }
+          await showList();
+        } catch (ex) { out.insertAdjacentHTML('beforeend', `<div class="acct-err">${esc(ex.message)}</div>`); b.disabled = false; }
+      }; });
+    } catch (ex) { out.innerHTML = `<span class="acct-err">${esc(ex.message || 'This code is not valid.')}</span>`; }
+  };
+  body.querySelector('#redeemForm').onsubmit = (ev) => { ev.preventDefault(); check(inp.value); };
+  if (pend) check(pend);
+  // Scan the QR on a printed gift card or voucher with the phone camera (where the browser can read QR codes).
+  body.querySelector('#redeemScan').onclick = async () => {
+    const cam = body.querySelector('#redeemCam');
+    if (!('BarcodeDetector' in window)) { out.innerHTML = 'Your browser cannot scan here: open your phone camera and point it at the QR code; it opens this page with the code filled in.'; return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); } catch { out.innerHTML = '<span class="acct-err">Camera not allowed. You can type the code instead.</span>'; return; }
+    cam.srcObject = stream; cam.hidden = false; await cam.play();
+    const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+    const stop = () => { stream.getTracks().forEach((t) => t.stop()); cam.hidden = true; };
+    const t0 = Date.now();
+    const tick = async () => {
+      if (cam.hidden) return;
+      try {
+        const codes = await det.detect(cam);
+        const raw = codes[0]?.rawValue;
+        if (raw) { stop(); const m = String(raw).match(/redeem=([A-Z0-9-]{4,30})/i); const code = (m ? m[1] : raw).toUpperCase().replace(/[^A-Z0-9-]/g, ''); inp.value = code; check(code); return; }
+      } catch { /* keep trying */ }
+      if (Date.now() - t0 > 30000) { stop(); out.textContent = 'No QR code found. You can type the code instead.'; return; }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  };
+}
+
 function codeBox(e) {
   const st = e.status || 'RECEIVED';
   if (!e.quotedPrice || !['RECEIVED', 'PRICE_SENT'].includes(st) || e.cancelState === 'REQUESTED') return '';
   if (e.discountCode) return `<div class="code-box" data-code-id="${esc(e.id)}"><button type="button" class="req-open" data-code-remove>Remove code</button><span class="acct-err" data-code-msg></span></div>`;
-  return `<form class="code-box" data-code-id="${esc(e.id)}" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input name="code" placeholder="Discount code" maxlength="30" style="max-width:160px;text-transform:uppercase;padding:6px 8px;font-size:13px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Apply</button><a href="/offers.html" class="acct-info" style="font-size:12px">See offers</a><span class="acct-err" data-code-msg style="flex-basis:100%"></span></form>`;
+  return `<form class="code-box" data-code-id="${esc(e.id)}" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input name="code" placeholder="Code or gift card" value="${esc(pendingCode())}" maxlength="30" style="max-width:160px;text-transform:uppercase;padding:6px 8px;font-size:13px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Apply</button><a href="/offers.html" class="acct-info" style="font-size:12px">See offers</a><span class="acct-err" data-code-msg style="flex-basis:100%"></span></form>`;
 }
 function wireCodes(root) {
   root.querySelectorAll('.code-box').forEach((box) => {
@@ -846,6 +904,10 @@ async function showList() {
   try { admin = ((await fetchAuthSession()).tokens?.accessToken?.payload?.['cognito:groups'] || []).includes('ADMINS'); } catch { /* not admin */ }
   body.innerHTML = `<p class="acct-info">Signed in as <b>${esc(state.email)}</b><span id="custNo"></span></p>
     ${admin ? '<p class="acct-info" style="margin:0;font-size:13px;color:var(--kumkum)">Studio account: you see every customer\'s enquiries and orders here, and anything you do is done for that customer (they get the emails).</p>' : ''}
+    <details class="redeem" id="redeemBox"><summary>🎁 Have a gift card, voucher or code?</summary>
+      <form id="redeemForm" novalidate style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><input name="code" id="redeemCode" placeholder="Enter the code" maxlength="30" style="max-width:200px;text-transform:uppercase;padding:6px 8px;font-size:14px"><button class="btn" type="submit" style="padding:6px 12px;font-size:13px">Check</button><button class="btn ghost-dark" type="button" id="redeemScan" style="padding:6px 12px;font-size:13px">📷 Scan QR</button></form>
+      <video id="redeemCam" playsinline muted hidden style="width:100%;max-width:320px;border-radius:8px;margin-top:8px"></video>
+      <div id="redeemOut" class="acct-info" style="font-size:13px;margin-top:6px"></div></details>
     <nav class="acct-tabs" role="tablist" id="acctTabs"></nav>
     <div id="enqList" class="acct-info">Loading…</div>
     <button class="acct-link" id="myDetails">My details</button><button class="acct-link" id="refresh">Refresh</button><button class="acct-link" id="signOut">Sign out</button>`;
@@ -897,6 +959,7 @@ async function showList() {
       wireCodes(list);
     };
     draw();
+    wireRedeem(items);
   } catch (ex) {
     list.textContent = 'We could not load your enquiries and orders. ' + friendly(ex);
   }
@@ -920,6 +983,15 @@ Hub.listen('auth', ({ payload }) => {
 loadUser().then(async () => {
   // Links in our emails: art.pranixtechno.com/#my-enquiries opens the panel (sign-in first if needed).
   const qp = new URLSearchParams(location.search);
+  // QR on a gift card / voucher: art.pranixtechno.com/#redeem=GIFT-XXXX-XXXX → the code waits in My enquiries & orders.
+  const rd = location.hash.match(/^#redeem=([A-Za-z0-9-]{4,30})$/);
+  if (rd) {
+    try { localStorage.setItem(PENDING, rd[1].toUpperCase()); } catch { /* */ }
+    try { history.replaceState(null, '', location.pathname + '#my-enquiries'); } catch { /* */ }
+    if (state.user) await showList(); else showSignIn('Sign in (or create an account) to use your gift card or code.');
+    open();
+    return;
+  }
   if (location.hash === "#my-enquiries") {
     if (state.user) {
       await showList();

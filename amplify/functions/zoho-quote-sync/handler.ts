@@ -3645,6 +3645,68 @@ async function bumpUses(code: string, delta: number) {
   if (!p) return;
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: str(p, 'id') } }, UpdateExpression: 'SET usedCount = if_not_exists(usedCount, :z) + :d', ExpressionAttributeValues: { ':z': { N: '0' }, ':d': { N: String(delta) } } }));
 }
+// ---------- Private codes and gift cards (Voucher) ----------
+async function findVoucher(code: string) {
+  const T = process.env.VOUCHER_TABLE;
+  if (!T || !code) return null;
+  return (await scanAll(T)).find((x) => str(x, 'code').toUpperCase() === code.toUpperCase()) ?? null;
+}
+/** The amount a private code / gift card takes off this order, or the reason it can't be used. */
+function voucherAmount(v: Img, e: Img, list: number): { amount: number; error?: string } {
+  const now = new Date().toISOString();
+  if (!v.active?.BOOL) return { amount: 0, error: 'This code is no longer active.' };
+  if (str(v, 'endAt') && str(v, 'endAt') < now) return { amount: 0, error: 'This code has expired.' };
+  const lock = str(v, 'forEmail').toLowerCase();
+  if (lock && lock !== str(e, 'email').toLowerCase()) return { amount: 0, error: 'This code was given to someone else: sign in with the email it was sent to.' };
+  if (str(v, 'kind') === 'GIFT') {
+    const bal = num(v, 'balance') ?? 0;
+    if (!(bal > 0)) return { amount: 0, error: 'This gift card has been fully used.' };
+    return { amount: Math.round(Math.min(bal, list) * 100) / 100 };
+  }
+  const max = num(v, 'maxUses');
+  if (max && (num(v, 'usedCount') ?? 0) >= max) return { amount: 0, error: 'This code has been fully used.' };
+  return discountFor(v, str(e, 'kind'), list);
+}
+async function useVoucher(v: Img, ref: string, amount: number, back = false) {
+  const T = process.env.VOUCHER_TABLE;
+  if (!T) return;
+  let uses: { ref: string; amount: number; at: string; back?: boolean }[] = [];
+  try { uses = JSON.parse(str(v, 'uses') || '[]'); } catch { uses = []; }
+  uses.push({ ref, amount: back ? -amount : amount, at: new Date().toISOString(), ...(back ? { back: true } : {}) });
+  const gift = str(v, 'kind') === 'GIFT';
+  await ddb.send(new UpdateItemCommand({ TableName: T, Key: { id: { S: str(v, 'id') } },
+    UpdateExpression: `SET usedCount = if_not_exists(usedCount, :z) + :d, uses = :u${gift ? ', balance = if_not_exists(balance, :z) + :b' : ''}`,
+    ExpressionAttributeValues: { ':z': { N: '0' }, ':d': { N: back ? '-1' : '1' }, ':u': { S: JSON.stringify(uses.slice(-100)) }, ...(gift ? { ':b': { N: String(back ? amount : -amount) } } : {}) } }));
+}
+/** A code taken off an order: give back the use (offer) or the amount (gift card). */
+async function releaseCode(code: string, ref: string, amount: number) {
+  const v = await findVoucher(code);
+  if (v) await useVoucher(v, ref, amount, true); else await bumpUses(code, -1);
+}
+
+/** Customer: what a code / gift card gives, without using it. */
+async function checkCode(ev: ApiEvent) {
+  const code = String((ev.arguments as { code?: string }).code ?? '').trim().toUpperCase().slice(0, 30);
+  if (!code) throw new Error('Enter the code.');
+  const f = await findPromo(code);
+  if (f && 'p' in f) { const p = f.p; return { ok: true, code, kind: 'OFFER', text: `${str(p, 'discountType') === 'AED' ? `AED ${num(p, 'discountValue')}` : `${num(p, 'discountValue')}%`} off${num(p, 'minOrder') ? ` orders from AED ${num(p, 'minOrder')}` : ''}` }; }
+  const v = await findVoucher(code);
+  if (!v) throw new Error(f && 'error' in f ? f.error : 'This code is not valid.');
+  const email = String(ev.identity?.claims?.email ?? '').toLowerCase();
+  const now = new Date().toISOString();
+  if (!v.active?.BOOL) throw new Error('This code is no longer active.');
+  if (str(v, 'endAt') && str(v, 'endAt') < now) throw new Error('This code has expired.');
+  if (str(v, 'forEmail') && email && str(v, 'forEmail').toLowerCase() !== email) throw new Error('This code was given to someone else: sign in with the email it was sent to.');
+  if (str(v, 'kind') === 'GIFT') {
+    const bal = num(v, 'balance') ?? 0;
+    if (!(bal > 0)) throw new Error('This gift card has been fully used.');
+    return { ok: true, code, kind: 'GIFT', balance: bal, text: `Gift card: AED ${bal.toLocaleString('en-US')} to spend${str(v, 'endAt') ? `, until ${new Date(str(v, 'endAt')).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}` };
+  }
+  const max = num(v, 'maxUses');
+  if (max && (num(v, 'usedCount') ?? 0) >= max) throw new Error('This code has been fully used.');
+  return { ok: true, code, kind: 'CODE', text: `${str(v, 'discountType') === 'AED' ? `AED ${num(v, 'discountValue')}` : `${num(v, 'discountValue')}%`} off${num(v, 'minOrder') ? ` orders from AED ${num(v, 'minOrder')}` : ''}${str(v, 'endAt') ? `, until ${new Date(str(v, 'endAt')).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}` };
+}
+
 async function applyCode(ev: ApiEvent) {
   const table = process.env.ENQUIRY_TABLE;
   if (!table) throw new Error('Not configured');
@@ -3663,18 +3725,21 @@ async function applyCode(ev: ApiEvent) {
     // Remove the code: back to the full price.
     if (!current) return { ok: true, price: list };
     await updateEnquiry(id, { quotedPrice: list, discountAmount: null, discountCode: null, listPrice: null });
-    await bumpUses(current, -1);
+    await releaseCode(current, str(e, 'ref'), num(e, 'discountAmount') ?? 0);
     return { ok: true, price: list, removed: current };
   }
   if (code === current) throw new Error('This code is already applied.');
+  // A public offer code first, else a private code / gift card given by the studio.
   const f = await findPromo(code);
-  if (!f || 'error' in f) throw new Error(f?.error ?? 'This code is not valid.');
-  const d = discountFor(f.p, str(e, 'kind'), list);
+  const v = f && 'p' in f ? null : await findVoucher(code);
+  if (!v && (!f || 'error' in f)) throw new Error(f?.error ?? 'This code is not valid.');
+  const d = v ? voucherAmount(v, e, list) : discountFor((f as { p: Img }).p, str(e, 'kind'), list);
   if (d.error) throw new Error(d.error);
   const price = Math.round((list - d.amount) * 100) / 100;
+  const prevAmount = num(e, 'discountAmount') ?? 0;
   await updateEnquiry(id, { listPrice: list, discountAmount: d.amount, discountCode: code, quotedPrice: price });
-  await bumpUses(code, 1);
-  if (current) await bumpUses(current, -1);
+  if (v) await useVoucher(v, str(e, 'ref'), d.amount); else await bumpUses(code, 1);
+  if (current) await releaseCode(current, str(e, 'ref'), prevAmount);
   console.log(`Code ${code} on ${str(e, 'ref')}: AED ${list} - ${d.amount} = ${price}`);
   return { ok: true, code, list, discount: d.amount, price };
 }
@@ -4486,6 +4551,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     if (field === 'artistWorks') return JSON.stringify(await artistWorks(event));
     if (field === 'dailyKural') return JSON.stringify(await dailyKural(true));
     if (field === 'applyCode') return JSON.stringify(await applyCode(event));
+    if (field === 'checkCode') return JSON.stringify(await checkCode(event));
     if (field === 'assignCodes') return JSON.stringify(await assignCodes());
     if (field === 'marketAdmin') return JSON.stringify(await marketAdmin(event));
     if (field === 'translateMessage') return JSON.stringify(await translateMessage(event.arguments));

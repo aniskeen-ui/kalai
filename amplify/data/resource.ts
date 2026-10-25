@@ -430,6 +430,30 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),
 
+  // Private discount codes and gift cards / vouchers: given by the studio to people it knows, never shown on the
+  // website or readable by visitors (the function checks them when a customer enters the code on an order).
+  Voucher: a
+    .model({
+      code: a.string(), // upper case, e.g. KAL-7Q2M-4XPD
+      kind: a.string(), // CODE (discount: % or AED, limited uses) | GIFT (gift card: an AED balance used up over orders)
+      discountType: a.string(), // CODE: PCT | AED
+      discountValue: a.float(),
+      appliesTo: a.string(), // ALL | ART | CRAFTS | GIFT (as offers)
+      minOrder: a.float(),
+      value: a.float(), // GIFT: starting value (AED)
+      balance: a.float(), // GIFT: what is left
+      maxUses: a.integer(), // CODE: how many orders (blank = no limit)
+      usedCount: a.integer(),
+      forName: a.string(), // who it was given to
+      forEmail: a.string(), // optional: only this customer can use it
+      forPhone: a.string(), // to send it on WhatsApp / call
+      endAt: a.string(),
+      active: a.boolean(),
+      note: a.string(),
+      uses: a.string(), // JSON [{ref, amount, at}]
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   // Website settings master (one row, id "site"): timings shown on the home page.
   SiteSetting: a
     .model({
@@ -533,6 +557,14 @@ const schema = a.schema({
     .handler(a.handler.function(zohoQuoteSync)),
 
   // Customer (or the studio for them): apply / remove a discount code on an order before paying.
+  // Customer: what a code or gift card gives (before applying it to an order).
+  checkCode: a
+    .mutation()
+    .arguments({ code: a.string().required() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+
   applyCode: a
     .mutation()
     .arguments({ id: a.id().required(), code: a.string() })

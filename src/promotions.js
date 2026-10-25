@@ -21,8 +21,135 @@ function state(p, now = new Date().toISOString()) {
 }
 
 export async function showPromotions() {
-  if (!wired) { wired = true; $('prNew').onclick = () => edit(null); $('prFind').addEventListener('input', draw); }
+  if (!wired) { wired = true; $('prNew').onclick = () => edit(null); $('prFind').addEventListener('input', draw); $('vNew').onclick = () => vEdit(null); }
   await load();
+  await vLoad();
+}
+
+/* ---------- Private codes & gift cards (Voucher: studio only, never public) ---------- */
+let vouchers = [];
+const redeemLink = (code) => `https://art.pranixtechno.com/#redeem=${encodeURIComponent(code)}`;
+let qrLib = null;
+const loadQr = () => (qrLib ||= new Promise((ok, no) => { if (window.qrcode) { ok(window.qrcode); return; } const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; s.onload = () => ok(window.qrcode); s.onerror = () => no(new Error('QR library not loaded')); document.head.appendChild(s); }));
+async function qrSvg(text, cell = 4) { const q = (await loadQr())(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: cell, margin: 2, scalable: true }); }
+async function qrDataUrl(text, cell = 8) { const q = (await loadQr())(0, 'M'); q.addData(text); q.make(); return q.createDataURL(cell, 2); }
+/** A gift card / voucher image (PNG) with the QR code: to send or print. */
+async function cardPng(v) {
+  const c = document.createElement('canvas'); c.width = 1000; c.height = 560; const g = c.getContext('2d');
+  g.fillStyle = '#1e4d2b'; g.fillRect(0, 0, 1000, 560); g.fillStyle = '#c9a24a'; g.fillRect(0, 520, 1000, 40);
+  g.fillStyle = '#ffffff'; g.font = '600 46px Georgia, serif'; g.fillText('KALAI', 56, 96); g.font = '20px Arial'; g.fillStyle = '#c9dca4'; g.fillText('ART HOUSE · DUBAI', 200, 94);
+  g.fillStyle = '#ffffff'; g.font = '700 54px Arial'; g.fillText(v.kind === 'GIFT' ? `Gift card  AED ${Number(v.value || 0).toLocaleString('en-US')}` : `${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`, 56, 210);
+  g.font = '26px Arial'; g.fillStyle = '#e8efe0'; if (v.forName) g.fillText(`For ${v.forName}`, 56, 262);
+  g.font = '700 40px monospace'; g.fillStyle = '#ffffff'; g.fillText(v.code, 56, 350);
+  g.font = '22px Arial'; g.fillStyle = '#e8efe0'; g.fillText(`Valid until ${v.endAt ? day(v.endAt) : '—'}`, 56, 398);
+  g.fillText('Scan the QR or enter the code under My enquiries & orders', 56, 446); g.fillText('on art.pranixtechno.com', 56, 478);
+  const img = new Image(); img.src = await qrDataUrl(redeemLink(v.code), 8); await img.decode();
+  g.fillStyle = '#ffffff'; g.fillRect(690, 150, 270, 270); g.drawImage(img, 700, 160, 250, 250);
+  return c.toDataURL('image/png');
+}
+const genCode = (pre) => `${pre}-${Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('').replace(/(.{4})/, '$1-')}`;
+async function vLoad() {
+  $('vList').innerHTML = '<p class="muted">Loading…</p>';
+  try {
+    const r = await client.models.Voucher.list({ limit: 1000 });
+    if (r.errors?.length) throw new Error(r.errors[0].message);
+    vouchers = (r.data || []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    vDraw();
+  } catch (ex) { $('vList').innerHTML = `<p class="err">Could not load private codes: ${esc(ex.message)}</p>`; }
+}
+function vState(v) {
+  const now = new Date().toISOString();
+  if (!v.active) return ['Off', 'HIDDEN'];
+  if (v.endAt && v.endAt < now) return ['Expired', 'HIDDEN'];
+  if (v.kind === 'GIFT' ? !(Number(v.balance) > 0) : v.maxUses && (v.usedCount || 0) >= v.maxUses) return ['Used up', 'HIDDEN'];
+  return ['Active', 'PUBLISHED'];
+}
+const vWhat = (v) => (v.kind === 'GIFT' ? `Gift card ⃃ ${Number(v.value || 0).toLocaleString('en-US')} · balance <b>⃃ ${Number(v.balance || 0).toLocaleString('en-US')}</b>`
+  : `${v.discountType === 'AED' ? `⃃ ${v.discountValue}` : `${v.discountValue}%`} off · ${AREA[v.appliesTo || 'ALL']}${v.minOrder ? ` · min ⃃ ${v.minOrder}` : ''} · used ${v.usedCount || 0}${v.maxUses ? ` of ${v.maxUses}` : ''}`);
+const vShare = (v) => `Hello${v.forName ? ` ${v.forName.split(' ')[0]}` : ''}, here is your ${v.kind === 'GIFT' ? `Kalai Art House gift card worth AED ${v.value}` : `private Kalai Art House code for ${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`}: ${v.code}${v.endAt ? ` (valid until ${day(v.endAt)})` : ''}. Choose an artwork on art.pranixtechno.com; once we send you the price, open My enquiries & orders and enter the code on your order.`;
+function vDraw() {
+  $('vList').innerHTML = vouchers.length ? vouchers.map((v) => {
+    const [label, cls] = vState(v);
+    let uses = []; try { uses = JSON.parse(v.uses || '[]'); } catch { uses = []; }
+    return `<article class="mk-card" data-v="${esc(v.id)}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b class="mono" style="font-size:16px">${esc(v.code)}</b><span class="cg-badge ${cls}">${label}</span><span class="chip">${v.kind === 'GIFT' ? 'Gift card' : 'Private code'}</span>
+        <span class="muted" style="margin-left:auto">${v.forName ? `for <b>${esc(v.forName)}</b>` : ''}${v.forEmail ? ` · only ${esc(v.forEmail)}` : ''} · ${v.endAt ? `until ${esc(day(v.endAt))}` : 'no expiry'}</span></div>
+      <div class="muted">${vWhat(v)}${v.note ? ` · ${esc(v.note)}` : ''}</div>
+      ${uses.length ? `<div class="muted" style="font-size:12px">Used on: ${uses.slice(-6).map((u) => `${esc(u.ref)} ${u.back ? '(given back)' : `⃃ ${u.amount}`}`).join(' · ')}</div>` : ''}
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="vqr" data-qr="${esc(v.code)}" style="width:110px;height:110px;background:#fff;border-radius:6px"></div><div class="muted" style="font-size:12px;max-width:420px">The QR opens <span class="mono">art.pranixtechno.com</span> with this code ready in My enquiries &amp; orders. Send the card picture, or the code.</div></div>
+      <div class="mk-act"><button class="btn small ghost" type="button" data-va="copy">Copy code</button><a class="btn small ghost" target="_blank" rel="noopener" href="https://wa.me/${String(v.forPhone || '').replace(/[^\d]/g, '').replace(/^0(?=5)/, '971')}?text=${encodeURIComponent(vShare(v) + ' ' + redeemLink(v.code))}">WhatsApp</a>${v.forEmail ? `<a class="btn small ghost" href="mailto:${esc(v.forEmail)}?subject=${encodeURIComponent(v.kind === 'GIFT' ? 'Your Kalai Art House gift card' : 'Your Kalai Art House code')}&body=${encodeURIComponent(vShare(v) + '\n\n' + redeemLink(v.code))}">Email</a>` : ''}${v.forPhone ? `<a class="btn small ghost" href="tel:${esc(v.forPhone)}">Call</a>` : ''}<button class="btn small ghost" type="button" data-va="png">Download card (with QR)</button><button class="btn small ghost" type="button" data-va="edit">Edit</button><button class="btn small ghost" type="button" data-va="toggle">${v.active ? 'Switch off' : 'Switch on'}</button>${(v.usedCount || 0) ? '' : '<button class="btn small ghost" type="button" data-va="del">Delete</button>'}<span class="muted" data-vm style="font-size:12px"></span></div>
+    </article>`;
+  }).join('') : '<p class="muted">No private codes or gift cards yet.</p>';
+  document.querySelectorAll('#vList [data-qr]').forEach(async (el) => { try { el.innerHTML = await qrSvg(redeemLink(el.dataset.qr), 3); } catch { el.textContent = 'QR not available'; } });
+  document.querySelectorAll('#vList [data-va]').forEach((b) => {
+    const v = vouchers.find((x) => x.id === b.closest('[data-v]').dataset.v), m = b.closest('[data-v]').querySelector('[data-vm]');
+    b.onclick = async () => {
+      const a = b.dataset.va;
+      if (a === 'copy') { try { await navigator.clipboard.writeText(v.code); m.textContent = 'Copied.'; } catch { m.textContent = v.code; } return; }
+      if (a === 'edit') { vEdit(v); return; }
+      if (a === 'png') { try { const url = await cardPng(v); const l = document.createElement('a'); l.href = url; l.download = `${v.code}.png`; l.click(); m.textContent = 'Downloaded: attach it on WhatsApp or email.'; } catch (ex) { m.textContent = ex.message; } return; }
+      if (a === 'del' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Delete for good?'; return; }
+      b.disabled = true;
+      const r = a === 'del' ? await client.models.Voucher.delete({ id: v.id }) : await client.models.Voucher.update({ id: v.id, active: !v.active });
+      if (r.errors?.length) { m.textContent = r.errors[0].message; b.disabled = false; return; }
+      await vLoad();
+    };
+  });
+}
+function vEdit(v) {
+  const x = v || { kind: 'CODE', code: genCode('KAL'), discountType: 'PCT', discountValue: 10, maxUses: 1, appliesTo: 'ALL', active: true };
+  $('vForm').innerHTML = `<div class="mk-card" style="display:grid;gap:10px;margin-bottom:10px"><h3>${v ? 'Edit' : 'New'} private code / gift card</h3>
+    <div class="three"><div class="field"><label for="vKind">Type</label><select id="vKind" ${v ? 'disabled' : ''}><option value="CODE" ${x.kind !== 'GIFT' ? 'selected' : ''}>Private discount code</option><option value="GIFT" ${x.kind === 'GIFT' ? 'selected' : ''}>Gift card / voucher (⃃ balance)</option></select></div>
+      <div class="field"><label for="vCode">Code</label><div style="display:flex;gap:6px"><input id="vCode" class="mono" maxlength="30" value="${esc(x.code)}" ${v && (v.usedCount || 0) ? 'readonly' : ''}><button type="button" class="btn small ghost" id="vGen" ${v ? 'hidden' : ''}>New</button></div></div>
+      <div class="field"><label for="vEnd">Valid until <span style="color:var(--kumkum)">*</span></label><input id="vEnd" type="date" required value="${esc(localDate(x.endAt) || localDate(new Date(Date.now() + (x.kind === 'GIFT' ? 365 : 90) * 864e5).toISOString()))}"></div></div>
+    <div class="three" id="vCodeRow"><div class="field"><label for="vType">Discount</label><select id="vType"><option value="PCT" ${x.discountType !== 'AED' ? 'selected' : ''}>% off</option><option value="AED" ${x.discountType === 'AED' ? 'selected' : ''}>⃃ off</option></select></div>
+      <div class="field"><label for="vVal">Amount</label><input id="vVal" type="number" min="1" step="0.5" value="${esc(x.discountValue ?? '')}"></div>
+      <div class="field"><label for="vMax">Number of orders (blank = no limit)</label><input id="vMax" type="number" min="1" step="1" value="${esc(x.maxUses ?? '')}"></div></div>
+    <div class="three" id="vGiftRow"><div class="field"><label for="vValue">Gift card value (⃃)</label><input id="vValue" type="number" min="1" step="1" value="${esc(x.value ?? '')}" ${v && x.kind === 'GIFT' && (v.usedCount || 0) ? 'readonly' : ''}></div>
+      <div class="field"><label>Balance</label><div class="muted" style="padding-top:8px">${x.kind === 'GIFT' && v ? `⃃ ${Number(x.balance || 0).toLocaleString('en-US')}` : 'starts at the full value'}</div></div><div></div></div>
+    <div class="three"><div class="field"><label for="vArea">Use on</label><select id="vArea">${Object.entries(AREA).map(([k, n]) => `<option value="${k}" ${k === (x.appliesTo || 'ALL') ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label for="vMin">Minimum order (⃃, optional)</label><input id="vMin" type="number" min="0" step="1" value="${esc(x.minOrder ?? '')}"></div><div></div></div>
+    <div class="three"><div class="field"><label for="vFor">Given to (name)</label><input id="vFor" maxlength="80" value="${esc(x.forName)}" placeholder="e.g. Priya Raman"></div>
+      <div class="field"><label for="vPhone">Mobile / WhatsApp (optional)</label><input id="vPhone" type="tel" maxlength="30" value="${esc(x.forPhone)}" placeholder="+971 50 123 4567"></div>
+      <div class="field"><label for="vEmail">Email (optional: only this email can use it)</label><input id="vEmail" type="email" maxlength="120" value="${esc(x.forEmail)}" placeholder="their sign-in email"></div>
+      <div class="field"><label for="vNote">Note (only you see it)</label><input id="vNote" maxlength="200" value="${esc(x.note)}" placeholder="e.g. friend of Siva, birthday gift"></div></div>
+    <div style="display:flex;gap:8px;align-items:center"><button class="btn" type="button" id="vSave">Save</button><button class="btn ghost" type="button" id="vCancel">Cancel</button><span class="err" id="vMsg"></span></div></div>`;
+  const kind = () => $('vKind').value;
+  const sw = () => { $('vCodeRow').hidden = kind() === 'GIFT'; $('vGiftRow').hidden = kind() !== 'GIFT'; if (!v) $('vCode').value = genCode(kind() === 'GIFT' ? 'GIFT' : 'KAL'); };
+  $('vKind').onchange = sw; sw(); if (v) { $('vCodeRow').hidden = x.kind === 'GIFT'; $('vGiftRow').hidden = x.kind !== 'GIFT'; $('vCode').value = x.code; }
+  $('vGen').onclick = () => { $('vCode').value = genCode(kind() === 'GIFT' ? 'GIFT' : 'KAL'); };
+  $('vCancel').onclick = () => { $('vForm').innerHTML = ''; };
+  $('vSave').onclick = async () => {
+    const msg = $('vMsg'); msg.textContent = '';
+    const code = $('vCode').value.trim().toUpperCase().replace(/\s+/g, '');
+    if (!/^[A-Z0-9-]{4,30}$/.test(code)) { msg.textContent = 'Code: 4–30 letters, numbers or dashes.'; return; }
+    if (vouchers.some((o) => o.code === code && o.id !== v?.id) || list.some((p) => String(p.code || '').toUpperCase() === code)) { msg.textContent = 'This code is already used by another code or offer.'; return; }
+    const gift = (v ? x.kind : kind()) === 'GIFT';
+    const email = $('vEmail').value.trim().toLowerCase();
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'Check the email address.'; return; }
+    const endD = $('vEnd').value;
+    if (!endD) { msg.textContent = 'Every code needs a validity date (Valid until).'; return; }
+    const endAt = new Date(`${endD}T23:59:59+04:00`).toISOString();
+    if (endAt < new Date().toISOString()) { msg.textContent = 'Valid until is in the past.'; return; }
+    const rec = { code, appliesTo: $('vArea').value, minOrder: $('vMin').value ? Number($('vMin').value) : null, forName: $('vFor').value.trim() || null, forEmail: email || null, forPhone: $('vPhone').value.trim() || null, note: $('vNote').value.trim() || null, endAt };
+    if (gift) {
+      const val = Number($('vValue').value);
+      if (!(val > 0)) { msg.textContent = 'Enter the gift card value.'; return; }
+      Object.assign(rec, { kind: 'GIFT', value: val });
+      if (!v) rec.balance = val; else if (!(v.usedCount || 0)) rec.balance = val;
+    } else {
+      const val = Number($('vVal').value);
+      if (!(val > 0) || ($('vType').value === 'PCT' && val > 90)) { msg.textContent = 'Enter the discount (1–90 %, or ⃃).'; return; }
+      Object.assign(rec, { kind: 'CODE', discountType: $('vType').value, discountValue: val, maxUses: $('vMax').value ? Number($('vMax').value) : null });
+    }
+    $('vSave').disabled = true;
+    try {
+      const r = v ? await client.models.Voucher.update({ id: v.id, ...rec }) : await client.models.Voucher.create({ ...rec, active: true, usedCount: 0, uses: '[]' });
+      if (r.errors?.length) throw new Error(r.errors[0].message);
+      $('vForm').innerHTML = ''; await vLoad();
+    } catch (ex) { msg.textContent = ex.message; $('vSave').disabled = false; }
+  };
+  $('vForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 async function load() {
   $('prList').innerHTML = '<p class="muted">Loading…</p>';
@@ -106,6 +233,7 @@ function edit(p, reuse = false) {
       : $('pfBanner').checked && !$('pfBannerText').value.trim() ? 'Write the banner text, or untick the banner.'
       : code && !/^[A-Z0-9-]{3,30}$/.test(code) ? 'Codes use letters, numbers and dashes (3 to 30).'
       : code && !(v > 0) ? 'Enter the discount amount.'
+      : code && !$('pfEnd').value ? 'Every discount code needs an end date (validity).'
       : code && $('pfType').value === 'PCT' && v > 90 ? 'A % discount must be 90 or less.'
       : code && $('pfActive').checked && list.some((o) => o.code === code && o.id !== editing?.id && o.active && (!o.endAt || o.endAt >= new Date().toISOString())) ? `Offer ${list.find((o) => o.code === code && o.id !== editing?.id && o.active)?.number || ''} is still on with this code: switch it off first, or use another code.`
       : $('pfStart').value && $('pfEnd').value && $('pfEnd').value < $('pfStart').value ? 'The end date is before the start date.' : '';
