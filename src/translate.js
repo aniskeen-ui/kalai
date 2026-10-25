@@ -16,7 +16,9 @@ function loadCache(l) { try { const o = JSON.parse(localStorage.getItem(`kalaiTr
 function saveCache(l) { try { const o = {}; let n = 0; for (const [k, v] of memo) if (k.startsWith(`${l}|`) && n++ < 4000) o[k.slice(l.length + 1)] = v; localStorage.setItem(`kalaiTr_${l}`, JSON.stringify(o)); } catch { /* storage full */ } }
 
 const SKIP = 'script,style,noscript,code,pre,textarea,svg,[data-notranslate],.notranslate,.mono,.dhs';
-const worth = (t) => (t.match(/[A-Za-z]/g) || []).length >= 2; // prices, codes and numbers stay
+// Prices ("≈ OMR 141", "Dhs 800", "$46"), codes and numbers are not text to translate.
+const MONEY = /(?:≈\s*)?(?:(?:SAR|QAR|KD|BD|OMR|JD|Dhs|AED|USD|INR|GBP|EUR)\s?[\d.,]+|[$£€₹⃃]\s?[\d.,]+|[\d.,]+\s?(?:Dhs|AED))|\b(?:AT|KA|BP)-[\w-]+/g;
+const worth = (t) => (t.replace(MONEY, '').match(/[A-Za-z]/g) || []).length >= 2;
 const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
 
 function collect(root) {
@@ -48,7 +50,8 @@ async function translate(root = document.body) {
     attrs.forEach(([el, a]) => { const m = attrKey(el, a); if (m[a] === undefined) m[a] = el.getAttribute(a); items.push([m[a].trim(), (t) => el.setAttribute(a, t)]); });
     const need = [...new Set(items.map(([t]) => t).filter((t) => t && !memo.has(`${lang}|${t}`)))];
     // Show what is already known at once, then fill in the rest as each part arrives.
-    const apply = () => { paused = true; items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); if (v) put(v); }); setTimeout(() => { paused = false; }, 0); };
+    // Known translations go in; anything not translated yet in THIS language shows English (not the previous language).
+    const apply = () => { paused = true; items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); put(v || t); }); setTimeout(() => { paused = false; }, 0); };
     apply();
     const lb = document.getElementById('langBtn'); if (need.length && lb) lb.classList.add('working');
     for (let i = 0; i < need.length; i += 80) {

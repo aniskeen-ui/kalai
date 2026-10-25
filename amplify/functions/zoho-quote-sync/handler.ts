@@ -3773,7 +3773,9 @@ async function siteTranslate(a: { lang?: string; texts?: string }) {
     const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const unesc = (v: string) => v.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
     try {
-      const html = `<html><body>${todo.map(({ t }, k) => `<p id="t${k}">${esc(t)}</p>`).join('')}</body></html>`;
+      // Prices and codes are kept exactly as they are (translate="no").
+      const keepNo = (v: string) => esc(v).replace(/((?:≈\s*)?(?:(?:SAR|QAR|KD|BD|OMR|JD|Dhs|AED|USD|INR|GBP|EUR)\s?[\d.,]+|[$£€₹⃃]\s?[\d.,]+|[\d.,]+\s?(?:Dhs|AED|cm)|AT-\d+|KA-[\w-]+|BP-\d+))/g, '<span translate="no">$1</span>');
+      const html = `<html><body>${todo.map(({ t }, k) => `<p id="t${k}">${keepNo(t)}</p>`).join('')}</body></html>`;
       const r = await translator.send(new TranslateDocumentCommand({ Document: { Content: new TextEncoder().encode(html), ContentType: 'text/html' }, SourceLanguageCode: 'en', TargetLanguageCode: lang }));
       const back = new TextDecoder().decode(r.TranslatedDocument?.Content ?? new Uint8Array());
       const got = new Map<number, string>();
