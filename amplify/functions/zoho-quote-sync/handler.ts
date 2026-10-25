@@ -139,6 +139,31 @@ async function ensureAwb(jobs: Jobs): Promise<boolean> {
   return true;
 }
 
+/** The artist's parcel gets its airway bill once the work is finished and a courier is allocated. */
+async function ensureArtistAwb(e: Img, jobs: Jobs): Promise<boolean> {
+  const ib = jobs.inbound;
+  if (!ib || ib.awb || str(e, 'artistStage') !== 'FINISHED') return false;
+  const no = await nextAwb(ib.supplierId, ib.name);
+  if (!no) return false;
+  ib.awb = no; ib.awbAt = new Date().toISOString();
+  return true;
+}
+/** Label data for the artist's parcel: from the artist, to the frame shop on the order (else the studio). */
+async function artistLabel(e: Img, jobs: Jobs) {
+  const ib = jobs.inbound!;
+  const { S } = mtables();
+  const fp = jobs.framer ? plain(await getRow(S, { id: { S: jobs.framer.supplierId } })) : null;
+  const det = parseDetails(str(e, 'details'));
+  return {
+    awb: ib.awb!, courier: ib.name, ref: str(e, 'ref'), date: dubaiToday(), service: 'Prepaid · Standard', pieces: '1 of 1',
+    contents: `${str(e, 'kind') === 'COMMISSION' ? 'Commissioned artwork' : 'Original artwork'} (unframed, flat)${det['Size'] ? `, ${String(det['Size']).slice(0, 30)}` : ''}`, fragile: false,
+    from: ib.from ?? { name: 'Artist', phone: '', address: '' },
+    to: fp ? { name: String(fp.business ?? jobs.framer!.name), phone: String(fp.phone ?? ''), address: [fp.address, fp.city, fp.emirate, fp.country || 'UAE'].filter(Boolean).map(String).join(', ') }
+      : { name: 'Kalai Art House', phone: '+971 55 299 6626', address: 'Studio, Dubai, UAE' },
+    returnTo: 'Kalai Art House, Dubai · +971 55 299 6626',
+  };
+}
+
 /** The supplier's next invoice number (peek; take = true also moves the counter on). Null when suppliers type their own. */
 async function supplierInvoiceNo(sellerId: string, name: string, take = false): Promise<string | null> {
   const ns = await numberSeries();
@@ -1371,6 +1396,8 @@ async function artistRows(enquiries: Img[], admin = false) {
         onHold: str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL',
         rework: reworkForArtist(e, c),
         frameShop: shopOf(c),
+        // The courier Kalai allocated for this parcel and its airway bill (label to print once finished).
+        inbound: (() => { const ib = parseJobs(str(c, 'supplierJobs')).inbound; return ib ? { courier: ib.name, awb: ib.awb ?? '', label: ['FINISHED', 'SHIPPED'].includes(str(e, 'artistStage')) } : null; })(),
         orderStatus: str(e, 'status'), // the customer's order (e.g. DELIVERED), for the artist's Status filter
         priceBy: str(c, 'artistBy'),
         ...artistStage(e, c),
@@ -1432,10 +1459,19 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   if (!table) throw new Error('ENQUIRY_TABLE is not configured');
   const id = args.id ?? '';
   const step = String(args.step ?? '').toUpperCase();
-  if (!PROGRESS.includes(step)) throw new Error('Unknown step');
+  if (!PROGRESS.includes(step) && step !== 'LABEL') throw new Error('Unknown step');
   const got = await ddb.send(new GetItemCommand({ TableName: table, Key: { id: { S: id } } }));
   const e = got.Item as Img | undefined;
   if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Order not found');
+  const ajobs = await jobsOf(id);
+  // The airway bill label for the artist's parcel (drawn in the portal with a barcode or QR code).
+  if (step === 'LABEL') {
+    if (!ajobs.inbound) throw new Error('Kalai Art House has not allocated the courier for this parcel yet.');
+    if (!['FINISHED', 'SHIPPED'].includes(str(e, 'artistStage'))) throw new Error('Mark the work finished first: the airway bill is made then.');
+    if (await ensureArtistAwb(e, ajobs)) await saveJobs(id, ajobs);
+    if (!ajobs.inbound.awb) throw new Error('The courier gives the airway bill number for this parcel: it shows here once they have it.');
+    return { label: await artistLabel(e, ajobs) };
+  }
   if (str(e, 'purchaseState') === 'CANCELLED') throw new Error('This order was cancelled by the customer.');
   if (sivaStopped(e)) throw new Error('The customer cancelled this order: please stop. Send your invoice for the work done.');
   if (str(e, 'cancelState') === 'REQUESTED' && str(e, 'cancelRequest') === 'CANCEL') throw new Error('On hold: the customer asked to cancel. Please wait for Kalai Art House before continuing.');
@@ -1445,8 +1481,10 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   if (target < current) throw new Error(`Already marked ${str(e, 'artistStage').toLowerCase()}.`);
   // Artists in the UAE usually hand the work over (or the frame shop collects it): courier and AWB optional.
   const local = !!str(e, 'artistId') && (str(e, 'artistCountry') || 'UAE') === 'UAE';
-  const courier = String(args.courier ?? '').trim().slice(0, 60) || (local && step === 'SHIPPED' ? 'Handed over' : '');
-  const awb = String(args.awb ?? '').trim().slice(0, 60) || (local && step === 'SHIPPED' ? '–' : '');
+  // Kalai allocated the courier and made the airway bill: that is the courier and AWB.
+  const ib = ajobs.inbound?.awb ? ajobs.inbound : null;
+  const courier = (ib && !by.startsWith('Kalai Art House') ? ib.name : '') || String(args.courier ?? '').trim().slice(0, 60) || (ib ? ib.name : '') || (local && step === 'SHIPPED' ? 'Handed over' : '');
+  const awb = (ib && !by.startsWith('Kalai Art House') ? ib.awb! : '') || String(args.awb ?? '').trim().slice(0, 60) || (ib ? ib.awb! : '') || (local && step === 'SHIPPED' ? '–' : '');
   if (step === 'SHIPPED' && (!courier || !awb)) throw new Error('Enter the courier and the AWB / tracking number.');
   // Once sent, the courier and AWB are fixed for Siva; only Kalai Art House can correct them.
   if (step === 'SHIPPED' && str(e, 'artistStage') === 'SHIPPED' && !by.startsWith('Kalai Art House')) throw new Error('Already sent: the courier and AWB can only be corrected by Kalai Art House.');
@@ -1465,6 +1503,9 @@ async function artistProgress(args: ApiEvent['arguments'], by = 'Siva') {
   const parts = Object.entries(set).map(([k, v], i) => { names[`#p${i}`] = k; values[`:p${i}`] = { S: v }; return `#p${i} = :p${i}`; });
   await ddb.send(new UpdateItemCommand({ TableName: table, Key: { id: { S: id } }, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
   console.log(`Artist progress ${set.artistStage} for ${str(e, 'ref')}`);
+  if (set.artistStage === 'FINISHED' && ajobs.inbound && !ajobs.inbound.awb) {
+    try { if (await ensureArtistAwb({ ...e, artistStage: { S: 'FINISHED' } }, ajobs)) await saveJobs(id, ajobs); } catch (err) { console.warn('Artist AWB not made', err); }
+  }
   // Sent to the frame shop and the frame shop has already accepted the job: the order is now "Being framed".
   // The order's status follows the artist: Started → Artist working, Finished → Artist finished, sent with an AWB →
   // Sent by artist (or straight to Being framed when the frame shop has already accepted the job). Only forward.
@@ -2382,7 +2423,9 @@ type Job = { supplierId: string; name: string; price: number | null; due: string
 // Print shops print the customer's photo / child's drawing / our print file (Little Artists, Framed Prints) and hand
 // the print to the frame shop. Without a print job, the frame shop prints it itself.
 type Role = 'framer' | 'delivery' | 'printer';
-type Jobs = { framer?: Job; delivery?: Job; printer?: Job };
+// inbound: the courier Kalai allocates for the artist's parcel (artist → frame shop), with its airway bill.
+type Inbound = { supplierId: string; name: string; at: string; awb?: string; awbAt?: string; from?: { name: string; phone: string; address: string } };
+type Jobs = { framer?: Job; delivery?: Job; printer?: Job; inbound?: Inbound };
 const ROLE_OF: Record<string, Role> = { FRAMER: 'framer', COURIER: 'delivery', PRINTER: 'printer' };
 const ROLE_LABEL = { framer: 'frame shop', delivery: 'delivery partner', printer: 'print shop' };
 const ROLE_WORD = { framer: 'framing', delivery: 'delivery', printer: 'printing' };
@@ -2735,6 +2778,32 @@ async function marketAdmin(ev: ApiEvent) {
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  // The courier for the artist's parcel (artist → frame shop): allocated here; the artist prints the airway bill.
+  if (action === 'artistCourier') {
+    const id = txt(d.id, 80);
+    const e = await enquiryRow(id);
+    if (!e || !['PRICE', 'COMMISSION'].includes(str(e, 'kind'))) throw new Error('Order not found');
+    const jobs = await jobsOf(id);
+    if (str(e, 'artistStage') === 'SHIPPED' && jobs.inbound?.awb) throw new Error('The artist has already sent it with this airway bill.');
+    const sid = txt(d.supplierId, 80);
+    if (!sid) { delete jobs.inbound; await saveJobs(id, jobs); return { jobs }; }
+    const p = plain(await getRow(S, { id: { S: sid } }));
+    if (!p || p.type !== 'COURIER') throw new Error('Choose a delivery partner / courier.');
+    if (p.status !== 'APPROVED') throw new Error(`${String(p.business)} is not approved yet (Artists & sellers).`);
+    // Pickup: the artist's address (from their profile unless typed here).
+    let from = { name: txt(d.fromName, 120), phone: txt(d.fromPhone, 30), address: txt(d.fromAddress, 300) };
+    if (!from.address && str(e, 'artistId')) {
+      const ap = plain(await getRow(S, { id: { S: str(e, 'artistId') } }));
+      if (ap) from = { name: from.name || String(ap.business ?? ''), phone: from.phone || String(ap.phone ?? ''), address: [ap.address, ap.city, ap.emirate, ap.country].filter(Boolean).map(String).join(', ') };
+    }
+    const same = jobs.inbound?.supplierId === sid;
+    jobs.inbound = { ...(same ? jobs.inbound : {}), supplierId: sid, name: String(p.business || p.contactName), at: new Date().toISOString(), from: { name: from.name || 'Artist', phone: from.phone, address: from.address } } as Inbound;
+    if (!same) { delete jobs.inbound.awb; delete jobs.inbound.awbAt; }
+    await ensureArtistAwb(e, jobs).catch((err) => console.warn('Artist AWB not made', err));
+    await saveJobs(id, jobs);
+    if (!same && p.email) await sendMail({ to: String(p.email), subject: `Pickup from our artist: ${str(e, 'ref')}`, lines: [`Hello ${h(p.contactName)},`, `Kalai Art House has a pickup for you: an artwork from <b>${h(jobs.inbound.from?.name)}</b>${jobs.inbound.from?.address ? `, ${h(jobs.inbound.from.address)}` : ''}, to our frame shop (order ${h(str(e, 'ref'))}).`, 'The artist sticks our airway bill on the parcel when it is ready: scan it at pickup. We will confirm the pickup time.'] }).catch(() => {});
+    return { jobs };
+  }
   // Studio saved a note for the artist on an order: email it to them too.
   if (action === 'artistNoteMail') {
     const e = await enquiryRow(txt(d.id, 80));

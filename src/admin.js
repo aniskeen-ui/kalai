@@ -708,11 +708,42 @@ function supplierSection(e) {
   };
   return `<fieldset class="cost" id="supplierBox"><legend>Frame shop &amp; delivery</legend>
     <div class="muted" style="font-size:12px">They see this order in their supplier portal: the photo, frame spec and size, your price, and the pickup and delivery addresses. Their steps update the order (Being framed, Shipped, Delivered) and their invoice becomes a Zoho bill.</div>
-    ${gift ? row('printer', 'Printing', 'PRINTER') : ''}${row('framer', 'Framing', 'FRAMER')}${row('delivery', 'Delivery', 'COURIER')}</fieldset>`;
+    ${['PRICE', 'COMMISSION'].includes(e.kind) ? inboundRow(e, j) : ''}${gift ? row('printer', 'Printing', 'PRINTER') : ''}${row('framer', 'Framing', 'FRAMER')}${row('delivery', 'Delivery', 'COURIER')}</fieldset>`;
+}
+// The courier for the artist's parcel (artist → frame shop). The artist prints its airway bill label when the work is finished.
+function inboundRow(e, j) {
+  const ib = j.inbound, sent = e.artistStage === 'SHIPPED';
+  const list = suppliers.filter((s) => s.type === 'COURIER');
+  return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)" data-inbound>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → frame shop courier</b>${ib ? `<span class="muted">${esc(ib.name)}${ib.awb ? ` · AWB <span class="mono">${esc(ib.awb)}</span>` : ` · airway bill made when the artist marks it finished`}</span>` : '<span class="muted">not allocated: the artist types the courier and AWB</span>'}</div>
+    ${sent && ib?.awb ? '' : `<div class="three" style="align-items:end">
+      <div class="field"><label>Courier</label><select data-ib="sid"><option value="">${list.length ? 'Choose…' : 'none approved yet (Artists & sellers)'}</option>${list.map((s) => `<option value="${esc(s.id)}" ${ib?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}</option>`).join('')}</select></div>
+      <div class="field" style="grid-column:span 2"><label>Pickup address (blank = the artist's profile)</label><input data-ib="addr" maxlength="300" value="${esc(ib?.from?.address || '')}" placeholder="Artist's address for the courier"></div></div>
+      <div class="three" style="align-items:end"><div class="field"><label>Artist name on the label</label><input data-ib="name" maxlength="120" value="${esc(ib?.from?.name || (e.artistId ? '' : 'Siva Raja'))}"></div><div class="field"><label>Artist phone</label><input data-ib="phone" maxlength="30" value="${esc(ib?.from?.phone || '')}"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-ibsave>${ib ? 'Update courier' : 'Allocate courier'}</button>${ib ? '<button type="button" class="btn small ghost" data-ibremove>Remove</button>' : ''}</div></div>`}
+    <span class="muted" data-ibmsg style="font-size:12px"></span>
+  </div>`;
 }
 function wireSuppliers(e) {
   const box = $('supplierBox'); if (!box) return;
   const v = (k) => box.querySelector(`[data-js="${k}"]`);
+  box.querySelectorAll('[data-ibsave],[data-ibremove]').forEach((b) => {
+    b.onclick = async () => {
+      const ib = (k) => box.querySelector(`[data-ib="${k}"]`)?.value.trim() || '';
+      const msg = box.querySelector('[data-ibmsg]');
+      const data = { id: e.id, supplierId: b.dataset.ibremove != null ? '' : ib('sid'), fromName: ib('name'), fromPhone: ib('phone'), fromAddress: ib('addr') };
+      if (b.dataset.ibsave != null && !data.supplierId) { msg.textContent = 'Choose the courier.'; return; }
+      b.disabled = true; msg.textContent = 'Saving…';
+      try {
+        const r = await client.mutations.marketAdmin({ action: 'artistCourier', data: JSON.stringify(data) });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+        costings.set(e.id, { ...(costings.get(e.id) || { enquiryId: e.id }), supplierJobs: JSON.stringify(out.jobs || {}) });
+        box.outerHTML = supplierSection(e); wireSuppliers(e);
+        const m2 = $('supplierBox').querySelector('[data-ibmsg]'); if (m2) m2.textContent = data.supplierId ? 'Saved: the courier was emailed; the artist sees the airway bill when the work is finished.' : 'Removed.';
+      } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+    };
+  });
   ['printer', 'framer', 'delivery'].forEach((role) => {
     const sel = v(`${role}-sid`), pr = v(`${role}-price`);
     if (sel && pr) sel.onchange = () => {

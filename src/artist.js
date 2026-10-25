@@ -7,6 +7,7 @@ import { getUrl } from 'aws-amplify/storage';
 import { wireFind } from './find.js';
 import { SUGGEST } from './suggest.js';
 import { cleanTitle } from './title.js';
+import { downloadAwb, printAwb } from './awb.js';
 
 const client = generateClient();
 // Shown inside the artist & seller portal (seller.html "Studio orders" tab): no own header there.
@@ -297,7 +298,15 @@ function progressBlock(x) {
     : '';
   const lockedShip = p === 'SHIPPED' && !x.editShip;
   const shop = p ? shopBox(x.frameShop) : ''; // from the moment the artist confirms (Started)
-  const ship = lockedShip ? (isAdmin ? `<div><button type="button" class="linkbtn" data-fixship="${esc(x.id)}">Correct courier / AWB (Kalai Art House only)</button></div>` : '')
+  // Kalai allocated the courier: once finished, the airway bill label to print and stick on the parcel (no typing).
+  const ib = x.inbound;
+  const awbBox = !ib ? '' : ib.label && ib.awb ? `<div class="awb-box"><div>Airway bill <b class="mono">${esc(ib.awb)}</b> · courier <b>${esc(ib.courier)}</b></div>
+      <div class="awb-acts"><button type="button" class="btn small" data-awbl="bar">🏷 Download label (barcode)</button><button type="button" class="btn small ghost" data-awbl="qr">🏷 Download label (QR code)</button><button type="button" class="linkbtn" data-awbp="bar">Print barcode label</button><button type="button" class="linkbtn" data-awbp="qr">Print QR label</button></div>
+      <div class="muted" style="font-size:12px">Pack it flat between stiff boards, stick this label on the parcel and hand it to the courier: they scan it at pickup.</div></div>`
+    : `<div class="awb-box muted">Courier <b>${esc(ib.courier)}</b> collects it from you: the airway bill label appears here when you mark the work finished.</div>`;
+  const ship = ib && ib.awb && p === 'FINISHED' ? `<div class="field"><button type="button" class="btn" data-step="SHIPPED">Handed to ${esc(ib.courier)}</button></div>`
+    : ib && ib.awb && p === 'SHIPPED' && !isAdmin ? ''
+    : lockedShip ? (isAdmin ? `<div><button type="button" class="linkbtn" data-fixship="${esc(x.id)}">Correct courier / AWB (Kalai Art House only)</button></div>` : '')
     : p === 'FINISHED' || p === 'SHIPPED' ? `<div class="aform">
       <div class="field"><label for="sc-${esc(x.id)}">Courier to the frame shop</label><select id="sc-${esc(x.id)}">${['', ...COURIERS, 'Other'].map((c) => `<option value="${esc(c)}" ${x.artistCourier === c || (c === 'Other' && x.artistCourier && !COURIERS.includes(x.artistCourier)) ? 'selected' : ''}>${c || 'Choose…'}</option>`).join('')}</select>
         <input id="sco-${esc(x.id)}" placeholder="Courier name" value="${x.artistCourier && !COURIERS.includes(x.artistCourier) ? esc(x.artistCourier) : ''}" ${x.artistCourier && !COURIERS.includes(x.artistCourier) ? '' : 'hidden'} style="margin-top:6px"></div>
@@ -307,7 +316,7 @@ function progressBlock(x) {
   return `<div class="progress" id="pg-${esc(x.id)}">
     <ol>${step('STARTED', 'Started', x.startedAt)}${step('FINISHED', 'Finished', x.finishedAt)}${step('SHIPPED', 'Sent to frame shop', x.shippedAt)}${x.artistAwb ? ` <li class="muted" style="list-style:none">${esc(x.artistCourier)} · AWB ${esc(x.artistAwb)}</li>` : ''}</ol>
     ${x.progressBy && x.progressBy !== 'Siva' ? `<div class="muted" style="font-size:12px">Last update made for you by Kalai Art House.</div>` : ''}
-    ${next}${shop}${ship}
+    ${next}${shop}${awbBox}${ship}
     <div class="ok" id="pm-${esc(x.id)}" role="status"></div>
   </div>`;
 }
@@ -319,13 +328,25 @@ function wireProgress(x) {
   if (fix) fix.onclick = () => { x.editShip = true; render(); };
   const sel = document.getElementById('sc-' + x.id);
   if (sel) sel.onchange = () => { document.getElementById('sco-' + x.id).hidden = sel.value !== 'Other'; };
+  box.querySelectorAll('[data-awbl],[data-awbp]').forEach((b) => {
+    b.onclick = async () => {
+      const msg = document.getElementById('pm-' + x.id); msg.textContent = 'Making the airway bill…';
+      try {
+        const { data, errors } = await client.mutations.artistProgress({ id: x.id, step: 'LABEL' });
+        if (errors?.length) throw new Error(errors[0].message);
+        const l = parse(data).label;
+        if (b.dataset.awbl) await downloadAwb(l, b.dataset.awbl); else await printAwb(l, b.dataset.awbp);
+        msg.textContent = `Airway bill ${l.awb} ready.`;
+      } catch (ex) { msg.textContent = ex.message; }
+    };
+  });
   box.querySelectorAll('[data-step]').forEach((b) => {
     b.onclick = async () => {
       const msg = document.getElementById('pm-' + x.id);
       box.querySelectorAll('.err').forEach((e) => e.remove());
       const step = b.dataset.step;
       let courier = null, awb = null;
-      if (step === 'SHIPPED') {
+      if (step === 'SHIPPED' && sel) {
         courier = sel.value === 'Other' ? document.getElementById('sco-' + x.id).value.trim() : sel.value;
         awb = document.getElementById('sa-' + x.id).value.trim();
         if (!courier || !awb) { msg.insertAdjacentHTML('afterend', '<div class="err">Choose the courier and enter the AWB / tracking number.</div>'); return; }
@@ -337,6 +358,9 @@ function wireProgress(x) {
         const r = parse(data) || {};
         Object.assign(x, { progress: r.artistStage || step, startedAt: r.artistStartedAt || x.startedAt, finishedAt: r.artistFinishedAt || x.finishedAt, progressBy: r.artistBy || x.progressBy, shippedAt: r.artistShippedAt || x.shippedAt, artistCourier: r.artistCourier || x.artistCourier, artistAwb: r.artistAwb || x.artistAwb });
         x.editShip = false;
+        if (x.inbound && x.progress === 'FINISHED' && !x.inbound.awb) {
+          try { const lr = await client.mutations.artistProgress({ id: x.id, step: 'LABEL' }); const l = parse(lr.data)?.label; if (l) Object.assign(x.inbound, { awb: l.awb, label: true }); } catch { /* shows after a refresh */ }
+        } else if (x.inbound) x.inbound.label = ['FINISHED', 'SHIPPED'].includes(x.progress);
         x.label = x.progress === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : x.progress === 'FINISHED' ? 'Finished · send it to the frame shop' : 'In progress';
         render();
         const m2 = document.getElementById('pm-' + x.id);
