@@ -13,6 +13,26 @@ const SUBJECTS = { land: 'Landscapes & water', village: 'Village life', nature: 
 const MEDIUM = { water: 'Watercolour on paper', sketch: 'Graphite on paper', photo: 'Fine-art photographic print' };
 
 let items = [];
+const pending = new Map(); // product id → fields changed on screen, written by "Save changes"
+function saveBar() {
+  const n = pending.size;
+  $('cgSaveBar').hidden = n === 0;
+  $('cgSaveCount').textContent = `${n} work${n === 1 ? '' : 's'} changed`;
+}
+async function saveAll() {
+  const ids = [...pending.keys()]; if (!ids.length) return;
+  $('cgSaveAll').disabled = true; let ok = 0; const bad = [];
+  for (const id of ids) {
+    const r = await client.models.Product.update({ id, ...pending.get(id) });
+    if (r.errors?.length) bad.push(`${items.find((x) => x.id === id)?.code || id}: ${r.errors[0].message}`); else { pending.delete(id); ok++; }
+    $('cgSaveMsg').textContent = `Saving… ${ok + bad.length}/${ids.length}`;
+  }
+  $('cgSaveAll').disabled = false;
+  $('cgSaveMsg').textContent = bad.length ? `Saved ${ok}. Not saved: ${bad.join('; ')}` : `Saved ${ok} work${ok === 1 ? '' : 's'}.`;
+  document.querySelectorAll('.cg-row.cg-dirty').forEach((r) => { if (!pending.has(r.dataset.id)) { r.classList.remove('cg-dirty'); const m = r.querySelector('.cg-saved'); if (m) m.textContent = 'Saved'; } });
+  saveBar(); if (!pending.size) $('cgSaveBar').hidden = false, setTimeout(() => { if (!pending.size) $('cgSaveBar').hidden = true; }, 2500);
+}
+addEventListener('beforeunload', (e) => { if (pending.size) { e.preventDefault(); e.returnValue = ''; } });
 const selected = new Set();
 const thumbs = new Map(); // imageKey → url
 let loaded = false;
@@ -47,6 +67,7 @@ async function load() {
     // Works without an artwork code (imported before codes existed, or just now) get one, then the list reloads.
     if (all.some((p) => !p.code) && !codesAsked) { codesAsked = true; client.mutations.assignCodes().then(() => { codesAsked = false; load(); }).catch(() => {}); }
     items = all.sort((a, b) => String(b.publishAt || b.createdAt).localeCompare(String(a.publishAt || a.createdAt)));
+    items.forEach((p) => { if (pending.has(p.id)) Object.assign(p, pending.get(p.id)); }); // unsaved edits stay on screen
     draw();
   } catch (ex) {
     $('cgList').innerHTML = `<p class="err">Could not load the catalogue: ${esc(ex.message)}</p>`;
@@ -82,7 +103,7 @@ function draw() {
 function row(p) {
   const s = state(p);
   const opt = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${l}</option>`).join('');
-  return `<article class="cg-row ${selected.has(p.id) ? 'sel' : ''}" data-id="${esc(p.id)}">
+  return `<article class="cg-row ${selected.has(p.id) ? 'sel' : ''} ${pending.has(p.id) ? 'cg-dirty' : ''}" data-id="${esc(p.id)}">
     <label class="cg-pick"><input type="checkbox" ${selected.has(p.id) ? 'checked' : ''} aria-label="Select ${esc(p.title)}"></label>
     <div class="cg-img"><img alt=""></div>
     <div class="cg-fields">
@@ -154,15 +175,14 @@ function wireRows(list) {
             if (ap && p.printRoyalty == null) patch.printRoyalty = Number(ap.royaltyPct ?? 10);
           } else if (p.printRoyalty == null) patch.printRoyalty = await sivaRoyaltyPct();
         }
-        const msg = el.querySelector('.cg-saved'); msg.textContent = 'Saving…';
-        const r = await client.models.Product.update(patch);
-        if (r.errors?.length) { msg.textContent = 'Not saved: ' + r.errors[0].message; return; }
-        Object.assign(p, r.data || patch);
+        // Kept until "Save changes" (one Save for the whole screen, like the other screens).
+        const msg = el.querySelector('.cg-saved');
+        delete patch.id; pending.set(p.id, { ...(pending.get(p.id) || {}), ...patch }); Object.assign(p, patch);
         if (patch.medium) el.querySelector('[data-f="medium"]').value = patch.medium;
-        msg.textContent = 'Saved';
+        msg.textContent = 'Not saved yet'; el.classList.add('cg-dirty');
+        saveBar();
         // Prints / licences switched on or off: show or hide their royalty boxes straight away.
-        if (['printable', 'licensable'].includes(f)) { const y = scrollY; draw(); scrollTo(0, y); return; }
-        setTimeout(() => { msg.textContent = ''; }, 1500);
+        if (['printable', 'licensable'].includes(f)) { const y = scrollY; draw(); scrollTo(0, y); }
       };
     });
     const cb = el.querySelector('[data-clean]');
@@ -271,7 +291,7 @@ function wireToolbar() {
   $('cgStart').value = tomorrow;
   $('cgFilter').onchange = draw;
   $('cgSearch').oninput = draw;
-  $('cgReload').onclick = load;
+  $('cgReload').onclick = async () => { if (pending.size && !confirm(`${pending.size} work(s) have unsaved changes. Refresh and lose them?`)) return; pending.clear(); saveBar(); await load(); };
   $('cgAll').onchange = (e) => { filtered().forEach((p) => (e.target.checked ? selected.add(p.id) : selected.delete(p.id))); draw(); };
   $('cgPublish').onclick = () => bulk('Publishing now', (p) => upd(p, { status: 'PUBLISHED', publishAt: now() }));
   $('cgSchedule').onclick = () => {
@@ -296,6 +316,35 @@ function wireToolbar() {
     if (skipped) $('cgBulkMsg').textContent += ` ${skipped} skipped: the artist hasn't agreed to prints.`;
   };
   $('cgPrintsOff').onclick = () => bulk('Stopping prints', (p) => upd(p, { printable: false }));
+  // Mass change: one field for all ticked works (more fields can be added to the list).
+  const massInput = () => {
+    const f = $('cgMassField').value, sel = (opts) => `<select id="cgMassV" style="width:auto">${opts.map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('')}</select>`;
+    $('cgMassVal').innerHTML = f === 'printRoyalty' ? '<input id="cgMassV" type="number" min="0" max="50" step="0.5" placeholder="blank = artist\'s %" style="width:130px"> %'
+      : f === 'licenceRoyalty' ? '<input id="cgMassV" type="number" min="0" max="90" step="0.5" placeholder="blank = artist\'s %" style="width:130px"> %'
+      : f === 'licensable' || f === 'aiPreview' ? sel([['yes', 'Yes'], ['no', 'No']])
+      : f === 'printMax' ? sel(PRINT_MAX.map((z) => [z, z])) : f === 'subject' ? sel(Object.entries(SUBJECTS)) : sel([['water', 'Watercolour'], ['sketch', 'Sketch']]);
+  };
+  $('cgMassField').onchange = massInput; massInput();
+  $('cgMassGo').onclick = async () => {
+    const f = $('cgMassField').value, raw = String($('cgMassV').value || '').trim();
+    const label = $('cgMassField').selectedOptions[0].textContent;
+    let v = raw;
+    if (f === 'printRoyalty' || f === 'licenceRoyalty') { v = raw === '' ? null : Number(raw); const mx = f === 'printRoyalty' ? 50 : 90; if (v != null && !(v >= 0 && v <= mx)) { $('cgBulkMsg').textContent = `${label}: 0 to ${mx}.`; return; } }
+    if (f === 'licensable' || f === 'aiPreview') v = raw === 'yes';
+    let skipped = [];
+    await bulk(`${label} → ${raw === '' ? "artist's %" : $('cgMassV').selectedOptions?.[0]?.textContent || raw}`, async (p) => {
+      if (f === 'licensable' && v) {
+        if (!p.printKey) { skipped.push(`${p.code} (no full-size file)`); return; }
+        if (p.artistId) { const ap = await artistProfile(p.artistId); if (ap?.allowLicences !== 'YES') { skipped.push(`${p.code} (artist hasn't agreed)`); return; } }
+      }
+      const patch = { [f]: v };
+      if (f === 'kind' && (!p.medium || Object.values(MEDIUM).includes(p.medium))) patch.medium = MEDIUM[v];
+      await upd(p, patch);
+    });
+    if (skipped.length) $('cgBulkMsg').textContent += ` Skipped: ${skipped.join(', ')}.`;
+  };
+  $('cgSaveAll').onclick = saveAll;
+  $('cgDiscard').onclick = async () => { pending.clear(); saveBar(); $('cgSaveMsg').textContent = ''; await load(); };
   $('cgSold').onclick = () => bulk('Marking sold', (p) => upd(p, { status: 'SOLD' }));
   $('cgDraft').onclick = () => bulk('Taking off the website', (p) => upd(p, { status: 'DRAFT' }));
   $('cgHide').onclick = () => bulk('Hiding', (p) => upd(p, { status: 'HIDDEN' }));

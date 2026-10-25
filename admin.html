@@ -145,6 +145,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cg-links textarea{font-family:var(--mono);font-size:12px}
 .cg-row{display:grid;grid-template-columns:auto 96px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px}
 .cg-row.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+.cg-row.cg-dirty{border-left:4px solid var(--gold)}.cg-row.cg-dirty .cg-saved{color:var(--kumkum);font-weight:600}
 .cg-pick input{width:auto;margin-top:6px}
 .cg-img{width:96px;height:96px;background:var(--sunk);border-radius:4px;overflow:hidden}
 .cg-img img{width:100%;height:100%;object-fit:cover;display:block}
@@ -376,13 +377,15 @@ a.df[href]:hover{transform:translateY(-2px)}
         <button class="btn small" id="cgPublish" type="button">Publish now</button>
         <span class="cg-sched">Schedule <input id="cgPerDay" type="number" min="1" value="3" style="width:56px"> per day from <input id="cgStart" type="date" style="width:auto"> <button class="btn small" id="cgSchedule" type="button">Schedule</button></span>
         <span class="cg-sched">Framed prints: <button class="btn small" id="cgPrintsOn" type="button">Sell prints</button> up to <select id="cgPrintMax" style="width:auto"><option>A4</option><option selected>A3</option><option>40×50</option><option>50×70</option><option>60×80</option></select> <button class="btn small ghost" id="cgPrintsOff" type="button">Stop prints</button></span>
+        <span class="cg-sched">Change <select id="cgMassField" style="width:auto" aria-label="Field to change"><option value="printRoyalty">Print royalty %</option><option value="licenceRoyalty">Licence royalty %</option><option value="licensable">Sell licences</option><option value="printMax">Largest print size</option><option value="subject">Subject</option><option value="kind">Type (watercolour / sketch)</option><option value="aiPreview">AI preview</option></select> to <span id="cgMassVal"></span> <button class="btn small" id="cgMassGo" type="button">Apply to selected</button></span>
         <button class="btn small ghost" id="cgSold" type="button">Mark sold</button>
         <button class="btn small ghost" id="cgDraft" type="button">Take off website</button>
         <button class="btn small ghost" id="cgHide" type="button">Hide</button>
         <button class="btn small ghost" id="cgDelete" type="button" style="color:var(--kumkum)">Delete</button>
       </div>
       <div class="muted" id="cgBulkMsg" role="status" style="font-size:13px;min-height:1.2em;margin:6px 0"></div>
-      <p class="muted" style="font-size:12px;margin:0 0 8px">Works go live on their date automatically (09:00 Dubai), newest first. Edits save as you type out of a field. Sold works stay on the website marked “Sold”; hidden ones don't show. Prices are set only in the <b>Pricing</b> tab; each work shows the price the website shows now.</p>
+      <div id="cgSaveBar" hidden style="position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin:0 0 8px;box-shadow:0 6px 16px rgba(0,0,0,.12)"><b id="cgSaveCount"></b><button class="btn small" id="cgSaveAll" type="button">Save changes</button><button class="btn small ghost" id="cgDiscard" type="button">Discard</button><span class="muted" id="cgSaveMsg" style="font-size:13px"></span></div>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">Works go live on their date automatically (09:00 Dubai), newest first. Change any field, then press <b>Save changes</b>; to change many works at once, tick them and use <b>Change … Apply to selected</b>. Sold works stay on the website marked “Sold”; hidden ones don't show. Prices are set only in the <b>Pricing</b> tab; each work shows the price the website shows now.</p>
       <div id="cgList" class="cg-list"></div>
     </div>
 
