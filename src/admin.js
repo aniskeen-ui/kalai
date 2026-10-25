@@ -1991,15 +1991,20 @@ async function showDetailBody(e) {
     if (!digits) { $('waLinks').innerHTML = '<span class="muted">No mobile number to message.</span>'; return; }
     const price = finalPriceStr(), link = $('eLink').value.trim(), msg = $('eMsg').value.trim();
     const st = $('eStatus').value, unpaid = ['RECEIVED', 'PRICE_SENT'].includes(st);
+    // A "please pay" message is out of date once paid: never repeat it on WhatsApp.
+    const msgOk = unpaid || !/pay (with|securely|now|using)|link below|payment link|to confirm your order/i.test(msg);
     const text = [`Hello ${e.customerName || ''}, this is ${STUDIO_WHATSAPP_NAME} about your ${unpaid ? 'enquiry' : 'order'} ${e.ref} (${e.title}).`,
       unpaid ? (price ? `Price: AED ${price}` : '') : ['REFUNDED', 'CANCELLED'].includes(st) ? `Status: ${STATUS[st]}` : `Status: ${STATUS[st] || st}${price ? ` · paid AED ${price}, thank you` : ''}`,
-      msg, unpaid && link ? `Pay securely here: ${link}` : '',
+      msgOk ? msg : '', unpaid && link ? `Pay securely here: ${link}` : '',
       SHIP_STATUSES.includes($('eStatus').value) && $('eCourier').value.trim()
         ? `${$('eStatus').value === 'DELIVERED' ? 'Delivered' : 'Shipped'} with ${$('eCourier').value.trim()}${$('eAwb').value.trim() ? `, tracking no. ${$('eAwb').value.trim()}` : ''}` : '',
       'You can also track it under My enquiries & orders on art.pranixtechno.com'].filter(Boolean).join('\n');
     $('waLinks').innerHTML = `<a href="https://wa.me/${digits}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Send update on WhatsApp</a>`;
   };
   waLink();
+  { const stale = () => { const st = $('eStatus').value; const bad = !['RECEIVED', 'PRICE_SENT'].includes(st) && /pay (with|securely|now|using)|link below|payment link|to confirm your order/i.test($('eMsg').value);
+      let w = $('msgStale'); if (!w) { $('eMsg').insertAdjacentHTML('afterend', '<div class="err" id="msgStale" style="font-size:12px" hidden>This message asks the customer to pay, but the order is already paid: clear it or write a new one.</div>'); w = $('msgStale'); } w.hidden = !bad; };
+    ['eMsg', 'eStatus'].forEach((id) => { $(id).addEventListener('input', stale); $(id).addEventListener('change', stale); }); stale(); }
   if ($('addrBox')) wireRegion($('addrBox'));
   if ($('reviewBox')) wireReviews($('reviewBox'));
   ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));

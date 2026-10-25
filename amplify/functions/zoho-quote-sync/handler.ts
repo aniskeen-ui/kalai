@@ -3538,6 +3538,8 @@ async function assignCodes() {
     }
     await syncCustomers(byCode).catch((err) => console.warn('Customer master not updated', err));
     await catchUpArtistStatus(all);
+    // Older paid orders still showing a "please pay" message: clear it.
+    for (const e of all) if (PAIDISH.includes(str(e, 'status')) && PAY_MSG.test(str(e, 'adminMessage'))) await writeBack(str(e, 'id'), { adminMessage: null }).catch(() => {});
   }
   // Offer master numbers PR-0000001… (in order of creation).
   const prtable = process.env.PROMO_TABLE;
@@ -4271,6 +4273,19 @@ function mailsFor(rec: StreamRecord): Mail[] {
   return out;
 }
 
+// A message asking the customer to pay is out of date once the order is paid.
+const PAY_MSG = /pay (with|securely|now|using)|link below|payment link|to confirm your order/i;
+const PAIDISH = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+/** When the status moves on (by anyone: studio, artist, supplier, payment) and the message didn't change with it, the
+ *  message belonged to the earlier step: clear it so the customer page, emails and WhatsApp don't repeat it. */
+async function clearStaleMessage(rec: StreamRecord) {
+  const img = rec.dynamodb?.NewImage, old = rec.dynamodb?.OldImage;
+  if (rec.eventName !== 'MODIFY' || !img || !old) return;
+  const msg = str(img, 'adminMessage');
+  if (!msg || msg !== str(old, 'adminMessage') || str(img, 'status') === str(old, 'status')) return;
+  await writeBack(str(img, 'id'), { adminMessage: null });
+}
+
 /** The customer's tracker: every status change (by the studio, the artist's steps, suppliers, payments) with its time. */
 async function logStatus(rec: StreamRecord) {
   const img = rec.dynamodb?.NewImage, old = rec.dynamodb?.OldImage;
@@ -4419,6 +4434,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     try {
       await onStreamRecord(rec);
       await logStatus(rec).catch((err) => console.warn('Status log not written', err));
+      await clearStaleMessage(rec).catch((err) => console.warn('Old message not cleared', err));
       await notify(rec);
       await artistNotify(rec).catch((err) => console.warn('Artist email step failed', err));
     } catch (err) {
