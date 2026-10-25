@@ -61,6 +61,8 @@ const schema = a.schema({
       zohoCreditNoteId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoRefundId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Siva's progress, reported on the Artist desk: STARTED → FINISHED → SHIPPED (to the frame shop).
+      // Status history for the customer's tracker: JSON [{s, at}], appended by the function on every status change.
+      statusLog: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistStage: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistStartedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       artistFinishedAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),

@@ -13,7 +13,10 @@ export const LIC_TYPES = [['WEB', 'Web licence', 'websites and social media', 10
 export const PHOTO_SIZES = [['A4', 'A4 (21 × 30 cm)', 169, 59], ['A3', 'A3 (30 × 42 cm)', 249, 79], ['40×50', '40 × 50 cm', 299, 99], ['50×70', '50 × 70 cm', 399, 139], ['60×80', '60 × 80 cm', 499, 179]];
 const SHIP_ZONES = [['A', 'GCC (Saudi Arabia, Oman, Qatar, Bahrain, Kuwait)'], ['B', 'South Asia (India, Sri Lanka, Pakistan, Bangladesh, Nepal, Maldives, Bhutan)'], ['C', 'UK and Europe'], ['D', 'USA, Canada, Australia, New Zealand'], ['E', 'Rest of the world']];
 // Customer emails by event (the website emails the customer at each step; untick to stop one).
+// Opt-in (off unless ticked): the customer sees these on the tracker anyway.
+const MAIL_OPTIN = ['ARTIST_DONE', 'ARTIST_SENT'];
 const MAILS = [['RECEIVED', 'Enquiry or order received'], ['PRICE_SENT', 'Price sent (with the payment link)'], ['PAID', 'Payment received'], ['ARTIST_STARTED', 'The artist has started (paintings and sketches)'],
+  ['ARTIST_DONE', 'The artist has finished (off by default: shown on the tracker)'], ['ARTIST_SENT', 'On its way to our framer (off by default: shown on the tracker)'], ['MESSAGE', 'Your message on an order (without a status change)'],
   ['FRAMING', 'Being framed'], ['SHIPPED', 'Shipped (courier and tracking number)'], ['DELIVERED', 'Delivered (with the rating link)'], ['CANCELLED', 'Cancelled'],
   ['REQUEST', 'Cancellation or damage request received'], ['DECLINED', 'Request declined'], ['PICKUP', 'Return pickup booked'], ['REPLACEMENT', 'Replacement under way'],
   ['REFUND', 'Refund sent'], ['REFUNDED', 'Order closed as refunded (when no refund email went)'], ['RECEIVED_AGAIN', 'Enquiry reopened']];
@@ -85,7 +88,7 @@ export async function showSettings() {
       <div class="field" style="max-width:640px"><label for="st-inst">Show “4 interest-free payments” on artworks</label><select id="st-inst" style="max-width:220px"><option value="">Off</option><option>Tabby</option><option>Tamara</option></select>
         <div class="muted" style="font-size:12px">Turn on only once your Tabby or Tamara merchant account is open. Customers who want it tick “Pay in 4 instalments” when they order, and you send them the Tabby / Tamara payment link instead of Ziina.</div></div>
       <h3 style="margin:0;font-size:17px">Customer emails</h3>
-      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">The customer gets an email at each step, from kalaiarthouse@pranixtechno.com (replies come to the studio mailbox). Untick any you don't want sent. Studio notifications always go.</div>
+      <div class="field" style="max-width:640px"><div class="muted" style="font-size:12px">The customer gets an email at each step, from kalaiarthouse@pranixtechno.com (replies come to the studio mailbox). Untick any you don't want sent: the customer can follow every step live on the <b>Tracker</b> in My enquiries &amp; orders anyway. Studio notifications always go.</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 14px;margin-top:6px">${MAILS.map(([k, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-mail="${k}" style="width:auto"> ${l}</label>`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Timings</h3>${FIELDS.map((f) => `<div class="field" style="max-width:520px"><label for="st-${f.k}">${f.label}${f.unit === '' ? '' : ' (seconds)'}</label>
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
@@ -136,7 +139,7 @@ export async function showSettings() {
     $('st-launchOn').checked = !!row?.launchNote;
     $('st-launchNote').value = row?.launchNote && row.launchNote !== LAUNCH_DEF ? row.launchNote : '';
     const off = String(row?.mailOff || '').split(',');
-    document.querySelectorAll('[data-mail]').forEach((c) => { c.checked = !off.includes(c.dataset.mail); });
+    document.querySelectorAll('[data-mail]').forEach((c) => { c.checked = MAIL_OPTIN.includes(c.dataset.mail) ? off.includes(`ON:${c.dataset.mail}`) : !off.includes(c.dataset.mail); });
     let zones = {}; try { zones = JSON.parse(row?.shipZones || '{}') || {}; } catch { zones = {}; }
     SHIP_ZONES.forEach(([z]) => { $('st-zone' + z).value = zones[z] ?? ''; });
     $('st-inst').value = row?.instalments || '';
@@ -185,7 +188,7 @@ async function save() {
   }
   rec.shipZones = JSON.stringify(zones);
   rec.instalments = $('st-inst').value || null;
-  rec.mailOff = [...document.querySelectorAll('[data-mail]')].filter((c) => !c.checked).map((c) => c.dataset.mail).join(',') || null;
+  rec.mailOff = [...document.querySelectorAll('[data-mail]')].map((c) => (MAIL_OPTIN.includes(c.dataset.mail) ? (c.checked ? `ON:${c.dataset.mail}` : '') : (c.checked ? '' : c.dataset.mail))).filter(Boolean).join(',') || null;
   if (roomUrl && marks && !(marks.l < marks.r && marks.top > 0)) { $('stMsg').textContent = 'Room photo: click the three points on the sofa first (or remove the photo).'; return; }
   rec.roomMarks = roomUrl && marks ? JSON.stringify({ ...marks, cm: Number($('rmCm').value) || 200 }) : null;
   const first = (rec.heroLines || '').split('\n').map((l) => l.trim()).find(Boolean) || '';

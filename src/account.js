@@ -123,6 +123,16 @@ const css = `
 .steps-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
 .steps-bar i{height:5px;border-radius:3px;background:var(--line)}
 .steps-bar i.on{background:var(--gold)}
+.trk-list{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:0}
+.trk-list li{display:grid;grid-template-columns:22px 1fr;gap:10px;position:relative;padding:0 0 12px;font-size:14px}
+.trk-list li:not(:last-child)::before{content:'';position:absolute;left:10px;top:20px;bottom:0;width:2px;background:var(--line)}
+.trk-list li.done:not(:last-child)::before{background:var(--gold)}
+.trk-list .dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:11px;background:var(--bg);z-index:1}
+.trk-list li.done .dot{background:var(--gold);border-color:var(--gold);color:#fff}
+.trk-list li.now .dot{border-color:var(--gold);box-shadow:0 0 0 4px color-mix(in srgb,var(--gold) 25%,transparent)}
+.trk-list li.todo{opacity:.55}
+.trk-at{font-size:12px;opacity:.75;margin-left:4px}
+.trk-note{font-size:13px;margin-top:2px}
 .enq-msg{font-size:13px;line-height:1.45;background:var(--surface);border-left:3px solid var(--gold);padding:8px 10px}
 .enq-price{font-family:var(--mono);font-size:14px}
 .rate{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:10px}
@@ -741,7 +751,47 @@ function card(e) {
 }
 
 const ORDER_ST = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'];
+/* ---------- Tracker: every step of each open order, live (no need to wait for an email) ---------- */
+const TRACK_STEPS = {
+  ART: [['RECEIVED', 'Enquiry received', 'We have your request.'], ['PRICE_SENT', 'Price sent', 'The price and payment link are ready.'], ['PAID', 'Paid', 'Your order is confirmed.'],
+    ['ARTIST_WORKING', 'Artist at work', 'The artist is making your artwork by hand.'], ['ARTIST_DONE', 'Artwork finished', 'Finished and drying, ready to send.'],
+    ['ARTIST_SENT', 'On its way to our framer', 'Sent from the artist\'s studio to our framer in Dubai.'], ['FRAMING', 'Being framed', 'Our framer in Dubai is mounting and framing it.'],
+    ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it! Please rate your order.']],
+  FRAME: [['RECEIVED', 'Order received', 'We have your order.'], ['PRICE_SENT', 'Payment link sent', 'Ready for payment.'], ['PAID', 'Paid', 'Your order is confirmed.'],
+    ['FRAMING', 'Printing and framing', 'Our team in Dubai is printing and framing it.'], ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it! Please rate your order.']],
+  MARKET: [['RECEIVED', 'Order received', 'We are confirming it with the maker.'], ['PRICE_SENT', 'Payment link sent', 'Ready for payment.'], ['PAID', 'Paid', 'The maker is preparing it.'],
+    ['READY', 'Packed by the maker', 'Packed and ready for the courier.'], ['SHIPPED', 'Out for delivery', 'With the courier.'], ['DELIVERED', 'Delivered', 'Enjoy it!']],
+  LICENCE: [['RECEIVED', 'Order received', ''], ['PRICE_SENT', 'Payment link sent', ''], ['DELIVERED', 'Paid · file ready', 'Download the full-size file under Orders.']],
+};
+function trackCard(e) {
+  const st = e.status || 'RECEIVED';
+  const steps = e.kind === 'MARKET' ? TRACK_STEPS.MARKET : e.kind === 'LICENCE' ? TRACK_STEPS.LICENCE : ['PHOTO', 'GIFT'].includes(e.kind) ? TRACK_STEPS.FRAME : TRACK_STEPS.ART;
+  let log = []; try { log = JSON.parse(e.statusLog || '[]') || []; } catch { log = []; }
+  const firstAt = (s) => (log.find((x) => x.s === s) || {}).at;
+  const at = {
+    RECEIVED: e.createdAt, PRICE_SENT: firstAt('PRICE_SENT'), PAID: firstAt('PAID'),
+    ARTIST_WORKING: e.artistStartedAt || firstAt('ARTIST_WORKING'), ARTIST_DONE: e.artistFinishedAt || firstAt('ARTIST_DONE'), ARTIST_SENT: e.artistShippedAt || firstAt('ARTIST_SENT'),
+    FRAMING: firstAt('FRAMING'), READY: e.sellerReadyAt, SHIPPED: firstAt('SHIPPED') || e.sellerDispatchedAt, DELIVERED: e.deliveredAt || firstAt('DELIVERED'),
+  };
+  // How far it has got: the status, or a later step already recorded (e.g. the artist's own steps).
+  let cur = steps.findIndex(([k]) => k === st);
+  if (e.kind === 'MARKET' && st === 'PAID' && e.sellerStage === 'READY') cur = steps.findIndex(([k]) => k === 'READY');
+  steps.forEach(([k], i) => { if (at[k] && k !== 'RECEIVED' && i > cur && ['ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'].includes(k)) cur = i; });
+  if (cur < 0) cur = 0;
+  const d = (v) => (v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · ' + new Date(v).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '');
+  const ship = (st === 'SHIPPED' || st === 'DELIVERED') && e.courierName ? ` ${esc(e.courierName)}${e.trackingNo ? ` · tracking no. <b>${esc(e.trackingNo)}</b>` : ''}.` : '';
+  return `<article class="enq trk">
+    <div class="enq-top"><span class="enq-title">${esc(e.title)}</span><span class="pill">${esc(STATUS[st] || st)}</span></div>
+    <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')}</div>
+    <ol class="trk-list">${steps.map(([k, label, note], i) => {
+      const cls = i < cur ? 'done' : i === cur ? 'now' : 'todo';
+      return `<li class="${cls}"><span class="dot">${i < cur || (i === cur && st === 'DELIVERED') ? '✓' : ''}</span><div><b>${esc(label)}</b>${at[k] && i <= cur ? ` <span class="trk-at">${esc(d(at[k]))}</span>` : ''}${i === cur ? `<div class="trk-note">${esc(note)}${k === 'SHIPPED' ? ship : ''}</div>` : ''}</div></li>`;
+    }).join('')}</ol>
+    ${st === 'PRICE_SENT' && e.paymentLink ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">Pay now</a>` : ''}
+  </article>`;
+}
 const TABS = [
+  ['TRACK', 'Tracker', (e) => !['CANCELLED', 'REFUNDED'].includes(e.status) && !(e.status === 'DELIVERED' && e.deliveredAt && Date.now() - new Date(e.deliveredAt).getTime() > 14 * 864e5)],
   ['ORDERS', 'Orders', (e) => ORDER_ST.includes(e.status) && e.cancelState !== 'REQUESTED'],
   ['ENQ', 'Enquiries', (e) => ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED')],
   ['CANCEL', 'Cancellations & refunds', (e) => ['CANCELLED', 'REFUNDED'].includes(e.status) || ['REQUESTED', 'DECLINED', 'REOPENED'].includes(e.cancelState)],
@@ -828,14 +878,14 @@ async function showList() {
       return;
     }
     const groups = Object.fromEntries(TABS.map(([k, , f]) => [k, items.filter(f)]));
-    if (!currentTab || !groups[currentTab]) currentTab = groups.ORDERS.length ? 'ORDERS' : groups.ENQ.length ? 'ENQ' : 'CANCEL';
+    if (!currentTab || !groups[currentTab]) currentTab = groups.TRACK.length ? 'TRACK' : groups.ORDERS.length ? 'ORDERS' : groups.ENQ.length ? 'ENQ' : 'CANCEL';
     const nav = body.querySelector('#acctTabs');
     const draw = () => {
       nav.innerHTML = TABS.map(([k, label]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === currentTab}">${label}<b>${groups[k].length}</b></button>`).join('');
       nav.querySelectorAll('[data-tab]').forEach((b) => { b.onclick = () => { currentTab = b.dataset.tab; draw(); }; });
       const shown = groups[currentTab];
-      list.innerHTML = (currentTab === 'CANCEL' ? POLICY_NOTE : '') + (shown.length ? shown.map(card).join('')
-        : `<p class="acct-info">${currentTab === 'ORDERS' ? 'No orders yet. Once you pay for an enquiry it moves here.' : currentTab === 'ENQ' ? 'No open enquiries.' : 'No cancellations or refunds.'}</p>`);
+      list.innerHTML = (currentTab === 'CANCEL' ? POLICY_NOTE : currentTab === 'TRACK' ? '<p class="acct-info" style="margin:0;font-size:13px">Every step of your orders, updated live as the artist, our framer and the courier move it on. Open <b>Orders</b> for invoices, address and requests.</p>' : '') + (shown.length ? shown.map(currentTab === 'TRACK' ? trackCard : card).join('')
+        : `<p class="acct-info">${currentTab === 'ORDERS' ? 'No orders yet. Once you pay for an enquiry it moves here.' : currentTab === 'ENQ' ? 'No open enquiries.' : currentTab === 'TRACK' ? 'Nothing in progress right now.' : 'No cancellations or refunds.'}</p>`);
       list.querySelectorAll('.acct-terms').forEach((a) => { a.onclick = () => close(); });
       wireRate(list, items);
       wireRequests(list, items);

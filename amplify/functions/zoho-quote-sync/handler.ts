@@ -4178,6 +4178,8 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
       ['PRICE', 'COMMISSION'].includes(kind) ? 'Changed your mind? You can request a cancellation under My enquiries & orders: before the artist starts you get a full refund.' : '']);
+    if (st === 'ARTIST_DONE' && ['PRICE', 'COMMISSION'].includes(kind)) cust(`Finished: ${title} (${ref})`, [`The artist has finished <b>${h(title)}</b>. Next it goes to our framer in Dubai.`, msgLine]);
+    if (st === 'ARTIST_SENT' && ['PRICE', 'COMMISSION'].includes(kind)) cust(`On its way to our framer: ${title} (${ref})`, [`<b>${h(title)}</b> has left the artist's studio and is on its way to our framer in Dubai.`, msgLine, "We'll let you know when it is framed and ships."]);
     if (st === 'FRAMING') cust(kind === 'PHOTO' ? `We're printing and framing your order (${ref})` : kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
       kind === 'PHOTO' ? 'Your print is now with our framer in Dubai: printed on fine-art paper, then mounted and framed.' : kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> is now with our framer in Dubai for framing.`,
       msgLine, "We'll email you the courier and tracking number as soon as it ships."]);
@@ -4254,8 +4256,22 @@ function mailsFor(rec: StreamRecord): Mail[] {
   }
 
   // A new message on the order without a status change.
-  if (!statusChanged && msg && msg !== str(old, 'adminMessage')) cust(`A message about your order ${ref}`, [`About <b>${h(title)}</b>:`, h(msg)]);
+  if (!statusChanged && msg && msg !== str(old, 'adminMessage')) (key = 'MESSAGE'), cust(`A message about your order ${ref}`, [`About <b>${h(title)}</b>:`, h(msg)]);
   return out;
+}
+
+/** The customer's tracker: every status change (by the studio, the artist's steps, suppliers, payments) with its time. */
+async function logStatus(rec: StreamRecord) {
+  const img = rec.dynamodb?.NewImage, old = rec.dynamodb?.OldImage;
+  if (!img) return;
+  const st = str(img, 'status') || 'RECEIVED';
+  if (rec.eventName === 'MODIFY' && st === (str(old, 'status') || 'RECEIVED')) return;
+  let log: { s: string; at: string }[] = [];
+  try { log = JSON.parse(str(img, 'statusLog') || '[]'); if (!Array.isArray(log)) log = []; } catch { log = []; }
+  const at = rec.eventName === 'INSERT' ? (str(img, 'createdAt') || new Date().toISOString()) : new Date().toISOString();
+  if (log.length && log[log.length - 1].s === st) return;
+  log.push({ s: st, at });
+  await writeBack(str(img, 'id'), { statusLog: JSON.stringify(log.slice(-40)) });
 }
 
 // ---------- Emails to the artist doing the order (Siva or a portal artist) ----------
@@ -4315,6 +4331,7 @@ async function artistNotify(rec: StreamRecord) {
   }
 }
 
+const MAIL_OPTIN = ['ARTIST_DONE', 'ARTIST_SENT'];
 let mailOffCache: { at: number; list: string[] } | null = null;
 async function mailOff(): Promise<string[]> {
   if (mailOffCache && Date.now() - mailOffCache.at < 60_000) return mailOffCache.list;
@@ -4332,7 +4349,8 @@ async function notify(rec: StreamRecord) {
     if (!mails.length || !(await emailsOn())) return;
     // Customer emails switched off in Settings (studio notifications always go).
     const off = await mailOff();
-    mails = mails.filter((m) => !m.key || !off.includes(m.key));
+    // Opt-in emails (artist finished / sent to the framer) go only when ticked (stored as ON:KEY).
+    mails = mails.filter((m) => !m.key || (MAIL_OPTIN.includes(m.key) ? off.includes(`ON:${m.key}`) : !off.includes(m.key)));
     for (const m of mails) {
       try { await sendMail(m); } catch (err) { console.warn(`Email "${m.subject}" not sent:`, err); }
     }
@@ -4389,6 +4407,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     const img = rec.dynamodb?.NewImage;
     try {
       await onStreamRecord(rec);
+      await logStatus(rec).catch((err) => console.warn('Status log not written', err));
       await notify(rec);
       await artistNotify(rec).catch((err) => console.warn('Artist email step failed', err));
     } catch (err) {
