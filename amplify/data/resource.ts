@@ -479,6 +479,7 @@ const schema = a.schema({
       loyalty: a.string(), // Kalai Circle settings (JSON): rates, levels, referral, expiry
       programmes: a.string(), // Special programmes master (JSON): seniors, Little Artists, students … (Promotions → Programmes)
       siteLangDefault: a.string(), // language a new visitor sees first (blank = English)
+      countryThemes: a.string(), // country looks (JSON {on, fest}): colours, pattern, font and greeting by language; festival looks
       gbpPerAed: a.float(), // pounds per dirham (£ prices), refreshed with the rupee rate
       eurPerAed: a.float(), // euros per dirham (€ prices)
       kuralHour: a.integer(), // Dubai hour (0–23) the Thirukkural of the day is published (default 6)

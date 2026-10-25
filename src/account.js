@@ -12,9 +12,18 @@ import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones, countryRegionHtml, wireRegion, addressLine, COUNTRIES } from './phone.js';
 // Every country for the Little Artists form (index.html).
 window.kalaiCountries = COUNTRIES;
+// Pictures come from short-lived signed links (about an hour): a page left open longer shows broken pictures when it
+// scrolls to new ones. On a failed picture from our storage, sign the link again (once) and reload it.
+document.addEventListener('error', async (ev) => {
+  const img = ev.target;
+  if (!(img instanceof HTMLImageElement) || img.dataset.resigned || !/amazonaws\.com\/.+X-Amz-/i.test(img.src)) return;
+  img.dataset.resigned = '1';
+  try { const path = decodeURIComponent(new URL(img.src).pathname.replace(/^\//, '')); const { url } = await getUrl({ path, options: { expiresIn: 3600 } }); img.src = url.toString(); } catch { /* keep the alt text */ }
+}, true);
 window.kalaiKidsCountries?.(COUNTRIES);
 import { cleanTitle } from './title.js';
 import './translate.js'; // language picker in the header (whole site)
+import './country.js'; // country looks that follow the language, festival looks
 
 autoPhones();
 

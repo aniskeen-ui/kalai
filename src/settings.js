@@ -79,6 +79,10 @@ export async function showSettings() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><button type="button" class="btn small ghost" data-langset="all">All ${ALL_LANGS.length}</button><button type="button" class="btn small ghost" data-langset="default">Recommended (${DEFAULT_LANGS.length})</button><button type="button" class="btn small ghost" data-langset="none">English only</button><span class="muted" id="st-langCount" style="font-size:12px"></span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">${ALL_LANGS.map(([k, n]) => `<label style="display:flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-lang="${k}" ${k === 'en' ? 'checked disabled' : ''} style="width:auto">${n}</label>`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Website theme</h3>
+      <h3 style="margin:0;font-size:17px">Country looks</h3>
+      <div style="display:grid;gap:6px;font-size:14px"><label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-ctOn" style="width:auto"> Country looks: colours, a pattern from local art, headline font and a greeting that follow the website language (English: the visitor's time zone)</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-ctFest" style="width:auto"> Festival looks: Diwali, Pongal, Onam, Holi, Ramadan and Eid, Lunar New Year, Christmas, New Year and national days (UAE, Saudi, Qatar, Kuwait, Bahrain, Oman, India, Pakistan)</label>
+        <div class="muted" style="font-size:12px">Visitors can change it with the flag button in the header (or choose the Kalai classic look). Try one: <a href="/" target="_blank" rel="noopener">open the website</a>, pick a language or a flag.</div></div>
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=green" target="_blank" rel="noopener">preview 2. Monda theme</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview 1. Original theme</a> · <a href="/?look=auto" target="_blank" rel="noopener">end preview</a>. A preview changes only your own browser.</div></div>
       <h3 style="margin:0;font-size:17px">Room photo for "On a wall"</h3>
@@ -148,6 +152,7 @@ export async function showSettings() {
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? f.def ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
+    { let ct = {}; try { ct = JSON.parse(row?.countryThemes || '{}') || {}; } catch { ct = {}; } $('st-ctOn').checked = ct.on !== false; $('st-ctFest').checked = ct.fest !== false; }
     { // Website languages: saved list, else the recommended set.
       const on = new Set(String(row?.siteLangs || '').split(',').map((x) => x.trim()).filter(Boolean).length ? String(row.siteLangs).split(',').map((x) => x.trim()) : DEFAULT_LANGS);
       const boxes = [...document.querySelectorAll('[data-lang]')];
@@ -201,6 +206,8 @@ async function save() {
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
+  rec.countryThemes = JSON.stringify({ on: $('st-ctOn').checked, fest: $('st-ctFest').checked });
+  try { localStorage.setItem('kalai-ct-cfg', rec.countryThemes); } catch { /* */ }
   rec.siteLangDefault = $('st-langDef').value || 'en';
   { const n = (id, d) => (Number.isFinite(Number($(id).value)) && $(id).value !== '' ? Number($(id).value) : d);
     rec.loyalty = JSON.stringify({ on: $('lyOn').checked, pointValue: n('lyVal', 3), minRedeem: n('lyMin', 500), maxPct: n('lyMax', 30), expiryMonths: n('lyExp', 12),
