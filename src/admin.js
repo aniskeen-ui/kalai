@@ -1982,8 +1982,10 @@ function arrangeDetail(e) {
   if (LAYOUT === 'b') {
     const c1 = put(el('lay-col'), head, parts.order, parts.review);
     const c2 = put(el('lay-col'), parts.ship, parts.pay.filter((x) => x && x.id !== 'flowSlot'), parts.cost, parts.after);
-    const c3 = put(el('lay-col lay-side'), el('lay-h', '<b>Action</b>'), act, $('flowSlot'));
+    const c3 = put(el('lay-col lay-side'), el('lay-h', '<b>Action</b>'), act);
     box.prepend(put(el('lay-grid3'), c1, c2, c3));
+    // The document flow runs as a band across the top, between the order list and the order's details.
+    const fs = $('flowSlot'); if (fs) { fs.classList.add('flowband'); box.prepend(fs); }
     form.style.display = 'none';
     return;
   }
@@ -2014,7 +2016,7 @@ function journeyCard(e) {
   return d;
 }
 // The document-flow card lives under the order list; a layout may borrow it into the detail: put it back first.
-function restoreFlow() { const fs = $('flowSlot'), home = document.querySelector('.deskL'); if (fs && home && !home.contains(fs)) home.appendChild(fs); }
+function restoreFlow() { const fs = $('flowSlot'), home = document.querySelector('.deskL'); if (fs) fs.classList.remove('flowband'); if (fs && home && !home.contains(fs)) home.appendChild(fs); }
 const PAY_LABEL_UI = { ZIINA: 'Ziina', BANK: 'Bank transfer', CASH: 'Cash', CARD: 'Card', OTHER: 'Other' };
 async function showDetailBody(e) {
   restoreFlow();
