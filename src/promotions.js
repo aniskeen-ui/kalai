@@ -21,12 +21,24 @@ function state(p, now = new Date().toISOString()) {
 }
 
 export async function showPromotions() {
-  if (!wired) { wired = true; $('prNew').onclick = () => edit(null); $('prFind').addEventListener('input', draw); $('vNew').onclick = () => vEdit(null); $('pgAdd').onclick = pgAdd; $('pgSave').onclick = pgSave; }
+  if (!wired) { wired = true; $('prNew').onclick = () => edit(null); $('prFind').addEventListener('input', draw); $('vNew').onclick = () => vEdit(null); $('pgAdd').onclick = pgAdd; $('pgSave').onclick = pgSave;
+    ['vFind', 'vStat', 'vKind'].forEach((id) => $(id).addEventListener('input', () => { vShown = 50; vDraw(); }));
+    document.querySelectorAll('#ofTabs [data-of]').forEach((b) => { b.onclick = () => ofTab(b.dataset.of); });
+    let t = 'offers'; try { t = localStorage.getItem('kalai-of-tab') || 'offers'; } catch { /* */ } ofTab(t); }
   await load();
   await vLoad();
   await pgLoad();
 }
 
+/* ---------- Offers tab: three sections (offers & banners · vouchers & gift cards · special programmes), one at a time ---------- */
+function ofTab(t) {
+  const map = { offers: 'ofSecOffers', vouchers: 'ofSecVouchers', progs: 'ofSecProgs' };
+  if (!map[t]) t = 'offers';
+  Object.entries(map).forEach(([k, id]) => { $(id).hidden = k !== t; });
+  document.querySelectorAll('#ofTabs [data-of]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.of === t)));
+  try { localStorage.setItem('kalai-of-tab', t); } catch { /* */ }
+}
+const ofCount = (k, txt) => { const el = document.querySelector(`[data-ofn="${k}"]`); if (el) el.textContent = txt; };
 /* ---------- Private codes & gift cards (Voucher: studio only, never public) ---------- */
 let vouchers = [];
 const redeemLink = (code) => `https://art.pranixtechno.com/#redeem=${encodeURIComponent(code)}`;
@@ -72,19 +84,32 @@ function vState(v) {
 const vWhat = (v) => (v.kind === 'GIFT' ? `Gift card ⃃ ${Number(v.value || 0).toLocaleString('en-US')} · balance <b>⃃ ${Number(v.balance || 0).toLocaleString('en-US')}</b>`
   : `${v.discountType === 'AED' ? `⃃ ${v.discountValue}` : `${v.discountValue}%`} off · ${AREA[v.appliesTo || 'ALL']}${v.minOrder ? ` · min ⃃ ${v.minOrder}` : ''} · used ${v.usedCount || 0}${v.maxUses ? ` of ${v.maxUses}` : ''}`);
 const vShare = (v) => `Hello${v.forName ? ` ${v.forName.split(' ')[0]}` : ''}, here is your ${v.kind === 'GIFT' ? `Kalai Art House gift card worth AED ${v.value}` : `private Kalai Art House code for ${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`}: ${v.code}${v.endAt ? ` (valid until ${day(v.endAt)})` : ''}. Choose an artwork on art.pranixtechno.com; once we send you the price, open My enquiries & orders and enter the code on your order.`;
-function vDraw() {
-  $('vList').innerHTML = vouchers.length ? vouchers.map((v) => {
-    const [label, cls] = vState(v);
-    let uses = []; try { uses = JSON.parse(v.uses || '[]'); } catch { uses = []; }
-    return `<article class="mk-card" data-v="${esc(v.id)}">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b class="mono" style="font-size:16px">${esc(v.code)}</b><span class="cg-badge ${cls}">${label}</span><span class="chip">${v.kind === 'GIFT' ? 'Gift card' : `Discount voucher ${v.discountType === 'AED' ? '⃃' : '%'}`}</span>
-        <span class="muted" style="margin-left:auto">${v.forName ? `for <b>${esc(v.forName)}</b>` : ''}${v.forEmail ? ` · only ${esc(v.forEmail)}` : ''} · ${v.endAt ? `until ${esc(day(v.endAt))}` : 'no expiry'}</span></div>
-      <div class="muted">${vWhat(v)}${v.note ? ` · ${esc(v.note)}` : ''}</div>
-      ${uses.length ? `<div class="muted" style="font-size:12px">Used on: ${uses.slice(-6).map((u) => `${esc(u.ref)} ${u.back ? '(given back)' : `⃃ ${u.amount}`}`).join(' · ')}</div>` : ''}
+let vOpen = null, vShown = 50;
+function vDetail(v) {
+  let uses = []; try { uses = JSON.parse(v.uses || '[]'); } catch { uses = []; }
+  return `<div class="mk-card" data-v="${esc(v.id)}" style="box-shadow:none">
+      <div class="muted">${vWhat(v)}${v.note ? ` · ${esc(v.note)}` : ''}${v.forEmail ? ` · only <b>${esc(v.forEmail)}</b> can use it` : ' · anyone with the code can use it'}${v.forPhone ? ` · ${esc(v.forPhone)}` : ''}</div>
+      ${uses.length ? `<div class="muted" style="font-size:12px">Used on: ${uses.slice(-10).map((u) => `${esc(u.ref)} ${u.back ? '(given back)' : `⃃ ${u.amount}`}`).join(' · ')}</div>` : ''}
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div class="vqr" data-qr="${esc(v.code)}" style="width:110px;height:110px;background:#fff;border-radius:6px"></div><div class="muted" style="font-size:12px;max-width:420px">The QR opens <span class="mono">art.pranixtechno.com</span> with this code ready in My enquiries &amp; orders. Send the card picture, or the code.</div></div>
       <div class="mk-act"><button class="btn small ghost" type="button" data-va="copy">Copy code</button><a class="btn small ghost" target="_blank" rel="noopener" href="https://wa.me/${String(v.forPhone || '').replace(/[^\d]/g, '').replace(/^0(?=5)/, '971')}?text=${encodeURIComponent(vShare(v) + ' ' + redeemLink(v.code))}">WhatsApp</a>${v.forEmail ? `<a class="btn small ghost" href="mailto:${esc(v.forEmail)}?subject=${encodeURIComponent(v.kind === 'GIFT' ? 'Your Kalai Art House gift card' : 'Your Kalai Art House code')}&body=${encodeURIComponent(vShare(v) + '\n\n' + redeemLink(v.code))}">Email</a>` : ''}${v.forPhone ? `<a class="btn small ghost" href="tel:${esc(v.forPhone)}">Call</a>` : ''}<button class="btn small ghost" type="button" data-va="png">Download card (with QR)</button><button class="btn small ghost" type="button" data-va="edit">Edit</button><button class="btn small ghost" type="button" data-va="toggle">${v.active ? 'Switch off' : 'Switch on'}</button>${(v.usedCount || 0) ? '' : '<button class="btn small ghost" type="button" data-va="del">Delete</button>'}<span class="muted" data-vm style="font-size:12px"></span></div>
-    </article>`;
-  }).join('') : '<p class="muted">No private codes or gift cards yet.</p>';
+    </div>`;
+}
+function vDraw() {
+  const q = ($('vFind')?.value || '').trim().toLowerCase(), st = $('vStat')?.value || '', kd = $('vKind')?.value || '';
+  const rows = vouchers.filter((v) => (!q || [v.code, v.forName, v.forEmail, v.forPhone, v.note].some((x) => String(x || '').toLowerCase().includes(q)))
+    && (!st || vState(v)[0] === st) && (!kd || (kd === 'GIFT' ? v.kind === 'GIFT' : v.kind !== 'GIFT')));
+  const active = vouchers.filter((v) => vState(v)[0] === 'Active').length;
+  ofCount('vouchers', `(${active} active)`);
+  if ($('vCount')) $('vCount').textContent = `${rows.length} of ${vouchers.length}`;
+  const val = (v) => (v.kind === 'GIFT' ? `⃃ ${Number(v.value || 0).toLocaleString('en-US')} <span class="muted">(left ⃃ ${Number(v.balance || 0).toLocaleString('en-US')})</span>` : v.discountType === 'AED' ? `⃃ ${v.discountValue} off` : `${v.discountValue}% off`);
+  $('vList').innerHTML = rows.length ? `<div class="tablewrap"><table><thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Given to</th><th class="num">Used</th><th>Valid until</th><th>Status</th></tr></thead><tbody>
+    ${rows.slice(0, vShown).map((v) => { const [label, cls] = vState(v); return `<tr data-vrow="${esc(v.id)}" style="cursor:pointer" class="${vOpen === v.id ? 'sel' : ''}">
+      <td class="mono"><b>${esc(v.code)}</b></td><td>${v.kind === 'GIFT' ? 'Gift card' : 'Discount voucher'}</td><td>${val(v)}</td><td>${esc(v.forName || '–')}${v.forEmail ? ' <span title="Only this email can use it">🔒</span>' : ''}</td>
+      <td class="num">${v.usedCount || 0}${v.maxUses ? `/${v.maxUses}` : ''}</td><td>${v.endAt ? esc(day(v.endAt)) : '–'}</td><td><span class="cg-badge ${cls}">${label}</span></td></tr>
+      ${vOpen === v.id ? `<tr><td colspan="7">${vDetail(v)}</td></tr>` : ''}`; }).join('')}
+    </tbody></table></div>${rows.length > vShown ? `<button type="button" class="btn small ghost" id="vMore">Show ${Math.min(50, rows.length - vShown)} more</button>` : ''}` : `<p class="muted">${vouchers.length ? 'No vouchers match.' : 'No private codes or gift cards yet.'}</p>`;
+  $('vMore')?.addEventListener('click', () => { vShown += 50; vDraw(); });
+  document.querySelectorAll('#vList [data-vrow]').forEach((tr) => { tr.onclick = () => { vOpen = vOpen === tr.dataset.vrow ? null : tr.dataset.vrow; vDraw(); }; });
   document.querySelectorAll('#vList [data-qr]').forEach(async (el) => { try { el.innerHTML = await qrSvg(redeemLink(el.dataset.qr), 3); } catch { el.textContent = 'QR not available'; } });
   document.querySelectorAll('#vList [data-va]').forEach((b) => {
     const v = vouchers.find((x) => x.id === b.closest('[data-v]').dataset.v), m = b.closest('[data-v]').querySelector('[data-vm]');
@@ -169,6 +194,7 @@ async function load() {
 function draw() {
   const q = ($('prFind')?.value || '').trim().toLowerCase();
   const shown = list.filter((p) => !q || [p.number, p.title, p.code, p.bannerText].some((v) => String(v || '').toLowerCase().includes(q)));
+  ofCount('offers', `(${list.filter((p) => state(p)[0] === 'Live').length} live)`);
   $('prList').innerHTML = shown.length ? shown.map((p) => {
     const [label, cls] = state(p);
     const off = p.code ? `${p.discountType === 'AED' ? `⃃ ${p.discountValue}` : `${p.discountValue}%`} off · ${AREA[p.appliesTo || 'ALL']}${p.minOrder ? ` · min ⃃ ${p.minOrder}` : ''}` : 'No code (banner / page only)';
@@ -355,6 +381,7 @@ function pgReqDraw() {
         <label class="field" style="margin:0;flex:1;min-width:200px"><span style="font-size:12px;font-weight:700">Note to the customer (optional)</span><input data-note maxlength="200"></label>
         <button type="button" class="btn small" data-dec="APPROVE">Approve</button><button type="button" class="btn small ghost" data-dec="DECLINE">Decline</button><span class="muted" data-msg style="font-size:12px"></span></div></div>`;
   };
+  ofCount('progs', open.length ? `(${open.length} to decide)` : '');
   const st = { APPROVED: 'approved', DECLINED: 'declined', ENDED: 'ended' };
   $('pgReq').innerHTML = `<h3 style="margin:0">Requests to decide (${open.length})</h3>${open.length ? open.map(card).join('') : '<p class="muted" style="margin:0">No requests waiting.</p>'}
     ${live.length ? `<details><summary class="muted">Customers on an ongoing programme (${live.length})</summary>${live.map(({ c, a }) => `<div style="font-size:13px;display:flex;gap:8px;align-items:center;margin-top:4px" data-code="${esc(c.code)}" data-app="${esc(a.id)}">${esc(a.name)} · <b>${esc(c.name || c.code)}</b> ${esc(c.code)} · ${a.until ? `until ${esc(day(a.until))}` : 'always'} <button type="button" class="btn small ghost" data-dec="END">End now</button><span class="muted" data-msg></span></div>`).join('')}</details>` : ''}

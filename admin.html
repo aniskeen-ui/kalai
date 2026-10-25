@@ -413,19 +413,27 @@ a.df[href]:hover{transform:translateY(-2px)}
     </div>
     <div id="offersPane" hidden>
       <div class="bar"><h1 style="font-size:28px;margin-right:auto">Offers</h1><a class="btn small ghost" href="/offers.html" target="_blank" rel="noopener">Open Offers page</a><button class="btn small" id="prNew" type="button">New offer</button></div>
+      <div class="mk-tabs" role="tablist" id="ofTabs" style="margin-bottom:10px"><button type="button" data-of="offers" aria-pressed="true">Offers &amp; banners <span class="muted" data-ofn="offers"></span></button><button type="button" data-of="vouchers" aria-pressed="false">Vouchers &amp; gift cards <span class="muted" data-ofn="vouchers"></span></button><button type="button" data-of="progs" aria-pressed="false">Special programmes <span class="muted" data-ofn="progs"></span></button></div>
+      <div id="ofSecOffers">
       <p class="muted" style="font-size:12px;margin:0 0 8px">Each offer can show a banner across the top of the website, appear on the Offers page (art.pranixtechno.com/offers.html, easy to share), and carry a discount code that customers type on their order.</p>
       <div id="prEdit" hidden style="margin-bottom:12px"></div>
       <input id="prFind" type="search" placeholder="Find an offer: PRM number, title or code" style="margin-bottom:8px">
       <div id="prList" style="display:grid;gap:8px"></div>
-      <div class="bar" style="margin-top:22px"><h2 style="font-size:22px;margin-right:auto">Vouchers &amp; gift cards</h2><button class="btn small" id="vNew" type="button">New voucher / gift card</button></div>
+      </div>
+      <div id="ofSecVouchers" hidden>
+      <div class="bar"><h2 style="font-size:22px;margin-right:auto">Vouchers &amp; gift cards</h2><button class="btn small" id="vNew" type="button">New voucher / gift card</button></div>
       <p class="muted" style="margin:0 0 8px;font-size:13px">For people you know: never shown on the website or the Offers page. The person enters the code on their order under My enquiries &amp; orders (like any offer code). A <b>discount voucher</b> gives <b>% off</b> or <b>⃃ off</b> for a set number of orders; a <b>gift card</b> holds an amount in dirhams that is used up over their orders.</p>
       <div id="vForm"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><input id="vFind" type="search" placeholder="Find: code, name, email or note" style="max-width:320px"><select id="vStat" style="width:auto"><option value="">All statuses</option><option value="Active">Active</option><option value="Used up">Used up</option><option value="Expired">Expired</option><option value="Off">Off</option></select><select id="vKind" style="width:auto"><option value="">All types</option><option value="CODE">Discount vouchers</option><option value="GIFT">Gift cards</option></select><span class="muted" id="vCount" style="font-size:13px"></span></div>
       <div id="vList" style="display:grid;gap:8px"></div>
-      <div class="bar" style="margin-top:22px"><h2 style="font-size:22px;margin-right:auto">Special programmes</h2><button class="btn small ghost" id="pgAdd" type="button">Add programme</button><button class="btn small" id="pgSave" type="button">Save programmes</button></div>
+      </div>
+      <div id="ofSecProgs" hidden>
+      <div class="bar"><h2 style="font-size:22px;margin-right:auto">Special programmes</h2><button class="btn small ghost" id="pgAdd" type="button">Add programme</button><button class="btn small" id="pgSave" type="button">Save programmes</button></div>
       <p class="muted" style="margin:0 0 8px;font-size:13px">Your list: seniors, Little Artists, top students, healthy-life rewards and more. Switched-on programmes show to signed-in customers under My enquiries &amp; orders, where they apply. You approve or decline each request below. <b>Ongoing</b>: becomes the customer's standard discount (taken off when you send the price, until the end date). <b>One-time</b>: the customer gets a code that only works with their email (<b>FOC</b>: a gift card up to the cap). Proof files are deleted when you decide. A programme discount doesn't stack with offers, vouchers or offer prices.</p>
       <div id="pgReq" style="display:grid;gap:8px;margin-bottom:12px"></div>
       <div id="pgList" class="tablewrap"></div>
       <span class="muted" id="pgMsg" style="font-size:13px"></span>
+    </div>
     </div>
 
     <div id="sellersPane" hidden>
