@@ -1723,7 +1723,7 @@ function offerPanel(e) {
   if (o == null) return '';
   const open = ['RECEIVED', 'PRICE_SENT'].includes(e.status || 'RECEIVED');
   const q = e.quotedPrice != null ? Number(e.quotedPrice) : null;
-  const state = !open ? '' : q == null ? '<b style="color:var(--kumkum)">Waiting for your answer</b>' : q === o ? '<b style="color:var(--ok)">Accepted: price set to the offer</b>' : `Your answer: <b>⃃ ${q.toLocaleString('en-US')}</b> (counter offer)`;
+  const state = !open ? (['CANCELLED'].includes(e.status) ? '<b class="muted">Declined</b>' : q === o ? '<b style="color:var(--ok)">Accepted · paid</b>' : q != null ? `<b style="color:var(--ok)">Paid at your revised price ⃃ ${q.toLocaleString('en-US')}</b>` : '') : q == null ? '<b style="color:var(--kumkum)">Waiting for your answer</b>' : q === o ? '<b style="color:var(--ok)">Accepted: price set to the offer</b>' : `Your answer: <b>⃃ ${q.toLocaleString('en-US')}</b> (counter offer)`;
   return `<fieldset class="cost" id="offerBox" style="border-color:var(--gold)"><legend>Customer's offer</legend>
     <div style="display:flex;gap:14px;align-items:baseline;flex-wrap:wrap"><span style="font-size:22px;font-weight:700">⃃ ${o.toLocaleString('en-US')}</span><span class="muted">offered for ${esc(e.title)}</span><span style="font-size:13px">${state}</span></div>
     ${open ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px">
