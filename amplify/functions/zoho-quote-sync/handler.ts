@@ -1172,10 +1172,18 @@ async function useCataloguePrice(id: string, e: Img) {
   const pr = (await scanAll(PT)).find((x) => str(x, 'code') === no);
   if (!pr) return false;
   const ap = await getRow(AT, { productId: { S: str(pr, 'id') } });
-  const price = num(ap, 'artistPrice');
+  let price = num(ap, 'artistPrice');
+  let cur: 'AED' | 'INR' = str(ap, 'currency') === 'AED' ? 'AED' : 'INR';
+  // A portal artist's work: their price is on their listing (what they receive) when the price table has none yet.
+  if (!price && str(pr, 'listingId')) {
+    const { L } = mtables();
+    const l = plain(await getRow(L, { id: { S: str(pr, 'listingId') } }));
+    price = Number(l?.sellerPrice ?? l?.costPrice ?? 0) || null;
+    cur = 'AED';
+    if (price) await putRow(AT, { ...(plain(ap) ?? {}), productId: str(pr, 'id'), __typename: 'ArtworkPrice', createdAt: str(ap, 'createdAt') || new Date().toISOString(), updatedAt: new Date().toISOString(), artistPrice: price, currency: 'AED', artistPriceAt: new Date().toISOString(), artistNote: 'From the artist portal (what the artist receives)' }).catch(() => {});
+  }
   if (!price) return false;
-  const cur = str(ap, 'currency') === 'AED' ? 'AED' : 'INR';
-  await artistQuote({ id, priceInr: price, note: 'Catalogue price (My works & prices)' } as ApiEvent['arguments'], `${str(pr, 'artist') || 'Siva Raja'} · catalogue price`, cur);
+  await artistQuote({ id, priceInr: price, note: str(pr, 'artistId') ? 'Catalogue price from the artist portal' : 'Catalogue price (My works & prices)' } as ApiEvent['arguments'], `${str(pr, 'artist') || 'Siva Raja'} · catalogue price`, cur);
   return true;
 }
 
@@ -1618,10 +1626,8 @@ async function onStreamRecord(rec: StreamRecord) {
       const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no && str(x, 'artistId')) : undefined;
       if (pr) {
         await writeBack(id, { artistId: str(pr, 'artistId'), artistName: str(pr, 'artist'), artistCountry: str(pr, 'artistCountry') || 'UAE' }).catch(() => {});
-        // Their price is already known (what they receive for this work).
-        const ap = process.env.ARTPRICE_TABLE ? await getRow(process.env.ARTPRICE_TABLE, { productId: { S: str(pr, 'id') } }) : undefined;
-        const ae = num(ap, 'artistPrice');
-        if (ae) await artistQuote({ id, priceInr: ae, note: 'Catalogue price from the artist portal' } as ApiEvent['arguments'], str(pr, 'artist') || 'Artist', 'AED').catch(() => {});
+        // Their price is already known (what they receive for this work: price table, else their listing).
+        await useCataloguePrice(id, img).catch((err) => console.warn('Artist catalogue price not used', err));
       } else {
         // Siva's collection work: his price is the one he gave under "My works & prices", so the order doesn't ask him again.
         await useCataloguePrice(id, img).catch((err) => console.warn('Catalogue price not used', err));
@@ -3789,6 +3795,12 @@ async function assignCodes() {
     }
     await syncCustomers(byCode).catch((err) => console.warn('Customer master not updated', err));
     await catchUpArtistStatus(all);
+    // Portal artists' collection orders still without the artist's price: take it from their work (price or listing).
+    const openArt = all.filter((e) => str(e, 'kind') === 'PRICE' && str(e, 'artistId') && !str(e, 'zohoPOId') && !['CANCELLED', 'REFUNDED'].includes(str(e, 'status')));
+    if (openArt.length) {
+      const cost = await costingFor(openArt.map((e) => str(e, 'id')));
+      for (const e of openArt) { const c = cost.get(str(e, 'id')); if (num(c, 'artistPriceInr') == null && num(c, 'artistPriceAed') == null) await useCataloguePrice(str(e, 'id'), e).catch(() => {}); }
+    }
     // Older paid orders still showing a "please pay" message: clear it.
     for (const e of all) if (PAIDISH.includes(str(e, 'status')) && PAY_MSG.test(str(e, 'adminMessage'))) await writeBack(str(e, 'id'), { adminMessage: null }).catch(() => {});
   }
