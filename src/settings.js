@@ -37,6 +37,37 @@ const TEXTS = [
 let wired = false;
 let row = null;
 
+// Settings → sub-tabs: each heading's section goes in its tab; the Save button stays below whichever tab is open.
+export const SETTING_TABS = [
+  ['general', 'General', /^Pre-launch|^Order screen layout|^Timings/],
+  ['loyalty', 'Loyalty', /^Kalai Circle/],
+  ['languages', 'Languages', /^Website languages/],
+  ['look', 'Look & theme', /^Website theme|^Country looks|^Room photo/],
+  ['home', 'Home page texts', /^Top of the home page|^Little Artists section/],
+  ['artists', 'Artists', /^Artists/],
+  ['payments', 'Currency & payments', /^Currency|^Pay in instalments/],
+  ['shipping', 'Shipping', /^Little Artists: shipping/],
+  ['emails', 'Customer emails', /^Customer emails/],
+];
+function groupTabs(box) {
+  const saveRow = $('stSave')?.closest('div');
+  const panels = new Map(SETTING_TABS.map(([k]) => { const d = document.createElement('div'); d.dataset.sp = k; d.style.cssText = 'display:grid;gap:14px'; d.hidden = true; return [k, d]; }));
+  let cur = 'general';
+  [...box.children].forEach((el) => {
+    if (el === saveRow) return;
+    if (el.tagName === 'H3') { const t = SETTING_TABS.find(([, , re]) => re.test(el.textContent.trim())); if (t) cur = t[0]; }
+    panels.get(cur).appendChild(el);
+  });
+  box.prepend(...panels.values());
+  showSettingTab(settingTab);
+}
+let settingTab = 'general';
+/** Shows one settings sub-tab (called from the tab bar in Order Management). */
+export function showSettingTab(k) {
+  settingTab = SETTING_TABS.some(([x]) => x === k) ? k : 'general';
+  document.querySelectorAll('#setBox [data-sp]').forEach((p) => { p.hidden = p.dataset.sp !== settingTab; });
+}
+
 export async function showSettings() {
   const box = $('setBox');
   if (!wired) {
@@ -120,6 +151,7 @@ export async function showSettings() {
       <input id="st-${f.k}" type="number" min="${f.min}" max="${f.max}" step="1" style="max-width:140px"><div class="muted" style="font-size:12px">${f.note}</div></div>`).join('')}
       ${textHtml}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
+    groupTabs(box);
     $('stSave').onclick = save;
     // Live example of the rounding, on a Dhs 1,000 price.
     const eg = () => {

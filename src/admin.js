@@ -9,7 +9,7 @@ import { showCatalogue } from './catalogue.js';
 import { showMessages } from './messages.js';
 import { showMarket } from './market.js';
 import { showPromotions } from './promotions.js';
-import { showSettings } from './settings.js';
+import { showSettings, showSettingTab } from './settings.js';
 import { showNumbers } from './numbers.js';
 import { showPricing } from './pricing.js';
 import { showPrintsMaster, showLicMaster } from './pricemasters.js';
@@ -277,7 +277,7 @@ function showPane(pane, tabId) {
   if (pane === 'sellers') showMarket();
   if (pane === 'offers') showPromotions();
   if (pane === 'settings') {
-    let t = 'site'; try { t = localStorage.getItem('kalai-st-tab') || 'site'; } catch { /* */ }
+    let t = 'general'; try { t = localStorage.getItem('kalai-st-tab') || 'general'; } catch { /* */ } if (t === 'site') t = 'general';
     stTab(t);
   }
   if (pane === 'pricing') showPriceTab(priceTab);
@@ -2441,9 +2441,9 @@ document.addEventListener('click', async (ev) => {
 /* Settings sub-tabs: Website settings | Number series. */
 function stTab(t) {
   document.querySelectorAll('#stTabs [data-st]').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.st === t)); b.onclick = () => stTab(b.dataset.st); });
-  $('stSite').hidden = t !== 'site'; $('nsBox').hidden = t !== 'numbers';
+  $('stSite').hidden = t === 'numbers'; $('nsBox').hidden = t !== 'numbers';
   try { localStorage.setItem('kalai-st-tab', t); } catch { /* */ }
-  if (t === 'numbers') showNumbers(); else showSettings();
+  if (t === 'numbers') showNumbers(); else { showSettingTab(t); showSettings().then(() => showSettingTab(t)); }
 }
 
 /* ---------- Variants: saved selections of orders (VARNT1001, VARNT1002 …), shared by everyone in Order Management ---------- */
