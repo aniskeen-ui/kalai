@@ -1026,7 +1026,8 @@ async function declineQuote(img: Img) {
 
 // ---------- Artist desk (Siva): no customer details, no selling price ----------
 
-const PRIVATE_KEY = /name|mobile|phone|whats|email|address|parent|contact|reference|deliver|to$|gift for/i;
+// Never shown to artists: who the customer is, and what the customer pays (price, offer, payment, discount).
+const PRIVATE_KEY = /name|mobile|phone|whats|email|address|parent|contact|reference|deliver|to$|gift for|price|offer|payment|discount|total|instal/i;
 
 async function scanAll(table: string) {
   const items: Img[] = [];
