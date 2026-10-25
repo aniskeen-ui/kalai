@@ -203,6 +203,26 @@ function paperOf(x) {
   const iso = a >= 20 && a <= 22 && b >= 28 && b <= 31 ? 'A4' : a >= 28 && a <= 31 && b >= 40 && b <= 43 ? 'A3' : a >= 14 && a <= 15.5 && b >= 20 && b <= 22 ? 'A5' : '';
   return raw.replace(/\s*\(.*$/, '').trim() + (iso && !new RegExp(iso).test(raw) ? ` (${iso})` : '');
 }
+const STUDIO_WA = '971552996626'; // Kalai Art House WhatsApp
+/** Clear instructions for the artist on each placed order: paper, size, medium, finishing, packing, and who to ask. */
+function guide(x, paper) {
+  if (!x.ordered || x.stopped || x.progress === 'SHIPPED') return '';
+  const get = (k) => (x.brief.find((b) => b.k.toLowerCase() === k) || {}).v || '';
+  const art = get('artwork'), medium = (art.match(/\(([^,]+),/) || [])[1] || get('style') || '';
+  const ask = `https://wa.me/${STUDIO_WA}?text=${encodeURIComponent(`Hello Kalai Art House, a question about order ${x.ref} (${x.title}): `)}`;
+  const steps = [
+    paper ? `Paper size: <b>${esc(paper)}</b>${x.kind === 'PRICE' ? ' (the same size as the work shown on the website).' : ' (the size the customer chose).'}` : 'Paper size: not stated. Please ask us before you start.',
+    medium ? `Medium: <b>${esc(medium)}</b>${x.kind === 'PRICE' ? ', as in the picture above' : ''}.` : '',
+    x.kind === 'PRICE' ? 'Make it as shown in the picture above: same subject, composition and colours. It is a handmade original, so small natural differences are fine.' : 'Work from the customer\'s brief and reference photo above.',
+    'Use good-quality, acid-free art paper. Leave about <b>2 cm clear margin</b> on every side: the frame shop mounts it, and the mount covers the edges.',
+    'Sign it at the bottom right, inside the picture area (not in the margin).',
+    'When finished: let it dry fully, tap <b>It\'s finished</b>, and send us a clear photo of the work on WhatsApp.',
+    'Packing: flat, never rolled or folded, between two stiff boards, in a plastic sleeve against damp. Then send it to the frame shop shown below and enter the courier and AWB here.',
+  ].filter(Boolean);
+  return `<details class="guide" ${x.progress ? '' : 'open'}><summary><b>How to make this work</b> · paper, size and sending</summary>
+    <ol>${steps.map((t) => `<li>${t}</li>`).join('')}</ol>
+    <div class="guide-ask">Anything unclear (size, colours, paper, deadline)? <b>Please ask before you start.</b> <a href="${esc(ask)}" target="_blank" rel="noopener">Ask Kalai Art House on WhatsApp</a></div></details>`;
+}
 function card(x) {
   const brief = x.brief.map(({ k, v }) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
   const paper = paperOf(x);
@@ -213,6 +233,7 @@ function card(x) {
     <h2>${esc(x.title)}</h2>
     ${x.imageKey ? `<img class="opic" alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:220px;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
     ${paper ? `<div class="paper">Paper size: <b>${esc(paper)}</b>${x.kind === 'PRICE' ? ' <span class="muted">· same size as the work on the website</span>' : ' <span class="muted">· as the customer chose</span>'}</div>` : ''}
+    ${guide(x, paper)}
     ${brief ? `<dl class="brief">${brief}</dl>` : ''}
     ${x.hasPhoto ? `<div><button type="button" class="linkbtn" data-photo="${esc(x.id)}">View the customer's reference photo</button> <span class="muted" id="ph-${esc(x.id)}" style="font-size:13px"></span></div>` : ''}
     ${reworkBlock(x)}
