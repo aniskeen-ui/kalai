@@ -66,8 +66,18 @@ async function adminBar() {
     const sup = all.filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type));
     const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)} · ${p.type === 'FRAMER' ? 'frame shop' : p.type === 'PRINTER' ? 'print shop' : 'delivery'} · ${esc({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' }[p.status] || p.status)}</option>`;
     const grp = (t, l) => { const xs = sup.filter((p) => p.type === t); return xs.length ? `<optgroup label="${l}">${xs.map(opt).join('')}</optgroup>` : ''; };
-    $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${grp('FRAMER', 'Frame shops')}${grp('PRINTER', 'Print shops')}${grp('COURIER', 'Delivery partners')}`;
-    $('viewAs').value = sup.some((p) => p.id === viewAs) ? viewAs : '';
+    // Category filter: only frame shops, print shops or delivery partners in the list.
+    const cur = sup.find((p) => p.id === viewAs);
+    let cat = ''; try { cat = localStorage.getItem('kalaiSupCat') || ''; } catch { /* */ }
+    if (cur && cat && cur.type !== cat) cat = cur.type;
+    $('supCat').value = cat;
+    const fill = () => {
+      const c = $('supCat').value;
+      $('viewAs').innerHTML = `<option value="">${c ? 'Choose…' : 'My own portal (studio login)'}</option>${(!c || c === 'FRAMER') ? grp('FRAMER', 'Frame shops') : ''}${(!c || c === 'PRINTER') ? grp('PRINTER', 'Print shops') : ''}${(!c || c === 'COURIER') ? grp('COURIER', 'Delivery partners') : ''}`;
+      $('viewAs').value = sup.some((p) => p.id === viewAs && (!c || p.type === c)) ? viewAs : '';
+    };
+    fill();
+    $('supCat').onchange = () => { try { localStorage.setItem('kalaiSupCat', $('supCat').value); } catch { /* */ } fill(); };
     if (!$('viewAs').value) viewAs = '';
     $('adminNote').textContent = sup.length ? '' : 'No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them.';
   } catch (ex) { $('adminNote').textContent = ex.message; }
