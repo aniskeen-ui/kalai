@@ -38,7 +38,7 @@ async function cardPng(v) {
   const c = document.createElement('canvas'); c.width = 1000; c.height = 560; const g = c.getContext('2d');
   g.fillStyle = '#1e4d2b'; g.fillRect(0, 0, 1000, 560); g.fillStyle = '#c9a24a'; g.fillRect(0, 520, 1000, 40);
   g.fillStyle = '#ffffff'; g.font = '600 46px Georgia, serif'; g.fillText('KALAI', 56, 96); g.font = '20px Arial'; g.fillStyle = '#c9dca4'; g.fillText('ART HOUSE · DUBAI', 200, 94);
-  g.fillStyle = '#ffffff'; g.font = '700 54px Arial'; g.fillText(v.kind === 'GIFT' ? `Gift card  AED ${Number(v.value || 0).toLocaleString('en-US')}` : `${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`, 56, 210);
+  g.fillStyle = '#ffffff'; g.font = '700 54px Arial'; g.fillText(v.kind === 'GIFT' ? `Gift card  AED ${Number(v.value || 0).toLocaleString('en-US')}` : `Voucher  ${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`, 56, 210);
   g.font = '26px Arial'; g.fillStyle = '#e8efe0'; if (v.forName) g.fillText(`For ${v.forName}`, 56, 262);
   g.font = '700 40px monospace'; g.fillStyle = '#ffffff'; g.fillText(v.code, 56, 350);
   g.font = '22px Arial'; g.fillStyle = '#e8efe0'; g.fillText(`Valid until ${v.endAt ? day(v.endAt) : '—'}`, 56, 398);
@@ -72,7 +72,7 @@ function vDraw() {
     const [label, cls] = vState(v);
     let uses = []; try { uses = JSON.parse(v.uses || '[]'); } catch { uses = []; }
     return `<article class="mk-card" data-v="${esc(v.id)}">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b class="mono" style="font-size:16px">${esc(v.code)}</b><span class="cg-badge ${cls}">${label}</span><span class="chip">${v.kind === 'GIFT' ? 'Gift card' : 'Private code'}</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b class="mono" style="font-size:16px">${esc(v.code)}</b><span class="cg-badge ${cls}">${label}</span><span class="chip">${v.kind === 'GIFT' ? 'Gift card' : `Discount voucher ${v.discountType === 'AED' ? '⃃' : '%'}`}</span>
         <span class="muted" style="margin-left:auto">${v.forName ? `for <b>${esc(v.forName)}</b>` : ''}${v.forEmail ? ` · only ${esc(v.forEmail)}` : ''} · ${v.endAt ? `until ${esc(day(v.endAt))}` : 'no expiry'}</span></div>
       <div class="muted">${vWhat(v)}${v.note ? ` · ${esc(v.note)}` : ''}</div>
       ${uses.length ? `<div class="muted" style="font-size:12px">Used on: ${uses.slice(-6).map((u) => `${esc(u.ref)} ${u.back ? '(given back)' : `⃃ ${u.amount}`}`).join(' · ')}</div>` : ''}
@@ -98,13 +98,13 @@ function vDraw() {
 }
 function vEdit(v) {
   const x = v || { kind: 'CODE', code: genCode('KAL'), discountType: 'PCT', discountValue: 10, maxUses: 1, appliesTo: 'ALL', active: true };
-  $('vForm').innerHTML = `<div class="mk-card" style="display:grid;gap:10px;margin-bottom:10px"><h3>${v ? 'Edit' : 'New'} private code / gift card</h3>
-    <div class="three"><div class="field"><label for="vKind">Type</label><select id="vKind" ${v ? 'disabled' : ''}><option value="CODE" ${x.kind !== 'GIFT' ? 'selected' : ''}>Private discount code</option><option value="GIFT" ${x.kind === 'GIFT' ? 'selected' : ''}>Gift card / voucher (⃃ balance)</option></select></div>
+  $('vForm').innerHTML = `<div class="mk-card" style="display:grid;gap:10px;margin-bottom:10px"><h3>${v ? 'Edit' : 'New'} discount voucher / gift card</h3>
+    <div class="three"><div class="field"><label for="vKind">Type</label><select id="vKind" ${v ? 'disabled' : ''}><option value="CODE" ${x.kind !== 'GIFT' ? 'selected' : ''}>Discount voucher: % off or ⃃ off</option><option value="GIFT" ${x.kind === 'GIFT' ? 'selected' : ''}>Gift card: ⃃ amount to spend</option></select></div>
       <div class="field"><label for="vCode">Code</label><div style="display:flex;gap:6px"><input id="vCode" class="mono" maxlength="30" value="${esc(x.code)}" ${v && (v.usedCount || 0) ? 'readonly' : ''}><button type="button" class="btn small ghost" id="vGen" ${v ? 'hidden' : ''}>New</button></div></div>
       <div class="field"><label for="vEnd">Valid until <span style="color:var(--kumkum)">*</span></label><input id="vEnd" type="date" required value="${esc(localDate(x.endAt) || localDate(new Date(Date.now() + (x.kind === 'GIFT' ? 365 : 90) * 864e5).toISOString()))}"></div></div>
-    <div class="three" id="vCodeRow"><div class="field"><label for="vType">Discount</label><select id="vType"><option value="PCT" ${x.discountType !== 'AED' ? 'selected' : ''}>% off</option><option value="AED" ${x.discountType === 'AED' ? 'selected' : ''}>⃃ off</option></select></div>
+    <div class="three" id="vCodeRow"><div class="field"><label for="vType">Voucher gives</label><select id="vType"><option value="PCT" ${x.discountType !== 'AED' ? 'selected' : ''}>% off</option><option value="AED" ${x.discountType === 'AED' ? 'selected' : ''}>⃃ off</option></select></div>
       <div class="field"><label for="vVal">Amount</label><input id="vVal" type="number" min="1" step="0.5" value="${esc(x.discountValue ?? '')}"></div>
-      <div class="field"><label for="vMax">Number of orders (blank = no limit)</label><input id="vMax" type="number" min="1" step="1" value="${esc(x.maxUses ?? '')}"></div></div>
+      <div class="field"><label for="vMax">Can be used on (orders; blank = no limit)</label><input id="vMax" type="number" min="1" step="1" value="${esc(x.maxUses ?? '')}"></div></div>
     <div class="three" id="vGiftRow"><div class="field"><label for="vValue">Gift card value (⃃)</label><input id="vValue" type="number" min="1" step="1" value="${esc(x.value ?? '')}" ${v && x.kind === 'GIFT' && (v.usedCount || 0) ? 'readonly' : ''}></div>
       <div class="field"><label>Balance</label><div class="muted" style="padding-top:8px">${x.kind === 'GIFT' && v ? `⃃ ${Number(x.balance || 0).toLocaleString('en-US')}` : 'starts at the full value'}</div></div><div></div></div>
     <div class="three"><div class="field"><label for="vArea">Use on</label><select id="vArea">${Object.entries(AREA).map(([k, n]) => `<option value="${k}" ${k === (x.appliesTo || 'ALL') ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
