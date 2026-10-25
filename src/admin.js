@@ -203,6 +203,7 @@ async function start() {
   if (location.hash === '#pricing') showPane('pricing', 'tabPricing');
   if (location.hash === '#customers') showPane('customers', 'tabCustomers');
   await loadRates();
+  await varLoad();
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
   const m = location.hash.match(/^#order=(.+)$/);
@@ -579,7 +580,7 @@ let searchT;
 $('fSearch').addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(render, 200); });
 ['fFrom', 'fTo'].forEach((id) => $(id).addEventListener('change', render));
 $('fCust').addEventListener('change', render);
-$('fClear').onclick = () => { $('fSearch').value = ''; $('fCust').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
+$('fClear').onclick = () => { $('fVar').value = ''; try { localStorage.setItem('kalai-variant', ''); } catch { /* */ } $('fSearch').value = ''; $('fCust').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
 // Click a customer code on an order: list all that customer's orders.
 document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-cust]'); if (!b) return; fillFinders(); $('fCust').value = b.dataset.cust; $('fSearch').value = ''; $('fStatus').value = ''; render(); });
 // Dropdowns: order numbers (type to narrow) and customers (name · code · number of orders).
@@ -769,9 +770,10 @@ async function load() {
 function render() {
   const fs = $('fStatus').value, fk = $('fKind').value;
   const counts = {};
-  all.forEach((e) => { const s = e.status || 'RECEIVED'; counts[s] = (counts[s] || 0) + 1; });
+  const vr0 = variantOn(), base = vr0 ? all.filter((e) => vr0.refs.includes(e.ref)) : all; // counts follow the variant
+  base.forEach((e) => { const s = e.status || 'RECEIVED'; counts[s] = (counts[s] || 0) + 1; });
   // Click a count to show only those orders; click it again (or "All") to show everything.
-  $('counts').innerHTML = (all.length ? `<button type="button" class="count" data-st="" aria-pressed="${!fs}">All <b>${all.length}</b></button>` : '')
+  $('counts').innerHTML = (vr0 ? `<span class="chip" style="font-weight:700">${esc(vr0.id)}${vr0.name ? ` · ${esc(vr0.name)}` : ''}</span> ` : '') + (base.length ? `<button type="button" class="count" data-st="" aria-pressed="${!fs}">All <b>${base.length}</b></button>` : '')
     + (Object.keys(STATUS).filter((k) => counts[k])
       .map((k) => `<button type="button" class="count" data-st="${k}" aria-pressed="${fs === k}">${STATUS[k]} <b>${counts[k]}</b></button>`).join('') || '<span class="muted">No enquiries yet.</span>');
   const reqs = all.filter(isReq).length;
@@ -793,20 +795,22 @@ function render() {
   // Order box: order no., title, artwork code (in the details). Customer: the dropdown.
   const hit = (e) => (!fc || custOf(e) === fc) && (!q || [e.ref, e.title, typeof e.details === 'string' ? e.details : JSON.stringify(e.details || '')]
     .some((v) => String(v || '').toLowerCase().includes(q)));
-  const list = all.filter((e) => (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk)
-    && hit(e) && (!from || dubaiDay(e.createdAt) >= from) && (!to || dubaiDay(e.createdAt) <= to));
+  // A variant (saved selection of orders): only its orders, whatever their dates.
+  const vr = variantOn();
+  const list = all.filter((e) => (vr ? vr.refs.includes(e.ref) : true) && (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk)
+    && hit(e) && (vr || ((!from || dubaiDay(e.createdAt) >= from) && (!to || dubaiDay(e.createdAt) <= to))));
   $('rows').innerHTML = list.length ? list.map((e) => {
     const s = e.status || 'RECEIVED';
     const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
     return `<tr data-id="${esc(e.id)}" tabindex="0" class="${e.id === selectedId ? 'sel' : ''}">
-      <td>${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}${e.kind === 'PRICE' && offerOf(e) != null ? '<br><span class="muted" style="font-size:11px">offer</span>' : e.kind === 'PRICE' ? '<br><span class="muted" style="font-size:11px">original</span>' : ''}</td>
+      <td>${varPicking ? `<input type="checkbox" data-vpick="${esc(e.ref)}" ${varPick.has(e.ref) ? 'checked' : ''} style="width:auto;margin-right:6px" aria-label="Add to the variant">` : ''}${esc(d)}</td><td class="mono">${esc(e.ref)}</td><td>${esc(KIND[e.kind] || '')}${e.kind === 'PRICE' && offerOf(e) != null ? '<br><span class="muted" style="font-size:11px">offer</span>' : e.kind === 'PRICE' ? '<br><span class="muted" style="font-size:11px">original</span>' : ''}</td>
       <td style="white-space:normal;min-width:180px">${esc(e.title)}</td><td>${esc(e.customerName)}${e.customerCode ? `<br><span class="muted mono" style="font-size:11px">${esc(e.customerCode)}</span>` : ''}</td>
       <td><span class="pill ${s}">${esc(STATUS[s] || s)}</span>${!e.owner ? ' <span class="chip" title="Sent without signing in: the customer can\'t track it online; reply on WhatsApp">Guest</span>' : ''}${offerOf(e) != null && ['RECEIVED', 'PRICE_SENT'].includes(s) ? ` <span class="chip req" title="The customer made an offer">Offer ⃃ ${offerOf(e).toLocaleString('en-US')}</span>` : ''}${isReq(e) ? ` <span class="chip req">${e.cancelRequest === 'CANCEL' ? 'Cancel request' : 'Damage reported'}</span>` : ''}${hasArtist(e) && !costings.get(e.id)?.artistPriceInr && !costings.get(e.id)?.artistPriceAed && !['CANCELLED', 'DELIVERED'].includes(s) ? ` <span class="chip" title="${esc(e.artistName || 'Siva')} hasn't priced this yet">Artist price needed</span>` : ''}${e.artistName ? ` <span class="chip">${esc(e.artistName)}</span>` : ''}${isLocked(e) ? ' <span title="Payment recorded in Zoho" aria-label="Payment recorded in Zoho">🔒</span>' : e.zohoState === 'ERROR' ? ' <span title="Zoho error" aria-label="Zoho error" style="color:var(--kumkum)">⚠</span>' : ''}</td>
       <td class="mono">${e.quotedPrice ? '⃃ ' + Number(e.quotedPrice).toLocaleString('en-US') : '–'}</td></tr>`;
   }).join('') : `<tr><td colspan="7" class="muted">${$('fFrom').value || $('fTo').value ? 'No orders on these dates. Press <b>Clear</b> to see all dates.' : 'Nothing matches this filter.'}</td></tr>`;
   $('rows').querySelectorAll('tr[data-id]').forEach((tr) => {
     const pick = () => { const e = all.find((x) => x.id === tr.dataset.id); if (e) { selectedId = e.id; render(); showDetail(e); } };
-    tr.onclick = pick;
+    tr.onclick = (ev) => { const cb = ev.target.closest?.('[data-vpick]'); if (cb) { if (cb.checked) varPick.add(cb.dataset.vpick); else varPick.delete(cb.dataset.vpick); varFill(); return; } pick(); };
     tr.onkeydown = (ev) => { if (ev.key === 'Enter') pick(); };
   });
 }
@@ -2336,3 +2340,68 @@ document.addEventListener('click', async (ev) => {
   const b = ev.target.closest?.('[data-podkey]'); if (!b) return;
   try { const { url } = await getUrl({ path: b.dataset.podkey, options: { expiresIn: 600 } }); window.open(url.toString(), '_blank', 'noopener'); } catch (ex) { b.textContent = ex.message; }
 });
+
+/* ---------- Variants: saved selections of orders (VARNT1001, VARNT1002 …), shared by everyone in Order Management ---------- */
+// Stored in Rates (key "variants"): { next, list: [{ id, name, refs: [KA-…], at, by }] }.
+let variants = { next: 1001, list: [] }, varSaved = false, varPicking = false;
+const varPick = new Set();
+let varEditing = null;
+const variantOn = () => variants.list.find((v) => v.id === $('fVar').value) || null;
+async function varLoad() {
+  try {
+    const { data } = await client.models.Rates.get({ key: 'variants' });
+    let d = data?.data; for (let i = 0; i < 2 && typeof d === 'string'; i++) d = JSON.parse(d);
+    if (d && Array.isArray(d.list)) { variants = { next: Number(d.next) || 1001, list: d.list }; varSaved = true; } else varSaved = !!data;
+  } catch { /* none yet */ }
+  varSelect();
+}
+function varSelect() {
+  const cur = $('fVar').value || (() => { try { return localStorage.getItem('kalai-variant') || ''; } catch { return ''; } })();
+  $('fVar').innerHTML = `<option value="">No variant</option>${variants.list.map((v) => `<option value="${esc(v.id)}">${esc(v.id)} · ${esc(v.name || '')} (${v.refs.length})</option>`).join('')}`;
+  $('fVar').value = variants.list.some((v) => v.id === cur) ? cur : '';
+}
+async function varSave() {
+  const rec = { key: 'variants', data: JSON.stringify(variants) };
+  let r = varSaved ? await client.models.Rates.update(rec) : await client.models.Rates.create(rec);
+  if (r.errors?.length && !varSaved) r = await client.models.Rates.update(rec);
+  if (r.errors?.length) throw new Error(r.errors[0].message);
+  varSaved = true;
+}
+function varFill() { const t = $('varRefs'); if (t) t.value = [...varPick].join('\n'); const c = $('varCount'); if (c) c.textContent = `${varPick.size} order${varPick.size === 1 ? '' : 's'}`; }
+function varOpen(v) {
+  varEditing = v || null; varPick.clear(); (v?.refs || []).forEach((r) => varPick.add(r)); varPicking = true;
+  const box = $('varBox'); box.hidden = false;
+  box.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">${v ? `Change variant ${esc(v.id)}` : 'New variant'}</b><span class="muted" style="font-size:13px">Tick orders in the list below, or type / paste order numbers. Saved variants show only their orders (any date).</span></div>
+    <div style="display:grid;grid-template-columns:minmax(200px,1fr) minmax(260px,2fr);gap:10px">
+      <div class="field" style="margin:0"><label for="varName">Variant name</label><input id="varName" maxlength="60" placeholder="e.g. Anis basket, Diwali framing batch" value="${esc(v?.name || '')}"></div>
+      <div class="field" style="margin:0"><label for="varRefs">Orders (<span id="varCount"></span>)</label><textarea id="varRefs" rows="3" placeholder="KA-261025-Q3X0&#10;KA-261025-2INX"></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="btn small" id="varSaveBtn">${v ? 'Save changes' : 'Save as new variant'}</button><button type="button" class="btn small ghost" id="varShown">Add all orders shown now</button>
+      ${v ? '<button type="button" class="btn small ghost" id="varDel">Delete variant</button>' : ''}<button type="button" class="btn small ghost" id="varClose">Close</button>
+      ${variants.list.length && !v ? `<span class="muted" style="font-size:13px">or change: ${variants.list.map((x) => `<button type="button" class="linkbtn" data-vedit="${esc(x.id)}">${esc(x.id)}</button>`).join(' ')}</span>` : ''}<span class="muted" id="varMsg" style="font-size:13px"></span></div>`;
+  varFill(); render();
+  $('varRefs').oninput = () => { varPick.clear(); $('varRefs').value.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^KA-/.test(x)).forEach((x) => varPick.add(x)); $('varCount').textContent = `${varPick.size} order${varPick.size === 1 ? '' : 's'}`; render(); };
+  $('varShown').onclick = () => { [...document.querySelectorAll('#rows [data-vpick]')].forEach((cb) => varPick.add(cb.dataset.vpick)); varFill(); render(); };
+  $('varClose').onclick = () => { varPicking = false; box.hidden = true; render(); };
+  box.querySelectorAll('[data-vedit]').forEach((b) => { b.onclick = () => varOpen(variants.list.find((x) => x.id === b.dataset.vedit)); });
+  $('varDel')?.addEventListener('click', async () => {
+    if (!confirm(`Delete variant ${v.id}? The orders themselves stay as they are.`)) return;
+    variants.list = variants.list.filter((x) => x.id !== v.id);
+    try { await varSave(); if ($('fVar').value === v.id) $('fVar').value = ''; varSelect(); varPicking = false; box.hidden = true; render(); } catch (ex) { $('varMsg').textContent = ex.message; }
+  });
+  $('varSaveBtn').onclick = async () => {
+    const name = $('varName').value.trim(), refs = [...varPick];
+    if (!refs.length) { $('varMsg').textContent = 'Tick at least one order.'; return; }
+    const unknown = refs.filter((r) => !all.some((e) => e.ref === r));
+    if (unknown.length && !confirm(`${unknown.join(', ')} not found among the loaded orders. Save anyway?`)) return;
+    const by = $('who')?.textContent || '';
+    let id;
+    if (v) { Object.assign(v, { name, refs, at: new Date().toISOString() }); id = v.id; }
+    else { id = `VARNT${variants.next}`; variants.next += 1; variants.list.push({ id, name, refs, at: new Date().toISOString(), by }); }
+    $('varMsg').textContent = 'Saving…';
+    try { await varSave(); varSelect(); $('fVar').value = id; try { localStorage.setItem('kalai-variant', id); } catch { /* */ } varPicking = false; box.hidden = true; render(); }
+    catch (ex) { if (!v) variants.next -= 1, variants.list.pop(); $('varMsg').textContent = ex.message; }
+  };
+}
+$('varBtn').onclick = () => { const v = variantOn(); if (!$('varBox').hidden) { varPicking = false; $('varBox').hidden = true; render(); return; } varOpen(v); };
+$('fVar').onchange = () => { try { localStorage.setItem('kalai-variant', $('fVar').value); } catch { /* */ } render(); };
