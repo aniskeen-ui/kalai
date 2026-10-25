@@ -82,8 +82,8 @@ export const STATUS = {
   RECEIVED: 'Received',
   PRICE_SENT: 'Price sent',
   PAID: 'Paid',
-  ARTIST_WORKING: 'Being painted',
-  ARTIST_DONE: 'Painting finished',
+  ARTIST_WORKING: 'Artist at work',
+  ARTIST_DONE: 'Artwork finished',
   ARTIST_SENT: 'On its way to the framer',
   FRAMING: 'Being framed',
   SHIPPED: 'Shipped',
@@ -95,6 +95,8 @@ export const STATUS = {
 const STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED'];
 const KIND = { PRICE: 'Collection', COMMISSION: 'Commission', GIFT: 'Little Artists', MARKET: 'Crafts shop', PHOTO: 'Framed Prints', LICENCE: 'Image licence' };
 const MARKET_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED'];
+// Framed Prints and Little Artists: no artist steps (printed / framed in Dubai).
+const FRAME_STEPS = ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
 const LICENCE_STEPS = ['RECEIVED', 'PRICE_SENT', 'DELIVERED'];
 
 /* ---------- styles ---------- */
@@ -708,7 +710,7 @@ function wireCodes(root) {
 }
 function card(e) {
   const st = e.status || 'RECEIVED';
-  const steps = e.kind === 'MARKET' ? MARKET_STEPS : e.kind === 'LICENCE' ? LICENCE_STEPS : STEPS;
+  const steps = e.kind === 'MARKET' ? MARKET_STEPS : e.kind === 'LICENCE' ? LICENCE_STEPS : ['PHOTO', 'GIFT'].includes(e.kind) ? FRAME_STEPS : STEPS;
   const idx = steps.indexOf(st);
   const pillCls = st === 'DELIVERED' ? 'pill done' : st === 'CANCELLED' || st === 'REFUNDED' ? 'pill stop' : 'pill';
   const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
@@ -721,7 +723,7 @@ function card(e) {
     ${e.quotedPrice ? `<div>Price: ${e.discountCode && e.listPrice ? `<s class="acct-info">⃃ ${Number(e.listPrice).toLocaleString('en-US')}</s> ` : ''}<span class="enq-price">⃃ ${Number(e.quotedPrice).toLocaleString('en-US')}</span>${e.discountCode ? ` <span class="acct-info" style="font-size:12px">· code <b>${esc(e.discountCode)}</b> −⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')}</span>` : ''}</div>` : ''}
     ${codeBox(e)}
     ${e.adminMessage ? `<div class="enq-msg">${esc(e.adminMessage)}</div>` : ''}
-    ${['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your painting on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your painting is finished and is being prepared for framing.' : 'Your painting is on its way to our framing studio in Dubai.'}</div>` : ''}
+    ${['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT'].includes(st) && e.artistStage ? `<div class="enq-msg">${e.artistStage === 'STARTED' ? `The artist started your artwork on ${new Date(e.artistStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.` : e.artistStage === 'FINISHED' ? 'Your artwork is finished and is being prepared for the framer.' : 'Your artwork is on its way to our framer in Dubai.'}</div>` : ''}
     ${e.kind === 'MARKET' ? `<div class="acct-info" style="font-size:13px">By ${esc(parseDet(e.details).Maker || e.sellerName)}${e.qty > 1 ? ` · quantity ${e.qty}` : ''} · ${e.deliveryBy === 'KALAI' ? 'delivered by Kalai Art House' : 'delivered by the maker'}</div>` : ''}
     ${e.kind === 'MARKET' && st === 'RECEIVED' ? '<div class="enq-msg">Thank you for your order. We are confirming it with the maker and will send you a secure payment link shortly.</div>' : ''}
     ${e.kind === 'MARKET' && st === 'PAID' ? `<div class="enq-msg">${e.sellerStage === 'READY' ? 'The maker has packed it; our courier is collecting it.' : 'Paid: the maker is preparing your order.'}</div>` : ''}

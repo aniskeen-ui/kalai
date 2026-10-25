@@ -2360,7 +2360,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (delivering) jobs.delivery = { supplierId: sub, name: by, price: j.deliveryPrice ?? null, due: j.due, note: '', stage: 'ACCEPTED', assignedAt: now, acceptedAt: now, byFramer: true };
     await saveJobs(id, jobs);
     // The frame shop has it: the order is "Being framed" (the customer is emailed). Siva's works only once he has sent them.
-    if (role === 'framer' && PAID_LIKE.includes(str(e, 'status')) && (['GIFT', 'PHOTO'].includes(str(e, 'kind')) || !str(e, 'zohoPOId') || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
+    if (role === 'framer' && PAID_LIKE.includes(str(e, 'status')) && (['GIFT', 'PHOTO'].includes(str(e, 'kind')) || str(e, 'artistStage') === 'SHIPPED')) await updateEnquiry(id, { status: 'FRAMING' });
     await studio(`${by} accepted ${ref}`, [`${h(by)} accepted the ${ROLE_WORD[role]} of <b>${h(str(e, 'title'))}</b> (${h(ref)})${role === 'framer' && j.canDeliver ? (delivering ? ' <b>and will deliver it too</b>' : '. They will <b>not</b> deliver it: please assign a delivery partner') : ''}.`]);
     return view();
   }
@@ -4074,12 +4074,16 @@ function mailsFor(rec: StreamRecord): Mail[] {
 
   if (rec.eventName === 'INSERT') {
     key = 'RECEIVED';
-    cust(`We've received your enquiry ${ref}`, [
+    const det0 = parseDetails(str(img, 'details'));
+    const isOrder = ['MARKET', 'LICENCE', 'PHOTO', 'GIFT'].includes(kind) || /^Artwork order/i.test(str(img, 'title')) || /website price/i.test(String(det0['Price'] ?? ''));
+    cust(isOrder ? `We've received your order ${ref}` : `We've received your enquiry ${ref}`, [
       kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
         : kind === 'LICENCE' ? `Thank you for your licence order: <b>${h(title)}</b>, <b>${aed(price)}</b>. The secure payment link follows in a moment; once paid you can download the full-size file under My enquiries & orders.`
         : kind === 'PHOTO' ? `Thank you for your order. We'll send you a secure payment link and ask for your delivery address; once paid we print, frame and deliver it.`
         : kind === 'GIFT' ? `Thank you for sending us your child's drawing. We'll frame it with care and confirm the delivery charge and date shortly.`
         : kind === 'COMMISSION' ? `Thank you for your commission request: <b>${h(title)}</b>. We'll come back with the price, size options and delivery date, usually within 24 hours.`
+        : det0['Offer'] ? `Thank you for your offer of <b>${h(String(det0['Offer']))}</b> for <b>${h(title)}</b>. We'll check it with the artist and reply, usually within 24 hours.`
+        : det0['Price'] ? `Thank you for your order: <b>${h(title)}</b>, ${h(String(det0['Price']).replace(/\s*\(website price\)/i, ''))}. We'll confirm it's ready and send you a secure payment link, usually within 24 hours.`
         : `Thank you for your interest in <b>${h(title)}</b>. We'll reply with the price, framing options and delivery date, usually within 24 hours.`,
       `Your reference is <b>${h(ref)}</b>. You can follow every step under My enquiries & orders on our website.`]);
     studio(`New ${KIND[kind] ?? 'enquiry'}: ${title} (${ref})`, [`<b>${h(title)}</b>`, `${h(str(img, 'customerName'))} · ${h(str(img, 'phone'))} · ${h(to)}`, `Reference ${h(ref)}`,
@@ -4113,7 +4117,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>. Licences are digital and can't be cancelled once paid.`],
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
     else if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
-      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>${num(img, 'discountAmount') && num(img, 'listPrice') ? ` (${aed(num(img, 'listPrice'))} less your discount of ${aed(num(img, 'discountAmount'))})` : ''}, including framing, ${(str(img, 'deliveryCountry') || 'UAE') === 'UAE' ? 'delivery in the UAE' : `shipping to ${h(str(img, 'deliveryCountry'))}`} and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
+      price ? `The price for <b>${h(title)}</b> is <b>${aed(price)}</b>${num(img, 'discountAmount') && num(img, 'listPrice') ? ` (${aed(num(img, 'listPrice'))} less your discount of ${aed(num(img, 'discountAmount'))})` : ''}, including ${kind === 'MARKET' || kind === 'LICENCE' ? '' : 'framing, '}${(str(img, 'deliveryCountry') || 'UAE') === 'UAE' ? 'delivery in the UAE' : `shipping to ${h(str(img, 'deliveryCountry'))}`} and VAT where it applies.` : `We've replied about <b>${h(title)}</b>.`,
       msgLine, str(img, 'paymentLink') ? 'You can pay securely with the button below. The price is held for 7 days.' : 'The price is held for 7 days. Reply to this email or message us on WhatsApp to go ahead.',
       str(img, 'deliveryAddress') ? '' : 'Please also add your <b>delivery address</b> under My enquiries & orders, so we can ship it as soon as it is ready.',
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>, including the cancellation policy.`],
@@ -4125,12 +4129,13 @@ function mailsFor(rec: StreamRecord): Mail[] {
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
       "You can follow every step under My enquiries & orders, and we'll email you the tracking number when it ships.",
-      'Changed your mind? You can request a cancellation under My enquiries & orders: before the work starts you get a full refund.']);
+      ['PRICE', 'COMMISSION'].includes(kind) ? 'Changed your mind? You can request a cancellation under My enquiries & orders: before the artist starts you get a full refund.' : '']);
     if (st === 'FRAMING') cust(kind === 'PHOTO' ? `We're printing and framing your order (${ref})` : kind === 'GIFT' ? `We're framing your child's drawing (${ref})` : `Being framed: ${title} (${ref})`, [
-      kind === 'PHOTO' ? 'Your print is now with our framer in Dubai: printed on fine-art paper, then mounted and framed.' : kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> has reached our framer in Dubai and is being framed now.`,
+      kind === 'PHOTO' ? 'Your print is now with our framer in Dubai: printed on fine-art paper, then mounted and framed.' : kind === 'GIFT' ? `Your child's drawing for <b>${h(title.replace(/^Little Artists gift for\s*/i, '') || 'your gift')}</b> is now with our framer in Dubai.` : `<b>${h(title)}</b> is now with our framer in Dubai for framing.`,
       msgLine, "We'll email you the courier and tracking number as soon as it ships."]);
     if (st === 'SHIPPED') cust(`On its way: ${title} (${ref})`, [`<b>${h(title)}</b> has shipped${str(img, 'courierName') ? ` with <b>${h(str(img, 'courierName'))}</b>` : ''}${str(img, 'trackingNo') ? `, tracking number <b>${h(str(img, 'trackingNo'))}</b>` : ''}.`, msgLine, 'Please check the parcel when it arrives. If anything is damaged, report it with photos under My enquiries & orders within 48 hours.']);
-    if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
+    if (st === 'DELIVERED' && kind === 'LICENCE') cust(`Your licensed file: ${title} (${ref})`, [`Your licence for <b>${h(title.replace(/^Image licence:\s*/i, ''))}</b> is active. Download the full-size file under <b>My enquiries & orders</b> (sign in with this email address); you can download it again any time.`, msgLine], MY);
+    else if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
       'If anything arrived damaged, report it with photos under My enquiries & orders within 48 hours and choose a replacement or a refund.',
       'We would be grateful for your feedback: you can rate your order under My enquiries & orders.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
     if (st === 'REPLACEMENT') cust(`Your replacement is under way (${ref})`, [`We've started the replacement for <b>${h(title)}</b>.`, msgLine,
@@ -4149,7 +4154,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
   if (str(img, 'artistStartedAt') && !str(old, 'artistStartedAt') && kind !== 'MARKET' && kind !== 'GIFT' && kind !== 'PHOTO') {
     key = 'ARTIST_STARTED';
     cust(`The artist has started: ${title} (${ref})`, [`Good news: the artist has started work on <b>${h(title)}</b>.`,
-      kind === 'COMMISSION' ? "We'll share the pencil sketch with you for approval before any paint goes on." : "We'll let you know when it moves to the framer.",
+      kind === 'COMMISSION' ? "We'll keep you posted as it progresses." : "We'll let you know when it moves to the framer.",
       'From now, a cancellation is refunded at 50% under our terms.']);
   }
 
