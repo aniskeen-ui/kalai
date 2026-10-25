@@ -33,7 +33,6 @@ const redeemLink = (code) => `https://art.pranixtechno.com/#redeem=${encodeURICo
 let qrLib = null;
 const loadQr = () => (qrLib ||= new Promise((ok, no) => { if (window.qrcode) { ok(window.qrcode); return; } const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; s.onload = () => ok(window.qrcode); s.onerror = () => no(new Error('QR library not loaded')); document.head.appendChild(s); }));
 async function qrSvg(text, cell = 4) { const q = (await loadQr())(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: cell, margin: 2, scalable: true }); }
-async function qrDataUrl(text, cell = 8) { const q = (await loadQr())(0, 'M'); q.addData(text); q.make(); return q.createDataURL(cell, 2); }
 /** A gift card / voucher image (PNG) with the QR code: to send or print. */
 async function cardPng(v) {
   const c = document.createElement('canvas'); c.width = 1000; c.height = 560; const g = c.getContext('2d');
@@ -42,17 +41,15 @@ async function cardPng(v) {
   g.fillStyle = '#ffffff'; g.font = '600 46px Georgia, serif'; g.fillText('KALAI', 56, 96);
   const kw = g.measureText('KALAI').width; // the subtitle starts after the word, whatever font the browser used
   g.font = '20px Arial'; g.fillStyle = '#c9dca4'; g.fillText('ART HOUSE · DUBAI', 56 + kw + 16, 94);
-  // Pranix logo, top right: the picture /pranix-logo.png when it is on the site, otherwise the name in letters.
-  const logo = await new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ok(null); im.src = '/pranix-logo.png'; });
-  if (logo) { const sc = Math.min(220 / logo.width, 56 / logo.height), w = logo.width * sc, hh = logo.height * sc; g.fillStyle = '#ffffff'; g.fillRect(944 - w - 12, 48, w + 24, hh + 16); g.drawImage(logo, 944 - w, 56, w, hh); }
-  else { g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = '700 26px Arial'; g.fillText('PRANIX', 944, 82); g.font = '13px Arial'; g.fillStyle = '#c9dca4'; g.fillText('TECHNOLOGIES FZCO', 944, 102); g.textAlign = 'left'; }
   g.fillStyle = '#ffffff'; g.font = '700 54px Arial'; g.fillText(v.kind === 'GIFT' ? `Gift card  AED ${Number(v.value || 0).toLocaleString('en-US')}` : `Voucher  ${v.discountType === 'AED' ? `AED ${v.discountValue}` : `${v.discountValue}%`} off`, 56, 210);
-  g.font = '26px Arial'; g.fillStyle = '#e8efe0'; if (v.forName) g.fillText(`For ${v.forName}`, 56, 262);
-  g.font = '700 40px monospace'; g.fillStyle = '#ffffff'; g.fillText(v.code, 56, 350);
-  g.font = '22px Arial'; g.fillStyle = '#e8efe0'; g.fillText(`Valid until ${v.endAt ? day(v.endAt) : '—'}`, 56, 398);
+  g.font = '700 40px monospace'; g.fillStyle = '#ffffff'; g.fillText(v.code, 56, 310);
+  g.font = '22px Arial'; g.fillStyle = '#e8efe0'; g.fillText(`Valid until ${v.endAt ? day(v.endAt) : '—'}`, 56, 362);
   g.fillText('Scan the QR or enter the code under My enquiries & orders', 56, 446); g.fillText('on art.pranixtechno.com', 56, 478);
-  const img = new Image(); img.src = await qrDataUrl(redeemLink(v.code), 8); await img.decode();
-  g.fillStyle = '#ffffff'; g.fillRect(690, 150, 270, 270); g.drawImage(img, 700, 160, 250, 250);
+  // QR drawn module by module on whole pixels (sharp, with the 4-module white border scanners need).
+  const q = (await loadQr())(0, 'M'); q.addData(redeemLink(v.code)); q.make();
+  const n = q.getModuleCount(), cell = Math.floor(290 / (n + 8)), size = cell * (n + 8), x0 = 960 - size, y0 = Math.round(280 - size / 2);
+  g.fillStyle = '#ffffff'; g.fillRect(x0, y0, size, size); g.fillStyle = '#000000';
+  for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (q.isDark(r, col)) g.fillRect(x0 + (col + 4) * cell, y0 + (r + 4) * cell, cell, cell);
   return c.toDataURL('image/png');
 }
 const genCode = (pre) => `${pre}-${Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('').replace(/(.{4})/, '$1-')}`;
