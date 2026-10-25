@@ -23,11 +23,11 @@ const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
 
 function collect(root) {
   const nodes = [], attrs = [];
-  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement && !n.parentElement.closest(SKIP) && worth(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement && !n.parentElement.closest(SKIP) && worth(enOf(n)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
   for (let n = w.nextNode(); n; n = w.nextNode()) nodes.push(n);
   (root.querySelectorAll ? [root, ...root.querySelectorAll('[placeholder],[title],[aria-label],img[alt]')] : []).forEach((el) => {
     if (!el.getAttribute || el.closest(SKIP)) return;
-    ATTRS.forEach((a) => { const v = el.getAttribute(a); if (v && worth(v)) attrs.push([el, a]); });
+    ATTRS.forEach((a) => { const m = orig.get(el); const v = (m && m[a] !== undefined) ? m[a] : el.getAttribute(a); if (v && worth(v)) attrs.push([el, a]); });
   });
   return { nodes, attrs };
 }
@@ -76,7 +76,7 @@ async function translate(root = document.body) {
 
 // New content (product pages, forms, lists) is translated as it appears.
 let paused = false, timer = null;
-new MutationObserver(() => { if (paused || lang === 'en') return; clearTimeout(timer); timer = setTimeout(() => translate(), 250); })
+new MutationObserver((recs) => { if (paused) return; recs.forEach((r) => { if (r.type === 'characterData') orig.delete(r.target); }); if (lang === 'en') return; clearTimeout(timer); timer = setTimeout(() => translate(), 250); })
   .observe(document.body, { childList: true, subtree: true, characterData: true });
 
 /** The English text of an element (what the studio receives in an order), whatever the visitor's language. */
