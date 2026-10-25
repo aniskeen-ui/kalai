@@ -15,8 +15,9 @@ let chosen = false; // the visitor picked a language themselves (else the studio
 try { const v = localStorage.getItem('kalaiLang'); if (v) { lang = v; chosen = true; } } catch { /* */ }
 if (!LANGS.some(([k]) => k === lang)) lang = 'en';
 const memo = new Map(); // `${lang}|${text}` → translation
-function loadCache(l) { try { const o = JSON.parse(localStorage.getItem(`kalaiTr_${l}`) || '{}'); Object.entries(o).forEach(([k, v]) => memo.set(`${l}|${k}`, v)); } catch { /* */ } }
-function saveCache(l) { try { const o = {}; let n = 0; for (const [k, v] of memo) if (k.startsWith(`${l}|`) && n++ < 4000) o[k.slice(l.length + 1)] = v; localStorage.setItem(`kalaiTr_${l}`, JSON.stringify(o)); } catch { /* storage full */ } }
+try { Object.keys(localStorage).filter((k) => k.startsWith('kalaiTr_')).forEach((k) => localStorage.removeItem(k)); } catch { /* old caches */ }
+function loadCache(l) { try { const o = JSON.parse(localStorage.getItem(`kalaiTr2_${l}`) || '{}'); Object.entries(o).forEach(([k, v]) => memo.set(`${l}|${k}`, v)); } catch { /* */ } }
+function saveCache(l) { try { const o = {}; let n = 0; for (const [k, v] of memo) if (k.startsWith(`${l}|`) && n++ < 4000) o[k.slice(l.length + 1)] = v; localStorage.setItem(`kalaiTr2_${l}`, JSON.stringify(o)); } catch { /* storage full */ } }
 
 const SKIP = 'script,style,noscript,code,pre,textarea,svg,[data-notranslate],.notranslate,.mono,.dhs';
 // Prices ("≈ OMR 141", "Dhs 800", "$46"), codes and numbers are not text to translate.
@@ -41,9 +42,10 @@ let busy = false, again = false;
 async function translate(root = document.body) {
   if (busy) { again = true; return; }
   busy = true;
+  const L = lang; // this run's language: if the visitor switches meanwhile, the run stops and starts again
   try {
     const { nodes, attrs } = collect(root);
-    if (lang === 'en') { // back to English
+    if (L === 'en') { // back to English
       nodes.forEach((n) => { const o = orig.get(n); if (o !== undefined && n.nodeValue !== o) n.nodeValue = o; });
       attrs.forEach(([el, a]) => { const m = orig.get(el); if (m && m[a] !== undefined) el.setAttribute(a, m[a]); });
       return;
@@ -51,29 +53,27 @@ async function translate(root = document.body) {
     const items = [];
     nodes.forEach((n) => { if (!orig.has(n)) orig.set(n, n.nodeValue); items.push([enOf(n).trim(), (t) => { const o = enOf(n); n.nodeValue = o.replace(o.trim(), t); }]); });
     attrs.forEach(([el, a]) => { const m = attrKey(el, a); if (m[a] === undefined) m[a] = el.getAttribute(a); items.push([m[a].trim(), (t) => el.setAttribute(a, t)]); });
-    const need = [...new Set(items.map(([t]) => t).filter((t) => t && !memo.has(`${lang}|${t}`)))];
-    // Show what is already known at once, then fill in the rest as each part arrives.
-    // Known translations go in; anything not translated yet in THIS language shows English (not the previous language).
-    const apply = () => { paused = true; items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); put(v || t); }); setTimeout(() => { paused = false; }, 0); };
+    const need = [...new Set(items.map(([t]) => t).filter((t) => t && !memo.has(`${L}|${t}`)))];
+    // Known translations go in; anything not translated yet in THIS language shows English (never another language).
+    const apply = () => { if (lang !== L) return; paused = true; items.forEach(([t, put]) => { const v = memo.get(`${L}|${t}`); put(v || t); }); setTimeout(() => { paused = false; }, 0); };
     apply();
     const lb = document.getElementById('langBtn'); if (need.length && lb) lb.classList.add('working');
     for (let i = 0; i < need.length; i += 80) {
+      if (lang !== L) return; // switched language: stop
       const part = need.slice(i, i + 80);
       try {
-        const r = await client.mutations.siteTranslate({ lang, texts: JSON.stringify(part) }, { authMode: 'apiKey' });
+        const r = await client.mutations.siteTranslate({ lang: L, texts: JSON.stringify(part) }, { authMode: 'apiKey' });
         const out = JSON.parse(typeof r.data === 'string' ? r.data : '[]');
-        part.forEach((t, k) => { if (out[k]) memo.set(`${lang}|${t}`, out[k]); });
+        part.forEach((t, k) => { if (out[k]) memo.set(`${L}|${t}`, out[k]); }); // kept under the language asked for
         apply();
       } catch (ex) { console.warn('Translation failed', ex); }
     }
-    paused = true;
-    items.forEach(([t, put]) => { const v = memo.get(`${lang}|${t}`); if (v) put(v); });
-    setTimeout(() => { paused = false; }, 0);
-    saveCache(lang);
-    document.getElementById('langBtn')?.classList.remove('working');
+    saveCache(L);
+    apply();
   } finally {
+    document.getElementById('langBtn')?.classList.remove('working');
     busy = false;
-    if (again) { again = false; setTimeout(() => translate(), 50); }
+    if (again || lang !== L) { again = false; setTimeout(() => translate(), 50); }
   }
 }
 
