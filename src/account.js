@@ -1230,15 +1230,17 @@ function drawCartUi() {
   const b = document.getElementById('cartBody'), t = document.getElementById('totals');
   if (!b || !t) return;
   const items = cartGet();
+  const h2 = document.querySelector('#drawer header h2'), units = items.reduce((a, i) => a + (Number(i.qty) || 1), 0);
+  if (h2) h2.textContent = units ? `Your cart · ${units} item${units > 1 ? 's' : ''}` : 'Your cart';
   if (!items.length) { b.innerHTML = '<div class="empty">Your cart is empty.<br>Add a painting, a framed print, a Crafts shop item or a Little Artists gift.</div>'; t.innerHTML = ''; cartStep = 'items'; return; }
   b.innerHTML = items.map((i, n) => `<div class="line" style="display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:start">
       ${i.img ? `<img src="${esc(i.img)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:4px">` : '<span style="width:64px;height:64px;display:grid;place-items:center;background:#0001;border-radius:4px">🎨</span>'}
       <div><div class="t" style="font-weight:600">${esc(i.name)}</div><div class="s" style="font-size:12px;color:var(--muted)">${esc(i.sub || '')}</div>
-        ${i.t === 'CRAFT' ? `<label style="font-size:12px">Qty <select data-cq="${n}">${Array.from({ length: Math.max(1, Math.min(10, Number(i.max) || 1)) }, (_, k) => `<option ${k + 1 === Number(i.qty) ? 'selected' : ''}>${k + 1}</option>`).join('')}</select></label>` : ''}
+        ${i.t === 'CRAFT' || i.t === 'PRINT' ? `<label style="font-size:12px">Qty <select data-cq="${n}">${Array.from({ length: i.t === 'PRINT' ? 5 : Math.max(1, Math.min(10, Number(i.max) || 1)) }, (_, k) => `<option ${k + 1 === Number(i.qty || 1) ? 'selected' : ''}>${k + 1}</option>`).join('')}</select></label> ` : ''}
         <button class="rm" type="button" data-crm="${n}" style="background:none;border:0;padding:0;color:var(--kumkum);font-size:12px;cursor:pointer">Remove</button></div>
       <div class="price" style="font-family:var(--mono)">${money(lineTotal(i))}${i.quote ? '<div style="font-size:11px;color:var(--muted)">+ shipping</div>' : ''}</div></div>`).join('');
   b.querySelectorAll('[data-crm]').forEach((x) => { x.onclick = () => { const v = cartGet(); v.splice(Number(x.dataset.crm), 1); cartSet(v); cartPreview = null; drawCartUi(); }; });
-  b.querySelectorAll('[data-cq]').forEach((x) => { x.onchange = () => { const v = cartGet(), it = v[Number(x.dataset.cq)]; it.qty = Number(x.value); it.price = Number(it.unit) * it.qty; it.sub = `${it.maker ? `by ${it.maker} · ` : ''}qty ${it.qty}`; cartSet(v); cartPreview = null; drawCartUi(); }; });
+  b.querySelectorAll('[data-cq]').forEach((x) => { x.onchange = () => { const v = cartGet(), it = v[Number(x.dataset.cq)]; const unit = Number(it.unit) || Number(it.price) / (Number(it.qty) || 1); it.qty = Number(x.value); it.unit = unit; it.price = Math.round(unit * it.qty * 100) / 100; if (it.t === 'CRAFT') it.sub = `${it.maker ? `by ${it.maker} · ` : ''}qty ${it.qty}`; else it.sub = String(it.sub || '').replace(/ · \d+ copies$/, '') + (it.qty > 1 ? ` · ${it.qty} copies` : ''); cartSet(v); cartPreview = null; drawCartUi(); }; });
   const sub = items.reduce((a, i) => a + lineTotal(i), 0);
   const gifts = items.every((i) => i.t === 'GIFT');
   if (cartStep === 'items' || !state.user) {
