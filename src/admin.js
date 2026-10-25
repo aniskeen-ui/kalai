@@ -408,6 +408,7 @@ function zohoActual(e) {
     out[f] = Math.round(((out[f] || 0) + amt) * 100) / 100;
     ref[f] = [ref[f], `${b.vendor || ''} · ${b.number}${b.status === 'draft' ? ' (draft)' : ''}`].filter(Boolean).join('; ');
   }
+  if (['PHOTO', 'LICENCE'].includes(e.kind) && out.artist == null) { const ry = royaltyOf(e); if (ry.pct) { out.artist = ry.amount; ref.artist = `${ry.pct}% royalty to ${e.artistName || 'Siva Raja'} (paid with their earnings, no bill)`; } }
   return { out, ref, unmapped, checkedAt: d?.checkedAt || null };
 }
 /** Actual costs: what you typed wins; otherwise the figure from Zoho. */
@@ -419,6 +420,13 @@ function actualOf(c, e) {
   return Object.keys(m).some((k) => ACT_FIELDS.some(([f]) => f === k)) ? m : null;
 }
 /** One report line: sales, refund, net sales, each cost (planned from the Costing box, actual from bills) and margin. */
+/** The artist's royalty on a framed print of their painting (or an image licence): the % on the order, else Siva's
+ *  default from Pricing. Print prices already include it (base × (1 + %)), so it is price × % / (100 + %). */
+function royaltyOf(e) {
+  const pct = Number(e.royaltyPct || 0) || (e.kind === 'PHOTO' && (!e.artistName || /siva/i.test(e.artistName)) && !e.artistId ? Number(rates.sivaRoyalty ?? 10) : 0);
+  const base = Number(e.listPrice || e.quotedPrice || 0);
+  return { pct, amount: pct ? Math.round(base * pct / (e.kind === 'LICENCE' ? 100 : 100 + pct) * 100) / 100 : 0 };
+}
 function reportLine(e) {
   const c = costings.get(e.id);
   const costs = parseCosts(c);
@@ -440,15 +448,17 @@ function reportLine(e) {
     note = 'crafts shop: maker payout in Artist';
   } else if (e.kind === 'LICENCE') {
     // Image licence: nothing to make or ship; the artist's royalty (% of the price) is the only cost.
-    k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: 0, india: 0, customs: 0, local: 0 };
-    note = `image licence${e.royaltyPct ? `: ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''}`;
+    const ry = royaltyOf(e);
+    k = { artist: ry.amount, framing: 0, india: 0, customs: 0, local: 0 };
+    note = `image licence${ry.pct ? `: ${ry.pct}% royalty to ${e.artistName || 'the artist'}` : ''}`;
   } else if (e.kind === 'PHOTO') {
     // Photo framing: print (+ frame unless print only) per copy, from the supplier price lists; UAE delivery included.
     const gd = parseDetails(e.details), sp = specOf(e, gd);
     const es = estCosts(e), print = Number(es.print || 0), frm = sp.style === 'none' ? 0 : Number(es.framing || 0);
     // A print of a painting: the artist's royalty (% of the price) is their share, shown under Artist.
-    k = { artist: Math.round(price * Number(e.royaltyPct || 0)) / 100, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(es.local || 0) };
-    note = `est. from supplier prices (print + frame${e.royaltyPct ? ` + ${e.royaltyPct}% royalty to ${e.artistName || 'the artist'}` : ''})${es.framing == null || es.print == null ? ' · some supplier prices missing' : ''}`;
+    const ry = royaltyOf(e);
+    k = { artist: ry.amount, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(es.local || 0) };
+    note = `est. from supplier prices (print + frame${ry.pct ? ` + ${ry.pct}% royalty to ${e.artistName || 'Siva Raja'}` : ''})${es.framing == null || es.print == null ? ' · some supplier prices missing' : ''}`;
   } else if (e.kind === 'GIFT') {
     // Print (from the photo) + framing, per copy; A3 when the customer chose the large size.
     const gd = parseDetails(e.details), es = estCosts(e);
@@ -830,10 +840,13 @@ function actualSection(e) {
   // Closed order whose actual costs were saved: read-only until "Edit actual costs" (a late bill can still be added).
   const lockA = ['DELIVERED', 'REFUNDED', 'CANCELLED'].includes(e.status) && !!a.at;
   const dA = lockA ? 'disabled' : '';
-  const rows = ACT_FIELDS.map(([f, label]) => `<tr><td>${label}</td><td class="num mono">${plan(f) == null ? '–' : money(plan(f))}</td>
+  // Labels and rows that fit the order: prints have a royalty, a print shop and a frame shop, and no India courier or customs.
+  const printed = ['PHOTO', 'GIFT'].includes(e.kind), lic = e.kind === 'LICENCE';
+  const LBL = printed ? { artist: e.kind === 'GIFT' ? 'Artist' : 'Artist royalty (print of a painting)', framing: 'Print shop + frame shop' } : lic ? { artist: 'Artist royalty' } : {};
+  const rows = ACT_FIELDS.filter(([f]) => !((printed || lic) && ['india', 'customs'].includes(f)) && !(lic && ['framing', 'local'].includes(f)) && !(e.kind === 'GIFT' && f === 'artist')).map(([f, label0]) => { const label = LBL[f] || label0; return `<tr><td>${label}</td><td class="num mono">${plan(f) == null ? '–' : money(plan(f))}</td>
     <td class="num mono" title="${esc(z.ref[f] || '')}">${z.out[f] != null ? money(z.out[f]) : '–'}${z.ref[f] ? `<div class="muted" style="font-size:10px;font-family:inherit;white-space:normal">${esc(z.ref[f])}</div>` : ''}</td>
     <td><input data-act="${f}" ${dA} type="number" min="0" step="0.01" value="${a[f] ?? ''}" placeholder="${z.out[f] != null ? 'uses that' : 'bill amount'}" style="width:110px"></td>
-    <td><input data-actref="${f}" ${dA} maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`).join('');
+    <td><input data-actref="${f}" ${dA} maxlength="80" value="${esc(ref[f] || '')}" placeholder="vendor · bill no." style="min-width:140px"></td></tr>`; }).join('');
   const mv = l.marginA != null ? `Planned margin <b>${money(l.margin)}</b> · actual <b class="${l.marginA < 0 ? 'neg' : ''}">${money(l.marginA)}</b> · variance <b class="${l.marginA - l.margin < 0 ? 'neg' : ''}">${money(l.marginA - l.margin)}</b>` : `Planned margin <b>${l.margin == null ? '–' : money(l.margin)}</b>. Enter the bills as they come; costs without a bill stay at the planned figure.`;
   return `<fieldset class="cost" id="actualBox"><legend>Actual costs (from bills, ⃃)</legend>
     <div class="tablewrap"><table class="costs"><thead><tr><th>Cost</th><th class="num">Planned</th><th class="num">From Zoho / job</th><th>Your figure</th><th>Vendor · bill no.</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -845,9 +858,10 @@ window.kalaiSaveActual = async (id) => {
   const e = all.find((x) => x.id === id); if (!e) return;
   const box = $('actualBox'), out = { ref: {} };
   for (const [f, label] of ACT_FIELDS) {
-    const raw = box.querySelector(`[data-act="${f}"]`).value.trim();
+    const inp = box.querySelector(`[data-act="${f}"]`); if (!inp) continue; // row not shown for this kind of order
+    const raw = inp.value.trim();
     if (raw !== '') { const v = Number(raw); if (!(v >= 0)) { $('actMsg').textContent = `${label}: enter an amount in ⃃.`; return; } out[f] = Math.round(v * 100) / 100; }
-    const rf = box.querySelector(`[data-actref="${f}"]`).value.trim(); if (rf) out.ref[f] = rf;
+    const rf = (box.querySelector(`[data-actref="${f}"]`)?.value || '').trim(); if (rf) out.ref[f] = rf;
   }
   out.at = new Date().toISOString();
   $('actMsg').textContent = 'Saving…';
@@ -1697,14 +1711,14 @@ async function showThumb(e, det) {
   const put = (url, label) => { if ($('dThumb') !== box) return; box.href = url; box.querySelector('img').src = url; box.querySelector('span').textContent = label; box.hidden = false; };
   try {
     if (e.fileKey && /\.(jpe?g|png|webp|heic|gif)$/i.test(e.fileKey)) { const { url } = await getUrl({ path: e.fileKey, options: { expiresIn: 900 } }); put(url.toString(), "Customer's photo"); return; }
-    if (e.kind !== 'PRICE') return;
+    if (!['PRICE', 'PHOTO'].includes(e.kind)) return; // a framed print of a painting: the painting's picture
     if (!thumbProducts) {
       thumbProducts = [];
       let nextToken = null;
       do { const r = await client.models.Product.list({ limit: 500, nextToken, selectionSet: ['id', 'title', 'code', 'imageKey'] }); thumbProducts.push(...(r.data || [])); nextToken = r.nextToken; } while (nextToken);
     }
     const code = String(det['Artwork no.'] || '').trim();
-    const name = String(e.title || '').replace(/^(Price enquiry( \(offer\))?|Artwork order): /i, '').trim().toLowerCase();
+    const name = String(e.title || '').replace(/^(Price enquiry( \(offer\))?|Artwork order|Framed print): /i, '').replace(/\s*\([^)]*\)\s*$/, e.kind === 'PHOTO' ? '' : '$&').trim().toLowerCase();
     const p = thumbProducts.find((x) => code && (x.code === code || x.id.startsWith(code))) || thumbProducts.find((x) => String(x.title || '').trim().toLowerCase() === name);
     if (p?.imageKey) { const { url } = await getUrl({ path: p.imageKey, options: { expiresIn: 900 } }); put(url.toString(), p.code ? `Artwork ${p.code}` : 'Artwork'); return; }
     // Works built into the website (not in the Catalogue): read their pictures from the home page once.
