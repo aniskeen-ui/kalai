@@ -2251,7 +2251,7 @@ async function sellerAction(ev: ApiEvent) {
 // Frame shop: Accept → Framed, ready for pickup → its invoice (Zoho bill). Delivery partner: Accept → Picked up
 // (order Shipped, tracking no.) → Delivered (order Delivered) → its invoice (Zoho bill).
 type Job = { supplierId: string; name: string; price: number | null; due: string; note: string; stage: string; assignedAt: string; acceptedAt?: string; readyAt?: string; canDeliver?: boolean; deliveryPrice?: number | null; byFramer?: boolean;
-  pickedAt?: string; deliveredAt?: string; awb?: string; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
+  pickedAt?: string; deliveredAt?: string; awb?: string; pod?: { name: string; at: string; signKey?: string; photoKeys?: string[]; note?: string }; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
 // Print shops print the customer's photo / child's drawing / our print file (Little Artists, Framed Prints) and hand
 // the print to the frame shop. Without a print job, the frame shop prints it itself.
 type Role = 'framer' | 'delivery' | 'printer';
@@ -2366,6 +2366,7 @@ function jobView(e: Img, jobs: Jobs, role: Role, framerProfile: Dict | null, pri
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
     stage: j.stage, price: j.price, due: j.due, note: j.note, assignedAt: j.assignedAt, awb: j.awb ?? '', invoiceNo: j.invoiceNo ?? '', invoiceAmt: j.invoiceAmt ?? null, hasBill: !!j.billId,
     bill: j.bill ?? '', billState: j.billState ?? '', message: j.message ?? '',
+    pod: j.pod ? { name: j.pod.name, at: j.pod.at, signed: !!j.pod.signKey, photos: j.pod.photoKeys?.length ?? 0 } : null,
     specs: role === 'printer' ? [['Print', str(e, 'kind') === 'GIFT' ? giftPrintSpec(det) : photoPrintSpec(det)]]
       : role === 'framer' ? [...(printed && jobs.printer ? [['Print', `Printed by ${jobs.printer.name}: collect it from them (see below), then frame it.`]] : str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
     printJob: role === 'printer' || (role === 'framer' && printed && !jobs.printer),
@@ -2492,12 +2493,28 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     await studio(`Picked up: ${ref}`, [`${h(by)} picked up <b>${h(str(e, 'title'))}</b> (${h(ref)})${j.awb ? `, tracking ${h(j.awb)}` : ''}. The order is now Shipped and the customer has been emailed.`]);
     return view();
   }
+  // Proof of delivery: who received it, their signature and/or photos (uploaded to the partner's own folder).
+  const podOf = () => {
+    const p = (d.pod ?? {}) as Dict;
+    const name = txt(p.name, 80);
+    const signKey = txt(p.signKey, 300), photoKeys = (Array.isArray(p.photoKeys) ? p.photoKeys : []).map((k) => txt(k, 300)).filter((k) => k.startsWith('uploads/')).slice(0, 4);
+    if (!name) throw new Error('Proof of delivery: enter the name of the person who received it.');
+    if (!signKey.startsWith('uploads/') && !photoKeys.length) throw new Error('Proof of delivery: add the receiver\'s signature or a photo of the delivered parcel.');
+    return { name, at: now, ...(signKey.startsWith('uploads/') ? { signKey } : {}), ...(photoKeys.length ? { photoKeys } : {}), ...(txt(p.note, 200) ? { note: txt(p.note, 200) } : {}) };
+  };
+  if (role === 'delivery' && action === 'jobPod') {
+    if (j.stage !== 'DELIVERED') throw new Error('Proof of delivery is added when you mark it delivered.');
+    j.pod = podOf(); await saveJobs(id, jobs);
+    await studio(`Proof of delivery: ${ref}`, [`${h(by)} added proof of delivery for <b>${h(str(e, 'title'))}</b> (${h(ref)}): received by <b>${h(j.pod.name)}</b>${j.pod.signKey ? ', signed' : ''}${j.pod.photoKeys?.length ? `, ${j.pod.photoKeys.length} photo(s)` : ''}.`]);
+    return view();
+  }
   if (role === 'delivery' && action === 'jobDelivered') {
     if (j.stage !== 'PICKED') throw new Error('Mark it picked up first.');
+    j.pod = podOf();
     j.stage = 'DELIVERED'; j.deliveredAt = now;
     await saveJobs(id, jobs);
     if (str(e, 'status') === 'SHIPPED') await updateEnquiry(id, { status: 'DELIVERED' });
-    await studio(`Delivered: ${ref}`, [`${h(by)} delivered <b>${h(str(e, 'title'))}</b> (${h(ref)}) to ${h(str(e, 'deliveryName') || str(e, 'customerName'))}.`]);
+    await studio(`Delivered: ${ref}`, [`${h(by)} delivered <b>${h(str(e, 'title'))}</b> (${h(ref)}) to ${h(str(e, 'deliveryName') || str(e, 'customerName'))}.`, `Proof of delivery: received by <b>${h(j.pod.name)}</b>${j.pod.signKey ? ', signed' : ''}${j.pod.photoKeys?.length ? `, ${j.pod.photoKeys.length} photo(s)` : ''} (see the order's Delivery box).`]);
     return view();
   }
   if (action === 'jobInvoice') {

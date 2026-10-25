@@ -1042,6 +1042,9 @@ function shippingSection(e) {
     ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.deliveryMessage)}</div>` : ''}
     ${dj ? `<div style="font-size:14px"><b>${esc(dj.name)}</b> (delivery partner)${dj.awb ? ` · AWB <span class="mono">${esc(dj.awb)}</span>` : ' · waiting for the pickup'}${dj.deliveredAt ? ` · delivered ${esc(day(dj.deliveredAt))}` : dj.pickedAt ? ` · picked up ${esc(day(dj.pickedAt))}` : ''}</div>
       <div class="muted" style="font-size:12px">Filled in automatically from ${esc(dj.name)}'s portal (Picked up → Shipped, Delivered → Delivered). To use another courier, take the delivery job back under Frame shop &amp; delivery.</div>` : ''}
+    ${dj?.pod ? `<div style="font-size:14px;border:1px solid var(--line);border-radius:6px;padding:6px 8px">✓ <b>Proof of delivery</b>: received by <b>${esc(dj.pod.name)}</b> · ${esc(day(dj.pod.at))}${dj.pod.note ? ` · ${esc(dj.pod.note)}` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">${dj.pod.signKey ? `<button type="button" class="btn small ghost" data-podkey="${esc(dj.pod.signKey)}">Signature</button>` : ''}${(dj.pod.photoKeys || []).map((k, i) => `<button type="button" class="btn small ghost" data-podkey="${esc(k)}">Photo ${i + 1}</button>`).join('')}</div></div>`
+      : dj?.deliveredAt ? `<div class="muted" style="font-size:12px;color:var(--kumkum)">No proof of delivery yet: ${esc(dj.name)} can add it in their portal (name, signature or photo).</div>` : ''}
     <div class="two" ${dj ? 'hidden' : ''}>
       <div class="field"><label for="eCourierSel">Courier</label>
         <select id="eCourierSel">
@@ -2306,3 +2309,9 @@ start();
 
 // The old drag-to-resize width is no longer used: forget it.
 try { localStorage.removeItem('kalaiDeskW'); } catch { /* storage blocked */ }
+
+// Proof of delivery files (signature, photos) from the delivery partner: open on demand (short-lived link).
+document.addEventListener('click', async (ev) => {
+  const b = ev.target.closest?.('[data-podkey]'); if (!b) return;
+  try { const { url } = await getUrl({ path: b.dataset.podkey, options: { expiresIn: 600 } }); window.open(url.toString(), '_blank', 'noopener'); } catch (ex) { b.textContent = ex.message; }
+});

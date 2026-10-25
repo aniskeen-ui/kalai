@@ -251,6 +251,12 @@ function supGuide(j, fr, pr) {
     <ol>${steps.map((t) => `<li>${t}</li>`).join('')}</ol>
     <div class="guide-ask">Not sure about the ${pr ? 'size, paper or colours' : fr ? 'frame, size, mount or glass' : 'address or timing'}? <b>Please ask before you start.</b> <a href="${esc(ask)}" target="_blank" rel="noopener">Ask Kalai Art House on WhatsApp</a></div></details>`;
 }
+const podForm = (j, label, action) => `<div class="pod" data-pod><b>Proof of delivery</b> <span class="muted">(needed: name, plus signature or photo)</span>
+  <div class="field"><label>Received by (name)</label><input data-podname maxlength="80" placeholder="${esc(j.to?.name || 'Name of the person')}"></div>
+  <div class="field"><label>Signature of the receiver</label><canvas data-sign width="520" height="160" style="width:100%;max-width:520px;height:160px;border:1px dashed var(--line);border-radius:6px;background:#fff;touch-action:none"></canvas><button type="button" class="linkbtn" data-signclear>Clear signature</button></div>
+  <div class="field"><label>Photos of the delivered parcel (optional, up to 4)</label><input data-podphotos type="file" accept="image/*" capture="environment" multiple></div>
+  <div class="field"><label>Note (optional)</label><input data-podnote maxlength="200" placeholder="e.g. left with the building guard"></div>
+  <button class="btn small" data-a="${action}">${label}</button></div>`;
 function jobCard(j) {
   const fr = j.role === 'framer', pr = j.role === 'printer';
   const steps = fr ? FR_STEPS : pr ? PR_STEPS : DL_STEPS;
@@ -267,7 +273,8 @@ function jobCard(j) {
     else if (!fr && !pr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
       act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't finished framing yet.</span>`
         : `<div class="inline"><div class="field"><label>Tracking / AWB (optional)</label><input data-awb maxlength="60"></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
-    } else if (!fr && !pr && j.stage === 'PICKED') act = '<button class="btn small" data-a="jobDelivered">Delivered to the customer</button>';
+    } else if (!fr && !pr && j.stage === 'PICKED') act = podForm(j, 'Delivered to the customer', 'jobDelivered');
+    else if (!fr && !pr && j.stage === 'DELIVERED' && !j.pod) act = podForm(j, 'Save proof of delivery', 'jobPod');
     const canInvoice = fr || pr ? ['READY', 'COLLECTED'].includes(j.stage) : j.stage === 'DELIVERED';
     if (canInvoice && !j.invoiceNo) act += `<div class="inline"><div class="field"><label>Your invoice no.</label><input data-inv maxlength="40"></div><div class="field"><label>Amount (⃃)</label><input data-amt type="number" min="0" step="0.01" value="${j.price ?? ''}"></div><button class="btn small" data-a="jobInvoice">Send invoice</button></div>`;
   }
@@ -283,6 +290,7 @@ function jobCard(j) {
         ${fr && j.delivering ? '<dt>Delivery</dt><dd>You deliver this one too (see the delivery job)</dd>' : ''}
         ${j.specs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
         ${j.awb ? `<dt>Tracking</dt><dd>${esc(j.awb)}</dd>` : ''}
+        ${j.pod ? `<dt>Proof of delivery</dt><dd>Received by <b>${esc(j.pod.name)}</b>${j.pod.signed ? ' · signed' : ''}${j.pod.photos ? ` · ${j.pod.photos} photo${j.pod.photos > 1 ? 's' : ''}` : ''} · ${esc(day(j.pod.at))}</dd>` : ''}
         ${j.invoiceNo ? `<dt>Your invoice</dt><dd>${esc(j.invoiceNo)} · ${aed(j.invoiceAmt)}${j.bill ? ' · received' : ''}${j.hasBill ? ' · <button type="button" class="linkbtn" data-invpdf>📄 Open invoice</button>' : ''}</dd>` : ''}
       </dl>
       <dl>
@@ -314,9 +322,34 @@ function drawJobs() {
       try { const r = await call('jobPhoto', { id, role }); card.querySelector('[data-img]').innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener"><img class="photo" alt="Artwork to frame" src="${esc(r.url)}" onload="this.closest('[data-img]').querySelector('[data-px]').textContent=this.naturalWidth+' × '+this.naturalHeight+' px'"></a><div class="muted" data-px></div><div class="muted">Tap to open full size (link works for 15 minutes).</div>`; ph.hidden = true; }
       catch (ex) { msg.textContent = ex.message; ph.disabled = false; }
     };
+    const cv = card.querySelector('[data-sign]');
+    let signed = false;
+    if (cv) {
+      const g = cv.getContext('2d'); g.lineWidth = 2.5; g.lineCap = 'round'; g.strokeStyle = '#111';
+      let down = false;
+      const pt = (ev) => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+      cv.onpointerdown = (ev) => { down = true; cv.setPointerCapture(ev.pointerId); const [x, y] = pt(ev); g.beginPath(); g.moveTo(x, y); };
+      cv.onpointermove = (ev) => { if (!down) return; const [x, y] = pt(ev); g.lineTo(x, y); g.stroke(); signed = true; };
+      cv.onpointerup = () => { down = false; };
+      card.querySelector('[data-signclear]').onclick = () => { g.clearRect(0, 0, cv.width, cv.height); signed = false; };
+    }
     card.querySelectorAll('[data-a]').forEach((b) => {
       b.onclick = async () => {
         const a = b.dataset.a, data = { id, role };
+        if (a === 'jobDelivered' || a === 'jobPod') {
+          const name = card.querySelector('[data-podname]').value.trim(), files = [...(card.querySelector('[data-podphotos]').files || [])].slice(0, 4);
+          if (!name) { msg.textContent = 'Enter the name of the person who received it.'; return; }
+          if (!signed && !files.length) { msg.textContent = "Add the receiver's signature or a photo of the delivered parcel."; return; }
+          b.disabled = true; msg.textContent = 'Uploading the proof…';
+          try {
+            const ref = (jobs.find((x) => x.id === id && x.role === role) || {}).ref || id;
+            let signKey = '';
+            if (signed) { const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png')); signKey = (await uploadData({ path: ({ identityId }) => `uploads/${identityId}/pod/${ref}-signature-${Date.now()}.png`, data: blob, options: { contentType: 'image/png' } }).result).path; }
+            const photoKeys = [];
+            for (const [i, f] of files.entries()) { if (f.size > 12 * 1024 * 1024) throw new Error('A photo is too large (12 MB at most).'); photoKeys.push((await uploadData({ path: ({ identityId }) => `uploads/${identityId}/pod/${ref}-photo-${i + 1}-${Date.now()}.${(f.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')}`, data: f, options: { contentType: f.type || 'image/jpeg' } }).result).path); }
+            data.pod = { name, signKey, photoKeys, note: card.querySelector('[data-podnote]').value.trim() };
+          } catch (ex) { msg.textContent = ex.message || 'Upload failed.'; b.disabled = false; return; }
+        }
         if (a === 'jobAccept' && card.querySelector('[data-deliver]')) data.deliver = card.querySelector('[data-deliver]').checked;
         if (a === 'jobPicked') data.awb = card.querySelector('[data-awb]')?.value.trim() || '';
         if (a === 'jobInvoice') { data.invoiceNo = card.querySelector('[data-inv]').value.trim(); data.amount = card.querySelector('[data-amt]').value; }
