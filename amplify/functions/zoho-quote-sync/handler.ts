@@ -36,7 +36,7 @@ type ApiEvent = {
   info?: { fieldName?: string };
   fieldName?: string;
 };
-type LineItem = { line_item_id?: string; name?: string; description?: string; rate?: number; quantity?: number; tax_id?: string };
+type LineItem = { line_item_id?: string; name?: string; description?: string; rate?: number; quantity?: number; tax_id?: string; discount?: number | string };
 type ZohoBody = {
   code?: number;
   message?: string;
@@ -323,8 +323,25 @@ async function writeBack(id: string, set: Record<string, string | number | null>
 
 // ---------- quotes ----------
 
+/** The price line for Zoho: the full (list) price with the discount in Zoho's Discount column, and why, so the quote
+ *  and invoice show "AED 1,000 − 500 discount = 500" instead of only 500. */
+function priceLine(img: Img, price: number) {
+  const list = num(img, 'listPrice') ?? 0;
+  const off = list > price ? r2(list - price) : 0;
+  if (!off) return { rate: price, discount: undefined as number | undefined, header: {}, why: '' };
+  const parts: string[] = [];
+  const code = str(img, 'discountCode'), note = str(img, 'discountNote'), pts = num(img, 'loyaltyRedeemed') ?? 0;
+  const dAmt = num(img, 'discountAmount') ?? 0, lAmt = num(img, 'loyaltyAmount') ?? 0;
+  if (code && dAmt) parts.push(`code ${code} AED ${dAmt.toLocaleString('en-US')}`);
+  else if (dAmt) parts.push(`${note || 'discount'} AED ${dAmt.toLocaleString('en-US')}`);
+  if (pts && lAmt) parts.push(`${pts} Kalai Circle points AED ${lAmt.toLocaleString('en-US')}`);
+  return { rate: list, discount: off, header: { discount_type: 'item_level', is_discount_before_tax: true }, why: `Discount: ${parts.join(' + ') || `AED ${off}`}` };
+}
+
 async function createQuote(img: Img, rate?: number) {
   const q = quoteParts(img);
+  const start = rate ?? (num(img, 'quotedPrice') && ['RECEIVED', 'PRICE_SENT'].includes(str(img, 'status') || 'RECEIVED') && num(img, 'listPrice') ? num(img, 'quotedPrice')! : q.startRate);
+  const pl = priceLine(img, start);
   const customerId = await customerIdFor(img);
   const vat = await vatFields();
   const r = await zoho('/estimates', {
@@ -333,7 +350,8 @@ async function createQuote(img: Img, rate?: number) {
       customer_id: customerId,
       reference_number: q.ref,
       ...vat.header,
-      line_items: [{ name: q.name, description: q.description, rate: rate ?? q.startRate, quantity: 1, ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
+      ...pl.header,
+      line_items: [{ name: q.name, description: [q.description, pl.why].filter(Boolean).join('\n').slice(0, 2000), rate: pl.rate, quantity: 1, ...(pl.discount ? { discount: pl.discount } : {}), ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
       notes: q.notes,
     }),
   });
@@ -360,20 +378,22 @@ async function updateQuotePrice(img: Img, price: number) {
   const est = got.body.estimate;
   const vat = await vatFields();
   const tax = vat.taxId ? { tax_id: vat.taxId } : {};
+  const pl = priceLine(img, price);
   const lines: LineItem[] = (est.line_items ?? []).map((li, i) => ({
     line_item_id: li.line_item_id,
     name: li.name,
-    description: li.description,
+    description: i === 0 ? [q.description, pl.why].filter(Boolean).join('\n').slice(0, 2000) : li.description,
     quantity: li.quantity ?? 1,
-    rate: i === 0 ? price : li.rate,
+    rate: i === 0 ? pl.rate : li.rate,
+    ...(i === 0 && pl.discount ? { discount: pl.discount } : i === 0 ? { discount: 0 } : {}),
     ...tax,
   }));
-  if (!lines.length) lines.push({ name: q.name, description: q.description, quantity: 1, rate: price, ...tax });
+  if (!lines.length) lines.push({ name: q.name, description: [q.description, pl.why].filter(Boolean).join('\n'), quantity: 1, rate: pl.rate, ...(pl.discount ? { discount: pl.discount } : {}), ...tax });
   const msg = str(img, 'adminMessage');
   const notes = msg ? `${q.notes}\nStudio message: ${msg}` : q.notes;
   const r = await zoho(`/estimates/${found.id}`, {
     method: 'PUT',
-    body: JSON.stringify({ customer_id: est.customer_id, reference_number: q.ref, ...vat.header, line_items: lines, notes }),
+    body: JSON.stringify({ customer_id: est.customer_id, reference_number: q.ref, ...vat.header, discount_type: 'item_level', is_discount_before_tax: true, line_items: lines, notes }),
   });
   if (!r.ok) throw new Error(`Zoho quote update failed (${r.status}): ${r.body.message}`);
   console.log(`Updated Zoho quote ${est.estimate_number} for ${q.ref} to AED ${price}`);
@@ -448,6 +468,7 @@ async function keepAsDraft(path: string, status?: string): Promise<'draft' | 'vo
 
 async function createInvoice(img: Img, price: number) {
   const q = quoteParts(img);
+  const pl = priceLine(img, price);
   const customerId = await customerIdFor(img);
   const vat = await vatFields();
   let n = await nextInvoiceNumber();
@@ -461,7 +482,8 @@ async function createInvoice(img: Img, price: number) {
         reference_number: q.ref,
         date: dubaiToday(),
         ...vat.header,
-        line_items: [{ name: q.name, description: q.description, rate: price, quantity: 1, ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
+        ...pl.header,
+        line_items: [{ name: q.name, description: [q.description, pl.why].filter(Boolean).join('\n').slice(0, 2000), rate: pl.rate, quantity: 1, ...(pl.discount ? { discount: pl.discount } : {}), ...(vat.taxId ? { tax_id: vat.taxId } : {}) }],
         notes: q.notes,
       }),
     });
