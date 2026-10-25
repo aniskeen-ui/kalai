@@ -2555,10 +2555,11 @@ async function marketAdmin(ev: ApiEvent) {
     for (const it of items) {
       const name = txt(it.name, 120), email = txt(it.email, 120).toLowerCase();
       if (!name) { skipped++; continue; }
-      if (all.some((x) => x.type === 'ARTIST' && ((email && String(x.email ?? '').toLowerCase() === email) || String(x.business ?? '').toLowerCase() === name.toLowerCase()))) { skipped++; continue; }
+      const ptype = ['PRINTER', 'FRAMER', 'COURIER'].includes(String(it.type)) ? String(it.type) : 'ARTIST'; // supplier prospects too (print shops to ask for quotes)
+      if (all.some((x) => x.type === ptype && ((email && String(x.email ?? '').toLowerCase() === email) || String(x.business ?? '').toLowerCase() === name.toLowerCase()))) { skipped++; continue; }
       const link = txt(it.link, 300);
       const row = { id: `pro-${crypto.randomUUID()}`, __typename: 'SellerProfile', createdAt: now, updatedAt: now, appliedAt: now,
-        type: 'ARTIST', status: 'PROSPECT', business: name, contactName: name, email: email || undefined, phone: txt(it.phone, 40) || undefined,
+        type: ptype, status: 'PROSPECT', business: name, ...(ptype !== 'ARTIST' ? { address: txt(it.based, 300) || undefined, rateCard: it.rateCard ? JSON.stringify(it.rateCard) : undefined } : {}), contactName: name, email: email || undefined, phone: txt(it.phone, 40) || undefined,
         city: txt(it.based, 80) || undefined, country: /india/i.test(String(it.based ?? '')) ? 'India' : /oman/i.test(String(it.based ?? '')) ? 'Oman' : 'UAE',
         mediums: txt(it.work, 200) || undefined, about: txt(it.work, 2000) || undefined, portfolio: /^https?:\/\//i.test(link) ? link : undefined,
         adminNote: [txt(it.fit, 120) && `Fit: ${txt(it.fit, 120)}`, txt(it.how, 160) && `Reach: ${txt(it.how, 160)}`, txt(it.source, 120) && `Found via: ${txt(it.source, 120)}`].filter(Boolean).join(' · ') || undefined,
@@ -2572,6 +2573,16 @@ async function marketAdmin(ev: ApiEvent) {
     if (!p || p.status !== 'PROSPECT') throw new Error('Prospect not found');
     if (action === 'removeProspect') { await delRow(S, { id: { S: String(p.id) } }); return { removed: true }; }
     const row = { ...p, outreach: txt(d.outreach, 40) || p.outreach, outreachAt: new Date().toISOString(), adminNote: d.note !== undefined ? txt(d.note, 500) : p.adminNote, email: d.email !== undefined ? txt(d.email, 120).toLowerCase() || undefined : p.email, phone: d.phone !== undefined ? txt(d.phone, 40) || undefined : p.phone, updatedAt: new Date().toISOString() };
+    await putRow(S, row);
+    return { profile: row };
+  }
+  // A supplier prospect (e.g. a print shop that sent its quote) becomes an approved supplier, without the sign-up email:
+  // it works through the studio view of the supplier portal until the shop signs up with the same email.
+  if (action === 'promoteSupplier') {
+    const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));
+    if (!p || p.status !== 'PROSPECT' || !ROLE_OF[String(p.type)]) throw new Error('Supplier prospect not found');
+    const now = new Date().toISOString();
+    const row = { ...p, status: 'APPROVED', approvedAt: now, updatedAt: now, outreach: 'Supplier' };
     await putRow(S, row);
     return { profile: row };
   }

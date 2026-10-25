@@ -10,7 +10,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
 
-let site = null, sups = [], defaults = {}, fees = 0;
+let site = null, sups = [], defaults = {}, fees = 0, printPros = [];
 async function load() {
   const [s, sp, r] = await Promise.all([
     client.models.SiteSetting.get({ id: 'site' }).catch(() => null),
@@ -19,6 +19,7 @@ async function load() {
   ]);
   site = s?.data || null;
   sups = (sp?.data || []).filter((p) => p.status === 'APPROVED' && ['FRAMER', 'PRINTER', 'COURIER'].includes(p.type));
+  printPros = (sp?.data || []).filter((p) => p.status === 'PROSPECT' && p.type === 'PRINTER' && parseCard(p).fineArt);
   let rd = {}; try { rd = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : {}; } catch { rd = {}; }
   defaults = rd.defaults || {};
   fees = Number(rd.fee || 0) + Number(rd.ins || 0) + Number(rd.reserve || 0);
@@ -30,7 +31,8 @@ function pick(types, pref, fn) {
   return mine || list.sort((a, b) => a.c - b.c)[0] || null;
 }
 function costs(size) {
-  const pr = pick(['PRINTER'], defaults.printer, (c) => n(c.print?.[size]));
+  let pr = pick(['PRINTER'], defaults.printer, (c) => n(c.print?.[size]));
+  if (!pr) { const v = printPros.map((p) => n(parseCard(p).print?.[size])).filter((x) => x > 0).sort((a, b) => a - b); if (v.length) pr = { c: v[Math.floor((v.length - 1) / 2)], s: { business: 'market estimate' } }; }
   const fr = pick(['FRAMER'], defaults.framer, (c) => { const f = n(c.frames?.black?.[size]); return f == null ? null : f + (c.fixingIncluded ? 0 : Number(c.fixing?.[size] || 0)); });
   const dl = pick(['COURIER', 'FRAMER'], defaults.delivery, (c) => parcelPrice(c.uae?.Dubai, size));
   return { print: pr?.c ?? null, frame: fr?.c ?? null, delivery: dl?.c ?? null, from: [pr && `print ${pr.s.business}`, fr && `frame ${fr.s.business}`, dl && `delivery ${dl.s.business}`].filter(Boolean).join(' · ') };

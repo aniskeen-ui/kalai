@@ -93,7 +93,7 @@ function estCosts(e) {
   const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
   const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name, id: j.framer.supplierId } : pickSupplier(['FRAMER'], d.framer, (card) => frameCost(card, spec));
   const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, { ...e, deliveryEmirate: e.deliveryEmirate || 'Dubai' }, spec, zoneOf));
-  const pr = j.printer?.price != null ? { cost: Number(j.printer.price), name: j.printer.name } : pickSupplier(['PRINTER'], d.printer, (card) => printCost(card, spec));
+  const pr = j.printer?.price != null ? { cost: Number(j.printer.price), name: j.printer.name } : pickSupplier(['PRINTER'], d.printer, (card) => printCost(card, spec)) || (marketPrint(spec.size) != null ? { cost: marketPrint(spec.size), name: 'market estimate (no print shop yet)' } : null);
   return { spec, framing: fr?.cost ?? null, framingFrom: fr?.name || '', framingFromId: fr?.id || '', local: dl?.cost ?? null, localFrom: dl?.name || '', print: pr?.cost ?? null, printFrom: pr?.name || '' };
 }
 
@@ -604,9 +604,17 @@ let artists = [];
 async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
+  printProspects = (r.data || []).filter((p) => p.type === 'PRINTER' && p.status === 'PROSPECT' && parseCard(p).fineArt);
   suppliers = (r.data || []).filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type) && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
 }
 let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COURIER)
+// Print shops not approved yet (prospects with a fine-art estimate): their median is the "market estimate" for print
+// until a print shop is approved (Artists & sellers → Frame, print & delivery → Print shops to ask for quotes).
+let printProspects = [];
+function marketPrint(size) {
+  const v = printProspects.map((p) => Number(parseCard(p).print?.[size])).filter((x) => x > 0).sort((a, b) => a - b);
+  return v.length ? v[Math.floor((v.length - 1) / 2)] : null;
+}
 // Price lists change in the supplier portal (often in another tab): reload when coming back to this tab.
 window.addEventListener('focus', () => { loadArtists().catch(() => {}); });
 const jobsOf = (e) => { let v = costings.get(e.id)?.supplierJobs; try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; } return v && typeof v === 'object' ? v : {}; };
