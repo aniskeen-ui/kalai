@@ -59,6 +59,7 @@ export async function showSettings() {
         <span class="muted" style="font-size:12px">Choosing one switches this browser straight away so you can try it on a few orders; Save settings makes it the layout for everyone.</span></div>
       <h3 style="margin:0;font-size:17px">Website languages</h3>
       <div class="field"><span class="muted" style="font-size:12px">The language button in the website header offers the languages ticked here. <b>English is the default</b>: every visitor starts in English and can switch. Each sentence is translated once (Amazon Translate) and saved; a language costs nothing until a visitor picks it.</span>
+        <div class="field" style="max-width:340px;margin:6px 0"><label for="st-langDef">Default language (what a new visitor sees first)</label><select id="st-langDef"></select><span class="muted" style="font-size:12px">Visitors who pick a language keep their choice.</span></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><button type="button" class="btn small ghost" data-langset="all">All ${ALL_LANGS.length}</button><button type="button" class="btn small ghost" data-langset="default">Recommended (${DEFAULT_LANGS.length})</button><button type="button" class="btn small ghost" data-langset="none">English only</button><span class="muted" id="st-langCount" style="font-size:12px"></span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">${ALL_LANGS.map(([k, n]) => `<label style="display:flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-lang="${k}" ${k === 'en' ? 'checked disabled' : ''} style="width:auto">${n}</label>`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Website theme</h3>
@@ -134,10 +135,12 @@ export async function showSettings() {
     { // Website languages: saved list, else the recommended set.
       const on = new Set(String(row?.siteLangs || '').split(',').map((x) => x.trim()).filter(Boolean).length ? String(row.siteLangs).split(',').map((x) => x.trim()) : DEFAULT_LANGS);
       const boxes = [...document.querySelectorAll('[data-lang]')];
-      const count = () => { $('st-langCount').textContent = `${boxes.filter((b) => b.checked).length} shown`; };
+      const defSel = $('st-langDef');
+      const fillDef = (keep) => { const cur = keep || defSel.value || row?.siteLangDefault || 'en'; const ticked = ALL_LANGS.filter(([k]) => boxes.find((b) => b.dataset.lang === k)?.checked); defSel.innerHTML = ticked.map(([k, n]) => `<option value="${k}">${n}</option>`).join(''); defSel.value = ticked.some(([k]) => k === cur) ? cur : 'en'; };
+      const count = () => { $('st-langCount').textContent = `${boxes.filter((b) => b.checked).length} shown`; fillDef(); };
       boxes.forEach((b) => { if (b.dataset.lang !== 'en') b.checked = on.has(b.dataset.lang); b.onchange = count; });
       document.querySelectorAll('[data-langset]').forEach((x) => { x.onclick = () => { const v = x.dataset.langset; boxes.forEach((b) => { if (b.dataset.lang !== 'en') b.checked = v === 'all' || (v === 'default' && DEFAULT_LANGS.includes(b.dataset.lang)); }); count(); }; });
-      count(); }
+      fillDef(row?.siteLangDefault || 'en'); count(); }
     { let cur = row?.orderLayout || 'original'; try { cur = localStorage.getItem('kalaiOrderLayout') || cur; } catch { /* */ } $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value); }
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
@@ -174,6 +177,7 @@ async function save() {
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
+  rec.siteLangDefault = $('st-langDef').value || 'en';
   rec.siteLangs = ['en', ...[...document.querySelectorAll('[data-lang]')].filter((b) => b.checked && b.dataset.lang !== 'en').map((b) => b.dataset.lang)].join(',');
   rec.orderLayout = $('st-layout').value;
   window.kalaiSetLayout?.(rec.orderLayout);

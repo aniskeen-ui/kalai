@@ -11,7 +11,8 @@ const offered = () => { const pick = String(window.kalaiSiteLangs || '').split('
 export const LANGS = ALL_LANGS;
 const orig = new WeakMap(); // text node / element+attr → English
 let lang = 'en';
-try { lang = localStorage.getItem('kalaiLang') || 'en'; } catch { /* */ }
+let chosen = false; // the visitor picked a language themselves (else the studio's default applies)
+try { const v = localStorage.getItem('kalaiLang'); if (v) { lang = v; chosen = true; } } catch { /* */ }
 if (!LANGS.some(([k]) => k === lang)) lang = 'en';
 const memo = new Map(); // `${lang}|${text}` → translation
 function loadCache(l) { try { const o = JSON.parse(localStorage.getItem(`kalaiTr_${l}`) || '{}'); Object.entries(o).forEach(([k, v]) => memo.set(`${l}|${k}`, v)); } catch { /* */ } }
@@ -91,9 +92,9 @@ window.kalaiEN = (el) => {
   return s;
 };
 
-export function setLang(l) {
+export function setLang(l, byVisitor = false) {
   lang = LANGS.some(([k]) => k === l) ? l : 'en';
-  try { localStorage.setItem('kalaiLang', lang); } catch { /* */ }
+  if (byVisitor) { chosen = true; try { localStorage.setItem('kalaiLang', lang); } catch { /* */ } }
   document.documentElement.lang = lang;
   document.documentElement.dir = RTL.includes(lang) ? 'rtl' : 'ltr';
   document.documentElement.dataset.tr = lang === 'en' ? '' : '1'; // header layout for longer words
@@ -115,10 +116,15 @@ function picker() {
   const btn = document.getElementById('langBtn'), menu = document.getElementById('langMenu');
   btn.onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; btn.setAttribute('aria-expanded', String(!menu.hidden)); };
   document.addEventListener('click', () => { const m = document.getElementById('langMenu'), b2 = document.getElementById('langBtn'); if (m) m.hidden = true; b2?.setAttribute('aria-expanded', 'false'); });
-  menu.querySelectorAll('[data-lang]').forEach((x) => { x.onclick = () => { menu.hidden = true; setLang(x.dataset.lang); }; });
+  menu.querySelectorAll('[data-lang]').forEach((x) => { x.onclick = () => { menu.hidden = true; setLang(x.dataset.lang, true); }; });
   paint();
 }
 picker();
 if (lang !== 'en') setLang(lang);
 /** Settings loaded (or changed): rebuild the picker with the studio's languages; a language no longer offered → English. */
-window.kalaiLangPicker = () => { if (!offered().some(([k]) => k === lang)) setLang('en'); picker(); };
+window.kalaiLangPicker = () => {
+  const def = String(window.kalaiSiteLangDefault || 'en');
+  if (!chosen && offered().some(([k]) => k === def) && def !== lang) setLang(def); // first visit: the studio's default language
+  if (!offered().some(([k]) => k === lang)) setLang(offered().some(([k]) => k === def) ? def : 'en');
+  picker();
+};
