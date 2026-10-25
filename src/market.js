@@ -234,7 +234,7 @@ function sellerCard(s) {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${s.photoKey ? `<img alt="" data-key="${esc(s.photoKey)}" style="width:40px;height:40px;object-fit:cover;border-radius:50%">` : ''}<h3>${esc(s.business)}</h3>${s.type === 'ARTIST' ? '<span class="cg-badge SCHEDULED">Artist</span>' : ''}<span class="cg-badge ${s.status === 'APPROVED' ? 'PUBLISHED' : s.status === 'APPLIED' ? 'SCHEDULED' : 'HIDDEN'}">${SST[s.status] || esc(s.status)}</span>
       <span class="muted" style="margin-left:auto">Applied ${esc(day(s.appliedAt))}${s.status === 'APPROVED' ? ` · ${s.commissionPct ?? 0}% · Kalai delivery ${aed(s.kalaiDeliveryFee)} · ${live}/${n.length} listings live` : ''}</span></div>
     <div>${esc(s.contactName)} · <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a> · <a href="mailto:${esc(s.email)}">${esc(s.email)}</a>${s.emirate ? ` · ${esc(s.emirate)}` : ''}${s.country === 'India' ? ', India' : ''}${s.type === 'ARTIST' ? '' : s.tradeLicence ? ` · Licence ${esc(s.tradeLicence)}` : ' · <i>no trade licence given</i>'}</div>
-    ${s.type === 'ARTIST' ? `<div><b>Mediums:</b> ${esc(s.mediums)} · ${esc(s.experience || 'experience not given')} · commissions: ${s.commissions === 'NO' ? 'no' : 'yes'} · prints: ${s.allowPrints === 'NO' ? '<b>not allowed</b>' : `allowed${s.royaltyPct != null ? `, ${s.royaltyPct}% royalty` : ''}`} · licences: ${s.allowLicences === 'YES' ? 'allowed' : 'no'}${s.portfolio ? ` · <a href="${esc(s.portfolio)}" target="_blank" rel="noopener noreferrer">portfolio</a>` : ''}</div>
+    ${s.type === 'ARTIST' ? `<div><b>Mediums:</b> ${esc(s.mediums)} · ${esc(s.experience || 'experience not given')} · commissions: ${s.commissions === 'NO' ? 'no' : 'yes'} · prints: ${s.allowPrints === 'NO' ? '<b>not allowed</b>' : `allowed${s.royaltyPct != null ? `, ${s.royaltyPct}% royalty` : ''}`} · licences: ${s.allowLicences === 'YES' ? `allowed, ${s.licenceRoyaltyPct ?? 30}% royalty` : 'no'}${s.portfolio ? ` · <a href="${esc(s.portfolio)}" target="_blank" rel="noopener noreferrer">portfolio</a>` : ''}</div>
       <div style="white-space:pre-wrap"><b>About:</b> ${esc(s.about)}</div>
       <div class="mk-imgs">${samplesOf(s).map((k) => `<a data-key="${esc(k)}" target="_blank" rel="noopener"><img alt="Sample work" data-key="${esc(k)}"></a>`).join('') || '<span class="muted">No samples</span>'}</div>`
     : `<div><b>Sells:</b> ${esc(s.categories)} — ${esc(s.about)}</div>
@@ -245,7 +245,7 @@ function sellerCard(s) {
     <div class="mk-act">
       ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? DEF_PCT)}"></label>
       <label>Kalai delivery fee (⃃)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
-      ${s.type === 'ARTIST' ? `<label title="The artist's share of each framed print sold of their works, added to the print price">Print royalty %<input type="number" min="0" max="50" step="0.5" data-f="royalty" value="${esc(s.royaltyPct ?? 10)}"></label>
+      ${s.type === 'ARTIST' ? `<label title="The artist's share of each framed print sold of their works, added to the print price">Print royalty %<input type="number" min="0" max="50" step="0.5" data-f="royalty" value="${esc(s.royaltyPct ?? 10)}"></label><label title="The artist's share of each image licence sold of their works (% of the licence price)">Licence royalty %<input type="number" min="0" max="90" step="0.5" data-f="licroyalty" value="${esc(s.licenceRoyaltyPct ?? 30)}"></label>
       <label title="Shown on their artist bio on the website">Artist photo<input type="file" accept="image/*" data-f="photofile"><input type="hidden" data-f="photo" value=""></label>` : ''}` : ''}
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small" data-a="approveSeller" type="button">Save rates</button><button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
@@ -378,7 +378,7 @@ function wireCards() {
       if (['rejectSeller', 'rejectListing', 'suspendSeller'].includes(a) && !f('note').trim()) { msg.textContent = 'Write a short note to the seller first.'; return; }
       if (a === 'deleteSeller' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Delete for good? Click again'; b.classList.remove('ghost'); msg.textContent = 'This removes the account, its listings and its catalogue copies. It cannot be undone.'; return; }
       const data = { id, note: f('note').trim() };
-      if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); if (f('photo')) data.photoKey = f('photo'); }
+      if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); data.licenceRoyaltyPct = f('licroyalty'); if (f('photo')) data.photoKey = f('photo'); }
       if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
       if (a === 'approveListing') data.commissionPct = f('pct');
       card.querySelectorAll('button').forEach((x) => { x.disabled = true; }); msg.textContent = '';

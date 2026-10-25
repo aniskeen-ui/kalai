@@ -1505,6 +1505,7 @@ function showRates() {
       <div class="muted" style="font-size:12px;margin-top:-6px">India → Dubai courier: the artist books and pays it and it is added to the artist's bill (artwork + courier lines). Change it on an order under Overrides for an oversized or express parcel.</div>
       <div class="two">
         <div class="field"><label for="rSivaRoy">Siva's print royalty (%)</label><input id="rSivaRoy" type="number" min="0" max="50" step="0.5" value="${rates.sivaRoyalty ?? 10}"><span class="muted" style="font-size:12px">His share of each framed print of his paintings, added to the print price. Portal artists: set in Artists &amp; sellers.</span></div>
+        <div class="field"><label for="rSivaLic">Siva's licence royalty (%)</label><input id="rSivaLic" type="number" min="0" max="90" step="0.5" value="${rates.sivaLicenceRoyalty ?? 30}"><span class="muted" style="font-size:12px">His share of each image licence of his works (% of the licence price). Portal artists: set in Artists &amp; sellers; a work can have its own in Catalogue.</span></div>
         <div class="field"><label for="rFx">Exchange rate (⃃ per ₹)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
@@ -1548,7 +1549,7 @@ function showRates() {
     host.querySelectorAll('.err').forEach((x) => x.remove());
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: t[k].framing ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
-    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, fx: n($('rFx').value) ?? 0,
+    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, sivaLicenceRoyalty: n($('rSivaLic').value) ?? 30, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(),
       // The old Pricing master copies (courier, frame table, frame source) are dropped: one set of figures now.

@@ -285,6 +285,7 @@ const schema = a.schema({
       printMax: a.string(),
       printKey: a.string(),
       printRoyalty: a.float(),
+      licenceRoyalty: a.float(), // the artist's share of each image licence of this work (%; blank = the artist's own)
       // Image licences of this work (website → Licences tab): sold from the same full-size file (printKey).
       licensable: a.boolean(),
       printW: a.integer(), // pixel size of the print file (Licence tab)
@@ -366,6 +367,7 @@ const schema = a.schema({
       allowPrints: a.string(), // artists: YES = they agree to framed prints of their works being sold (royalty below)
       allowLicences: a.string(), // artists: YES = they agree to image licences of their works being sold (same royalty %)
       royaltyPct: a.float(), // artists: their share of each print sold of their works (% of the print price)
+      licenceRoyaltyPct: a.float(), // artists: their share of each image licence of their works (% of the licence price)
       catalogue: a.string(), // frame shops: their frames (JSON [{name, style, material, colour, widthMm, extra, photoKey, note}])
     })
     .authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),

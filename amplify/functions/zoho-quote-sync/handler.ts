@@ -2752,6 +2752,7 @@ async function marketAdmin(ev: ApiEvent) {
       const wasApproved = p.status === 'APPROVED';
       const extra: Dict = {};
       if (p.type === 'ARTIST' && d.royaltyPct !== undefined && d.royaltyPct !== '') extra.royaltyPct = numIn(d.royaltyPct, 50);
+      if (p.type === 'ARTIST' && d.licenceRoyaltyPct !== undefined && d.licenceRoyaltyPct !== '') extra.licenceRoyaltyPct = numIn(d.licenceRoyaltyPct, 90);
       if (typeof d.photoKey === 'string' && /^market\//.test(d.photoKey)) extra.photoKey = txt(d.photoKey, 300);
       const row = { ...p, ...extra, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
@@ -2895,6 +2896,15 @@ async function marketOrder(ev: ApiEvent) {
   return { ok: true, ref, total };
 }
 
+/** Licence royalty % for a work: the work's own, else its portal artist's, else Siva's (Pricing); 30% by default. */
+async function licenceRoyaltyOf(pr: Dict | Img): Promise<number> {
+  const g = (k: string) => { const v = (pr as Dict)[k]; return v && typeof v === 'object' && ('N' in (v as object) || 'S' in (v as object)) ? Number((v as { N?: string; S?: string }).N ?? (v as { S?: string }).S) : v; };
+  const own = Number(g('licenceRoyalty') ?? NaN);
+  if (own >= 0 && g('licenceRoyalty') != null && g('licenceRoyalty') !== '') return own;
+  const aid = String(g('artistId') ?? '');
+  if (aid) { const { S } = mtables(); const a = plain(await getRow(S, { id: { S: aid } })); if (a?.licenceRoyaltyPct != null) return Number(a.licenceRoyaltyPct); return 30; }
+  try { const row = plain(await getRow(process.env.RATES_TABLE!, { key: { S: 'default' } })); let rd: unknown = row?.data; for (let i = 0; i < 2 && typeof rd === 'string'; i++) rd = JSON.parse(rd); const v = (rd as { sivaLicenceRoyalty?: number } | undefined)?.sivaLicenceRoyalty; return v != null ? Number(v) : 30; } catch { return 30; }
+}
 /** Print royalty % for a work: the work's own, else its portal artist's (Artists & sellers), else Siva's (Pricing). */
 async function printRoyaltyOf(pr: Img): Promise<number> {
   const own = num(pr, 'printRoyalty');
@@ -3156,7 +3166,7 @@ async function licenceOrder(ev: ApiEvent) {
     customerName: name, phone: txt(d.phone, 30), email: me.email, quotedPrice: total,
     productId: String(pr.id), licenceType: type,
     artistName: String(pr.artist || 'Siva Raja'), ...(pr.artistId ? { artistId: String(pr.artistId), artistCountry: String(pr.artistCountry || 'UAE') } : {}),
-    royaltyPct: Number(pr.printRoyalty ?? 0),
+    royaltyPct: await licenceRoyaltyOf(pr),
   };
   await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row), ConditionExpression: 'attribute_not_exists(id)' }));
   // Straight to "Price sent": the stream makes the Ziina link and emails it.
