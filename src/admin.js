@@ -1731,6 +1731,7 @@ function offerPanel(e) {
       <label class="field" style="gap:2px;margin:0"><span style="font-size:11px;font-weight:700">Revised price (⃃)</span><input id="ofCounter" type="number" min="1" step="1" style="width:120px" value="${q != null && q !== o ? q : ''}"></label>
       <button type="button" class="btn small ghost" id="ofCounterBtn">Send revised price</button>
       <button type="button" class="btn small ghost" id="ofDecline" style="color:var(--kumkum)">Decline</button></div>
+      <div id="ofWarn" class="err" style="font-size:13px;margin-top:6px" hidden></div>
       <div class="muted" style="font-size:12px;margin-top:6px">Each button fills the price, status and message below. Check them, then press <b>Save</b>: the customer is emailed and can pay the agreed price. The customer's standard discount is not added on top of an offer.</div>` : ''}
   </fieldset>`;
 }
@@ -1748,6 +1749,23 @@ function wireOffer(e) {
     $('eMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
   const aed = (n) => `AED ${Number(n).toLocaleString('en-US')}`;
+  // Warning only: the offer (or revised price) against the order's cost and the market band.
+  const warn = () => {
+    const w = $('ofWarn'); if (!w) return;
+    const p = Number($('ofCounter').value) || o, out = [];
+    try {
+      if ($('cTier')) {
+        const { local, ...inp } = readCosting(); const r = calc({ ...inp, local }, p);
+        if (r.margin != null && r.margin < 0) out.push(`${aed(p)} doesn't cover the cost of ${aed(Math.round(r.total))} plus fees: a loss of about ${aed(Math.round(-r.margin))}`);
+        else if (r.marginPct != null && r.marginPct < 0.2) out.push(`only ${Math.round(r.marginPct * 100)}% margin at ${aed(p)}`);
+        const m = rates.market?.[$('cTier').value], band = m?.[mediumOf(e)];
+        if (band && p < band[0]) out.push(`below the market band ${aed(band[0])}–${aed(band[1])}`);
+      }
+    } catch { /* costing not ready */ }
+    w.hidden = !out.length; w.innerHTML = out.length ? `⚠ ${out.join(' · ')}. You can still accept it.` : '';
+  };
+  setTimeout(warn, 0);
+  ['ofCounter', 'cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc'].forEach((id) => { $(id)?.addEventListener('input', warn); $(id)?.addEventListener('change', warn); });
   $('ofAccept').onclick = () => fill(o, null, `Hello ${first}, good news: the artist has accepted your offer of ${aed(o)} for "${e.title}". You can pay with the link below to confirm your order.`);
   $('ofCounterBtn').onclick = () => {
     const c = Number($('ofCounter').value);
