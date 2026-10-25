@@ -64,6 +64,9 @@ const schema = a.schema({
       // Status history for the customer's tracker: JSON [{s, at}], appended by the function on every status change.
       statusLog: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Kalai Circle (loyalty): points earned on this order (after delivery), points spent on it and their value, referral.
+      // Basket checkout (website cart): orders paid together share basketRef; basketLead = the order that carries the basket emails.
+      basketRef: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      basketLead: a.boolean().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       loyaltyPoints: a.integer().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       loyaltyAt: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       loyaltyRedeemed: a.integer().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
@@ -622,6 +625,13 @@ const schema = a.schema({
     .handler(a.handler.function(zohoQuoteSync)),
   // Website: order a Crafts shop item (signed-in customer); the price is taken from the listing, not the browser.
   marketOrder: a
+    .mutation()
+    .arguments({ data: a.string().required() })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(zohoQuoteSync)),
+  // Website cart: checkout of several items at once (prices checked on the server), one payment for all of them.
+  basketCheckout: a
     .mutation()
     .arguments({ data: a.string().required() })
     .returns(a.string())

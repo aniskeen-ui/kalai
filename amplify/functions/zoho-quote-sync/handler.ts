@@ -2811,6 +2811,195 @@ async function marketOrder(ev: ApiEvent) {
   return { ok: true, ref, total };
 }
 
+// ---------- Website cart: checkout of several items, one payment ----------
+// Each item still becomes its own order (artist, frame shop, supplier and tracking work as before); the orders share a
+// basket reference. Prices are worked out here from the catalogue, the Settings and the listings, never taken from the
+// browser. Delivery in the UAE: the orders start at "Price sent" with ONE Ziina payment for the whole basket. Abroad,
+// or a Little Artists gift with overseas shipping: the orders start at "Received" and the studio quotes the shipping.
+const CART_FRAMES: Record<string, string> = { none: 'No frame', black: 'Black slim', white: 'White', oak: 'Natural oak', walnut: 'Walnut', gold: 'Gold' };
+const PRINT_SIZES: [string, string, number, number][] = [['A4', 'A4 (21 × 30 cm)', 169, 59], ['A3', 'A3 (30 × 42 cm)', 249, 79], ['40×50', '40 × 50 cm', 299, 99], ['50×70', '50 × 70 cm', 399, 139], ['60×80', '60 × 80 cm', 499, 179]];
+const PRINT_FRAMES: Record<string, string> = { black: 'Black frame', white: 'White frame', wood: 'Natural wood frame', none: 'Print only (no frame)' };
+const KIDS_EXTRAS: Record<string, [string, number]> = { premium: ['Premium frame', 45], large: ['Larger A3 frame', 35], copy: ['A second framed copy', 59], wrap: ['Gift wrap', 15] };
+const KIDS_EMIRATE: Record<string, number> = { Dubai: 25, Sharjah: 25, Ajman: 25, 'Abu Dhabi': 35, 'Ras Al Khaimah': 35, 'Umm Al Quwain': 35, Fujairah: 35 };
+const SHIP_ZONE: Record<string, string[]> = { A: ['Saudi Arabia', 'Oman', 'Qatar', 'Bahrain', 'Kuwait'], B: ['India', 'Sri Lanka', 'Pakistan', 'Bangladesh', 'Nepal', 'Maldives', 'Bhutan'],
+  C: ['United Kingdom', 'Ireland', 'France', 'Germany', 'Italy', 'Spain', 'Portugal', 'Netherlands', 'Belgium', 'Luxembourg', 'Switzerland', 'Austria', 'Denmark', 'Sweden', 'Norway', 'Finland', 'Iceland', 'Poland', 'Czechia', 'Slovakia', 'Hungary', 'Slovenia', 'Croatia', 'Romania', 'Bulgaria', 'Greece', 'Cyprus', 'Malta', 'Estonia', 'Latvia', 'Lithuania', 'Monaco', 'Liechtenstein', 'Andorra', 'San Marino', 'Vatican City', 'Jersey', 'Guernsey', 'Isle of Man', 'Gibraltar', 'Serbia', 'Bosnia and Herzegovina', 'Montenegro', 'North Macedonia', 'Albania', 'Kosovo', 'Moldova', 'Ukraine'],
+  D: ['United States', 'Canada', 'Australia', 'New Zealand'] };
+const zoneOfCountry = (c: string) => Object.keys(SHIP_ZONE).find((z) => SHIP_ZONE[z].includes(c)) ?? 'E';
+type CartLine = { kind: string; title: string; details: Dict; price: number; quote: boolean; extra: Dict; gift?: boolean; fileKey?: string };
+/** A Product's website price for a frame and frame size (same table as the website: Pricing → price matrix). */
+function matrixPrice(p: Dict, frame: string, size: string): number | null {
+  let m: Dict; try { m = JSON.parse(String(p.priceMatrix ?? '')); } catch { return null; }
+  if (!m) return null;
+  if (m.v === 2) { if (frame === 'none') return Number(m.none) || null; const sizes = (m.sizes ?? {}) as Record<string, Dict>; const row = sizes[size] ?? sizes[String(m.base)]; return row ? Number(row[frame]) || null : null; }
+  return Number(m[frame]) || null;
+}
+async function cartLine(it: Dict, site: Dict | null, used: Set<string>): Promise<CartLine> {
+  const t = txt(it.t, 10);
+  if (t === 'ART') {
+    const P = process.env.PRODUCT_TABLE!;
+    const p = plain(await getRow(P, { id: { S: txt(it.pid, 80) } }));
+    if (!p || p.status !== 'PUBLISHED' || p.kind === 'photo') throw new Error(`Sorry, "${txt(it.name, 60) || 'an artwork'}" is no longer available. Please remove it from your cart.`);
+    if (used.has(String(p.id))) throw new Error(`"${txt(it.name, 60)}" is in your cart twice: each work is one of a kind.`);
+    used.add(String(p.id));
+    const frame = CART_FRAMES[txt(it.frame, 10)] ? txt(it.frame, 10) : 'none';
+    let m: Dict = {}; try { m = JSON.parse(String(p.priceMatrix ?? '{}')) ?? {}; } catch { m = {}; }
+    const size = txt(it.size, 20) || String(m.base ?? '');
+    const price = matrixPrice(p, frame, size);
+    if (!price) throw new Error(`"${txt(it.name, 60)}" has no website price for this frame. Please ask us for the price instead.`);
+    const name = txt(it.name, 120) || String(p.title ?? 'Artwork');
+    const det: Dict = { Artwork: `${name} (${[p.medium, p.size].filter(Boolean).join(', ')})`, 'Artwork no.': String(p.code ?? ''), Framing: frame === 'none' ? 'Unframed' : `${CART_FRAMES[frame]} frame${size ? ` ${size} cm` : ''}, white mount`, Price: `AED ${price} (website price)` };
+    if (txt(it.tried, 120)) det['Frame tried on the website'] = txt(it.tried, 120);
+    if (it.inst) det.Payment = 'Asked about instalments';
+    if (txt(it.msg, 300)) det['Note on this work'] = txt(it.msg, 300);
+    return { kind: 'PRICE', title: name, details: det, price, quote: false, extra: {} };
+  }
+  if (t === 'PRINT') {
+    const P = process.env.PRODUCT_TABLE!;
+    const p = plain(await getRow(P, { id: { S: txt(it.pid, 80) } }));
+    if (!p || !['PUBLISHED', 'SOLD'].includes(String(p.status)) || (p.kind !== 'photo' && !p.printable)) throw new Error(`Sorry, the print "${txt(it.name, 60)}" is no longer available.`);
+    const sizes = (() => { const i = PRINT_SIZES.findIndex((z) => z[0] === p.printMax); return i >= 0 ? PRINT_SIZES.slice(0, i + 1) : PRINT_SIZES; })();
+    const z = sizes.find((x) => x[0] === txt(it.size, 10));
+    if (!z) throw new Error(`Choose another size for "${txt(it.name, 60)}".`);
+    const fr = PRINT_FRAMES[txt(it.frame, 10)] ? txt(it.frame, 10) : 'black';
+    let pp: Record<string, Dict> = {}; try { pp = JSON.parse(String(site?.photoPrices ?? '{}')) ?? {}; } catch { pp = {}; }
+    const sp = pp[z[0]] ?? {};
+    const base = fr === 'none' ? Number(sp.print ?? z[3]) : Number(sp.framed ?? z[2]);
+    const roy = p.kind === 'photo' ? 0 : Number(p.printRoyalty ?? 0);
+    const unit = roy ? Math.ceil(base * (1 + roy / 100) / 5) * 5 : base;
+    const qty = Math.max(1, Math.min(5, Math.floor(numIn(it.qty, 5)) || 1));
+    const name = txt(it.name, 120) || String(p.title ?? 'Print');
+    const det: Dict = { Print: name + (p.kind === 'photo' ? '' : ' (print of the painting)'), 'Artwork no.': String(p.code ?? ''), Size: z[1], Frame: fr === 'none' ? PRINT_FRAMES.none : PRINT_FRAMES[fr] + (it.mount === false ? '' : ', white mount'), Copies: String(qty), 'Delivery charge': 'included in the UAE', Total: `AED ${(unit * qty).toLocaleString('en-US')}` };
+    return { kind: 'PHOTO', title: `Framed print: ${name} (${z[1].split(' (')[0]})`, details: det, price: r2(unit * qty), quote: false, extra: {} };
+  }
+  if (t === 'CRAFT') {
+    const { S, L } = mtables();
+    const l = plain(await getRow(L, { id: { S: txt(it.listingId, 60) } }));
+    const seller = l ? plain(await getRow(S, { id: { S: String(l.sellerId) } })) : null;
+    if (!l || l.status !== 'APPROVED' || seller?.status !== 'APPROVED') throw new Error(`Sorry, "${txt(it.name, 60) || 'an item'}" is no longer available.`);
+    const qty = Math.max(1, Math.floor(numIn(it.qty, 99)) || 1);
+    if (qty > Number(l.stock ?? 0)) throw new Error(Number(l.stock ?? 0) > 0 ? `Only ${l.stock} left of "${l.title}".` : `Sorry, "${l.title}" is out of stock.`);
+    const unit = Number(l.customerPrice);
+    const det: Dict = { Item: String(l.title), Maker: seller.type === 'ARTIST' ? 'Artist' : String(l.sellerName ?? seller.business), Quantity: String(qty), 'Unit price': `AED ${unit}`, Delivery: l.deliveryBy === 'KALAI' ? 'Kalai Art House delivers' : 'The maker delivers' };
+    return { kind: 'MARKET', title: String(l.title), details: det, price: r2(unit * qty), quote: false,
+      extra: { listingId: String(l.id), sellerId: String(l.sellerId), sellerName: String(l.sellerName ?? seller.business), qty, unitPrice: unit, deliveryBy: String(l.deliveryBy), sellerAmount: r2(Number(l.sellerPrice) * qty), commissionPct: Number(l.commissionPct ?? 0) } };
+  }
+  if (t === 'GIFT') {
+    const f = (it.f ?? {}) as Dict;
+    const age = Math.max(3, Math.min(17, Math.floor(numIn(f.age, 17)) || 6));
+    const country = txt(f.country, 60) || 'UAE';
+    const uae = country === 'UAE';
+    let zones: Record<string, number> = {}; try { zones = JSON.parse(String(site?.shipZones ?? '{}')) ?? {}; } catch { zones = {}; }
+    const del = uae ? (KIDS_EMIRATE[txt(f.emirate, 40)] ?? 35) : (Number(zones[zoneOfCountry(country)]) > 0 ? Number(zones[zoneOfCountry(country)]) : null);
+    const ex = (Array.isArray(f.extras) ? f.extras : []).map((k) => KIDS_EXTRAS[String(k)]).filter(Boolean);
+    const total = (age <= 10 ? 0 : 79) + (del ?? 0) + ex.reduce((a, e) => a + e[1], 0);
+    const key = txt(it.fileKey, 300);
+    if (!key.startsWith('uploads/')) throw new Error("The child's drawing is missing: add the gift again.");
+    const det: Dict = { Child: `${txt(f.child, 40)}, age ${age}`, 'Gift for': txt(f.to, 60), Country: country, [uae ? 'Emirate' : 'State / city']: uae ? txt(f.emirate, 40) : txt(f.region, 60),
+      'Delivery charge': del == null ? 'to quote' : `AED ${del}`, Address: txt(f.address, 300), Frame: txt(f.frame, 20), Extras: ex.map((e) => e[0]).join(', '), 'Card message': txt(f.msg, 200), Parent: txt(f.parent, 80), Mobile: txt(f.phone, 30),
+      Total: `AED ${total.toLocaleString('en-US')}${del == null ? ' + shipping' : ''}`, Consent: 'Parent/guardian confirmed' };
+    if (!det['Gift for'] || !det.Address || !txt(f.child, 40)) throw new Error('A Little Artists gift is missing the child, who it is for or the address: add it again.');
+    return { kind: 'GIFT', title: `Little Artists gift for ${det['Gift for']}`, details: det, price: total, quote: del == null, extra: {}, gift: true, fileKey: key };
+  }
+  throw new Error('Unknown item in the cart.');
+}
+async function basketCheckout(ev: ApiEvent) {
+  const table = process.env.ENQUIRY_TABLE;
+  if (!table) throw new Error('Not configured');
+  const me = who(ev);
+  const d = parseData(ev.arguments.data);
+  const items = (Array.isArray(d.items) ? d.items : []).slice(0, 20) as Dict[];
+  if (!items.length) throw new Error('Your cart is empty.');
+  const site = process.env.SITE_TABLE ? plain(await getRow(process.env.SITE_TABLE, { id: { S: 'site' } })) : null;
+  const used = new Set<string>();
+  const lines: CartLine[] = [];
+  for (const it of items) lines.push(await cartLine(it, site, used));
+  const needsAddr = lines.some((l) => !l.gift);
+  const dry = !!d.dry; // the cart's "Review total": prices and discount only, nothing saved
+  let a: ReturnType<typeof checkAddress> | null = null;
+  if (needsAddr) { try { a = checkAddress(d.address as Dict); } catch (err) { if (!dry) throw err; } }
+  const dryCountry = txt((d.address as Dict)?.country, 60) || 'UAE';
+  const contactName = a?.name || txt((d.address as Dict)?.name, 80) || String(lines.find((l) => l.gift)?.details.Parent ?? '');
+  const contactPhone = a?.phone || txt((d.address as Dict)?.phone, 30) || String(lines.find((l) => l.gift)?.details.Mobile ?? '');
+  // Outside the UAE: the studio adds the shipping before the payment.
+  if ((a ? a.country : dryCountry) !== 'UAE') lines.forEach((l) => { if (!l.gift) l.quote = true; });
+  const quote = lines.some((l) => l.quote);
+
+  // Discount: the customer's standard / programme discount, or one code (offer, voucher, gift card, invite).
+  const mine = (await scanAll(table)).filter((e) => ownsEnquiry(e, ev));
+  const custCode = mine.map((e) => str(e, 'customerCode')).find(Boolean) ?? '';
+  const cust = custCode ? await loyCustomer(custCode) : null;
+  const AREA_OF = (k: string, area: string) => (AREA[area || 'ALL'] ?? AREA.ALL).includes(k);
+  const disc = lines.map(() => 0);
+  let codeUsed: { code: string; v: Img | null; amount: number } | null = null;
+  let stdNote = '';
+  const code = txt(d.code, 30).toUpperCase();
+  if (cust?.discountType && Number(cust.discountValue) > 0) {
+    if (code) throw new Error(`Your ${String(cust.discountNote || 'special')} discount is already taken off, so a code can't be added as well.`);
+    lines.forEach((l, i) => { if (AREA_OF(l.kind, String(cust.discountArea || 'ALL'))) disc[i] = cust.discountType === 'AED' ? 0 : r2(l.price * Number(cust.discountValue) / 100); });
+    if (cust.discountType === 'AED') { const idx = lines.findIndex((l) => AREA_OF(l.kind, String(cust.discountArea || 'ALL'))); if (idx >= 0) disc[idx] = Math.min(lines[idx].price - 2, Number(cust.discountValue)); }
+    stdNote = String(cust.discountNote || 'Your standard discount');
+  } else if (code) {
+    const f = await findPromo(code);
+    const v = f && 'p' in f ? null : await findVoucher(code);
+    if (!v && (!f || 'error' in f)) throw new Error(f?.error ?? 'This code is not valid.');
+    const p = v ?? (f as { p: Img }).p;
+    if (v && str(v, 'kind') === 'REF' && (Number(cust?.paidCount ?? 0) > 0)) throw new Error('Invite codes are for a first order: you can earn your own by inviting friends.');
+    if (v && str(v, 'kind') === 'REF' && str(v, 'refOwner') === custCode) throw new Error('This is your own invite code: share it with friends.');
+    const area = str(p, 'appliesTo') || 'ALL';
+    const okIdx = lines.map((l, i) => (v && str(v, 'kind') === 'GIFT') || AREA_OF(l.kind, area) ? i : -1).filter((i) => i >= 0);
+    const base = r2(okIdx.reduce((s2, i) => s2 + lines[i].price, 0));
+    if (!okIdx.length || !(base > 0)) throw new Error('This code does not apply to the items in your cart.');
+    const pseudo = toAttrs({ email: me.email, customerCode: custCode, kind: lines[okIdx[0]].kind }) as Img;
+    const r = v ? voucherAmount(v, pseudo, base) : discountFor(p, lines[okIdx[0]].kind, base);
+    if (r.error) throw new Error(r.error);
+    const total = Math.min(r.amount, base - 2 * okIdx.length);
+    let left = r2(total);
+    okIdx.forEach((i, n) => { const share = n === okIdx.length - 1 ? left : r2(total * lines[i].price / base); disc[i] = share; left = r2(left - share); });
+    codeUsed = { code, v, amount: r2(total) };
+  }
+
+  const basketRef = `BK-${newRef().slice(3)}`;
+  const now = new Date().toISOString();
+  const rows: Dict[] = lines.map((l, i) => {
+    const price = r2(l.price - disc[i]);
+    return { id: crypto.randomUUID(), __typename: 'Enquiry', createdAt: now, updatedAt: now, owner: me.owner, ref: newRef(), kind: l.kind, title: l.title,
+      details: JSON.stringify({ ...l.details, Basket: `${basketRef} (${lines.length} item${lines.length > 1 ? 's' : ''})`, Name: contactName, Mobile: l.details.Mobile ?? contactPhone, ...(txt(d.note, 300) ? { Message: txt(d.note, 300) } : {}) }),
+      status: l.quote ? 'RECEIVED' : 'PRICE_SENT', customerName: contactName, phone: contactPhone, email: me.email, quotedPrice: price, basketRef, basketLead: i === 0,
+      ...(l.fileKey ? { fileKey: l.fileKey } : {}),
+      ...(a && !l.gift ? { deliveryName: a.name, deliveryPhone: a.phone, deliveryCountry: a.country, deliveryEmirate: a.region, deliveryPin: a.pin, deliveryAddress: a.address, deliveryLandmark: a.landmark, addressAt: now, addressBy: 'Customer' } : {}),
+      ...(disc[i] > 0 ? { listPrice: l.price, discountAmount: disc[i], ...(codeUsed ? { discountCode: codeUsed.code, ...(codeUsed.v && str(codeUsed.v, 'kind') === 'REF' ? { referralBy: str(codeUsed.v, 'refOwner') } : {}) } : { discountType: String(cust?.discountType), discountValue: Number(cust?.discountValue), discountNote: stdNote }) } : {}),
+      ...l.extra };
+  });
+  if (dry) {
+    const tot = r2(rows.reduce((s2, r) => s2 + Number(r.quotedPrice), 0)), dsum = r2(disc.reduce((x, y) => x + y, 0));
+    return { lines: rows.map((r, i) => ({ title: String(r.title), price: Number(r.quotedPrice), list: lines[i].price, discount: disc[i] })), total: tot, discount: dsum, quote,
+      discountLabel: dsum > 0 ? (codeUsed ? `Code ${codeUsed.code}` : `${stdNote} discount`) : '' };
+  }
+  // Several pieces with a quote: no payment yet, the studio sends the price (one order at a time, as before).
+  let payUrl = '';
+  const total = r2(rows.reduce((s2, r) => s2 + Number(r.quotedPrice), 0));
+  if (!quote && total >= 2 && (await secureParam('/kalai/ziina/token'))) {
+    const test = await ziinaTest();
+    const body = (message?: string) => JSON.stringify({ amount: fils(total), currency_code: 'AED', test, ...(message ? { message } : {}),
+      success_url: `${SITE}/?paid=${encodeURIComponent(basketRef)}#my-enquiries`, cancel_url: `${SITE}/#my-enquiries`, failure_url: `${SITE}/?payfail=${encodeURIComponent(basketRef)}#my-enquiries` });
+    let r = await ziinaCall('/payment_intent', { method: 'POST', body: body(`Kalai Art House ${basketRef}`) });
+    if (r.status === 400 && /message/i.test(String(r.body?.message ?? ''))) r = await ziinaCall('/payment_intent', { method: 'POST', body: body() });
+    if (r.ok && r.body?.redirect_url) {
+      payUrl = String(r.body.redirect_url);
+      rows.forEach((row) => Object.assign(row, { paymentLink: payUrl, ziinaIntentId: String(r.body.id), ziinaAmount: Number(row.quotedPrice), ziinaTest: test ? 'yes' : undefined, ziinaMessage: `${test ? 'Test ' : ''}Ziina basket payment for ${basketRef}: AED ${total.toLocaleString('en-US')} for ${rows.length} orders.` }));
+    } else console.error(`Basket ${basketRef}: Ziina link failed (${r.status})`, r.body);
+  }
+  for (const row of rows) await ddb.send(new PutItemCommand({ TableName: table, Item: toAttrs(row), ConditionExpression: 'attribute_not_exists(id)' }));
+  if (codeUsed) { if (codeUsed.v) await useVoucher(codeUsed.v, basketRef, codeUsed.amount); else await bumpUses(codeUsed.code, 1); }
+  const lineTxt = rows.map((r) => `• ${h(String(r.title))} (${h(String(r.ref))}): <b>${aed(Number(r.quotedPrice))}</b>${Number(r.discountAmount) ? ` <span style="color:#6b6780">(was ${aed(Number(r.listPrice))})</span>` : ''}`).join('<br>');
+  if (me.email && (await emailsOn())) await sendMail({ to: me.email, subject: `We've received your order ${basketRef}`, lines: [`Hello ${h(contactName.split(' ')[0] || 'there')},`, `Thank you for your order of ${rows.length} item${rows.length > 1 ? 's' : ''}:`, lineTxt,
+    quote ? `Total so far <b>${aed(total)}</b>. We'll add the shipping${a && a.country !== 'UAE' ? ` to ${h(a.country)}` : ''} and send you the payment link, usually within 24 hours.` : `Total <b>${aed(total)}</b>, including delivery in the UAE${codeUsed ? ` and your code ${h(codeUsed.code)}` : stdNote ? ` and your ${h(stdNote)} discount` : ''}.`,
+    !quote && payUrl ? 'If you did not finish the payment, use the button below; your order is confirmed once it is paid.' : '', 'You can follow each item under My enquiries & orders.'].filter(Boolean), button: payUrl ? { label: `Pay ${aed(total)} securely`, url: payUrl } : MY }).catch(() => {});
+  await sendMail({ to: STUDIO_EMAIL, subject: `New basket order ${basketRef}: ${rows.length} items, ${aed(total)}`, lines: [`${h(contactName)} · ${h(contactPhone)} · ${h(me.email)}`, lineTxt, quote ? '<b>Needs a price/shipping quote</b> before payment.' : payUrl ? 'Payment link sent (one Ziina payment for all items).' : 'No Ziina link: send the payment link yourself.'], button: { label: 'Open Order Management', url: `${SITE}/admin.html` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
+  console.log(`Basket ${basketRef}: ${rows.length} orders, AED ${total}${quote ? ' (to quote)' : ''}`);
+  return { ok: true, basketRef, total, payUrl, quote, refs: rows.map((r) => r.ref) };
+}
+
 // ---------- Image licences (website → artwork → Licences) ----------
 // Sold from the work's full-size file (Catalogue → Prints → print file). Price = % of the original's price (unframed),
 // set per type in Settings. Paid by Ziina; once paid the order is Delivered and the buyer downloads the file under
@@ -3214,6 +3403,8 @@ async function ziinaPriceLink(rec: StreamRecord, img: Img) {
     return;
   }
   if (link && !mine) return; // the studio's own link
+  // A basket's shared payment: keep it while this order's price is unchanged.
+  if (str(img, 'basketRef') && mine && link && num(img, 'ziinaAmount') === price) return;
   if (mine && num(img, 'ziinaAmount') === price && link) return; // link already matches the price
   if (!(await secureParam('/kalai/ziina/token'))) return;
   const id = str(img, 'id'), ref = str(img, 'ref');
@@ -3287,7 +3478,8 @@ async function ziinaWebhook(ev: UrlEvent) {
   const data = msg.data ?? {};
   const table = process.env.ENQUIRY_TABLE!;
   if (msg.event === 'payment_intent.status.updated' && data.id) {
-    const e = (await scanAll(table)).find((x) => str(x, 'ziinaIntentId') === String(data.id));
+    const all = (await scanAll(table)).filter((x) => str(x, 'ziinaIntentId') === String(data.id));
+    const e = all[0];
     if (!e) { console.warn(`Ziina payment ${data.id}: no order`); return res(200); }
     // Don't trust the notification alone: read the payment from Ziina.
     const got = await ziinaCall(`/payment_intent/${encodeURIComponent(String(data.id))}`);
@@ -3295,9 +3487,15 @@ async function ziinaWebhook(ev: UrlEvent) {
     const st = String(pi.status ?? data.status ?? '');
     const now = new Date().toISOString();
     if (st === 'completed') {
-      const paidOk = Number(pi.amount) === fils(num(e, 'quotedPrice') ?? 0);
+      // A basket payment covers all its orders (each keeps its own price).
+      const paidOk = Number(pi.amount) === fils(all.reduce((s2, x) => s2 + (num(x, 'quotedPrice') ?? 0), 0));
       const card = pi.card_details ? `${pi.card_details.card_brand ?? 'card'} ••${pi.card_details.card_last_four ?? ''}` : '';
-      if (['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') && paidOk) {
+      if (all.length > 1 && paidOk) {
+        for (const x of all) if (['RECEIVED', 'PRICE_SENT'].includes(str(x, 'status') || 'RECEIVED')) await updateEnquiry(str(x, 'id'), { status: 'PAID', paymentMethod: 'ZIINA', paymentRef: String(pi.id), ziinaPaidAt: now, adminMessage: null, ...(card ? { ziinaCard: card } : {}) });
+        console.log(`Ziina paid basket ${str(e, 'basketRef')}: AED ${Number(pi.amount) / 100}`);
+      } else if (all.length > 1) {
+        for (const x of all) await writeBack(str(x, 'id'), { ziinaPaidAt: now, ziinaMessage: `Ziina basket payment of AED ${Number(pi.amount) / 100} does not match the basket total: check it and mark the orders Paid yourself.` });
+      } else if (['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') && paidOk) {
         await updateEnquiry(str(e, 'id'), { status: 'PAID', paymentMethod: 'ZIINA', paymentRef: String(pi.id), ziinaPaidAt: now, adminMessage: null, ...(card ? { ziinaCard: card } : {}) }); // the price message ("pay with the link") is done
         console.log(`Ziina paid ${str(e, 'ref')}: AED ${Number(pi.amount) / 100}`);
       } else {
@@ -3866,6 +4064,7 @@ async function redeemPoints(ev: ApiEvent) {
   const groups = ev.identity?.groups ?? (ev.identity?.claims?.['cognito:groups'] as string[] | undefined) ?? [];
   if (!e || (!ownsEnquiry(e, ev) && !groups.includes('ADMINS'))) throw new Error('Order not found');
   if (!['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') || str(e, 'zohoInvoiceId')) throw new Error('This order is already paid.');
+  if (str(e, 'basketRef') && str(e, 'ziinaIntentId')) throw new Error('This order is paid together with the rest of your cart, so points can\'t be added to it alone.');
   const code = str(e, 'customerCode');
   if (!code) throw new Error('Points are available once your first order is registered.');
   const had = num(e, 'loyaltyRedeemed') ?? 0, hadAmt = num(e, 'loyaltyAmount') ?? 0;
@@ -3974,6 +4173,7 @@ async function applyCode(ev: ApiEvent) {
   if (!e || (!ownsEnquiry(e, ev) && !groups.includes('ADMINS'))) throw new Error('Order not found');
   if (!['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') || str(e, 'zohoInvoiceId')) throw new Error('This order is already paid, so a code can no longer be added.');
   if (str(e, 'discountType')) throw new Error('A special discount is already applied to this order, so a code can\'t be added as well.');
+  if (str(e, 'basketRef') && str(e, 'ziinaIntentId')) throw new Error('This order is paid together with the rest of your cart: codes are added at checkout.');
   const current = str(e, 'discountCode');
   const list = num(e, 'listPrice') ?? num(e, 'quotedPrice') ?? 0;
   if (!(list > 0)) throw new Error('Add the code once we have sent you the price.');
@@ -4586,6 +4786,8 @@ function mailsFor(rec: StreamRecord): Mail[] {
     if (st === 'PAID' && kind === 'LICENCE') cust(`Your licensed file is ready (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>.`,
       'Download the full-size file under <b>My enquiries & orders</b> (button below): sign in with this email address. You can download it again any time.',
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', 'Thank you for supporting the artist.']);
+    else if (st === 'PAID' && str(img, 'basketRef')) cust(`Payment received: thank you (${str(img, 'basketRef')})`, [`We've received your payment for your order <b>${h(str(img, 'basketRef'))}</b>. All its items are confirmed.`,
+      'Each item is prepared on its own (paintings by the artist, prints and frames in Dubai), so they may arrive separately. You can follow each one under My enquiries & orders, and we email the tracking number as each ships.']);
     else if (st === 'PAID') cust(`Payment received: thank you (${ref})`, [`We've received your payment${price ? ` of <b>${aed(price)}</b>` : ''} for <b>${h(title)}</b>. Your order is confirmed.`,
       str(img, 'zohoInvoice') ? `Invoice ${h(str(img, 'zohoInvoice'))} follows separately.` : '', msgLine,
       str(img, 'deliveryAddress') ? `It will be delivered to: ${h(addressText(img))}. You can change this under My enquiries & orders until it ships.` : '<b>Please add your delivery address</b> under My enquiries & orders.',
@@ -4772,6 +4974,9 @@ async function mailOff(): Promise<string[]> {
 async function notify(rec: StreamRecord) {
   try {
     let mails = mailsFor(rec);
+    // A basket: the checkout already emailed the order; the payment email comes once (from the lead order).
+    const bi = rec.dynamodb?.NewImage;
+    if (bi && str(bi, 'basketRef')) mails = mails.filter((m) => m.to === STUDIO_EMAIL || !(m.key === 'RECEIVED' || (m.key === 'PAID' && !bi.basketLead?.BOOL)));
     if (!mails.length || !(await emailsOn())) return;
     // Customer emails switched off in Settings (studio notifications always go).
     const off = await mailOff();
@@ -4805,6 +5010,7 @@ export const handler = async (event: StreamEvent | ApiEvent | UrlEvent) => {
     const field = event.info?.fieldName ?? event.fieldName ?? (a.emirate ? 'customerAddress' : a.action ? 'customerRequest' : a.step ? 'artistProgress' : a.priceInr !== undefined ? 'artistQuote' : a.id ? 'checkZoho' : 'artistList');
     if (field === 'sellerAction') return JSON.stringify(await sellerAction(event));
     if (field === 'marketOrder') return JSON.stringify(await marketOrder(event));
+    if (field === 'basketCheckout') return JSON.stringify(await basketCheckout(event));
     if (field === 'licenceOrder') return JSON.stringify(await licenceOrder(event));
     if (field === 'siteTranslate') return JSON.stringify(await siteTranslate(event.arguments as { lang?: string; texts?: string }));
     if (field === 'verifyCertificate') return JSON.stringify(await verifyCertificate(String(event.arguments.code ?? '')));

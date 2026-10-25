@@ -389,7 +389,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <header class="top"><div class="wrap">
   <div class="brand" data-notranslate><b>KALAI</b><span>Art House · Dubai</span></div>
   <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="#little">Little Artists</a><a href="#prints">Framed Prints</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
-  <button class="cart-btn" id="openCart" aria-label="Open cart" hidden>Cart <span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="prints">Shop framed prints</button><div class="cur-pick" data-notranslate><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button><button type="button" data-cur="GBP">£ GBP</button><button type="button" data-cur="EUR">€ EUR</button><button type="button" data-cur="SAR">SAR · Saudi riyal</button><button type="button" data-cur="QAR">QAR · Qatari riyal</button><button type="button" data-cur="KWD">KWD · Kuwaiti dinar</button><button type="button" data-cur="BHD">BHD · Bahraini dinar</button><button type="button" data-cur="OMR">OMR · Omani rial</button><button type="button" data-cur="JOD">JOD · Jordanian dinar</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
+  <button class="cart-btn" id="openCart" aria-label="Open cart" title="Cart" hidden><span aria-hidden="true">🛒</span><span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="prints">Shop framed prints</button><div class="cur-pick" data-notranslate><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button><button type="button" data-cur="GBP">£ GBP</button><button type="button" data-cur="EUR">€ EUR</button><button type="button" data-cur="SAR">SAR · Saudi riyal</button><button type="button" data-cur="QAR">QAR · Qatari riyal</button><button type="button" data-cur="KWD">KWD · Kuwaiti dinar</button><button type="button" data-cur="BHD">BHD · Bahraini dinar</button><button type="button" data-cur="OMR">OMR · Omani rial</button><button type="button" data-cur="JOD">JOD · Jordanian dinar</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
 <section class="hero" style="padding-block:0"><div class="wrap">
@@ -892,39 +892,10 @@ window.kalaiShowCatalogue=function(list){
 };
 document.getElementById("artFind")?.addEventListener("input",()=>drawGrid());
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawGrid()});
-document.addEventListener("click",e=>{const bp=e.target.closest("[data-buyprint]");if(bp){closeAll();setTimeout(()=>window.kalaiOpenPrint&&window.kalaiOpenPrint(bp.dataset.buyprint),50);return}const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const a=e.target.closest("[data-add]");if(a)addToCart(a.dataset.add);const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
+document.addEventListener("click",e=>{const bp=e.target.closest("[data-buyprint]");if(bp){closeAll();setTimeout(()=>window.kalaiOpenPrint&&window.kalaiOpenPrint(bp.dataset.buyprint),50);return}const v=e.target.closest("[data-view]");if(v){openModal(PRODUCTS.find(x=>x.id===v.dataset.view));return}const o=e.target.closest("[data-offer]");if(o){openAsk(PRODUCTS.find(x=>x.id===o.dataset.offer),true);return}const q=e.target.closest("[data-ask]");if(q){openAsk(PRODUCTS.find(x=>x.id===q.dataset.ask));return}const j=e.target.closest("[data-jump]");if(j){closeAll();document.getElementById(j.dataset.jump).scrollIntoView({behavior:"smooth"})}});
 
-/* cart */
-let cart=[];try{cart=JSON.parse(localStorage.getItem("kalai-cart")||"[]")}catch(e){cart=[]}
-const save=()=>{try{localStorage.setItem("kalai-cart",JSON.stringify(cart))}catch(e){}};
-function addToCart(id){if(cart.includes(id)){toast("Already in your cart. Each work is one of a kind.");return}cart.push(id);save();updateCount();toast("Added to cart")}
-function updateCount(){document.getElementById("cartCount").textContent=cart.length}
-function totals(){const sub=cart.reduce((s,id)=>s+PRODUCTS.find(p=>p.id===id).price,0);const ship=sub===0?0:(sub>=1000?0:35);return{sub,ship,total:sub+ship}}
-function drawCart(){
-  const b=document.getElementById("cartBody"),t=document.getElementById("totals");b.innerHTML="";
-  if(!cart.length){b.innerHTML='<div class="empty">Your cart is empty.<br>Browse the collection to add a painting.</div>';t.innerHTML="";return}
-  cart.forEach(id=>{const p=PRODUCTS.find(x=>x.id===id);const row=document.createElement("div");row.className="line";
-    row.appendChild(mk(p));
-    row.insertAdjacentHTML("beforeend",`<div><div class="t">${p.name}</div><div class="s">${p.size}</div><button class="rm" data-rm="${id}">Remove</button></div><div class="price">${fmt(p.price)}</div>`);b.appendChild(row)});
-  const T=totals();
-  t.innerHTML=`<div class="r"><span>Paintings</span><span class="mono">${fmt(T.sub)}</span></div>
-   <div class="r"><span>Insured UAE delivery</span><span class="mono">${T.ship?fmt(T.ship):"Free"}</span></div>
-   <div class="r note"><span>Customs duty and VAT</span><span>Included</span></div>
-   <div class="r grand"><span>Total</span><span class="mono">${fmt(T.total)}</span></div>
-   <form id="checkout" style="display:grid;gap:10px;margin-top:10px" novalidate>
-     <input id="coName" placeholder="Full name" autocomplete="name" aria-label="Full name">
-     <input id="coPhone" placeholder="Mobile, e.g. +971 50 123 4567" inputmode="tel" aria-label="Mobile number">
-     <input id="coAddr" placeholder="Delivery address and emirate" aria-label="Delivery address">
-     <button class="btn primary" type="submit">Continue to payment</button>
-     <div class="note" id="coMsg">Free delivery on orders over AED 1,000.</div>
-   </form>`;
-  document.getElementById("checkout").onsubmit=e=>{e.preventDefault();
-    const n=document.getElementById("coName").value.trim(),ph=document.getElementById("coPhone").value.trim(),ad=document.getElementById("coAddr").value.trim();
-    const m=document.getElementById("coMsg");
-    if(!n||!ph||!ad){m.textContent="Please fill in your name, mobile and delivery address.";m.style.color="var(--kumkum)";return}
-    m.style.color="var(--ok)";m.textContent="Thank you. We will WhatsApp you a secure payment link to complete the order.";};
-}
-document.getElementById("cartBody").addEventListener("click",e=>{const r=e.target.closest("[data-rm]");if(r){cart=cart.filter(x=>x!==r.dataset.rm);save();updateCount();drawCart()}});
+/* cart: account.js (window.kalaiCart): paintings, framed prints, Crafts shop and Little Artists gifts, one checkout */
+function updateCount(){}
 const scrim=document.getElementById("scrim"),drawer=document.getElementById("drawer"),modal=document.getElementById("modal");
 function closeAll(){if(typeof lensEl!=="undefined")lensEl.style.display="none";drawer.hidden=true;modal.hidden=true;scrim.hidden=true;
   try{if(location.hash.startsWith("#art-")||location.hash.startsWith("#print-"))history.replaceState(null,"",location.pathname+location.search)}catch(e){}}
@@ -932,32 +903,36 @@ window.addEventListener("popstate",()=>{if(!location.hash.startsWith("#art-")&&!
 /* opening a shared artwork link: wait for the collection (website works load a moment later) */
 (function(){const m=location.hash.match(/^#art-(.+)$/);if(!m)return;const id=decodeURIComponent(m[1]);let n=0;
   const t=setInterval(()=>{const p=typeof PRODUCTS!=="undefined"&&PRODUCTS.find(x=>String(x.id)===id);const w=!p&&typeof ARTWORKS!=="undefined"&&ARTWORKS.find(x=>String(x.id)===id);if(p){clearInterval(t);openModal(p)}else if(w){clearInterval(t);openWork(w)}else if(++n>40)clearInterval(t)},250)})();
-document.getElementById("openCart").onclick=()=>{drawCart();drawer.hidden=false;scrim.hidden=false;document.getElementById("closeCart").focus()};
+
 document.getElementById("closeCart").onclick=closeAll;scrim.onclick=closeAll;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAll()});
 
 /* modal */
 
 function openAsk(p,offer){
+  const CARTABLE=!!(p.prices&&!offer&&window.kalaiCart&&p.code);
   const box=document.getElementById("modalBox");box.className="box";box.innerHTML="";
   const art=document.createElement("div");art.className="art";art.appendChild(mk(p));box.appendChild(art);
   box.insertAdjacentHTML("beforeend",`<div class="info"><button class="x" id="mClose" aria-label="Close">×</button>
    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700">${offer?"Make an offer":p.prices?"Order":"Price enquiry"}</div>
    <h2 style="font-size:26px">${p.name}</h2><p class="note" style="margin:0">${[p.medium,p.size].filter(Boolean).join(" · ")}${p.code?` · <span style="font-family:var(--mono)">${p.code}</span>`:""}</p>
    <form id="askForm" novalidate style="display:grid;gap:12px">
-     <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
+     ${CARTABLE?"":`     <div class="two"><div class="field"><label for="aName">Your name</label><input id="aName" autocomplete="name" placeholder="Priya Raman"></div>
      <div class="field"><label for="aPhone">Mobile / WhatsApp</label><input id="aPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
-     ${!(window.kalaiAccount&&window.kalaiAccount.user)?`<div class="field"><label for="aEmail">Email <span class="note" style="font-weight:400">(for the price and updates)</span></label><input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com"></div>`:""}
+     ${!(window.kalaiAccount&&window.kalaiAccount.user)?`<div class="field"><label for="aEmail">Email <span class="note" style="font-weight:400">(for the price and updates)</span></label><input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com"></div>`:""}`}
      ${offer?`<div class="field"><label for="aOffer">Your offer (⃃)</label><input id="aOffer" inputmode="numeric" placeholder="e.g. 350"></div>`:""}
      ${p.prices&&!offer?`<div class="field"><label for="aFrame">Frame</label><select id="aFrame">${FRAMES.map(f=>`<option value="${f.k}" ${f.k===(window.kalaiPriceStyle||"black")?"selected":""}>${f.n}${f.k!=="none"&&(window.kalaiPriceSize||baseSize(p))?` ${window.kalaiPriceSize||baseSize(p)} cm`:""} · ${money(priceOf(p,f.k,window.kalaiPriceSize||baseSize(p)))}</option>`).join("")}</select><span class="note" style="font-size:12px">Price includes the white mount and glass, and delivery in the UAE.</span></div>`
      :`<div class="field"><label for="aFrame">How would you like it?</label><select id="aFrame"><option>Framed, ready to hang</option><option>Unframed</option><option>Not sure, please advise</option></select></div>`}
      <div class="field"><label for="aMsg">Anything else? (optional)</label><textarea id="aMsg" placeholder="Is it available? Can it be delivered before the 28th?"></textarea></div>
      ${!offer&&window.kalaiInstalments?`<label class="check"><input type="checkbox" id="aInst"><span>Pay in 4 interest-free instalments with ${esc2(window.kalaiInstalments)}</span></label>`:""}
-     <button class="btn primary" type="submit">${offer?"Send my offer":p.prices?"Send my order":"Ask for price"}</button>
+     ${CARTABLE?`<div class="two"><button class="btn primary" type="submit">Add to cart</button><button class="btn ghost-dark" type="button" id="aBuy">Buy now</button></div>`:`<button class="btn primary" type="submit">${offer?"Send my offer":"Ask for price"}</button>`}
      <div class="ok-msg" id="askOk" hidden></div>
    </form></div>`);
   modal.hidden=false;scrim.hidden=false;document.getElementById("mClose").onclick=closeAll;
-  document.getElementById("askForm").onsubmit=e=>{e.preventDefault();const ok=document.getElementById("askOk");ok.hidden=false;
+  const toCart=buy=>{const k=document.getElementById("aFrame").value,f=FRAMES.find(x=>x.k===k),fs=window.kalaiPriceSize||baseSize(p);
+    const item={t:"ART",pid:p.id,name:p.name,img:p.img,frame:k,size:fs,price:priceOf(p,k,fs),sub:(k==="none"?"Unframed":f.n+" frame"+(fs?" "+fs+" cm":""))+(p.code?" · "+p.code:""),tried:window.kalaiFrameChoice||"",inst:!!document.getElementById("aInst")?.checked,msg:document.getElementById("aMsg").value.trim()};closeAll();window.kalaiCart.add(item,buy)};
+  if(CARTABLE)document.getElementById("aBuy").onclick=()=>toCart(true);
+  document.getElementById("askForm").onsubmit=e=>{e.preventDefault();if(CARTABLE){toCart(false);return}const ok=document.getElementById("askOk");ok.hidden=false;
     const n=document.getElementById("aName").value.trim(),ph=document.getElementById("aPhone").value.trim();
     const off=offer?document.getElementById("aOffer").value.replace(/[^\d.]/g,""):"";
     if(!n||!ph){ok.style.color="var(--kumkum)";ok.textContent="Please add your name and mobile number so we can reply.";return}
@@ -973,7 +948,7 @@ function openAsk(p,offer){
       :p.prices?`Thank you, ${n}. We've received your order for "${p.name}" (${fields["Price"]}). We'll confirm it's ready and send you the payment link on WhatsApp within one working day. If WhatsApp didn't open, tap here: `
       :`Thank you, ${n}. We'll send the price and delivery date for "${p.name}" on WhatsApp within one working day. If WhatsApp didn't open, tap here: `;
     url.then(u=>ok.appendChild(waLink(u)))};
-  document.getElementById("aName").focus();
+  document.getElementById("aName")?.focus();
 }
 function roomView(p){
   const R=window.kalaiRoom,FD=frameDims(p);
@@ -1250,6 +1225,9 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
     if(!$("kConsent").checked){ok.style.color="var(--kumkum)";ok.textContent="Please confirm you are the parent or guardian before sending.";return}
     const df=$("kDraw").files[0];if(!/^image\//.test(df.type||"image/")||df.size>15*1024*1024){ok.style.color="var(--kumkum)";ok.textContent="The drawing must be a photo (JPG or PNG) up to 15 MB.";return}
     if(needSignIn(ok))return;
+    if(window.kalaiCart){const del=delivery(),tot=+String($("kFee").dataset.aed).replace(/[^\d.]/g,"");ok.style.color="var(--fg)";ok.textContent="Adding to your cart…";
+      window.kalaiCart.addGift({child:$("kName").value.trim(),age:+$("kAge").value,to:$("kTo").value.trim(),country:$("kCountry").value,emirate:uae()?(window.kalaiEN||(e=>e.text))($("kEmirate").selectedOptions[0]):"",region:uae()?"":$("kRegion").value.trim(),address:$("kAddr").value.trim(),frame:document.querySelector('input[name="kf"]:checked').value,extras:[...document.querySelectorAll('[id^="kx-"]:checked')].map(x=>x.id.slice(3)),msg:$("kMsg").value.trim(),parent:$("kParent").value.trim(),phone:$("kPhone").value.trim()},df,tot,del===null)
+        .then(()=>{ok.textContent="Added to your cart. Check out when you're ready."}).catch(err=>{ok.style.color="var(--kumkum)";ok.textContent="Could not add it: "+(err.message||err)});return}
     const extras=[...document.querySelectorAll('[id^="kx-"]:checked')].map(x=>(window.kalaiEN||(e=>e.textContent))(x.parentElement.querySelector("span").firstChild).trim()).join(", ");
     const url=sendEnquiry("Little Artists gift",{"Child":$("kName").value.trim()+", age "+$("kAge").value,"Gift for":$("kTo").value.trim(),"Country":$("kCountry").value,[uae()?"Emirate":"State / city"]:uae()?(window.kalaiEN||(e=>e.text))($("kEmirate").selectedOptions[0]):$("kRegion").value.trim(),"Delivery charge":delivery()===null?"to quote ("+ZNAME[zoneOf($("kCountry").value)]+")":"AED "+delivery(),"Address":$("kAddr").value.trim(),"Frame":document.querySelector('input[name="kf"]:checked').value,"Extras":extras,"Card message":$("kMsg").value.trim(),"Parent":$("kParent").value.trim(),"Mobile":$("kPhone").value.trim(),"Total":$("kFee").dataset.aed,"Consent":"Parent/guardian confirmed"},[["Drawing",$("kDraw").files[0]]]);
     ok.style.color="var(--fg)";ok.textContent="Thank you. We've received the drawing, and you can follow this under My enquiries & orders. We'll WhatsApp you a secure payment link for "+$("kFee").dataset.aed+(uae()?", and the framed drawing reaches "+$("kTo").value.trim()+" 5 to 7 days after payment.":", and we'll confirm the shipping and delivery time to "+$("kCountry").value+" with it.")+" If WhatsApp didn't open, tap here: ";url.then(u=>ok.appendChild(waLink(u)));});
@@ -1291,9 +1269,9 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
         <div class="field"><label for="prFr">Frame</label><select id="prFr">${FR.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join("")}</select></div></div>
        <div class="two"><div class="field"><label for="prQty">Copies</label><select id="prQty"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
         <label class="check" id="prMatBox" style="align-self:end"><input type="checkbox" id="prMat" checked><span>White mount</span></label></div>
-       <div class="two"><div class="field"><label for="prName">Your name</label><input id="prName" autocomplete="name" placeholder="Priya Raman"></div>
+       ${window.kalaiCart?`<div class="two"><button class="btn primary" type="submit">Add to cart</button><button class="btn ghost-dark" type="button" id="prBuy">Buy now</button></div>`:`<div class="two"><div class="field"><label for="prName">Your name</label><input id="prName" autocomplete="name" placeholder="Priya Raman"></div>
         <div class="field"><label for="prPhone">Mobile / WhatsApp</label><input id="prPhone" inputmode="tel" autocomplete="tel" placeholder="+971 50 123 4567"></div></div>
-       <button class="btn primary" type="submit">Order this print</button><div class="ok-msg" id="prOk" hidden></div>
+       <button class="btn primary" type="submit">Order this print</button>`}<div class="ok-msg" id="prOk" hidden></div>
       </form>
       <div class="badges"><div class="badge"><i>✦</i><div><b>Fine-art print</b>Archival matte paper, true colours</div></div><div class="badge"><i>⛟</i><div><b>Delivered</b>UAE included · abroad: shipping quoted before you pay</div></div></div>
       <p class="note" style="margin:0">This is a print, not an original${p.painting?": the original painting is sold separately":" painting"}. Each print is made to order and framed in Dubai.</p></div>`;
@@ -1306,7 +1284,10 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
       [...box.querySelector("#prSize").options].forEach(o=>{const zz=SZ.find(x=>x[0]===o.value);o.textContent=`${zz[1]} · ${CUR==="AED"?price(zz,f,p)+" Dhs":money(price(zz,f,p))}`});};
     window.kalaiRefreshPrintModal=()=>{if(box.querySelector("#prSize"))upd()};
     ["prSize","prFr","prQty","prMat"].forEach(id=>box.querySelector("#"+id).addEventListener("change",upd));upd();
-    box.querySelector("#prForm").onsubmit=e=>{e.preventDefault();const ok=box.querySelector("#prOk");ok.hidden=false;ok.style.color="var(--kumkum)";
+    const prCart=buy=>{const z=SZ.find(x=>x[0]===box.querySelector("#prSize").value),f=box.querySelector("#prFr").value,q=+box.querySelector("#prQty").value,m=box.querySelector("#prMat").checked;
+      const item={t:"PRINT",pid:p.id,name:p.name,img:p.img,size:z[0],frame:f,qty:q,mount:f!=="none"&&m,price:price(z,f,p)*q,sub:`Framed print · ${z[1]} · ${f==="none"?"print only":FR.find(x=>x[0]===f)[1].toLowerCase()}${q>1?` · ${q} copies`:""}`};closeAll();window.kalaiCart.add(item,buy)};
+    if(window.kalaiCart)box.querySelector("#prBuy").onclick=()=>prCart(true);
+    box.querySelector("#prForm").onsubmit=e=>{e.preventDefault();if(window.kalaiCart){prCart(false);return}const ok=box.querySelector("#prOk");ok.hidden=false;ok.style.color="var(--kumkum)";
       const n=box.querySelector("#prName").value.trim(),ph=box.querySelector("#prPhone").value.trim();
       if(!n||!ph){ok.textContent="Please add your name and mobile number.";return}
       if(needSignIn(ok))return;

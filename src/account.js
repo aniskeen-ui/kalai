@@ -172,7 +172,7 @@ const css = `
 .rtrack li.now span{color:var(--gold)}
 .rtrack small{color:var(--muted);font-size:11px}
 .acct-sm{display:none}
-@media (max-width:640px){.acct-lg{display:none}.acct-sm{display:inline}}
+@media (max-width:1500px){.acct-lg{display:none}.acct-sm{display:inline}}
 .acct-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .acct-tabs::-webkit-scrollbar{display:none}
 .acct-tabs button{flex:none;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:6px 8px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;line-height:1.3}
@@ -879,6 +879,8 @@ function wireCodes(root) {
     box.querySelector('[data-code-remove]')?.addEventListener('click', () => send(''));
   });
 }
+let BASKETS = {};
+const payLabel = (e) => { const b = e.basketRef && BASKETS[e.basketRef]; return b && b.n > 1 ? `Pay ⃃ ${Number(b.total.toFixed(2)).toLocaleString('en-US')} for order ${esc(e.basketRef)} (${b.n} items)` : 'Pay now'; };
 function card(e) {
   const st = e.status || 'RECEIVED';
   const steps = e.kind === 'MARKET' ? MARKET_STEPS : e.kind === 'LICENCE' ? LICENCE_STEPS : ['PHOTO', 'GIFT'].includes(e.kind) ? FRAME_STEPS : STEPS;
@@ -886,7 +888,7 @@ function card(e) {
   const pillCls = st === 'DELIVERED' ? 'pill done' : st === 'CANCELLED' || st === 'REFUNDED' ? 'pill stop' : 'pill';
   const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const pay = st === 'PRICE_SENT' && e.paymentLink
-    ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">Pay now</a>` : '';
+    ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">${payLabel(e)}</a>` : '';
   return `<article class="enq">
     <div class="enq-top"><span class="enq-title">${esc(e.title)}</span><span class="${pillCls}">${esc(STATUS[st] || st)}</span></div>
     <div class="enq-ref">${esc(e.ref)} · ${esc(KIND[e.kind] || '')} · ${esc(date)}</div>
@@ -949,7 +951,7 @@ function trackCard(e) {
       const cls = i < cur ? 'done' : i === cur ? 'now' : 'todo';
       return `<li class="${cls}"><span class="dot">${i < cur || (i === cur && st === 'DELIVERED') ? '✓' : ''}</span><div><b>${esc(label)}</b>${at[k] && i <= cur ? ` <span class="trk-at">${esc(d(at[k]))}</span>` : ''}${i === cur ? `<div class="trk-note">${esc(note)}${k === 'SHIPPED' ? ship : ''}</div>` : ''}</div></li>`;
     }).join('')}</ol>
-    ${st === 'PRICE_SENT' && e.paymentLink ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">Pay now</a>` : ''}
+    ${st === 'PRICE_SENT' && e.paymentLink ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">${payLabel(e)}</a>` : ''}
   </article>`;
 }
 const TABS = [
@@ -1029,6 +1031,7 @@ async function showList() {
       nextToken = res.nextToken;
     } while (nextToken);
     items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    BASKETS = {}; items.filter((x) => x.basketRef && x.status === 'PRICE_SENT' && x.paymentLink).forEach((x) => { const b = (BASKETS[x.basketRef] ||= { n: 0, total: 0 }); b.n += 1; b.total += Number(x.quotedPrice || 0); });
     const cc = !admin && items.find((x) => x.customerCode)?.customerCode;
     if (cc && body.querySelector('#custNo')) body.querySelector('#custNo').innerHTML = ` · customer no. <b style="font-family:var(--mono)">${esc(cc)}</b>`;
     myReviews.clear();
@@ -1140,7 +1143,7 @@ async function save({ ref, subject, fields, files }) {
 
 /* ---------- Crafts shop: order an item (signed in; the price comes from the listing on the server) ---------- */
 let pendingOrder = null;
-function afterSignIn() { if (pendingLicence) { const pl = pendingLicence; pendingLicence = null; buyLicence(pl); return; } if (pendingOrder) { const p = pendingOrder; pendingOrder = null; showOrder(p); } else showList(); }
+function afterSignIn() { if (pendingCart) { pendingCart = false; showList(); window.kalaiCart?.open(); return; } if (pendingLicence) { const pl = pendingLicence; pendingLicence = null; buyLicence(pl); return; } if (pendingOrder) { const p = pendingOrder; pendingOrder = null; showOrder(p); } else showList(); }
 let lastAddr = null;
 async function showOrder(p) {
   title.textContent = 'Order';
@@ -1192,11 +1195,144 @@ async function showOrder(p) {
   if (!a.name) f.name.focus();
 }
 window.kalaiMarketOrder = (p) => {
+  if (window.kalaiCart && Number(p.price) > 0) { window.kalaiCart.add({ t: 'CRAFT', listingId: p.id, name: p.title, img: p.img, maker: p.seller, unit: Number(p.price), qty: 1, max: Number(p.stock) || 1, price: Number(p.price), sub: `${p.seller ? `by ${p.seller} · ` : ''}qty 1` }, true); return; }
   if (state.user) { showOrder(p); open(); return; }
   pendingOrder = p;
   showSignIn('Sign in or create a free account to order, so you can pay securely and follow the delivery.');
   open();
 };
+
+
+/* ---------- Cart: collection paintings, framed prints, Crafts shop, Little Artists gifts → one checkout, one payment ---------- */
+// Kept in this browser (localStorage). Prices shown here are the website's; the server works them out again at checkout.
+const CART_KEY = 'kalai-cart3';
+let pendingCart = false;
+const cartGet = () => { try { const v = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+const cartSet = (v) => { try { localStorage.setItem(CART_KEY, JSON.stringify(v)); } catch { /* private mode */ } cartBadge(); };
+const money = (n) => (typeof moneyH === 'function' ? moneyH(Number(n)) : `⃃ ${Number(n).toLocaleString('en-US')}`); // eslint-disable-line no-undef
+function cartBadge() {
+  const b = document.getElementById('openCart'), n = cartGet().reduce((a, i) => a + (Number(i.qty) || 1), 0);
+  if (!b) return;
+  b.hidden = false; // always there, like any shop
+  const c = document.getElementById('cartCount'); if (c) c.textContent = String(n);
+}
+const lineTotal = (i) => Number(i.price || 0) * (i.t === 'CRAFT' || i.t === 'PRINT' ? 1 : 1);
+let cartStep = 'items';
+let cartPreview = null;
+function cartDrawer() {
+  const drawer = document.getElementById('drawer'), sc = document.getElementById('scrim');
+  if (!drawer) return;
+  drawer.hidden = false; if (sc) sc.hidden = false;
+  drawCartUi();
+}
+function drawCartUi() {
+  const b = document.getElementById('cartBody'), t = document.getElementById('totals');
+  if (!b || !t) return;
+  const items = cartGet();
+  if (!items.length) { b.innerHTML = '<div class="empty">Your cart is empty.<br>Add a painting, a framed print, a Crafts shop item or a Little Artists gift.</div>'; t.innerHTML = ''; cartStep = 'items'; return; }
+  b.innerHTML = items.map((i, n) => `<div class="line" style="display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:start">
+      ${i.img ? `<img src="${esc(i.img)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:4px">` : '<span style="width:64px;height:64px;display:grid;place-items:center;background:#0001;border-radius:4px">🎨</span>'}
+      <div><div class="t" style="font-weight:600">${esc(i.name)}</div><div class="s" style="font-size:12px;color:var(--muted)">${esc(i.sub || '')}</div>
+        ${i.t === 'CRAFT' ? `<label style="font-size:12px">Qty <select data-cq="${n}">${Array.from({ length: Math.max(1, Math.min(10, Number(i.max) || 1)) }, (_, k) => `<option ${k + 1 === Number(i.qty) ? 'selected' : ''}>${k + 1}</option>`).join('')}</select></label>` : ''}
+        <button class="rm" type="button" data-crm="${n}" style="background:none;border:0;padding:0;color:var(--kumkum);font-size:12px;cursor:pointer">Remove</button></div>
+      <div class="price" style="font-family:var(--mono)">${money(lineTotal(i))}${i.quote ? '<div style="font-size:11px;color:var(--muted)">+ shipping</div>' : ''}</div></div>`).join('');
+  b.querySelectorAll('[data-crm]').forEach((x) => { x.onclick = () => { const v = cartGet(); v.splice(Number(x.dataset.crm), 1); cartSet(v); cartPreview = null; drawCartUi(); }; });
+  b.querySelectorAll('[data-cq]').forEach((x) => { x.onchange = () => { const v = cartGet(), it = v[Number(x.dataset.cq)]; it.qty = Number(x.value); it.price = Number(it.unit) * it.qty; it.sub = `${it.maker ? `by ${it.maker} · ` : ''}qty ${it.qty}`; cartSet(v); cartPreview = null; drawCartUi(); }; });
+  const sub = items.reduce((a, i) => a + lineTotal(i), 0);
+  const gifts = items.every((i) => i.t === 'GIFT');
+  if (cartStep === 'items' || !state.user) {
+    t.innerHTML = `<div class="r" style="display:flex;justify-content:space-between"><span>Subtotal</span><span class="mono">${money(sub)}</span></div>
+      <div class="r note" style="display:flex;justify-content:space-between;font-size:13px"><span>Delivery in the UAE</span><span>Included</span></div>
+      <p class="note" style="font-size:12px;margin:4px 0">Gift card, voucher or offer code? Add it at checkout. Outside the UAE we add the shipping before you pay.</p>
+      <button class="btn primary" type="button" id="cartGo" style="width:100%">Checkout</button>
+      <button class="btn ghost-dark" type="button" id="cartMore" style="width:100%;margin-top:6px">Continue shopping</button>`;
+    t.querySelector('#cartMore').onclick = () => { document.getElementById('drawer').hidden = true; document.getElementById('scrim').hidden = true; };
+    t.querySelector('#cartGo').onclick = () => {
+      if (!state.user) { pendingCart = true; document.getElementById('drawer').hidden = true; showSignIn('Sign in or create a free account to check out: you pay securely and can follow each item.'); open(); return; }
+      cartStep = 'checkout'; drawCartUi();
+    };
+    return;
+  }
+  const a = lastAddr || {};
+  t.innerHTML = '';
+  b.innerHTML = `<div style="font-size:13px;color:var(--muted)">${items.length} item${items.length > 1 ? 's' : ''} · ${money(sub)}</div><form id="coForm" novalidate style="display:grid;gap:8px">
+      <b style="font-size:15px">${gifts ? 'Your details' : 'Delivery address'}</b>
+      <input name="name" placeholder="${gifts ? 'Your name' : "Receiver's name"}" autocomplete="name" value="${esc(a.name)}" aria-label="Name">
+      <input name="phone" type="tel" inputmode="tel" placeholder="Mobile, e.g. +971 50 123 4567" autocomplete="tel" value="${esc(a.phone)}" aria-label="Mobile">
+      ${gifts ? '<p class="note" style="font-size:12px;margin:0">The gift goes to the address you gave with it.</p>' : `${countryRegionHtml({ country: a.country || 'UAE', region: a.emirate, pin: a.pin, prefix: 'co' })}
+      <textarea name="address" rows="2" placeholder="Villa / flat no., building, street, area" autocomplete="street-address" aria-label="Address">${esc(a.address)}</textarea>
+      <input name="landmark" placeholder="Landmark (optional)" value="${esc(a.landmark)}" aria-label="Landmark">`}
+      <input name="note" maxlength="300" placeholder="Note for us (optional)" aria-label="Note">
+      <div style="display:flex;gap:6px"><input name="code" maxlength="30" placeholder="Gift card, voucher or offer code" style="text-transform:uppercase;flex:1" aria-label="Code"><button class="btn ghost-dark" type="button" id="coApply">Apply</button></div>
+      <div id="coSum" style="font-size:14px"></div>
+      <p class="note" style="font-size:12px;margin:0">By paying you agree to our <a href="#terms" style="color:var(--kumkum)">terms</a>, including the cancellation policy. Each item is prepared on its own and may arrive separately.</p>
+      <div class="acct-err" id="coErr" role="alert" style="color:var(--kumkum);font-size:13px"></div>
+      <button class="btn primary" type="submit" id="coPay">Review total</button>
+      <button class="acct-link" type="button" id="coBack">← Back to the cart</button></form>`;
+  const f = b.querySelector('#coForm');
+  if (!gifts) wireRegion(f);
+  if (cartPreview?.code) f.code.value = cartPreview.code;
+  b.querySelector('#coBack').onclick = () => { cartStep = 'items'; cartPreview = null; drawCartUi(); };
+  const payload = (dry) => {
+    const g = (k) => String(f[k]?.value || '').trim();
+    return { dry, items: cartGet().map(({ img, sub: _s, ...rest }) => rest), code: g('code'), note: g('note'),
+      address: { name: g('name'), phone: g('phone'), country: g('country') || 'UAE', emirate: g('emirate'), pin: g('pin'), address: g('address'), landmark: g('landmark') } };
+  };
+  const err = b.querySelector('#coErr'), sum = b.querySelector('#coSum'), pay = b.querySelector('#coPay');
+  const call = async (dry) => {
+    err.textContent = ''; pay.disabled = true;
+    try {
+      const r = await client.mutations.basketCheckout({ data: JSON.stringify(payload(dry)) });
+      if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+      return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    } catch (ex) { err.textContent = ex.message || 'Something went wrong.'; return null; } finally { pay.disabled = false; }
+  };
+  const showSum = (p) => {
+    cartPreview = { ...p, code: f.code.value.trim().toUpperCase() };
+    sum.innerHTML = `${p.lines.map((l) => `<div style="display:flex;justify-content:space-between;gap:8px"><span>${esc(l.title)}</span><span class="mono">${l.discount ? `<s style="color:var(--muted)">${money(l.list)}</s> ` : ''}${money(l.price)}</span></div>`).join('')}
+      ${p.discountLabel ? `<div style="color:var(--ok)">${esc(p.discountLabel)}: − ${money(p.discount)}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:1px solid var(--line);padding-top:4px;margin-top:4px"><span>Total</span><span class="mono">${money(p.total)}</span></div>
+      ${p.quote ? '<div class="note" style="font-size:12px">Shipping is added by us before you pay: we email you the payment link.</div>' : '<div class="note" style="font-size:12px">Includes delivery in the UAE. Paid in dirhams by card, Apple Pay or Google Pay (Ziina).</div>'}`;
+    pay.innerHTML = p.quote ? 'Place order' : `Pay ${money(p.total)} securely`;
+  };
+  const review = async () => { const p = await call(true); if (p) showSum(p); return p; };
+  b.querySelector('#coApply').onclick = review;
+  f.code.addEventListener('change', () => { cartPreview = null; pay.textContent = 'Review total'; });
+  f.onsubmit = async (ev) => {
+    ev.preventDefault();
+    if (!cartPreview || cartPreview.code !== f.code.value.trim().toUpperCase()) { await review(); return; }
+    pay.textContent = 'One moment…';
+    const r = await call(false);
+    if (!r) { pay.textContent = 'Try again'; return; }
+    const g = (k) => String(f[k]?.value || '').trim();
+    if (!gifts) lastAddr = { name: g('name'), phone: g('phone'), country: g('country'), emirate: g('emirate'), pin: g('pin'), address: g('address'), landmark: g('landmark') };
+    cartSet([]); cartStep = 'items'; cartPreview = null;
+    if (r.payUrl) { location.href = r.payUrl; return; }
+    document.getElementById('drawer').hidden = true;
+    await showList(); open();
+    body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0">Thank you! Order <b>${esc(r.basketRef)}</b> placed (${r.refs.length} item${r.refs.length > 1 ? 's' : ''}, ${money(r.total)}). ${r.quote ? "We'll add the shipping and email you the payment link." : "We'll email you the payment link shortly."}</p>`);
+  };
+  if (cartPreview) showSum(cartPreview); else review();
+}
+window.kalaiCart = {
+  add(item, buyNow = false) {
+    const v = cartGet();
+    if (item.t === 'ART' && v.some((x) => x.t === 'ART' && x.pid === item.pid)) { toastMsg('Already in your cart. Each work is one of a kind.'); if (buyNow) cartDrawer(); return; }
+    if (item.t === 'CRAFT') { const same = v.find((x) => x.t === 'CRAFT' && x.listingId === item.listingId); if (same) { same.qty = Math.min(Number(same.max) || 10, Number(same.qty) + 1); same.price = same.unit * same.qty; same.sub = `${same.maker ? `by ${same.maker} · ` : ''}qty ${same.qty}`; cartSet(v); toastMsg('Added to cart'); if (buyNow) cartDrawer(); return; } }
+    v.push(item); cartSet(v); cartPreview = null;
+    toastMsg(`Added to cart: ${item.name}`);
+    if (buyNow) cartDrawer();
+  },
+  /** Little Artists: the drawing is uploaded now (signed in), then the gift waits in the cart. */
+  async addGift(f, file, price, quote) {
+    const res = await uploadData({ path: ({ identityId }) => `uploads/${identityId}/gift-${Date.now()}-${safeName(file.name)}`, data: file, options: { contentType: file.type || 'image/jpeg' } }).result;
+    this.add({ t: 'GIFT', name: `Little Artists gift for ${f.to}`, sub: `${f.child}, age ${f.age} · ${f.country === 'UAE' ? f.emirate : f.country}`, f, fileKey: res.path, price, quote }, true);
+  },
+  open: cartDrawer,
+  count: () => cartGet().length,
+};
+document.getElementById('openCart')?.addEventListener('click', (e) => { e.stopImmediatePropagation(); cartStep = 'items'; cartDrawer(); }, true);
+cartBadge();
 
 /* ---------- daily message: small notice at the side of the page, Tamil / English / Arabic ---------- */
 const MSG_TITLE = { ta: 'இன்றைய செய்தி', en: "Today's message", ar: 'رسالة اليوم' };
