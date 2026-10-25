@@ -54,6 +54,8 @@ header.top .cart-btn{white-space:nowrap}
 .brand b{font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.06em}
 .brand span{font-size:12px;color:#c9c3dd;letter-spacing:.08em;text-transform:uppercase}
 nav.links{display:flex;gap:18px;font-size:14px}
+/* "Shop framed prints" duplicates the Framed Prints menu link on wide screens; on phones (menu hidden) it stays as the way in. */
+@media (min-width:861px){header.top .cart-btn[data-jump="prints"]{display:none}}
 nav.links a{color:var(--on-ink);text-decoration:none;opacity:.85}
 nav.links a:hover{opacity:1;color:#e8c77f}
 .cart-btn{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid #6d6596;color:var(--on-ink);border-radius:999px;padding:7px 14px;font-size:14px}
