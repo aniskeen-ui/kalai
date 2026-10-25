@@ -5,8 +5,13 @@
 import { generateClient } from 'aws-amplify/data';
 
 const client = generateClient();
-export const LANGS = [['en', 'English'], ['ar', 'العربية'], ['ta', 'தமிழ்'], ['hi', 'हिन्दी'], ['ml', 'മലയാളം'], ['te', 'తెలుగు'], ['ur', 'اردو'], ['tl', 'Filipino'], ['ru', 'Русский'], ['fr', 'Français'], ['zh', '中文']];
-const RTL = ['ar', 'ur'];
+// English, then the UAE's main communities (Arab world, South Asia, Philippines, Iran…), then Europe and East Asia.
+export const LANGS = [['en', 'English'], ['ar', 'العربية'],
+  ['hi', 'हिन्दी'], ['ur', 'اردو'], ['ta', 'தமிழ்'], ['ml', 'മലയാളം'], ['te', 'తెలుగు'], ['kn', 'ಕನ್ನಡ'], ['mr', 'मराठी'], ['gu', 'ગુજરાતી'], ['pa', 'ਪੰਜਾਬੀ'], ['bn', 'বাংলা'], ['ne', 'नेपाली'], ['si', 'සිංහල'],
+  ['tl', 'Filipino'], ['fa', 'فارسی'], ['ps', 'پښتو'], ['tr', 'Türkçe'], ['id', 'Bahasa Indonesia'], ['ms', 'Bahasa Melayu'], ['sw', 'Kiswahili'],
+  ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português'], ['ru', 'Русский'], ['uk', 'Українська'], ['pl', 'Polski'], ['nl', 'Nederlands'],
+  ['zh', '中文 (简体)'], ['zh-TW', '中文 (繁體)'], ['ja', '日本語'], ['ko', '한국어']];
+const RTL = ['ar', 'ur', 'fa', 'ps'];
 const orig = new WeakMap(); // text node / element+attr → English
 let lang = 'en';
 try { lang = localStorage.getItem('kalaiLang') || 'en'; } catch { /* */ }

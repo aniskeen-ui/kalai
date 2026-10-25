@@ -3763,7 +3763,7 @@ async function dailyKural(force: boolean) {
 }
 
 // ---------- Website in other languages ----------
-const SITE_LANGS = ['ar', 'ta', 'hi', 'ml', 'te', 'ur', 'tl', 'ru', 'fr', 'zh'];
+const SITE_LANGS = ['ar', 'hi', 'ur', 'ta', 'ml', 'te', 'kn', 'mr', 'gu', 'pa', 'bn', 'ne', 'si', 'tl', 'fa', 'ps', 'tr', 'id', 'ms', 'sw', 'fr', 'de', 'es', 'it', 'pt', 'ru', 'uk', 'pl', 'nl', 'zh', 'zh-TW', 'ja', 'ko'];
 const trMemo = new Map<string, string>();
 async function siteTranslate(a: { lang?: string; texts?: string }) {
   const lang = String(a.lang ?? '');
