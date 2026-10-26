@@ -2,6 +2,7 @@
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl, remove } from 'aws-amplify/storage';
 import { ALL_LANGS, DEFAULT_LANGS } from './langs.js';
+import { GUI_LOOKS, applyGui } from './gui.js';
 
 const ROOM_KEY = 'catalogue/site/room.jpg'; // the room photo for "On a wall" (public read)
 
@@ -110,6 +111,8 @@ export async function showSettings() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><button type="button" class="btn small ghost" data-langset="all">All ${ALL_LANGS.length}</button><button type="button" class="btn small ghost" data-langset="default">Recommended (${DEFAULT_LANGS.length})</button><button type="button" class="btn small ghost" data-langset="none">English only</button><span class="muted" id="st-langCount" style="font-size:12px"></span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">${ALL_LANGS.map(([k, n]) => `<label style="display:flex;gap:6px;align-items:center;font-weight:400;font-size:13px"><input type="checkbox" data-lang="${k}" ${k === 'en' ? 'checked disabled' : ''} style="width:auto">${n}</label>`).join('')}</div></div>
       <h3 style="margin:0;font-size:17px">Website theme</h3>
+      <div class="field" style="max-width:560px"><label for="st-gui">Order Management look (this computer)</label><select id="st-gui" style="max-width:320px">${GUI_LOOKS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select>
+        <span class="muted" style="font-size:12px">Changes the look of the studio screens straight away, on this computer only. The website itself keeps the theme below.</span></div>
       <h3 style="margin:0;font-size:17px">Country looks</h3>
       <div style="display:grid;gap:6px;font-size:14px"><label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-ctOn" style="width:auto"> Country looks: colours, a pattern from local art, headline font and a greeting that follow the website language (English: the visitor's time zone)</label>
         <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="st-ctFest" style="width:auto"> Festival looks: Diwali, Pongal, Onam, Holi, Ramadan and Eid, Lunar New Year, Christmas, New Year and national days (UAE, Saudi, Qatar, Kuwait, Bahrain, Oman, India, Pakistan)</label>
@@ -152,6 +155,7 @@ export async function showSettings() {
       ${textHtml}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="stSave">Save settings</button><a class="btn ghost small" href="/" target="_blank" rel="noopener">Open the website</a><span id="stMsg" class="muted" style="font-size:13px"></span></div>`;
     groupTabs(box);
+    { const g = $('st-gui'); try { g.value = localStorage.getItem('kalaiGui') || 'standard'; } catch { /* */ } g.onchange = () => applyGui(g.value); }
     $('stSave').onclick = save;
     // Live example of the rounding, on a Dhs 1,000 price.
     const eg = () => {

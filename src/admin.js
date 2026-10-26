@@ -18,6 +18,7 @@ import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import { awbButtons, wireAwb } from './awb.js';
 import { downloadPod, podImage } from './pod.js';
 import { watchIcons } from './icons.js';
+import './gui.js';
 import outputs from '../amplify_outputs.json';
 
 const client = generateClient();
