@@ -63,6 +63,7 @@ nav.links{display:flex;gap:18px;font-size:14px}
 /* "Shop framed prints" duplicates the Framed Prints menu link on wide screens; on phones (menu hidden) it stays as the way in. */
 @media (min-width:861px){header.top .cart-btn[data-jump="prints"]{display:none}}
 nav.links a{color:var(--on-ink);text-decoration:none;opacity:.85}
+nav.links a[aria-current]{opacity:1;border-bottom:2px solid var(--gold)}
 nav.links a:hover{opacity:1;color:#e8c77f}
 .cart-btn{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid #6d6596;color:var(--on-ink);border-radius:999px;padding:7px 14px;font-size:14px}
 .cart-btn .count{background:#d9ad55;color:#1d1b2b;border-radius:999px;min-width:22px;height:22px;display:inline-grid;place-items:center;font-weight:700;font-size:12px}
@@ -380,6 +381,64 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 @media (max-width:1100px){html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:860px){html[data-skin="green"] .modal .box.wide{grid-template-columns:1fr}html[data-skin="green"] .similar,html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(2,minmax(0,1fr))}html[data-skin="green"] .viewer .stage{min-height:300px}}
 .vsai{margin:0;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:center;background:var(--surface,#fff);border:1px solid var(--line);border-radius:14px;padding:18px}.vsai img{width:100%;height:auto;border-radius:10px;display:block}.vsai h3{margin:0 0 8px;font-size:24px}.vsai p{margin:0 0 10px;font-size:15px;line-height:1.55}.vsai .vsai-tag{margin:6px 0 0;color:var(--kumkum)}@media(max-width:760px){.vsai{grid-template-columns:1fr;padding:12px}}
+/* Little Artists page (/#little-artists): its own page in the same site, with the full header */
+#littlePage{display:none;font-size:16px;line-height:1.6;--warm:#fff6e9}
+html[data-skin="green"] #littlePage{--warm:#f6f9ef}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #littlePage{--warm:#221e18}}
+:root[data-theme="dark"] #littlePage{--warm:#221e18}
+html.lp #littlePage{display:block}
+html.lp body > section:not(#little){display:none!important}
+html.lp #little .vsai{display:none}
+#littlePage h1,#littlePage h2,#littlePage h3{font-family:var(--display);font-weight:400;line-height:1.15;margin:0}
+.lp-btn{display:inline-block;border-radius:999px;padding:13px 24px;font:600 15px var(--body);text-decoration:none;cursor:pointer;border:1px solid transparent}
+.lp-btn.lp-primary{background:var(--kumkum);color:#fff}
+.lp-btn.lp-ghost{border-color:var(--line);color:var(--fg);background:var(--surface)}
+.lp-eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--kumkum);font-weight:700}
+#littlePage .lp-sec{padding-block:56px}
+.lp-hero{background:var(--warm);padding-block:44px 56px}
+.lp-hero .lp-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:40px;align-items:center}
+.lp-hero h1{font-size:clamp(36px,5vw,58px);margin:10px 0 16px}
+.lp-hero h1 em{font-style:normal;color:var(--kumkum)}
+.lp-hero .lead{font-size:18px;color:var(--muted);max-width:34em}
+.lp-pair{position:relative;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.14);background:#fff}
+.lp-pair img{display:block;width:100%;height:auto}
+.lp-pair .lp-lab{position:absolute;bottom:12px;font:700 13px var(--body);padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.95)}
+.lp-pair .lp-l{left:12px;color:#a3242f}
+.lp-pair .lp-r{right:12px;color:#555}
+.lp-cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}
+.lp-quote{font-family:var(--display);font-size:clamp(24px,3vw,34px);text-align:center;max-width:22em;margin:0 auto;line-height:1.35}
+.lp-quote b{color:var(--kumkum);font-weight:400}
+.lp-story{max-width:44em;margin:0 auto;font-size:17px}
+.lp-story p{margin:0 0 16px}
+.lp-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:28px}
+.lp-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
+.lp-card .lp-ico{font-size:28px}
+.lp-card h3{font-size:22px;margin:10px 0 8px}
+.lp-card p{margin:0;color:var(--muted)}
+.lp-steps{counter-reset:s;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-top:28px;padding:0;list-style:none}
+.lp-steps li{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;counter-increment:s}
+.lp-steps li::before{content:counter(s);display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--kumkum);color:#fff;font-weight:700;margin-bottom:10px}
+.lp-steps b{display:block;font-size:17px;margin-bottom:4px}
+.lp-steps span{color:var(--muted);font-size:15px}
+.lp-who{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.lp-who span{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:15px}
+.lp-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin-top:26px}
+.lp-gallery figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.lp-gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--sunk)}
+.lp-gallery figcaption{padding:10px 14px;font-size:14px;color:var(--muted)}
+.lp-promise{background:var(--warm)}
+.lp-promise ul{list-style:none;padding:0;margin:20px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px}
+.lp-promise li{padding-left:30px;position:relative}
+.lp-promise li::before{content:"✓";position:absolute;left:0;color:var(--kumkum);font-weight:700}
+#littlePage details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-top:10px}
+#littlePage summary{cursor:pointer;font-weight:600}
+#littlePage details p{margin:10px 0 0;color:var(--muted)}
+.lp-final{text-align:center;background:var(--ink);color:var(--on-ink)}
+.lp-final h2{font-size:clamp(28px,4vw,44px);margin-bottom:12px}
+.lp-final p{opacity:.9;max-width:36em;margin:0 auto}
+.lp-final .lp-btn.lp-primary{background:#fff;color:var(--ink)}
+@media(max-width:900px){.lp-hero .lp-grid{grid-template-columns:minmax(0,1fr)}.lp-cards{grid-template-columns:minmax(0,1fr)}.lp-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-promise ul{grid-template-columns:1fr}}
+@media(max-width:520px){.lp-steps{grid-template-columns:minmax(0,1fr)}}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--kumkum);text-decoration:underline;cursor:pointer}
 .askship{margin:-4px 0 6px;font-size:14px}.askship .btn-ask{background:none;border:1px solid var(--line);border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer;color:var(--fg)}.askship .btn-ask:hover{border-color:var(--fg)}.askship form{display:grid;gap:10px;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px}.askship .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.askship .two{grid-template-columns:1fr}}
 </style>
@@ -390,7 +449,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 <div id="launchBar" class="launch-bar" role="status" hidden></div>
 <header class="top"><div class="wrap">
   <div class="brand" data-notranslate><b>KALAI</b><span>Art House · Dubai</span></div>
-  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="/little.html">Little Artists</a><a href="#prints">Framed Prints</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
+  <nav class="links"><a href="#collection">Collection</a><a href="#market" id="marketLink" hidden>Crafts shop</a><a href="#commission">Commission</a><a href="/#little-artists">Little Artists</a><a href="#prints">Framed Prints</a><a href="#artist">Our artist</a><a href="#join">Become an artist</a><a href="#help">Delivery &amp; FAQ</a></nav>
   <button class="cart-btn" id="openCart" aria-label="Open cart" title="Cart" hidden><span aria-hidden="true">🛒</span><span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="prints">Shop framed prints</button><div class="cur-pick" data-notranslate><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button><button type="button" data-cur="GBP">£ GBP</button><button type="button" data-cur="EUR">€ EUR</button><button type="button" data-cur="SAR">SAR · Saudi riyal</button><button type="button" data-cur="QAR">QAR · Qatari riyal</button><button type="button" data-cur="KWD">KWD · Kuwaiti dinar</button><button type="button" data-cur="BHD">BHD · Bahraini dinar</button><button type="button" data-cur="OMR">OMR · Omani rial</button><button type="button" data-cur="JOD">JOD · Jordanian dinar</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
@@ -412,6 +471,97 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
   new MutationObserver(later).observe(wrap, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
   fit();
 })();
+</script>
+<div id="littlePage">
+<div class="lp-sec lp-hero"><div class="wrap lp-grid">
+  <div>
+    <div class="lp-eyebrow">Little Artists · Kalai Art House</div>
+    <h1>No machine can paint <em>like your child.</em></h1>
+    <p class="lead">A wobbly line, a sun with a smile, a parrot with a beak bigger than its head. Your child put their whole heart into it. We frame it in Dubai, so it gets the wall it deserves and becomes a gift someone will keep for life.</p>
+    <div class="lp-cta"><a class="lp-btn lp-primary" href="#kidsOrder">Frame my child's drawing</a><a class="lp-btn lp-ghost" href="#lp-how">How it works</a></div>
+  </div>
+  <div class="lp-pair"><img src="/img/little-vs-ai.jpg" alt="Left: a parrot painted by a young child in watercolour. Right: the same parrot made by AI, neat and polished." width="1024" height="755"><span class="lp-lab lp-l">❤ Painted by tiny hands</span><span class="lp-lab lp-r">Made by AI in seconds</span></div>
+</div></div>
+
+<div class="lp-sec"><div class="wrap">
+  <p class="lp-quote">AI made it perfect. <b>Your child made it priceless.</b></p>
+  <div class="lp-story" style="margin-top:28px">
+    <p>Look at the two parrots. The one on the right is neat and polished. It was made by clever software, trained by brilliant researchers on millions of pictures, in a few seconds. It can be made again, a thousand times, exactly the same.</p>
+    <p>The one on the left was made by a little hand holding a brush that felt too big. The beak went outside the lines. The red ran into the blue. And somewhere in the middle, there was a moment of pure concentration, maybe a tongue poking out, maybe a proud call of "Look what I made!"</p>
+    <p>That painting can never be made again. Not because the colours were special, but because your child will never be this age again. Next year their hand will be steadier, their parrots more careful. This one is a snapshot of who they are <i>right now</i>.</p>
+    <p>That is what we frame.</p>
+  </div>
+</div></div>
+
+<div class="lp-sec" style="padding-top:0"><div class="wrap">
+  <div class="lp-eyebrow">Why it matters</div>
+  <h2 style="font-size:34px;margin-top:8px">More than a picture on the wall</h2>
+  <div class="lp-cards">
+    <div class="lp-card"><div class="lp-ico">🌱</div><h3>It tells them their ideas matter</h3><p>When children see their own drawing framed and hung like real art, they feel seen. That quiet pride is worth more than any gold star.</p></div>
+    <div class="lp-card"><div class="lp-ico">💛</div><h3>A gift only they can give</h3><p>Grandparents, a favourite teacher, an aunt far away: no shop-bought present means as much as a framed picture with a little name in the corner.</p></div>
+    <div class="lp-card"><div class="lp-ico">⏳</div><h3>A memory that won't fade</h3><p>Fridge drawings curl, fade and get lost. Framed behind glass, this one stays bright for the day they are grown and you show it to them again.</p></div>
+  </div>
+</div></div>
+
+<div id="lp-how" class="lp-sec" style="background:var(--sunk)"><div class="wrap">
+  <div class="lp-eyebrow">How it works</div>
+  <h2 style="font-size:34px;margin-top:8px">From the kitchen table to the wall</h2>
+  <ol class="lp-steps">
+    <li><b>Take a photo</b><span>A clear phone photo in daylight, straight above the paper, is all we need.</span></li>
+    <li><b>Choose who it's for</b><span>Grandma, a teacher, a best friend, and add your child's own message.</span></li>
+    <li><b>We print and frame it</b><span>On fine paper, in a real frame with a mount, by framers in Dubai.</span></li>
+    <li><b>Delivered, ready to hang</b><span>To any emirate, or abroad on request, with your child's message.</span></li>
+  </ol>
+  <div class="lp-cta"><a class="lp-btn lp-primary" href="#kidsOrder">Start with your child's drawing</a></div>
+</div></div>
+
+<div class="lp-sec"><div class="wrap">
+  <div class="lp-eyebrow">Made for moments like these</div>
+  <h2 style="font-size:34px;margin-top:8px">Who will treasure it?</h2>
+  <div class="lp-who"><span>👵 Grandparents</span><span>🍎 Teacher's Day</span><span>🌷 Mother's Day</span><span>👔 Father's Day</span><span>🎂 Birthdays</span><span>🌙 Eid</span><span>🪔 Diwali</span><span>🎄 Christmas</span><span>✈️ Family far away</span><span>🏡 A new home</span></div>
+</div></div>
+
+<div id="lp-gallery" class="lp-sec" style="padding-top:0"><div class="wrap">
+  <div class="lp-eyebrow">Little masterpieces</div>
+  <h2 style="font-size:34px;margin-top:8px">Drawn by little hands</h2>
+  <div class="lp-gallery" id="lpGallery"></div>
+</div></div>
+
+<div class="lp-sec lp-promise"><div class="wrap">
+  <div class="lp-eyebrow">Our promise to parents</div>
+  <h2 style="font-size:34px;margin-top:8px">Your child's art, treated with care</h2>
+  <ul>
+    <li>We never publish your child's drawing or name without your permission.</li>
+    <li>For children aged 3 to 10 the framing is free: you pay only the delivery.</li>
+    <li>Printed on fine paper and framed by hand in Dubai, ready to hang.</li>
+    <li>If a photo is too small to print sharply, we tell you before we start.</li>
+  </ul>
+</div></div>
+
+<div class="lp-sec"><div class="wrap" style="max-width:820px">
+  <div class="lp-eyebrow">Questions parents ask</div>
+  <h2 style="font-size:34px;margin:8px 0 10px">Good to know</h2>
+  <details><summary>How old can my child be?</summary><p>Little Artists is for children aged 3 to 17. For ages 3 to 10 the framing is free; for ages 11 to 17 there is a small framing fee.</p></details>
+  <details><summary>Do I need to send the original drawing?</summary><p>No. A clear photo taken in daylight, straight above the paper, is usually enough. If the photo is too small to print sharply, we will ask you to send the paper drawing.</p></details>
+  <details><summary>Can it be sent to grandparents in another country?</summary><p>Yes. Within the UAE delivery is a fixed small charge; for other countries we confirm the shipping charge before you pay.</p></details>
+  <details><summary>Will my child's drawing appear on your website?</summary><p>Never without your permission. The children shown on our site are illustrations, and any real drawing we show is shared with the family's consent.</p></details>
+</div></div>
+
+<div class="lp-sec lp-final"><div class="wrap">
+  <h2>Their first masterpiece deserves a frame.</h2>
+  <p>One day the little hand that painted it will be grown. Keep this moment, and give it to someone who will love it as much as you do.</p>
+  <div class="lp-cta" style="justify-content:center"><a class="lp-btn lp-primary" href="#kidsOrder">Frame my child's drawing</a></div>
+</div></div>
+
+</div>
+<script>
+/* Little Artists page: /#little-artists (and /little.html) shows only the Little Artists page (the landing, then the
+   order form), with the same header, cart, language and currency. Any other menu link goes back to the shop. */
+(function(){const LP=['#little-artists','#kidsOrder','#lp-how','#lp-gallery','#little'];
+  const set=()=>{const on=LP.includes(location.hash);const was=document.documentElement.classList.contains('lp');
+    document.documentElement.classList.toggle('lp',on);if(on&&!was&&location.hash==='#little-artists')scrollTo(0,0);
+    document.querySelectorAll('nav.links a').forEach(a=>{if(/little/.test(a.getAttribute('href')))a.toggleAttribute('aria-current',on)})};
+  set();addEventListener('hashchange',set);})();
 </script>
 <section class="hero" style="padding-block:0"><div class="wrap">
   <div>
@@ -501,7 +651,7 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
       <p>On the left, a parrot painted by a little one: a brave red head, a sunny yellow beak, a branch drawn with full concentration. Every wobbly line is a choice they made, and every colour that ran into the next is a moment they will never paint the same way again.</p>
       <p>On the right, the same parrot made by AI: neat, polished, perfect, built by clever researchers from millions of pictures in a few seconds.</p>
       <p>They may look alike, but they will never be equal. The one on the right can be made again a thousand times. The one on the left can never be made again, because your child will never be this age again.</p>
-      <p><a href="/little.html" style="font-weight:600">Discover Little Artists →</a></p>
+      <p><a href="/#little-artists" style="font-weight:600">Discover Little Artists →</a></p>
       <p class="vsai-tag"><b>AI made it perfect. Your child made it priceless.</b> Keep the moment: we frame your child's drawing in Dubai, ready to hang.</p>
     </figcaption>
   </figure>
@@ -1413,6 +1563,14 @@ drawChips();drawGrid();updateCount();
   btn.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden;btn.setAttribute("aria-expanded",String(!menu.hidden))};
   document.addEventListener("click",()=>{menu.hidden=true;btn.setAttribute("aria-expanded","false")});
   menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();
+</script>
+<script>
+// Gallery: photos listed in /data/little-gallery.json ([{ "src": "/img/…", "caption": "…" }]).
+fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(list=>{
+  const g=document.getElementById('lpGallery'),esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  if(!list.length){document.getElementById('lpGallery').closest('section').hidden=true;return}
+  g.innerHTML=list.map(x=>`<figure><img src="${esc(x.src)}" alt="${esc(x.caption||'A child\'s drawing')}" loading="lazy"><figcaption>${esc(x.caption)}</figcaption></figure>`).join('');
+});
 </script>
 <script type="module" src="/src/account.js"></script>
 <script>(function(){function h(){var e=document.querySelector("header.top");if(e)document.documentElement.style.setProperty("--hdr",e.offsetHeight+"px")}h();addEventListener("resize",h);addEventListener("load",function(){h();try{if(location.hash){var t=document.getElementById(location.hash.slice(1));if(t&&t.tagName==="SECTION")t.scrollIntoView()}}catch(e){}});})();</script>
