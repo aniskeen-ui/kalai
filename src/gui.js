@@ -18,6 +18,21 @@ const LOOKS = {
 {S} input,{S} select,{S} textarea{background:#0b1324;border-color:#2a3a5c}{S} .btn{background:#22d3ee;color:#04202a}{S} .btn.ghost{background:transparent;color:#e7ecf6;border-color:#2a3a5c}
 {S} thead th{background:#0d1526!important}{S} tbody tr:hover td{background:#13213a}`,
   },
+  bold: {
+    vars: '--bg:#eef1ea;--surface:#ffffff;--sunk:#f4f6f0;--line:#b9c4ad;--fg:#0e1a10;--muted:#3e4a3f;--ink:#14532d;--on-ink:#ffffff;--gold:#3f7d20;--gold-soft:#e5efd8;--ok:#166534;--kumkum:#b91c1c;--r:10px;color-scheme:light',
+    accent: '#14532d', tint: '#dcebd0', head: 'linear-gradient(90deg,#0f3d22,#14532d)',
+    extra: `{S} body{font-weight:500}
+{S} fieldset.cost,{S} .detail .dtop,{S} #zohoBox,{S} .flowcard,{S} .tablewrap,{S} .lay-act{background:#fff;border:2px solid #b9c4ad;box-shadow:0 2px 0 #d6dfcc}
+{S} fieldset.cost [style*="border:1px solid var(--line)"],{S} #supplierBox>div[style*="border-top"],{S} .detail .dtop .kv,{S} fieldset.cost table{background:#f7f9f4;border-width:2px!important;border-color:#c9d3bd!important}
+{S} fieldset.cost>legend,{S} .flowhead h3,{S} .lay-h b{font-weight:800;font-size:16px}
+{S} label,{S} .kv dt,{S} th{font-weight:700;color:#24301f}
+{S} input,{S} select,{S} textarea{border:2px solid #b9c4ad;font-weight:500}
+{S} .btn{font-weight:700;border:2px solid transparent}{S} .btn.ghost{border:2px solid #b9c4ad}
+{S} .sec-ico{stroke-width:2.4}
+{S} .df{border-width:2px}{S} .dfl{border-width:2px;border-left-width:5px}
+{S} thead th{background:#f4f6f0!important}{S} tbody tr:hover td{background:#eef5e6}
+{S} .muted{color:#4a5649}`,
+  },
   aurora: {
     vars: '--bg:#f5f3ff;--surface:#ffffff;--sunk:#faf9ff;--line:#e6e1f7;--fg:#1e1b4b;--muted:#5f5a85;--ink:#4c1d95;--on-ink:#ffffff;--gold:#7c3aed;--gold-soft:#efe9ff;--ok:#059669;--kumkum:#e11d48;--r:12px;color-scheme:light',
     accent: '#7c3aed', tint: '#efe9ff', head: 'linear-gradient(90deg,#4c1d95,#6d28d9 45%,#0d9488)',
@@ -47,7 +62,7 @@ ${L.extra.replaceAll('{S}', S)}`;
   }).join('\n');
 }
 const st = document.createElement('style'); st.id = 'gui-css'; st.textContent = css(); document.head.appendChild(st);
-export const GUI_LOOKS = [['standard', 'Standard (website colours)'], ['crisp', 'Crisp: white cards, emerald'], ['midnight', 'Midnight: dark, cyan'], ['aurora', 'Aurora: violet to teal']];
+export const GUI_LOOKS = [['standard', 'Standard (website colours)'], ['crisp', 'Crisp: white cards, emerald'], ['bold', 'Bold: thicker lines and text, green'], ['midnight', 'Midnight: dark, cyan'], ['aurora', 'Aurora: violet to teal']];
 export function applyGui(k) {
   const el = document.documentElement;
   if (LOOKS[k]) el.setAttribute('data-gui', k); else el.removeAttribute('data-gui');
