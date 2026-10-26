@@ -1697,13 +1697,30 @@ function docFlow(e, d) {
   for (const b of bills.filter((x) => !hasArtist(e) || !isArtist(x))) lanes.push(lane('sup', /aram|courier|deliver|dhl|fedex|post/i.test(b.vendor || '') ? '🚚' : '🖼️', `Supplier · ${b.vendor || 'vendor'}`, [box('🧾', 'Bill', b), box('💸', 'Payment', paidFor(b))]));
   return `<div class="dflow">${lanes.join('')}<div class="muted" style="font-size:11px">✓ done in Zoho · ✎ draft · … still to come. Click a box to open it in Zoho Books.</div></div>`;
 }
+/** The order's journey, step by step (done ✓ with the date when known, now, still to come), under the document flow. */
+function statusTrack(e) {
+  const k = e.kind, art = hasArtist(e), jj = jobsOf(e), dj = jj.delivery || {}, fj = jj.framer || {}, pj = jj.printer || {};
+  const path = art ? ['RECEIVED', 'PRICE_SENT', 'PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'FRAMING', 'SHIPPED', 'DELIVERED']
+    : ['PHOTO', 'GIFT'].includes(k) ? ['RECEIVED', 'PAID', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED']
+    : k === 'MARKET' ? ['RECEIVED', 'PRICE_SENT', 'PAID', 'SHIPPED', 'DELIVERED']
+    : k === 'LICENCE' ? ['RECEIVED', 'PRICE_SENT', 'PAID', 'DELIVERED']
+    : ['RECEIVED', 'PRICE_SENT', 'PAID', 'FRAMING', 'SHIPPED', 'DELIVERED'];
+  const when = { RECEIVED: e.createdAt, PAID: e.ziinaPaidAt, ARTIST_WORKING: e.artistStartedAt, ARTIST_DONE: e.artistFinishedAt, ARTIST_SENT: e.artistShippedAt,
+    FRAMING: fj.acceptedAt || fj.assignedAt, PRINTED: pj.readyAt, SHIPPED: dj.pickedAt, DELIVERED: dj.deliveredAt || e.deliveredAt };
+  const d = (x) => (x ? new Date(x).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
+  const s = e.status || 'RECEIVED', side = ['REPLACEMENT', 'REFUNDED', 'CANCELLED'].includes(s);
+  let at = path.indexOf(s); if (at < 0) at = side ? path.length : 0;
+  const fin = s === 'DELIVERED'; // the last step reached: shown done, not "now"
+  const steps = path.map((x, i) => `<li class="${i < at || (fin && i === at) ? 'done' : i === at ? 'now' : ''}"><span class="dot">${i < at || (fin && i === at) ? '✓' : i + 1}</span><b>${esc(STATUS[x] || x)}</b>${when[x] && i <= at ? `<small>${d(when[x])}</small>` : i === at ? '<small>now</small>' : ''}</li>`).join('');
+  return `<div class="strack"><div class="strack-h">Order status <span class="muted">· ${esc(STATUS[s] || s)}${side ? '' : at < path.length - 1 ? ` · next: ${esc(STATUS[path[at + 1]])}` : ' · complete'}</span></div><ol>${steps}${side ? `<li class="now side"><span class="dot">!</span><b>${esc(STATUS[s])}</b></li>` : ''}</ol></div>`;
+}
 /** The flow goes in the space under the order list (beside the open order). */
 function showFlow(e, d) {
   const slot = $('flowSlot'); if (!slot) return;
   if (!e) { slot.hidden = true; slot.innerHTML = ''; return; }
   slot.hidden = false;
   slot.dataset.fp = 'sand'; // the studio's chosen look
-  slot.innerHTML = `<div class="flowhead"><h3>✨ Document flow</h3><span class="muted mono" style="font-size:12px;margin-left:auto">${esc(e.ref)} · ${esc(e.customerName || '')}</span></div>${d ? docFlow(e, d) : '<div class="muted" style="font-size:13px">Press <b>Check Zoho</b> on the order to draw its documents.</div>'}`;
+  slot.innerHTML = `<div class="flowhead"><h3>✨ Document flow</h3><span class="muted mono" style="font-size:12px;margin-left:auto">${esc(e.ref)} · ${esc(e.customerName || '')}</span></div>${d ? docFlow(e, d) : '<div class="muted" style="font-size:13px">Press <b>Check Zoho</b> on the order to draw its documents.</div>'}${statusTrack(e)}`;
 }
 function docsList(e) {
   const raw = costings.get(e.id)?.zohoDocs;
@@ -2051,6 +2068,8 @@ const savedLayout = () => LAYOUT;
 async function showDetail(e) {
   await showDetailBody(e);
   try { arrangeDetail(e); } catch (err) { console.warn('Layout', err); }
+  // Orders without a Zoho box still get the status track under the order list.
+  if (!document.getElementById('checkZoho')) showFlow(e, null);
 }
 function arrangeDetail(e) {
   const LAYOUT_SAVED = savedLayout();
@@ -2089,7 +2108,7 @@ function arrangeDetail(e) {
     form.hidden = true; form.style.display = 'none';
     tabs.querySelectorAll('[data-lt]').forEach((b) => { b.onclick = () => { layoutTab = b.dataset.lt; tabs.querySelectorAll('[data-lt]').forEach((x) => x.setAttribute('aria-selected', x === b)); panes.forEach((p) => { p.hidden = p.dataset.lp !== layoutTab; }); }; });
     $('layBack').onclick = () => { selectedId = null; desk.classList.remove('open'); render(); restoreFlow(); box.innerHTML = '<p class="muted">Select an order to see the details, set a price and update its status.</p>'; showFlow(null); };
-    if ($('flowSlot')) $('flowSlot').hidden = !costings.get(e.id)?.zohoDocs;
+    if ($('flowSlot')) $('flowSlot').hidden = false; // status track always; the document flow once Zoho has documents
     return;
   }
   if (LAYOUT === 'b') {
