@@ -591,7 +591,7 @@ const schema = a.schema({
 
   applyCode: a
     .mutation()
-    .arguments({ id: a.id().required(), code: a.string() })
+    .arguments({ id: a.id().required(), code: a.string(), price: a.float() }) // price: studio only, re-apply the same code on a new price
     .returns(a.string())
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(zohoQuoteSync)),

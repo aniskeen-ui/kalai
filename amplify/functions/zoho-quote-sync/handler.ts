@@ -4621,6 +4621,24 @@ async function applyCode(ev: ApiEvent) {
     await releaseCode(current, str(e, 'ref'), num(e, 'discountAmount') ?? 0);
     return { ok: true, price: list, removed: current };
   }
+  // Studio changed the price (e.g. delivery abroad added): the same code is worked out again on the new price.
+  const newList = Number((ev.arguments as { price?: number }).price);
+  if (code && code === current && newList > 0 && groups.includes('ADMINS')) {
+    const prevAmt = num(e, 'discountAmount') ?? 0, loy = num(e, 'loyaltyAmount') ?? 0;
+    await releaseCode(current, str(e, 'ref'), prevAmt); // give the use / gift balance back first, then use it again
+    const f2 = await findPromo(code);
+    const v2 = f2 && 'p' in f2 ? null : await findVoucher(code);
+    const d2 = v2 ? voucherAmount(v2, e, newList) : f2 && 'p' in f2 ? discountFor(f2.p as Img, str(e, 'kind'), newList) : { amount: 0, error: f2?.error ?? 'This code is not valid.' };
+    if (d2.error) {
+      await updateEnquiry(id, { quotedPrice: Math.round((newList - loy) * 100) / 100, discountAmount: null, discountCode: null, listPrice: loy ? newList : null });
+      return { ok: true, price: newList, removed: current, why: d2.error };
+    }
+    const price2 = Math.round((newList - d2.amount - loy) * 100) / 100;
+    await updateEnquiry(id, { listPrice: newList, discountAmount: d2.amount, discountCode: code, quotedPrice: price2 });
+    if (v2) await useVoucher(v2, str(e, 'ref'), d2.amount); else await bumpUses(code, 1);
+    console.log(`Code ${code} re-priced on ${str(e, 'ref')}: AED ${newList} - ${d2.amount} = ${price2}`);
+    return { ok: true, code, list: newList, discount: d2.amount, price: price2 };
+  }
   if (code === current) throw new Error('This code is already applied.');
   // A public offer code first, else a private code / gift card given by the studio.
   const f = await findPromo(code);

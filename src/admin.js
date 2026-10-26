@@ -1972,6 +1972,12 @@ async function wireDiscount(e) {
     try { const r = await client.mutations.applyCode({ id: e.id, code: null }); if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, '')); vchCache = null; await refreshOne(e.id); } catch (ex) { m.textContent = ex.message; }
   };
   currentDiscountType = e.discountType || '';
+  // Code on the order: show that a new price gets the code worked out again on Save.
+  if ($('codeRe') && $('ePrice')) {
+    const re = () => { const v = Number($('ePrice').value || 0), was = Number(e.listPrice || 0); $('codeRe').hidden = !(v > 0) || v === was;
+      $('codeRe').textContent = `New price ⃃ ${v.toLocaleString('en-US')}: when you save, ${e.discountCode} is worked out again on it (was − ⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')} on ⃃ ${was.toLocaleString('en-US')}).`; };
+    ['input', 'change'].forEach((k) => $('ePrice').addEventListener(k, re)); re();
+  }
   if (!$('eDiscT')) return;
   const show = () => {
     const d = discountOf(), code = $('eDiscT').value === 'CODE', on = !!$('eDiscT').value && !code;
@@ -2122,7 +2128,7 @@ async function showDetailBody(e) {
       <div class="two">
         <div class="field"><label for="eStatus">Status</label><select id="eStatus">${Object.entries(STATUS).map(([k, v]) => { const lk = locked && BEFORE_PAYMENT.includes(k) && k !== s; const why = lk ? 'locked' : statusBlock(e, k, s); return `<option value="${k}" ${k === s ? 'selected' : ''} ${why ? 'disabled' : ''}>${v}${why ? ` (${why})` : ''}</option>`; }).join('')}</select>
           ${needsSiva(e) && !sivaDone(e) && !AFTER_SIVA.includes(s) ? `<span class="muted" style="font-size:12px">Being framed / Shipped open once ${esc(artistOf(e))} marks it <b>Sent to frame shop</b> (you can do it for them in ${artistPage(e)}).</span>` : ''}</div>
-        <div class="field"><label for="ePrice">Price (⃃)</label><input id="ePrice" type="number" min="0" step="1" value="${(e.discountType && e.listPrice != null ? e.listPrice : null) ?? e.quotedPrice ?? (/^(AED|Dhs) ?\d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^⃃ [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
+        <div class="field"><label for="ePrice">Price (⃃)</label><input id="ePrice" type="number" min="0" step="1" value="${((e.discountType || e.discountCode) && e.listPrice != null ? e.listPrice : null) ?? e.quotedPrice ?? (/^(AED|Dhs) ?\d+/.test(String(det.Price || '')) && !e.listingId ? String(det.Price).match(/\d+/)[0] : (e.kind === 'GIFT' || e.kind === 'PHOTO') && /^⃃ [\d,]+$/.test(String(det.Total || '').trim()) ? String(det.Total).replace(/[^\d]/g, '') : '')}" ${priceLocked(e) ? `readonly title="Locked: invoice ${esc(e.zohoInvoice || '')} exists in Zoho"` : ''}>
           ${discountRow(e)}
           ${e.loyaltyRedeemed ? `<span class="muted" style="font-size:12px">✦ Customer used ${Number(e.loyaltyRedeemed).toLocaleString('en-US')} Kalai Circle points: − ⃃ ${Number(e.loyaltyAmount || 0).toLocaleString('en-US')} (already taken off the price shown).</span>` : ''}
           ${e.loyaltyAt ? `<span class="muted" style="font-size:12px">✦ Kalai Circle: customer earned <b>${Number(e.loyaltyPoints || 0).toLocaleString('en-US')} points</b> on this order (${new Date(e.loyaltyAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}).</span>` : e.customerCode && !['CANCELLED', 'REFUNDED'].includes(e.status) && e.quotedPrice ? `<span class="muted" style="font-size:12px">✦ Kalai Circle points for this order are added 48 hours after it is delivered${e.status === 'DELIVERED' && e.deliveredAt ? `: due ${new Date(new Date(e.deliveredAt).getTime() + 49 * 3600_000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}. The balance is under Customers → this customer.</span>` : ''}
@@ -2132,7 +2138,7 @@ async function showDetailBody(e) {
               <div style="display:flex;justify-content:space-between;color:var(--ok)"><span>${what} <b class="mono">${esc(c)}</b></span><span class="mono">− ⃃ ${f(e.discountAmount)}</span></div>
               ${e.loyaltyAmount ? `<div style="display:flex;justify-content:space-between;color:var(--ok)"><span>Kalai Circle points (${f(e.loyaltyRedeemed)})</span><span class="mono">− ⃃ ${f(e.loyaltyAmount)}</span></div>` : ''}
               <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--line);padding-top:2px"><span>Customer pays</span><span class="mono">⃃ ${f(e.quotedPrice)}</span></div>
-              <span class="muted" style="font-size:11px">Zoho shows the same: ⃃ ${f(e.listPrice)} with ⃃ ${f(Number(e.listPrice || 0) - Number(e.quotedPrice || 0))} in the Discount column. If you change the price above, the code no longer applies.</span>${!priceLocked(e) && BEFORE_PAYMENT.includes(e.status || 'RECEIVED') ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px"><button type="button" class="btn small ghost" id="eCodeRemove">Remove this code</button><span class="muted" id="eCodeMsg" style="font-size:11px"></span></div>` : ''}</div>`; })() : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
+              <span class="muted" style="font-size:11px">Zoho shows the same: ⃃ ${f(e.listPrice)} with ⃃ ${f(Number(e.listPrice || 0) - Number(e.quotedPrice || 0))} in the Discount column. Price above = before the code: if you change it, the code is worked out again on the new price when you save.</span><b id="codeRe" style="font-size:12px;color:var(--kumkum)" hidden></b>${!priceLocked(e) && BEFORE_PAYMENT.includes(e.status || 'RECEIVED') ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px"><button type="button" class="btn small ghost" id="eCodeRemove">Remove this code</button><span class="muted" id="eCodeMsg" style="font-size:11px"></span></div>` : ''}</div>`; })() : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
       ${e.kind === 'LICENCE' ? licenceSection(e) : `${addressSection(e)}
       ${shippingSection(e)}
@@ -2461,6 +2467,19 @@ async function showDetailBody(e) {
         if (note) client.mutations.marketAdmin({ action: 'artistNoteMail', data: JSON.stringify({ id: e.id }) }).catch(() => {}); // emailed to the artist too
       }
       if (rw) await saveRework(e, rw);
+      // A voucher / offer code on the order: the Price box is the price before the code. A new price → the same code
+      // is worked out again on it (server), and the customer pays what that gives.
+      let priceOut = priceVal, codeMsg = '';
+      if (e.discountCode && !e.discountType && e.listPrice != null && !priceLocked(e)) {
+        const nl = Number(priceVal);
+        if (priceVal !== '' && nl > 0 && nl !== Number(e.listPrice)) {
+          const r = await client.mutations.applyCode({ id: e.id, code: e.discountCode, price: nl });
+          if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+          const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          priceOut = String(out.price); vchCache = null;
+          codeMsg = out.removed ? ` Code ${out.removed} no longer applies (${out.why || 'not valid'}): customer pays ⃃ ${out.price}.` : ` Code ${e.discountCode} worked out again: ⃃ ${nl.toLocaleString('en-US')} − ⃃ ${Number(out.discount).toLocaleString('en-US')} = ⃃ ${Number(out.price).toLocaleString('en-US')}.`;
+        } else priceOut = e.quotedPrice == null ? '' : String(e.quotedPrice);
+      }
       const prevMsg = e.adminMessage || '', newSt = $('eStatus').value;
       const { data, errors } = await client.models.Enquiry.update({
         ...(costingChanged ? { costingAt: savedAt } : {}),
@@ -2486,7 +2505,7 @@ async function showDetailBody(e) {
         status: $('eStatus').value,
         paymentMethod: $('ePayMethod').value || null,
         paymentRef: $('ePayRef').value.trim() || null,
-        ...(priceLocked(e) ? {} : { quotedPrice: priceVal === '' ? null : Number(priceVal), ...disc }),
+        ...(priceLocked(e) ? {} : { quotedPrice: priceOut === '' ? null : Number(priceOut), ...disc }),
         paymentLink: $('eLink').value.trim() || null,
         // A message left from an earlier step (unchanged while the status moves on) is cleared, so the customer
         // doesn't keep seeing e.g. "pay with the link" after paying.
@@ -2495,7 +2514,7 @@ async function showDetailBody(e) {
       if (errors?.length) throw new Error(errors[0].message);
       Object.assign(e, data || {});
       $('saveMsg').textContent = newSt === 'PAID' && s !== 'PAID' && !locked ? 'Saved as Paid. Waiting for Zoho to create the invoice and record the payment…' : 'Saved. The customer sees this under My enquiries & orders.';
-      $('saveMsg').insertAdjacentText('beforeend', ' ' + await mailNote(e, s, newSt, prevMsg));
+      $('saveMsg').insertAdjacentText('beforeend', codeMsg + ' ' + await mailNote(e, s, newSt, prevMsg));
       render();
       // Zoho may answer (invoice, challan, Siva's order…): watch for it and refresh the details.
       void toZoho;
