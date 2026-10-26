@@ -64,6 +64,15 @@ async function cardPng(v) {
   for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (q.isDark(r, col)) g.fillRect(x0 + (col + 4) * cell, y0 + (r + 4) * cell, cell, cell);
   return c.toDataURL('image/png');
 }
+let custCache = null;
+/** The customer master (BP-…), loaded once per visit. */
+async function loadCustomers() {
+  if (custCache) return custCache;
+  const out = []; let nextToken = null;
+  do { const r = await client.models.Customer.list({ limit: 500, nextToken }); if (r.errors?.length) throw new Error(r.errors[0].message); out.push(...(r.data || [])); nextToken = r.nextToken; } while (nextToken);
+  custCache = out.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  return custCache;
+}
 const genCode = (pre) => `${pre}-${Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('').replace(/(.{4})/, '$1-')}`;
 async function vLoad() {
   $('vList').innerHTML = '<p class="muted">Loading…</p>';
@@ -139,6 +148,8 @@ function vEdit(v) {
       <div class="field"><label>Balance</label><div class="muted" style="padding-top:8px">${x.kind === 'GIFT' && v ? `⃃ ${Number(x.balance || 0).toLocaleString('en-US')}` : 'starts at the full value'}</div></div><div></div></div>
     <div class="three"><div class="field"><label for="vArea">Use on</label><select id="vArea">${Object.entries(AREA).map(([k, n]) => `<option value="${k}" ${k === (x.appliesTo || 'ALL') ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label for="vMin">Minimum order (⃃, optional)</label><input id="vMin" type="number" min="0" step="1" value="${esc(x.minOrder ?? '')}"></div><div></div></div>
+    <div class="three"><div class="field" style="grid-column:span 2"><label for="vCust">Customer (pick an existing customer: fills name, mobile and email)</label><input id="vCust" list="vCustList" autocomplete="off" placeholder="Type a code (BP-…), name, email or mobile"><datalist id="vCustList"></datalist>
+        <span class="muted" id="vCustMsg" style="font-size:12px">Loading customers…</span></div><div></div></div>
     <div class="three"><div class="field"><label for="vFor">Given to (name)</label><input id="vFor" maxlength="80" value="${esc(x.forName)}" placeholder="e.g. Priya Raman"></div>
       <div class="field"><label for="vPhone">Mobile / WhatsApp (optional)</label><input id="vPhone" type="tel" maxlength="30" value="${esc(x.forPhone)}" placeholder="+971 50 123 4567"></div>
       <div class="field"><label for="vEmail">Email (optional: only this email can use it)</label><input id="vEmail" type="email" maxlength="120" value="${esc(x.forEmail)}" placeholder="their sign-in email"></div>
@@ -149,6 +160,22 @@ function vEdit(v) {
   $('vKind').onchange = sw; sw(); if (v) { $('vCodeRow').hidden = x.kind === 'GIFT'; $('vGiftRow').hidden = x.kind !== 'GIFT'; $('vCode').value = x.code; }
   $('vGen').onclick = () => { $('vCode').value = genCode(kind() === 'GIFT' ? 'GIFT' : 'KAL'); };
   $('vCancel').onclick = () => { $('vForm').innerHTML = ''; };
+  // Customer master → pick one: their name, mobile and email are copied into the voucher.
+  const custLabel = (c) => [c.code, c.name, c.email, c.phone].filter(Boolean).join(' · ');
+  loadCustomers().then((cs) => {
+    if (!$('vCustList')) return;
+    $('vCustList').innerHTML = cs.map((c) => `<option value="${esc(custLabel(c))}"></option>`).join('');
+    $('vCustMsg').textContent = cs.length ? `${cs.length} customer${cs.length > 1 ? 's' : ''} in the customer master.` : 'No customers yet.';
+    const pick = () => {
+      const t = $('vCust').value.trim(), code = (t.match(/BP-\d+/) || [])[0];
+      const c = cs.find((x) => custLabel(x) === t) || (code && cs.find((x) => x.code === code));
+      if (!c) return;
+      $('vFor').value = c.name || ''; $('vPhone').value = c.phone || ''; $('vEmail').value = (c.email || '').toLowerCase();
+      if (!$('vNote').value.trim()) $('vNote').value = `Customer ${c.code}`;
+      $('vCustMsg').textContent = `${c.code} · ${c.name || ''}: name, mobile and email copied below (change them if needed).`;
+    };
+    $('vCust').addEventListener('change', pick); $('vCust').addEventListener('input', () => { if (cs.some((x) => custLabel(x) === $('vCust').value.trim())) pick(); });
+  }).catch((ex) => { if ($('vCustMsg')) $('vCustMsg').textContent = `Customers not loaded: ${ex.message}`; });
   $('vSave').onclick = async () => {
     const msg = $('vMsg'); msg.textContent = '';
     const code = $('vCode').value.trim().toUpperCase().replace(/\s+/g, '');
