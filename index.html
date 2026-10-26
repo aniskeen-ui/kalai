@@ -420,6 +420,14 @@ html[data-lstyle="C"] .lp-line{display:block;position:relative;max-width:1150px;
 .lp-gallery.taped figure{break-inside:avoid;margin:0 0 26px;background:#fff;padding:8px 8px 4px;border:0;border-radius:2px;box-shadow:0 8px 18px rgba(0,0,0,.14);position:relative;transform:rotate(var(--r,0deg))}
 .lp-gallery.taped figure::before{content:"";position:absolute;top:-9px;left:50%;width:60px;height:18px;margin-left:-30px;background:rgba(240,220,150,.85);transform:rotate(var(--t,3deg))}
 .lp-gallery.taped img,.lp-gallery.framed img{height:auto}
+/* base style: neat cards, the whole drawing on white, name underneath */
+.lp-gallery:not(.taped):not(.framed){grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:20px}
+.lp-gallery:not(.taped):not(.framed) figure{border-radius:16px;transition:transform .2s ease,box-shadow .2s ease}
+.lp-gallery:not(.taped):not(.framed) figure:nth-child(4n+1){background:#fff4e6}.lp-gallery:not(.taped):not(.framed) figure:nth-child(4n+2){background:#eef6ff}
+.lp-gallery:not(.taped):not(.framed) figure:nth-child(4n+3){background:#f1f8e8}.lp-gallery:not(.taped):not(.framed) figure:nth-child(4n){background:#fdeef3}
+.lp-gallery:not(.taped):not(.framed) img{height:auto;aspect-ratio:1/1;object-fit:contain;padding:14px;background:transparent}
+.lp-gallery:not(.taped):not(.framed) figcaption{text-align:center;font-weight:600;color:var(--fg);padding:0 12px 14px}
+:root[data-theme="dark"] .lp-gallery:not(.taped):not(.framed) figure{background:var(--surface)!important}
 .lp-gallery.taped img{aspect-ratio:auto;object-fit:contain;background:#fff}
 .lp-gallery.taped figcaption{font:500 13px var(--body);color:#555;padding:6px 4px 4px;text-align:center}
 .lp-gallery.framed{display:block;columns:4 210px;column-gap:28px;background:#efe9de;padding:30px;border-radius:12px}
