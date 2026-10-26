@@ -4609,7 +4609,10 @@ async function applyCode(ev: ApiEvent) {
   if (!e || (!ownsEnquiry(e, ev) && !groups.includes('ADMINS'))) throw new Error('Order not found');
   if (!['RECEIVED', 'PRICE_SENT'].includes(str(e, 'status') || 'RECEIVED') || str(e, 'zohoInvoiceId')) throw new Error('This order is already paid, so a code can no longer be added.');
   if (str(e, 'discountType')) throw new Error('A special discount is already applied to this order, so a code can\'t be added as well.');
-  if (str(e, 'basketRef') && str(e, 'ziinaIntentId')) throw new Error('This order is paid together with the rest of your cart: codes are added at checkout.');
+  // Studio re-pricing the same code (e.g. delivery abroad added): allowed on a cart order too; the order then gets
+  // its own Ziina link for the new amount (the cart's shared link no longer matches its price).
+  const studioReprice = groups.includes('ADMINS') && Number((ev.arguments as { price?: number }).price) > 0 && !!code && code === str(e, 'discountCode');
+  if (str(e, 'basketRef') && str(e, 'ziinaIntentId') && !studioReprice) throw new Error('This order is paid together with the rest of your cart: codes are added at checkout.');
   const current = str(e, 'discountCode');
   const list = num(e, 'listPrice') ?? num(e, 'quotedPrice') ?? 0;
   if (!(list > 0)) throw new Error('Add the code once we have sent you the price.');
