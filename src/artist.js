@@ -355,7 +355,7 @@ function wireProgress(x) {
         if (x.inbound && x.progress === 'FINISHED' && !x.inbound.awb) {
           try { const lr = await client.mutations.artistProgress({ id: x.id, step: 'LABEL' }); const l = parse(lr.data)?.label; if (l) Object.assign(x.inbound, { awb: l.awb, label: true }); } catch { /* shows after a refresh */ }
         } else if (x.inbound) x.inbound.label = ['FINISHED', 'SHIPPED'].includes(x.progress);
-        x.label = x.progress === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : x.progress === 'FINISHED' ? 'Finished · send it to the frame shop' : 'In progress';
+        x.label = x.progress === 'SHIPPED' ? 'Sent to frame shop · send your invoice' : x.progress === 'FINISHED' ? 'Finished · not sent yet: hand it to the courier' : 'In progress';
         render();
         const m2 = document.getElementById('pm-' + x.id);
         if (m2) m2.textContent = 'Saved. Kalai Art House can see it now.';
@@ -439,7 +439,7 @@ function wireRework(x) {
         else if (step === 'RECEIVED') { Object.assign(x.rework, { receivedAt: r.sivaReceivedAt }); x.label = 'Rework needed (damaged in transit) · give your rework price'; }
         else Object.assign(x.rework, { stage: r.reworkStage, startedAt: r.reworkStartedAt || x.rework.startedAt, finishedAt: r.reworkFinishedAt || x.rework.finishedAt, sentAt: r.reworkSentAt || x.rework.sentAt, courier: r.reworkCourier || x.rework.courier, awb: r.reworkAwb || x.rework.awb });
         x.editRwShip = false;
-        x.label = x.rework.stage === 'SENT' ? 'Rework sent to frame shop · send your rework invoice' : x.rework.stage === 'FINISHED' ? 'Rework finished · send it to the frame shop' : x.rework.stage === 'STARTED' ? 'Rework in progress' : x.label;
+        x.label = x.rework.stage === 'SENT' ? 'Rework sent to frame shop · send your rework invoice' : x.rework.stage === 'FINISHED' ? 'Rework finished · not sent yet: hand it to the courier' : x.rework.stage === 'STARTED' ? 'Rework in progress' : x.label;
         render();
         const m2 = document.getElementById('rwm-' + x.id);
         if (m2) m2.textContent = 'Saved. Kalai Art House can see it now.';
