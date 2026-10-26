@@ -2272,7 +2272,7 @@ async function showDetailBody(e) {
       const destNote = () => {
         const out = $('cDel').value === 'OUTSIDE';
         $('cDestBox').hidden = !out; $('cDestNote').hidden = !out;
-        if (out) { const d = destOf(e); $('cDestNote').textContent = `Courier price from the delivery partner's ${d.country === 'UAE' ? 'GCC' : ZONE_NAME[zoneOf(d.country)]} rate (zone ${d.country === 'UAE' ? 'A' : zoneOf(d.country)}) for ${[d.region, d.country].filter(Boolean).join(', ')}. No UAE VAT on exports.`; }
+        if (out) { const d = destOf(e); const z = d.country === 'UAE' ? 'A' : zoneOf(d.country); $('cDestNote').textContent = `Courier price for ${[d.region, d.country].filter(Boolean).join(', ')}: the delivery partner's price for that region or country if they have one, else their ${ZONE_NAME[z]} zone rate (zone ${z}). No UAE VAT on exports.`; }
       };
       $('cDel').addEventListener('change', destNote);
       ['change', 'input'].forEach((k) => $('cDestBox').addEventListener(k, () => { destNote(); renderCost(); }));

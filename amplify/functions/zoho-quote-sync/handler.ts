@@ -2378,6 +2378,14 @@ async function sellerAction(ev: ApiEvent) {
       for (const r of rows) for (const c of cols) { const v = n((o as Record<string, Record<string, unknown>> | undefined)?.[r]?.[c]); if (v !== undefined && Number.isFinite(v)) (out[r] ??= {})[c] = v; }
       return out;
     };
+    // Courier price per country, or "Country|Region" (state / province / city): up to 400 rows.
+    const countryGrid = (o: unknown) => {
+      const src = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>;
+      const keys = Object.keys(src).map((k) => k.split('|').map((x) => txt(x, 60).trim()).filter(Boolean).slice(0, 2).join('|')).filter(Boolean);
+      const out: Record<string, Record<string, number>> = {};
+      Object.keys(src).slice(0, 400).forEach((k, i) => { const row = grid({ x: src[k] }, ['x'], PARCELS).x; if (row && keys[i]) out[keys[i]] = row; });
+      return out;
+    };
     const SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
     const PARCELS = ['s1', '40×50', '50×70', '60×80', '70×100']; // delivery partners: price by parcel (frame) size
     const PSZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
@@ -2388,7 +2396,7 @@ async function sellerAction(ev: ApiEvent) {
       : profile.type === 'FRAMER'
       ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']).x ?? {},
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
-      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), notes: txt(d.notes, 500), at: now };
+      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), country: countryGrid(d.country), notes: txt(d.notes, 500), at: now };
     const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
     await putRow(S, row);
     return { profile: row };

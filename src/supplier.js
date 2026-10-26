@@ -14,7 +14,8 @@ import {
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones } from './phone.js';
-import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, PRINT_SIZES, parcelPrice, parseCard } from './ratecard.js';
+import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, PRINT_SIZES, parcelPrice, parseCard, zoneOf, countriesInZone } from './ratecard.js';
+import { COUNTRIES, IN_STATES } from './phone.js';
 
 autoPhones();
 const client = generateClient();
@@ -378,6 +379,60 @@ let ratesBack = 'jobsView';
 const cell = (name, v) => `<input type="number" min="0" step="0.5" data-n="${esc(name)}" value="${v ?? ''}" placeholder="–">`;
 // One row of a courier's price list; older small / large prices fill the matching sizes.
 const pRow = (path, row) => RC_PARCELS.map(([k]) => `<td>${cell(`${path}.${k}`, parcelPrice(row, k === 's1' ? 'A3' : k))}</td>`).join('');
+// Courier prices per country (and optionally a region / state / city in it). These win over the zone price.
+const CNAMES = COUNTRIES.map((c) => c.key).filter((k) => k !== 'UAE');
+const ZONE_OF_NAME = Object.fromEntries(RC_ZONES);
+const ccRow = (country, region, row) => `<tr data-cc>
+  <td><select data-cc-country style="max-width:170px">${CNAMES.map((c) => `<option ${c === country ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    <div class="muted" style="font-size:11px" data-cc-zone>Zone: ${esc(ZONE_OF_NAME[zoneOf(country)] || '')}</div></td>
+  <td><input data-cc-region maxlength="60" value="${esc(region)}" placeholder="All of the country" ${country === 'India' ? 'list="rcInStates"' : ''} style="width:150px"></td>
+  ${RC_PARCELS.map(([k]) => `<td><input type="number" min="0" step="0.5" data-cp="${k}" value="${parcelPrice(row, k === 's1' ? 'A3' : k) ?? ''}" placeholder="–"></td>`).join('')}
+  <td><button type="button" class="linkbtn" data-cc-del title="Remove this row">✕</button></td></tr>`;
+function countrySection(card) {
+  const rows = Object.entries(card.country || {}).map(([k, v]) => { const [c, r = ''] = k.split('|'); return ccRow(c, r, v); }).join('');
+  return `<h3 style="font-size:15px;margin:16px 0 4px">Prices by country and region (optional)</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 6px">Your price to a country, or to one state / province / city in it. Kalai uses the region price first, then the country price, then the zone price above. Leave the region empty for the whole country.</p>
+    <div style="overflow-x:auto"><table class="rc" id="rcCountry"><thead><tr><th>Country</th><th>Region (optional)</th>${RC_PARCELS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${rows || '<tr data-cc-empty><td colspan="8" class="muted">No country prices yet.</td></tr>'}</tbody></table></div>
+    <datalist id="rcInStates">${IN_STATES.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+      <select id="rcAddPick" style="max-width:260px"><optgroup label="A whole zone">${RC_ZONES.map(([z, n]) => `<option value="zone:${z}">All of ${esc(n)} (${countriesInZone(z, CNAMES).length})</option>`).join('')}</optgroup>
+        <optgroup label="One country">${CNAMES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</optgroup></select>
+      <button type="button" class="btn small ghost" id="rcAdd">Add</button>
+      <input id="rcFind" placeholder="Find a country in the list…" style="max-width:200px">
+    </div>`;
+}
+function wireCountries() {
+  const tb = $('rcCountry')?.querySelector('tbody'); if (!tb) return;
+  const have = () => new Set([...tb.querySelectorAll('[data-cc]')].map((r) => `${r.querySelector('[data-cc-country]').value}|${r.querySelector('[data-cc-region]').value.trim()}`.toLowerCase()));
+  const add = (names) => {
+    const h = have(); tb.querySelector('[data-cc-empty]')?.remove();
+    const fresh = names.filter((c) => !h.has(`${c}|`.toLowerCase()));
+    tb.insertAdjacentHTML('beforeend', fresh.map((c) => ccRow(c, '', null)).join(''));
+    if (!fresh.length && names.length === 1) { tb.insertAdjacentHTML('beforeend', ccRow(names[0], '', null)); $('rMsg').textContent = `${names[0]} is already listed, so another ${names[0]} row was added: type the region (state / province / city) it is for.`; }
+    else $('rMsg').textContent = fresh.length ? `${fresh.length} ${fresh.length === 1 ? 'country' : 'countries'} added. Fill in the prices, then press Save my price list.` : 'Those countries are already in the list.';
+    tb.lastElementChild?.scrollIntoView({ block: 'nearest' });
+  };
+  $('rcAdd').onclick = () => { const v = $('rcAddPick').value; add(v.startsWith('zone:') ? countriesInZone(v.slice(5), CNAMES) : [v]); };
+  $('rcFind').oninput = () => { const q = $('rcFind').value.trim().toLowerCase(); if (!q) return; const o = [...$('rcAddPick').options].find((x) => !x.value.startsWith('zone:') && x.value.toLowerCase().startsWith(q)) || [...$('rcAddPick').options].find((x) => !x.value.startsWith('zone:') && x.value.toLowerCase().includes(q)); if (o) $('rcAddPick').value = o.value; };
+  tb.addEventListener('click', (ev) => { if (ev.target.closest('[data-cc-del]')) ev.target.closest('tr').remove(); });
+  tb.addEventListener('change', (ev) => {
+    const sel = ev.target.closest('[data-cc-country]'); if (!sel) return;
+    const tr = sel.closest('tr'); tr.querySelector('[data-cc-zone]').textContent = `Zone: ${ZONE_OF_NAME[zoneOf(sel.value)] || ''}`;
+    const r = tr.querySelector('[data-cc-region]'); if (sel.value === 'India') r.setAttribute('list', 'rcInStates'); else r.removeAttribute('list');
+  });
+}
+/** Country rows from the screen: { "India": {...}, "India|Kerala": {...} }; rows without any price are dropped. */
+function readCountries() {
+  const out = {}; let bad = false;
+  $('rGrid').querySelectorAll('[data-cc]').forEach((tr) => {
+    const c = tr.querySelector('[data-cc-country]').value, r = tr.querySelector('[data-cc-region]').value.trim().replace(/\|/g, ' ');
+    const row = {};
+    tr.querySelectorAll('[data-cp]').forEach((i) => { if (i.value === '') return; const v = Number(i.value); if (!(v >= 0 && v <= 5000)) bad = true; else row[i.dataset.cp] = v; });
+    if (Object.keys(row).length) out[r ? `${c}|${r}` : c] = row;
+  });
+  return { rows: out, bad };
+}
 function openRates(back) {
   ratesBack = back;
   const card = parseCard(profile), fr = profile.type === 'FRAMER';
@@ -385,7 +440,7 @@ function openRates(back) {
   $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
   $('rNote').textContent = pr ? 'Your price in ⃃ to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don\'t print that size). A4 = 21×30 cm, A3 = 30×42 cm.' : fr
     ? "Your price per frame, in ⃃, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
-    : 'Your charge in ⃃ to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional.';
+    : 'Your charge in ⃃ to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.';
   $('rGrid').innerHTML = pr
     ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (⃃)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
     : fr
@@ -400,9 +455,11 @@ function openRates(back) {
         ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}</tbody></table>`
     : `<table class="rc"><thead><tr><th>To</th>${RC_PARCELS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>
         ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th>${pRow(`uae.${em}`, card.uae?.[em])}</tr>`).join('')}
-        <tr><th colspan="${RC_PARCELS.length + 1}" style="padding-top:12px">Outside the UAE (optional)</th></tr>
-        ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th>${pRow(`intl.${z}`, card.intl?.[z])}</tr>`).join('')}</tbody></table>`;
+        <tr><th colspan="${RC_PARCELS.length + 1}" style="padding-top:12px">Outside the UAE (optional): price per zone</th></tr>
+        ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th>${pRow(`intl.${z}`, card.intl?.[z])}</tr>`).join('')}</tbody></table>
+       ${countrySection(card)}`;
   $('rNotes').value = card.notes || '';
+  if (!fr && !pr) wireCountries();
   // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.
   $('rEst')?.remove();
   if (!fr && isAdmin() && viewAs) {
@@ -414,6 +471,9 @@ function openRates(back) {
         const inp = $('rGrid').querySelector(`[data-n="uae.${em}.${k}"]`);
         if (inp) inp.value = (['Dubai', 'Sharjah', 'Ajman'].includes(em) ? near : far)[i];
       }));
+      // Outside the UAE: rough express-courier retail per zone, framed and boxed (volumetric weight).
+      const zone = { A: [60, 85, 120, 160, 240], B: [90, 125, 175, 235, 340], C: [140, 195, 275, 365, 530], D: [170, 235, 325, 435, 630], E: [190, 265, 365, 485, 700] };
+      RC_ZONES.forEach(([z]) => RC_PARCELS.forEach(([k], i) => { const inp = $('rGrid').querySelector(`[data-n="intl.${z}.${k}"]`); if (inp && inp.value === '') inp.value = zone[z][i]; }));
       if (!$('rNotes').value.trim()) $('rNotes').value = 'Estimates only, until business rates. Charged on volumetric weight (L×W×H ÷ 5000). Remote areas (Liwa, Ruwais, Western Region, RAK mountains) add about ⃃ 20+. 70×100 may need freight handling. Glass is fragile: pack well or use acrylic for large sizes. Artworks may be excluded from courier cover.';
       $('rMsg').textContent = 'Estimates filled in. Check them, then press Save my price list.';
     };
@@ -434,6 +494,7 @@ $('rateForm').addEventListener('submit', async (ev) => {
     path.slice(0, -1).forEach((k) => { o = o[k] ??= {}; });
     o[path[path.length - 1]] = v;
   });
+  if ($('rcCountry')) { const cc = readCountries(); if (cc.bad) bad = true; data.country = cc.rows; }
   if (bad) { $('rErr').textContent = 'Enter amounts in ⃃ from 0 to 5,000.'; return; }
   if ($('rIncl')) data.fixingIncluded = $('rIncl').checked;
   const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';

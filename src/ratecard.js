@@ -1,7 +1,7 @@
 // Supplier rate cards (supplier portal → My rates), and the cost of one order with each supplier (Order Management).
 // Frame shop: frame price per style and size, plus a fixing charge per size (or "fixing included").
 // Delivery partner: price per destination emirate and parcel size (older cards: small / large), and
-// optionally per zone outside the UAE. Later a courier aggregator (e.g. Shipy) can quote live instead.
+// per zone outside the UAE, and per country (and region) to override the zone. Later a courier aggregator (e.g. Shipy) can quote live instead.
 export const RC_STYLES = [['black', 'Black slim'], ['white', 'White'], ['oak', 'Natural wood / oak'], ['walnut', 'Walnut'], ['gold', 'Gold']];
 export const RC_SIZES = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
 export const RC_EMIRATES = ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'];
@@ -55,15 +55,26 @@ export function frameCost(card, spec) {
   return Math.round((Number(f) + fix) * 100) / 100;
 }
 
-/** Delivery partner's cost to this order's address, or null when its card has no price for it. */
-export function deliveryCost(card, e, spec, zoneOf) {
+/** Where a courier's price for this order comes from: its price for the country + region, else the country, else
+ *  the zone (outside the UAE), or the emirate (UAE). { price, from } — price null when the card has none. */
+export function deliveryQuote(card, e, spec, zoneOf) {
   const country = e.deliveryCountry || 'UAE';
-  if (country === 'UAE') return parcelPrice(card.uae?.[String(e.deliveryEmirate || '').split(' (')[0]], spec.size);
-  return parcelPrice(card.intl?.[zoneOf ? zoneOf(country) : 'E'], spec.size);
+  if (country === 'UAE') { const em = String(e.deliveryEmirate || '').split(' (')[0]; return { price: parcelPrice(card.uae?.[em], spec.size), from: em || 'UAE' }; }
+  const rows = card.country || {}, low = (x) => String(x || '').trim().toLowerCase();
+  const find = (k) => { const key = Object.keys(rows).find((x) => low(x) === low(k)); return key ? parcelPrice(rows[key], spec.size) : null; };
+  const region = String(e.deliveryEmirate || '').trim();
+  if (region) { const v = find(`${country}|${region}`); if (v != null) return { price: v, from: `${region}, ${country}` }; }
+  const c = find(country); if (c != null) return { price: c, from: country };
+  const z = zoneOf ? zoneOf(country) : 'E';
+  return { price: parcelPrice(card.intl?.[z], spec.size), from: `zone ${z} (${(RC_ZONES.find((x) => x[0] === z) || ['', ''])[1]})` };
 }
+/** Delivery partner's cost to this order's address, or null when its card has no price for it. */
+export function deliveryCost(card, e, spec, zoneOf) { return deliveryQuote(card, e, spec, zoneOf).price; }
 
 // Same zones as Little Artists shipping.
 const ZONE = { A: ['Saudi Arabia', 'Oman', 'Qatar', 'Bahrain', 'Kuwait'], B: ['India', 'Sri Lanka', 'Pakistan', 'Bangladesh', 'Nepal', 'Maldives', 'Bhutan'],
   D: ['United States', 'Canada', 'Australia', 'New Zealand'] };
 const EU = ['United Kingdom', 'Ireland', 'France', 'Germany', 'Italy', 'Spain', 'Portugal', 'Netherlands', 'Belgium', 'Luxembourg', 'Switzerland', 'Austria', 'Denmark', 'Sweden', 'Norway', 'Finland', 'Iceland', 'Poland', 'Czechia', 'Slovakia', 'Hungary', 'Slovenia', 'Croatia', 'Romania', 'Bulgaria', 'Greece', 'Cyprus', 'Malta', 'Estonia', 'Latvia', 'Lithuania', 'Monaco', 'Liechtenstein', 'Andorra', 'San Marino', 'Vatican City', 'Jersey', 'Guernsey', 'Isle of Man', 'Gibraltar', 'Serbia', 'Bosnia and Herzegovina', 'Montenegro', 'North Macedonia', 'Albania', 'Kosovo', 'Moldova', 'Ukraine'];
 export const zoneOf = (c) => (EU.includes(c) ? 'C' : Object.keys(ZONE).find((z) => ZONE[z].includes(c)) || 'E');
+/** Every country name in a zone (A–E), from the full country list. */
+export const countriesInZone = (z, names) => names.filter((c) => c !== 'UAE' && zoneOf(c) === z);
