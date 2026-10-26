@@ -111,6 +111,8 @@ function edit(c) {
   };
 }
 
+/** Opens the customer master on one customer (from an order: the customer's name in the document flow). */
+export async function openCustomerCode(code) { openCode = code || null; await showCustomers(); if (code) { $('cuSearch').value = code; draw(); document.querySelector(`#cuList tr[data-code="${code}"]`)?.scrollIntoView({ block: 'center' }); } }
 export async function showCustomers() {
   if (!wired) {
     wired = true;

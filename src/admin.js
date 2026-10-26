@@ -14,7 +14,7 @@ import { showSettings, showSettingTab } from './settings.js';
 import { showNumbers } from './numbers.js';
 import { showPricing } from './pricing.js';
 import { showPrintsMaster, showLicMaster } from './pricemasters.js';
-import { showCustomers } from './customers.js';
+import { showCustomers, openCustomerCode } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
 import { awbButtons, wireAwb } from './awb.js';
 import { downloadPod, podImage } from './pod.js';
@@ -604,6 +604,7 @@ $('fSearch').addEventListener('input', () => { clearTimeout(searchT); searchT = 
 $('fCust').addEventListener('change', render);
 $('fClear').onclick = () => { $('fVar').value = ''; try { localStorage.setItem('kalai-variant', ''); } catch { /* */ } $('fSearch').value = ''; $('fCust').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
 // Click a customer code on an order: list all that customer's orders.
+document.addEventListener('click', (ev) => { const c = ev.target.closest?.('[data-opencust]'); if (!c) return; showPane('customers', 'tabCustomers'); openCustomerCode(c.dataset.opencust); });
 document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-cust]'); if (!b) return; fillFinders(); $('fCust').value = b.dataset.cust; $('fSearch').value = ''; $('fStatus').value = ''; render(); });
 // Dropdowns: order numbers (type to narrow) and customers (name · code · number of orders).
 const custOf = (e) => e.customerCode || `n:${String(e.customerName || e.email || e.phone || '').trim().toLowerCase()}`;
@@ -711,7 +712,7 @@ function supplierSection(e) {
     const locked = cur && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage);
     const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${esc(cur.name)} · ${esc((role === 'printer' && cur.stage === 'READY' ? 'printed, ready to collect' : JOB_STAGE[cur.stage]) || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${label}</b>${cur ? jobWa(e, cur, role, spec) : ''}${cur ? `<span class="muted">${supLink(cur.name, cur.name) || esc(cur.name)} · ${esc((role === 'printer' && cur.stage === 'READY' ? 'printed, ready to collect' : JOB_STAGE[cur.stage]) || cur.stage)}${cur.awb ? ` · AWB ${esc(cur.awb)}` : ''}${cur.invoiceNo ? ` · invoice ${esc(cur.invoiceNo)} ${aed(cur.invoiceAmt, 2)}${cur.bill ? ` → Zoho bill ${esc(cur.bill)}${cur.billState && cur.billState !== 'open' ? ` (${esc(cur.billState)})` : ''}` : ''}` : ''}${cur.message ? ` · <span class="warn-t">${esc(cur.message)}</span>` : ''}</span>` : '<span class="muted">not given yet</span>'}</div>
       ${role === 'delivery' && cur ? deliveryDocs(cur) : ''}
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
         <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : role === 'printer' ? 'Print shop' : 'Delivery partner'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${cur?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `⃃ ${s.cost}` : 'no price for this'}${s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
@@ -1108,7 +1109,7 @@ function purchaseSection(e) {
   const st = e.purchaseState || '';
   const color = st === 'ARTIST_PAID' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : 'var(--muted)';
   return `<fieldset class="cost" id="purchase">
-    <legend>${esc(e.artistName || 'Siva Raja')} (purchase)</legend>
+    <legend>${e.artistId ? `<a class="who" href="/seller.html?view=${encodeURIComponent(e.artistId)}" target="_blank" rel="noopener" title="Open the artist's portal">${esc(e.artistName || 'Artist')}</a>` : esc(e.artistName || 'Siva Raja')} (purchase)</legend>
     <div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.purchaseMessage || `${artistOf(e)}'s order is recorded once the customer has paid and the costing has the artist's price.`)}</div>
     ${sivaProgress(e) ? `<div style="font-size:13px"><b>${esc(e.artistName || 'Siva')}'s progress:</b> ${esc(sivaProgress(e))}</div>` : ''}
     <div class="two">
@@ -1179,7 +1180,7 @@ function shippingSection(e) {
   return `<fieldset class="cost" id="shipBox" ${SHIP_STATUSES.includes(e.status) ? '' : 'hidden'}>
     <legend>Delivery</legend>
     ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.deliveryMessage)}</div>` : ''}
-    ${dj ? `<div style="font-size:14px"><b>${esc(dj.name)}</b> (delivery partner)${dj.awb ? ` · AWB <span class="mono">${esc(dj.awb)}</span>` : ' · waiting for the pickup'}${dj.deliveredAt ? ` · delivered ${esc(day(dj.deliveredAt))}` : dj.pickedAt ? ` · picked up ${esc(day(dj.pickedAt))}` : ''}</div>
+    ${dj ? `<div style="font-size:14px"><b>${supLink(dj.name, dj.name) || esc(dj.name)}</b> (delivery partner)${dj.awb ? ` · AWB <span class="mono">${esc(dj.awb)}</span>` : ' · waiting for the pickup'}${dj.deliveredAt ? ` · delivered ${esc(day(dj.deliveredAt))}` : dj.pickedAt ? ` · picked up ${esc(day(dj.pickedAt))}` : ''}</div>
       <div class="muted" style="font-size:12px">Filled in automatically from ${esc(dj.name)}'s portal (Picked up → Shipped, Delivered → Delivered). To use another courier, take the delivery job back under Frame shop &amp; delivery.</div>` : ''}
     ${dj?.pod || dj?.deliveredAt ? '<div class="muted" style="font-size:12px">Proof of delivery: under Frame shop &amp; delivery → Delivery.</div>' : ''}
     <div class="two" ${dj ? 'hidden' : ''}>
@@ -1674,17 +1675,22 @@ function showRates() {
 const DOC_STATUS_OK = ['delivered', 'paid', 'accepted', 'closed', 'billed', 'issued', 'invoiced', 'sent', 'open', 'creditcard', 'banktransfer', 'cash', 'recorded'];
 /** The order's documents as a flow: customer side, the artist, and each supplier, step by step.
  *  Green = done in Zoho, amber = draft (test mode or not yet sent), grey dashed = still to come. */
+/** A supplier's name as a link to their portal (studio view), matched on the business name. */
+function supLink(name, label) {
+  const n = String(name || '').trim().toLowerCase(), sp = n && suppliers.find((x) => String(x.business || '').trim().toLowerCase() === n);
+  return sp ? `<a class="who" href="/supplier.html?view=${encodeURIComponent(sp.id)}" target="_blank" rel="noopener" title="Open ${esc(sp.business)}'s portal">${label != null ? esc(label) : '$NAME'}</a>` : (label != null ? esc(label) : '');
+}
 function docFlow(e, d) {
   const docs = d?.docs || [];
   const st = (x) => (!x ? 'todo' : ['void', 'cancelled'].includes(x.status) ? 'void' : x.status === 'draft' ? 'draft' : 'done');
   const TAG = { done: '✓', draft: '✎', todo: '…', void: '✕' };
   const box = (icon, label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><span class="ic" aria-hidden="true">${icon}</span><span class="tag" aria-hidden="true">${TAG[st(x)]}</span><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : 'to come'))}</span>${x?.total != null ? `<span class="mono">${aed(x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
   const arrow = '<span class="dfa" aria-hidden="true">➜</span>';
-  const lane = (cls, icon, title, boxes) => `<div class="dfl ${cls}"><div class="dft"><i aria-hidden="true">${icon}</i>${esc(title).replace(/ · (.+)$/, ' · <span class="who">$1</span>')}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
+  const lane = (cls, icon, title, boxes, link = '') => `<div class="dfl ${cls}"><div class="dft"><i aria-hidden="true">${icon}</i>${link ? esc(title).replace(/ · (.+)$/, ` · ${link.replace('$NAME', '$1')}`) : esc(title)}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
   const one = (type) => docs.filter((x) => x.type === type).slice(-1)[0];
   const cust = [box('📝', 'Quote', one('Quote')), box('🧾', 'Invoice', one('Invoice')), box('💳', 'Payment', one('Payment received'), e.paymentMethod || ''), box('🚚', 'Delivery challan', one('Delivery challan'), e.status === 'DELIVERED' ? 'delivered' : '')];
   const cn = one('Credit note'); if (cn) cust.push(box('↩️', 'Credit note (refund)', cn));
-  const lanes = [lane('cust', '🛍️', `Customer · ${e.customerName || ''}`, cust)];
+  const lanes = [lane('cust', '🛍️', `Customer · ${e.customerName || ''}`, cust, e.customerCode ? `<button type="button" class="who" data-opencust="${esc(e.customerCode)}" title="Open ${esc(e.customerCode)} in Customers">$NAME</button>` : '')];
   const bills = docs.filter((x) => x.group === 'PURCHASE' && /bill/i.test(x.type));
   const who = artistOf(e).split(/\s+/)[0].toLowerCase();
   const isArtist = (b) => (!!e.zohoBillId && b.id === e.zohoBillId) || (!!who && String(b.vendor || '').toLowerCase().includes(who));
@@ -1692,9 +1698,9 @@ function docFlow(e, d) {
   if (hasArtist(e)) {
     const ab = bills.find(isArtist);
     const po = e.zohoPOId ? { type: 'Purchase order', number: e.zohoPO || 'PO', status: e.zohoState === 'TEST' ? 'draft' : 'open' } : null;
-    lanes.push(lane('art', '🎨', `Artist · ${artistOf(e)}`, [box('📦', 'Purchase order', po), box('🧾', 'Bill', ab), box('💸', 'Payment', paidFor(ab), e.artistPaidRef ? 'paid' : '')]));
+    lanes.push(lane('art', '🎨', `Artist · ${artistOf(e)}`, [box('📦', 'Purchase order', po), box('🧾', 'Bill', ab), box('💸', 'Payment', paidFor(ab), e.artistPaidRef ? 'paid' : '')], e.artistId ? `<a class="who" href="/seller.html?view=${encodeURIComponent(e.artistId)}" target="_blank" rel="noopener" title="Open the artist's portal">$NAME</a>` : ''));
   }
-  for (const b of bills.filter((x) => !hasArtist(e) || !isArtist(x))) lanes.push(lane('sup', /aram|courier|deliver|dhl|fedex|post/i.test(b.vendor || '') ? '🚚' : '🖼️', `Supplier · ${b.vendor || 'vendor'}`, [box('🧾', 'Bill', b), box('💸', 'Payment', paidFor(b))]));
+  for (const b of bills.filter((x) => !hasArtist(e) || !isArtist(x))) lanes.push(lane('sup', /aram|courier|deliver|dhl|fedex|post/i.test(b.vendor || '') ? '🚚' : '🖼️', `Supplier · ${b.vendor || 'vendor'}`, [box('🧾', 'Bill', b), box('💸', 'Payment', paidFor(b))], supLink(b.vendor)));
   return `<div class="dflow">${lanes.join('')}<div class="muted" style="font-size:11px">✓ done in Zoho · ✎ draft · … still to come. Click a box to open it in Zoho Books.</div></div>`;
 }
 /** The order's journey, step by step (done ✓ with the date when known, now, still to come), under the document flow. */
