@@ -289,10 +289,10 @@ function jobCard(j) {
       act = `${fr && j.canDeliver ? `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-deliver style="width:auto"> We will also deliver it to the customer${j.deliveryPrice != null ? ` (${aed(j.deliveryPrice)})` : ''}</label>` : ''}
         <button class="btn small" data-a="jobAccept">Accept the job</button>`;
     } else if (pr && j.stage === 'ACCEPTED') act = '<button class="btn small" data-a="jobPrinted">Printed, ready to collect</button>';
-    else if (fr && j.stage === 'ACCEPTED' && j.artist && j.artist.stage !== 'SHIPPED') act = `<span class="muted">Waiting for the artist to send the artwork. You'll be emailed with the courier and AWB when it's on its way.</span>`;
-    else if (fr && j.stage === 'ACCEPTED') act = j.collectFrom && !j.collectFrom.ready ? `<span class="muted">Waiting: ${esc(j.collectFrom.name)} hasn't printed it yet.</span>` : '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
+    else if (fr && j.stage === 'ACCEPTED' && j.artist && j.artist.stage !== 'SHIPPED') act = `<span class="waitnote">⏳ <b>Status now:</b> Waiting for the artist to send the artwork. You'll be emailed with the courier and AWB when it's on its way.</span>`;
+    else if (fr && j.stage === 'ACCEPTED') act = j.collectFrom && !j.collectFrom.ready ? `<span class="waitnote">⏳ <b>Status now:</b> Waiting: ${esc(j.collectFrom.name)} hasn't printed it yet.</span>` : '<button class="btn small" data-a="jobReady">Framed, ready for pickup</button>';
     else if (!fr && !pr && ['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
-      act = j.from && !j.from.ready ? `<span class="muted">Waiting: ${esc(j.from.name)} hasn't marked it ready yet.</span>`
+      act = j.from && !j.from.ready ? `<span class="waitnote">⏳ <b>Status now:</b> Waiting: ${esc(j.from.name)} hasn't marked it ready yet.</span>`
         : `<div class="inline"><div class="field"><label>${j.label?.awb ? 'Scan or type the airway bill on the parcel' : 'Tracking / AWB (optional)'}</label><input data-awb maxlength="60" ${j.label?.awb ? `placeholder="${esc(j.label.awb)}"` : ''}></div><button class="btn small" data-a="jobPicked">${j.selfDelivery ? 'Out for delivery' : 'Picked up'}</button></div>`;
     } else if (!fr && !pr && j.stage === 'PICKED') act = podForm(j, 'Delivered to the customer', 'jobDelivered');
     else if (!fr && !pr && j.stage === 'DELIVERED' && !j.pod) act = podForm(j, 'Save proof of delivery', 'jobPod');
@@ -303,6 +303,7 @@ function jobCard(j) {
     <div class="row"><h3>${pr ? 'Printing' : fr ? (j.printJob ? 'Print & frame' : 'Framing') : 'Delivery'} · ${esc(j.title)}</h3><span class="stage ${j.cancelled ? 'new' : j.invoiceNo || j.stage === 'DELIVERED' ? 'done' : j.stage === 'ASSIGNED' ? 'new' : ''}">${esc(label)}</span>
       <span class="muted" style="margin-left:auto">Order ${esc(j.ref)} · ${esc(j.kind)} · given ${esc(day(j.assignedAt))}</span></div>
     <div class="steps">${steps.map((s, i) => `<i class="${i <= at ? 'on' : ''}" title="${esc(s[1])}"></i>`).join('')}</div>
+    <div class="steplbl">${steps.map((s, i) => `<span class="${i < at ? 'done' : i === at ? 'now' : ''}">${i < at ? '✓ ' : ''}${esc(s[1])}</span>`).join('')}</div>
     <div class="grid2">
       <dl>
         <dt>Agreed price</dt><dd><b>${aed(j.price)}</b></dd>
