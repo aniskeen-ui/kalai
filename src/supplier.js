@@ -1,3 +1,4 @@
+import './stage.js';
 import { openPdf } from './pdf.js';
 import { awbButtons, wireAwb } from './awb.js';
 // Supplier portal: frame shops (FRAMER), delivery partners (COURIER) and print shops (PRINTER).

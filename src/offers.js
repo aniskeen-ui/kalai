@@ -1,4 +1,5 @@
 // Offers page: active promotions from Order Management → Offers (public, read-only).
+import './stage.js';
 import './amplify-config.js';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';

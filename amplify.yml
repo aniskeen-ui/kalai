@@ -9,7 +9,8 @@ frontend:
   phases:
     build:
       commands:
-        - npm run build
+        # The live shop is the "production" branch; every other branch builds the test site (orange TEST ribbon).
+        - if [ "$AWS_BRANCH" = "production" ]; then VITE_KALAI_STAGE=prod npm run build; else VITE_KALAI_STAGE=test npm run build; fi
   artifacts:
     baseDirectory: dist
     files:

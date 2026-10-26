@@ -1,5 +1,6 @@
 // Customer accounts: sign up / sign in, save enquiries, "My enquiries & orders" panel
 // (tabs: Orders · Enquiries · Cancellations & refunds).
+import './stage.js';
 import { openPdf } from './pdf.js';
 import './amplify-config.js';
 import {

@@ -10,6 +10,9 @@ import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { zohoQuoteSync } from './functions/zoho-quote-sync/resource';
 
+// Two sites from one code base: the "production" branch is the live shop; every other branch (main) is the test site.
+const STAGE = (process.env.AWS_BRANCH || '') === 'production' ? 'prod' : 'test';
+
 const backend = defineBackend({
   auth,
   data,
@@ -48,6 +51,7 @@ const fnStack = Stack.of(backend.zohoQuoteSync.resources.lambda);
 const apiId = backend.data.resources.graphqlApi.apiId;
 const tableName = (model: string) => `${model}-${apiId}-NONE`;
 const tableArn = (model: string) => `arn:aws:dynamodb:${fnStack.region}:${fnStack.account}:table/${tableName(model)}`;
+backend.zohoQuoteSync.addEnvironment('KALAI_STAGE', STAGE); // test site: Zoho drafts only, Ziina test, [TEST] emails
 backend.zohoQuoteSync.addEnvironment('ENQUIRY_TABLE', tableName('Enquiry'));
 backend.zohoQuoteSync.addEnvironment('COSTING_TABLE', tableName('Costing'));
 backend.zohoQuoteSync.addEnvironment('PRODUCT_TABLE', tableName('Product'));
@@ -139,7 +143,8 @@ new Rule(fnStack, 'DailyKuralRule', {
 // Cost alert for the whole AWS account: email the studio mailbox at 80% of US$20 (actual), at US$20 (actual)
 // and when AWS forecasts the month will pass US$20. Change the amount here.
 const alertTo = [{ subscriptionType: 'EMAIL', address: 'kalaiarthouse@pranixtechno.com' }];
-new CfnBudget(fnStack, 'MonthlyCostAlert', {
+// One alert for the account: made by the live site only (the name must be unique in the account).
+if (STAGE === 'prod') new CfnBudget(fnStack, 'MonthlyCostAlert', {
   budget: { budgetName: 'Kalai-monthly-cost', budgetType: 'COST', timeUnit: 'MONTHLY', budgetLimit: { amount: 20, unit: 'USD' } },
   notificationsWithSubscribers: [
     { notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 80, thresholdType: 'PERCENTAGE' }, subscribers: alertTo },

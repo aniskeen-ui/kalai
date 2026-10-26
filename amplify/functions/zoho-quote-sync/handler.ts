@@ -90,6 +90,8 @@ async function numberSeries(): Promise<NumberSeries> {
       digits: Math.min(12, Math.max(3, Number(x.digits) || def.digits)),
     };
   }
+  // Test site: its Zoho documents get their own TEST- numbers, so the live series (KAH-INV-0001…) stays untouched.
+  if (TEST_SITE) for (const k of ['inv', 'cn', 'qt', 'dc']) docs[k] = { ...docs[k], mode: 'alpha', source: 'internal', prefix: docs[k].prefix.startsWith('TEST-') ? docs[k].prefix : `TEST-${docs[k].prefix}` };
   return { ...(o as object), docs: { ...((o.docs ?? {}) as Record<string, SeriesDoc>), ...docs }, sup: (o.sup && typeof o.sup === 'object' ? o.sup : {}) } as NumberSeries;
 }
 async function saveSeries(ns: NumberSeries) {
@@ -192,7 +194,7 @@ async function supplierInvoiceNo(sellerId: string, name: string, take = false): 
     const taken = new Set(Object.entries(ns.sup).filter(([k]) => k !== sellerId).map(([, v]) => v.code));
     s = { code: supplierCode(name || 'Supplier', taken), next: s?.next || 1, name };
   }
-  const no = `${doc.mode === 'numeric' ? '' : s.code}${String(s.next || 1).padStart(doc.digits, '0')}`;
+  const no = `${TEST_SITE ? 'T-' : ''}${doc.mode === 'numeric' ? '' : s.code}${String(s.next || 1).padStart(doc.digits, '0')}`;
   if (take) { ns.sup[sellerId] = { ...s, next: (s.next || 1) + 1, name }; await saveSeries(ns); }
   return no;
 }
@@ -214,8 +216,11 @@ let cachedVendorId: string | null = null;
 let cachedVat: { id: string | null; at: number } | null = null;
 let cachedTest: { on: boolean; at: number } | null = null;
 
+/** The test site (every branch except "production"): always in test mode, whatever the SSM switches say. */
+const TEST_SITE = process.env.KALAI_STAGE !== 'prod';
 /** True while testing: invoices and POs stay drafts; no payments, bills or vendor payments are posted. */
 async function testMode(): Promise<boolean> {
+  if (TEST_SITE) return true;
   if (cachedTest && Date.now() - cachedTest.at < 60_000) return cachedTest.on;
   let on = true;
   try {
@@ -2130,6 +2135,49 @@ function mtables() {
   if (!S || !L || !M) throw new Error('Marketplace is not configured');
   return { S, L, M };
 }
+/** Moves a seller / artist / supplier profile to a new account id, with everything that points at it (listings,
+ *  orders, catalogue works, supplier jobs, the public artist card and their number series). */
+async function moveSeller(old: Dict, newId: string, owner: string): Promise<Dict> {
+  const { S, L, M } = mtables();
+  const oldId = String(old.id);
+  const row: Dict = { ...old, id: newId, owner, updatedAt: new Date().toISOString() };
+  delete row.migrated;
+  await putRow(S, row);
+  const setStr = async (table: string, key: Record<string, AttributeValue>, f: Record<string, string>) => {
+    const names: Record<string, string> = {}, values: Record<string, AttributeValue> = {};
+    const parts = Object.entries(f).map(([k, v], i) => { names[`#f${i}`] = k; values[`:f${i}`] = { S: v }; return `#f${i} = :f${i}`; });
+    await ddb.send(new UpdateItemCommand({ TableName: table, Key: key, UpdateExpression: `SET ${parts.join(', ')}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values })).catch((err) => console.warn('Move: not updated', err));
+  };
+  for (const l of await scanAll(L)) if (str(l, 'sellerId') === oldId) await setStr(L, { id: { S: str(l, 'id') } }, { sellerId: newId, owner });
+  const et = process.env.ENQUIRY_TABLE;
+  if (et) for (const e of await scanAll(et)) {
+    const f: Record<string, string> = {};
+    if (str(e, 'sellerId') === oldId) f.sellerId = newId;
+    if (str(e, 'artistId') === oldId) f.artistId = newId;
+    if (Object.keys(f).length) await setStr(et, { id: { S: str(e, 'id') } }, f);
+  }
+  const pt = process.env.PRODUCT_TABLE;
+  if (pt) for (const p of await scanAll(pt)) if (str(p, 'artistId') === oldId) await setStr(pt, { id: { S: str(p, 'id') } }, { artistId: newId });
+  const ct = process.env.COSTING_TABLE;
+  if (ct) for (const c of await scanAll(ct)) {
+    const js = parseJobs(c.supplierJobs?.S);
+    let changed = false;
+    for (const r of ['framer', 'delivery', 'printer', 'inbound'] as const) if (js[r]?.supplierId === oldId) { js[r]!.supplierId = newId; changed = true; }
+    if (changed) await saveJobs(str(c, 'enquiryId'), js);
+  }
+  // The public artist card and the works shown under it.
+  const A = process.env.ARTIST_TABLE;
+  if (A && row.type === 'ARTIST') {
+    const ok = artistKey(oldId), nk = artistKey(newId);
+    for (const m of await scanAll(M)) if (str(m, 'artistKey') === ok) await setStr(M, { listingId: { S: str(m, 'listingId') } }, { artistKey: nk });
+    const card = plain(await getRow(A, { id: { S: ok } }));
+    if (card) { await putRow(A, { ...card, id: nk, updatedAt: new Date().toISOString() }); await delRow(A, { id: { S: ok } }); }
+  }
+  try { const ns = await numberSeries(); if (ns.sup[oldId]) { ns.sup[newId] = ns.sup[oldId]; delete ns.sup[oldId]; await saveSeries(ns); } } catch { /* none */ }
+  await delRow(S, { id: { S: oldId } });
+  console.log(`Profile ${oldId} moved to ${newId} (${String(row.email)})`);
+  return row;
+}
 /** The website signs in with the access token, which has no email in it: read the signed-in person's email from
  *  Cognito with that same token (GetUser needs no other permission), so codes locked to an email, order emails and
  *  programme requests see who it is. Cached per user for the life of the function. */
@@ -2258,23 +2306,13 @@ async function sellerAction(ev: ApiEvent) {
   // A frame shop / delivery partner the studio added by hand: the first time it signs in with that email, the
   // profile (and its jobs) becomes this login's.
   if (!profile && action === 'me' && me.email && !viewAs) {
-    // (also an artist prospect the studio added from outreach: they then complete the artist application)
-    const added = (await scanAll(S)).map(plain).find((p) => p && !p.owner && (String(p.id).startsWith('sup-') || String(p.id).startsWith('pro-')) && String(p.email ?? '').toLowerCase() === me.email.toLowerCase());
-    if (added) {
-      const row = { ...added, id: me.sub, owner: me.owner, updatedAt: new Date().toISOString() };
-      await putRow(S, row);
-      const ct = process.env.COSTING_TABLE;
-      if (ct) for (const c of await scanAll(ct)) {
-        const js = parseJobs(c.supplierJobs?.S);
-        let changed = false;
-        for (const r of ['framer', 'delivery', 'printer'] as const) if (js[r]?.supplierId === added.id) { js[r]!.supplierId = me.sub; changed = true; }
-        if (changed) await saveJobs(str(c, 'enquiryId'), js);
-      }
-      await delRow(S, { id: { S: String(added.id) } });
-      profile = row;
-    }
+    // Their profile under another id with the same (Cognito-verified) email: a supplier or artist prospect the studio
+    // added (sup-/pro-), or a profile copied over from the test site (their old account): move it to this account.
+    const mail = me.email.toLowerCase();
+    const added = (await scanAll(S)).map(plain).find((p) => p && String(p.id) !== me.sub && String(p.email ?? '').toLowerCase() === mail
+      && (!p.owner || String(p.id).startsWith('sup-') || String(p.id).startsWith('pro-') || p.migrated === true));
+    if (added) profile = await moveSeller(added, me.sub, me.owner);
   }
-
   if (action === 'me') {
     const listings = profile ? (await scanAll(L)).filter((x) => str(x, 'sellerId') === me.sub).map(plain) : [];
     return { profile, listings, admin, viewing: viewAs && viewAs !== who(ev).sub ? viewAs : '' };
@@ -3728,6 +3766,7 @@ async function secureParam(name: string): Promise<string | null> {
   return v;
 }
 async function ziinaTest(): Promise<boolean> {
+  if (TEST_SITE) return true;
   const v = await optionalParam('/kalai/ziina/test_mode');
   return v ? v.toLowerCase() !== 'off' : testMode();
 }
@@ -5064,6 +5103,7 @@ function renderMail(m: Mail) {
 
 async function sendMail(m: Mail) {
   if (!m.to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.to)) return;
+  if (TEST_SITE && !m.subject.startsWith('[TEST]')) m = { ...m, subject: `[TEST] ${m.subject}` };
   const { html, text } = renderMail(m);
   await sesClient.send(new SendEmailCommand({
     FromEmailAddress: FROM,
