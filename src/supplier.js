@@ -463,14 +463,14 @@ function openRates(back) {
   if (!fr && !pr) wireCountries();
   // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.
   $('rEst')?.remove();
-  if (!fr && isAdmin() && viewAs) {
+  if (!fr && !pr && isAdmin() && viewAs && (card.from || 'UAE') === 'UAE') { // UAE couriers only; fills empty cells only
     const b = document.createElement('button'); b.type = 'button'; b.id = 'rEst'; b.className = 'btn small ghost'; b.style.margin = '0 0 10px';
     b.textContent = 'Fill with market estimates (until real prices)';
     b.onclick = () => {
       const near = [22, 35, 55, 75, 130], far = [32, 45, 65, 90, 150];
       RC_EMIRATES.forEach((em) => RC_PARCELS.forEach(([k], i) => {
         const inp = $('rGrid').querySelector(`[data-n="uae.${em}.${k}"]`);
-        if (inp) inp.value = (['Dubai', 'Sharjah', 'Ajman'].includes(em) ? near : far)[i];
+        if (inp && inp.value === '') inp.value = (['Dubai', 'Sharjah', 'Ajman'].includes(em) ? near : far)[i];
       }));
       // Outside the UAE: rough express-courier retail per zone, framed and boxed (volumetric weight).
       const zone = { A: [60, 85, 120, 160, 240], B: [90, 125, 175, 235, 340], C: [140, 195, 275, 365, 530], D: [170, 235, 325, 435, 630], E: [190, 265, 365, 485, 700] };
