@@ -1815,15 +1815,17 @@ function discountRow(e) {
   if (code) return '';
   const t = e.discountType || '', v = e.discountValue ?? '';
   return `<div id="discBox" style="display:grid;grid-template-columns:auto 90px 1fr;gap:6px;align-items:center;margin-top:6px">
-    <select id="eDiscT" aria-label="Discount type" style="width:auto"><option value="">No discount</option><option value="PCT" ${t === 'PCT' ? 'selected' : ''}>Discount %</option><option value="AED" ${t === 'AED' ? 'selected' : ''}>Discount ⃃</option></select>
+    <select id="eDiscT" aria-label="Discount type" style="width:auto"><option value="">No discount</option><option value="PCT" ${t === 'PCT' ? 'selected' : ''}>Discount %</option><option value="AED" ${t === 'AED' ? 'selected' : ''}>Discount ⃃</option><option value="CODE">Voucher / gift card / offer code</option></select>
     <input id="eDiscV" type="number" min="0" step="0.01" aria-label="Discount" value="${esc(v)}" ${t ? '' : 'hidden'}>
     <span class="muted" id="eDiscOut" style="font-size:12px"></span>
-    <input id="eDiscNote" placeholder="Reason (optional, e.g. loyal customer)" value="${esc(e.discountNote || '')}" style="grid-column:1/-1" ${t ? '' : 'hidden'}></div>`;
+    <input id="eDiscNote" placeholder="Reason (optional, e.g. loyal customer)" value="${esc(e.discountNote || '')}" style="grid-column:1/-1" ${t ? '' : 'hidden'}>
+    <div id="eVchBox" style="grid-column:1/-1;display:grid;gap:6px" hidden><div style="display:flex;gap:6px"><input id="eVch" list="eVchList" autocomplete="off" placeholder="Voucher or offer code (KAL-…, GIFT-…, offer code)" style="flex:1"><datalist id="eVchList"></datalist><button type="button" class="btn small" id="eVchApply">Apply</button></div>
+      <span class="muted" id="eVchMsg" style="font-size:12px">Pick one of the customer's vouchers or type any code. The price above is saved with it.</span></div></div>`;
 }
 const r2c = (x) => Math.round(x * 100) / 100;
 function discountOf() {
   const t = $('eDiscT')?.value || '', v = Number($('eDiscV')?.value || 0), list = Number($('ePrice')?.value || 0);
-  if (!t || !(v > 0) || !(list > 0)) return { t: '', amount: 0, list };
+  if (!t || t === 'CODE' || !(v > 0) || !(list > 0)) return { t: '', amount: 0, list };
   const amount = t === 'PCT' ? r2c(list * Math.min(v, 100) / 100) : Math.min(v, list);
   return { t, v, amount: Math.round(amount), list };
 }
@@ -1900,16 +1902,60 @@ function wireOffer(e) {
   $('ofDecline').onclick = () => fill(null, 'CANCELLED', `Hello ${first}, thank you for your offer of ${aed(o)} for "${e.title}". We're sorry, the artist can't accept it this time. You're welcome to make a new offer or ask us for the price.`);
 }
 
+// Studio: put a voucher / gift card / offer code on the order (same rules as when the customer adds it themselves).
+let vchCache = null;
+async function loadVouchersFor(e) {
+  if (!$('eVchList') || $('eVchList').dataset.for === e.id) return;
+  $('eVchList').dataset.for = e.id;
+  try {
+    if (!vchCache) { const out = []; let nextToken = null; do { const r = await client.models.Voucher.list({ limit: 500, nextToken }); out.push(...(r.data || [])); nextToken = r.nextToken; } while (nextToken); vchCache = out; }
+    const now = Date.now(), mail = String(e.email || '').toLowerCase();
+    const live = vchCache.filter((v) => v.active !== false && (!v.endAt || new Date(v.endAt).getTime() > now) && (v.kind === 'GIFT' ? Number(v.balance || 0) > 0 : !v.maxUses || Number(v.usedCount || 0) < Number(v.maxUses)));
+    const mine = (v) => (String(v.forEmail || '').toLowerCase() === mail && mail ? 0 : v.forEmail ? 2 : 1);
+    live.sort((a, b) => mine(a) - mine(b));
+    const what = (v) => (v.kind === 'GIFT' ? `gift card ⃃ ${Number(v.balance || 0)} left` : v.discountType === 'AED' ? `⃃ ${v.discountValue} off` : `${v.discountValue}% off`);
+    $('eVchList').innerHTML = live.filter((v) => !v.forEmail || mine(v) === 0).map((v) => `<option value="${esc(v.code)} · ${esc(v.forName || 'anyone')} · ${esc(what(v))}"></option>`).join('');
+    const n = live.filter((v) => mine(v) === 0).length;
+    $('eVchMsg').textContent = n ? `${n} voucher${n > 1 ? 's' : ''} for this customer (listed first). The price above is saved with the code.` : 'No voucher made for this customer: pick an open one or type a code. The price above is saved with it.';
+  } catch (ex) { $('eVchMsg').textContent = `Vouchers not loaded: ${ex.message}`; }
+}
+async function applyOrderCode(e, code, msg) {
+  code = String(code || '').toUpperCase();
+  if (!code) { msg.textContent = 'Pick or type a code.'; return; }
+  const price = Number($('ePrice')?.value || 0);
+  if (!(price > 0)) { msg.textContent = 'Enter the price first.'; return; }
+  msg.textContent = 'Applying…';
+  try {
+    // The code works on the saved price: save the price typed above first (status unchanged, nothing sent).
+    const saved = Number(e.listPrice ?? e.quotedPrice ?? 0);
+    if (price !== saved) {
+      const u = await client.models.Enquiry.update({ id: e.id, quotedPrice: price, listPrice: null, discountType: null, discountValue: null, discountAmount: null, discountNote: null });
+      if (u.errors?.length) throw new Error(u.errors[0].message);
+    }
+    const r = await client.mutations.applyCode({ id: e.id, code });
+    if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+    const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    vchCache = null;
+    msg.textContent = out?.removed ? `Code ${out.removed} removed.` : `Applied: − ⃃ ${out?.discount} → customer pays ⃃ ${out?.price}.`;
+    await refreshOne(e.id);
+  } catch (ex) { msg.textContent = ex.message; }
+}
 async function wireDiscount(e) {
+  if ($('eCodeRemove')) $('eCodeRemove').onclick = async () => {
+    const m = $('eCodeMsg'); m.textContent = 'Removing…';
+    try { const r = await client.mutations.applyCode({ id: e.id, code: null }); if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, '')); vchCache = null; await refreshOne(e.id); } catch (ex) { m.textContent = ex.message; }
+  };
   currentDiscountType = e.discountType || '';
   if (!$('eDiscT')) return;
   const show = () => {
-    const d = discountOf(), on = !!$('eDiscT').value;
-    $('eDiscV').hidden = !on; $('eDiscNote').hidden = !on;
+    const d = discountOf(), code = $('eDiscT').value === 'CODE', on = !!$('eDiscT').value && !code;
+    $('eDiscV').hidden = !on; $('eDiscNote').hidden = !on; $('eVchBox').hidden = !code;
+    if (code) loadVouchersFor(e);
     $('eDiscOut').innerHTML = on && d.t ? `− ⃃ ${d.amount.toLocaleString('en-US')} → customer pays <b>⃃ ${Math.max(0, d.list - d.amount).toLocaleString('en-US')}</b>` : on ? 'enter the discount' : '';
   };
   ['eDiscT', 'eDiscV', 'ePrice'].forEach((id) => { $(id).addEventListener('input', show); $(id).addEventListener('change', show); });
   if (priceLocked(e)) { ['eDiscT', 'eDiscV', 'eDiscNote'].forEach((id) => { $(id).disabled = true; }); }
+  $('eVchApply').onclick = () => applyOrderCode(e, $('eVch').value.trim().split(/\s/)[0], $('eVchMsg'));
   show();
   // The customer's standard discount (Customers tab), offered on orders that have none yet.
   if (!e.discountType && !priceLocked(e) && e.customerCode && BEFORE_PAYMENT.includes(e.status || 'RECEIVED')) {
@@ -2060,7 +2106,7 @@ async function showDetailBody(e) {
               <div style="display:flex;justify-content:space-between;color:var(--ok)"><span>${what} <b class="mono">${esc(c)}</b></span><span class="mono">− ⃃ ${f(e.discountAmount)}</span></div>
               ${e.loyaltyAmount ? `<div style="display:flex;justify-content:space-between;color:var(--ok)"><span>Kalai Circle points (${f(e.loyaltyRedeemed)})</span><span class="mono">− ⃃ ${f(e.loyaltyAmount)}</span></div>` : ''}
               <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--line);padding-top:2px"><span>Customer pays</span><span class="mono">⃃ ${f(e.quotedPrice)}</span></div>
-              <span class="muted" style="font-size:11px">Zoho shows the same: ⃃ ${f(e.listPrice)} with ⃃ ${f(Number(e.listPrice || 0) - Number(e.quotedPrice || 0))} in the Discount column. If you change the price above, the code no longer applies.</span></div>`; })() : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
+              <span class="muted" style="font-size:11px">Zoho shows the same: ⃃ ${f(e.listPrice)} with ⃃ ${f(Number(e.listPrice || 0) - Number(e.quotedPrice || 0))} in the Discount column. If you change the price above, the code no longer applies.</span>${!priceLocked(e) && BEFORE_PAYMENT.includes(e.status || 'RECEIVED') ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px"><button type="button" class="btn small ghost" id="eCodeRemove">Remove this code</button><span class="muted" id="eCodeMsg" style="font-size:11px"></span></div>` : ''}</div>`; })() : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
       ${e.kind === 'LICENCE' ? licenceSection(e) : `${addressSection(e)}
       ${shippingSection(e)}
