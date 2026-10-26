@@ -436,6 +436,15 @@ async function upgradeOld() {
   return n;
 }
 
+/** Opens one work's price calculation (from an order: the artwork no. AT-… or the product id). */
+export async function openPriceFor(key) {
+  await showPricing();
+  const k = String(key || '').trim().toLowerCase(), w = works.find((x) => String(x.id).toLowerCase() === k || String(x.code || '').toLowerCase() === k);
+  if (!w) { if ($('pcFind')) { $('pcFind').value = key || ''; drawList(); } return false; }
+  filter = 'ALL'; openId = w.id; if ($('pcFind')) $('pcFind').value = w.code || '';
+  drawList(); document.querySelector(`#pcList tr[data-id="${CSS.escape(w.id)}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  return true;
+}
 export async function showPricing() {
   if (!wired) {
     wired = true;

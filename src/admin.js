@@ -12,7 +12,7 @@ import { showMarket } from './market.js';
 import { showPromotions } from './promotions.js';
 import { showSettings, showSettingTab } from './settings.js';
 import { showNumbers } from './numbers.js';
-import { showPricing } from './pricing.js';
+import { showPricing, openPriceFor } from './pricing.js';
 import { showPrintsMaster, showLicMaster } from './pricemasters.js';
 import { showCustomers, openCustomerCode } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
@@ -604,6 +604,7 @@ $('fSearch').addEventListener('input', () => { clearTimeout(searchT); searchT = 
 $('fCust').addEventListener('change', render);
 $('fClear').onclick = () => { $('fVar').value = ''; try { localStorage.setItem('kalai-variant', ''); } catch { /* */ } $('fSearch').value = ''; $('fCust').value = ''; $('fFrom').value = ''; $('fTo').value = ''; $('fStatus').value = ''; $('fKind').value = ''; render(); };
 // Click a customer code on an order: list all that customer's orders.
+document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-openprice]'); if (!b) return; ev.preventDefault(); priceTab = 'paint'; showPane('pricing', 'tabPricing'); openPriceFor(b.dataset.openprice); });
 document.addEventListener('click', (ev) => { const c = ev.target.closest?.('[data-opencust]'); if (!c) return; showPane('customers', 'tabCustomers'); openCustomerCode(c.dataset.opencust); });
 document.addEventListener('click', (ev) => { const b = ev.target.closest?.('[data-cust]'); if (!b) return; fillFinders(); $('fCust').value = b.dataset.cust; $('fSearch').value = ''; $('fStatus').value = ''; render(); });
 // Dropdowns: order numbers (type to narrow) and customers (name · code · number of orders).
@@ -992,7 +993,7 @@ function costingSection(e) {
     : (c.artistPriceInr ?? c.artistPriceAed) != null ? `Entered by you on ${esc(who)}’s behalf.`
     : `${esc(who)} hasn't priced this yet (${e.artistId ? 'artist portal → Commissions' : 'Artist desk'}). You can also type the price here.`;
   return `<fieldset class="cost" id="costing">
-    <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}</legend>
+    <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}${artNo(e) ? ` <button type="button" class="linkbtn" data-openprice="${esc(artNo(e))}" style="font-size:12px;margin-left:8px" title="Open this artwork in Pricing">Price calculation for ${esc(artNo(e))} →</button>` : ''}</legend>
     ${rates.saved ? '' : '<div class="muted warnline">Margin &amp; charges are not saved yet: set them under <b>Pricing → Margin &amp; charges</b>.</div>'}
     <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
       <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Commissions in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
@@ -1676,6 +1677,8 @@ const DOC_STATUS_OK = ['delivered', 'paid', 'accepted', 'closed', 'billed', 'iss
 /** The order's documents as a flow: customer side, the artist, and each supplier, step by step.
  *  Green = done in Zoho, amber = draft (test mode or not yet sent), grey dashed = still to come. */
 /** A supplier's name as a link to their portal (studio view), matched on the business name. */
+/** The artwork no. (AT-…) of an order, from its details or the catalogue product it came from. */
+function artNo(e) { const det = parseDetails(e.details); const m = String(det['Artwork no.'] || det['Artwork no'] || '').match(/AT-\d+/); return m ? m[0] : (e.productId || ''); }
 function supLink(name, label) {
   const n = String(name || '').trim().toLowerCase(), sp = n && suppliers.find((x) => String(x.business || '').trim().toLowerCase() === n);
   return sp ? `<a class="who" href="/supplier.html?view=${encodeURIComponent(sp.id)}" target="_blank" rel="noopener" title="Open ${esc(sp.business)}'s portal">${label != null ? esc(label) : '$NAME'}</a>` : (label != null ? esc(label) : '');
