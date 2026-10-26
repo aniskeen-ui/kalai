@@ -112,7 +112,9 @@ details.lay-acc{border:1px solid var(--line);border-radius:var(--r);background:v
 details.lay-acc > summary{cursor:pointer;padding:10px 12px;font-weight:700}
 details.lay-acc[open]{padding:0 12px 12px;display:grid;gap:10px}
 details.lay-acc[open] > summary{margin:0 -12px}
-.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:14px;margin:0}
+.kv{display:grid;grid-template-columns:fit-content(38%) minmax(0,1fr);gap:4px 14px;font-size:14px;margin:0}
+.kv dt{overflow-wrap:anywhere}
+#detail .dtop{flex-wrap:wrap}#detail .dtop-main{min-width:min(100%,280px)}
 .kv dt{color:var(--muted)}
 .kv dd{margin:0;overflow-wrap:anywhere}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
