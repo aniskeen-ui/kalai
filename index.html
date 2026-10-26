@@ -560,9 +560,9 @@ html.lp #little .vsai{display:none}
 <div class="lp-sec"><div class="wrap">
   <p class="lp-quote">AI made it perfect. <b>Your child made it priceless.</b></p>
   <div class="lp-story" style="margin-top:28px">
-    <p>Look at the two parrots. The one on the right is neat and polished. It was made by clever software, trained by brilliant researchers on millions of pictures, in a few seconds. It can be made again, a thousand times, exactly the same.</p>
-    <p>The one on the left was made by a little hand holding a brush that felt too big. The beak went outside the lines. The red ran into the blue. And somewhere in the middle, there was a moment of pure concentration, maybe a tongue poking out, maybe a proud call of "Look what I made!"</p>
-    <p>That painting can never be made again. Not because the colours were special, but because your child will never be this age again. Next year their hand will be steadier, their parrots more careful. This one is a snapshot of who they are <i>right now</i>.</p>
+    <p>Look at the two pictures. The one on the right is neat and polished. It was made by clever software, trained by brilliant researchers on millions of pictures, in a few seconds. It can be made again, a thousand times, exactly the same.</p>
+    <p>The one on the left was made by a little hand holding a brush that felt too big. The colour went outside the lines. The red ran into the blue. And somewhere in the middle, there was a moment of pure concentration, maybe a tongue poking out, maybe a proud call of "Look what I made!"</p>
+    <p>That painting can never be made again. Not because the colours were special, but because your child will never be this age again. Next year their hand will be steadier, their drawings more careful. This one is a snapshot of who they are <i>right now</i>.</p>
     <p>That is what we frame.</p>
   </div>
 </div></div>
@@ -1680,6 +1680,13 @@ drawChips();drawGrid();updateCount();
   window.kalaiLittleStyle=function(st){st=['base','A','B','C'].includes(st)?st:'A';
     try{localStorage.setItem('kalaiLittleStyle',st)}catch(e){}
     if(document.documentElement.getAttribute('data-lstyle')!==st){document.documentElement.setAttribute('data-lstyle',st);draw()}};
+  // Child vs AI pictures (hero of the Little Artists page and the home-page block): start with a random pair, then
+  // fade to the next one every 7 seconds. Add more pairs here (same layout: child on the left, AI on the right).
+  (function(){const P=['/img/little-vs-ai.jpg','/img/little-vs-ai-cow.jpg'];
+    const imgs=[...document.querySelectorAll('#lpPair img,.vsai img')];if(!imgs.length||P.length<2)return;
+    let k=Math.floor(Math.random()*P.length);P.forEach(u=>{const i=new Image();i.src=u});
+    imgs.forEach(im=>{im.style.transition='opacity .6s ease';im.src=P[k]});
+    setInterval(()=>{k=(k+1)%P.length;imgs.forEach(im=>{im.style.opacity=0;setTimeout(()=>{im.src=P[k];im.style.opacity=1},600)})},7000);})();
   // Little Artists order form: until a drawing is uploaded, the frame preview shows real children's drawings, one after another.
   function samples(){const m=document.getElementById('kMount');if(!m||!list.length||!m.querySelector('.ph'))return;
     const pick=list.slice().sort(()=>Math.random()-.5).slice(0,8);
