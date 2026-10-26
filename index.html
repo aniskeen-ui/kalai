@@ -52,10 +52,10 @@ header.top .cart-btn{white-space:nowrap}
 .theme-btn{background:transparent;border:1px solid #6d6596;border-radius:999px;color:var(--on-ink);font-size:16px;line-height:1;padding:6px 10px;cursor:pointer}
 .brand{display:flex;align-items:baseline;gap:10px;margin-right:auto;min-width:0}
 /* Translated site (longer words): the menu gets its own row under the logo and buttons, nothing overlaps */
-html[data-tr="1"] header.top .wrap{flex-wrap:wrap;row-gap:8px}
-html[data-tr="1"] .brand{flex-shrink:0}
-html[data-tr="1"] nav.links{order:9;flex-basis:100%;flex-wrap:wrap;justify-content:center;gap:6px 18px;font-size:13px}
-html[data-tr="1"] nav.links a{white-space:nowrap}
+/* Also when the buttons leave too little room (hdr-2row, set by the header check below): no overlapping. */
+.brand{flex-shrink:0}.brand span{white-space:nowrap}nav.links a{white-space:nowrap}
+html[data-tr="1"] header.top .wrap,html.hdr-2row header.top .wrap{flex-wrap:wrap;row-gap:8px}
+html[data-tr="1"] nav.links,html.hdr-2row nav.links{order:9;flex-basis:100%;flex-wrap:wrap;justify-content:center;gap:6px 18px;font-size:13px}
 html[data-tr="1"] header.top .cart-btn{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand b{font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.06em}
 .brand span{font-size:12px;color:#c9c3dd;letter-spacing:.08em;text-transform:uppercase}
@@ -392,6 +392,25 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
   <button class="cart-btn" id="openCart" aria-label="Open cart" title="Cart" hidden><span aria-hidden="true">🛒</span><span class="count" id="cartCount">0</span></button><button class="cart-btn" data-jump="prints">Shop framed prints</button><div class="cur-pick" data-notranslate><button type="button" class="cur-sel" id="curBtn" aria-haspopup="true" aria-expanded="false" aria-label="Currency"></button><div class="cur-menu" id="curMenu" hidden><button type="button" data-cur="AED"></button><button type="button" data-cur="USD">$ USD</button><button type="button" data-cur="INR">₹ INR</button><button type="button" data-cur="GBP">£ GBP</button><button type="button" data-cur="EUR">€ EUR</button><button type="button" data-cur="SAR">SAR · Saudi riyal</button><button type="button" data-cur="QAR">QAR · Qatari riyal</button><button type="button" data-cur="KWD">KWD · Kuwaiti dinar</button><button type="button" data-cur="BHD">BHD · Bahraini dinar</button><button type="button" data-cur="OMR">OMR · Omani rial</button><button type="button" data-cur="JOD">JOD · Jordanian dinar</button></div></div><button class="theme-btn" type="button" aria-label="Switch to dark mode">🌙</button><button class="cart-btn" id="acctBtn" type="button">Sign in</button>
 </div></header>
 
+<script>
+// Header check: if the logo, menu and buttons don't fit on one line, the menu takes its own row under them.
+(function () {
+  const root = document.documentElement, wrap = document.querySelector('header.top .wrap');
+  if (!wrap) return;
+  const fit = () => {
+    root.classList.remove('hdr-2row');
+    if (wrap.scrollWidth > wrap.clientWidth + 1) { root.classList.add('hdr-2row'); return; }
+    const nav = wrap.querySelector('nav.links'), brand = wrap.querySelector('.brand');
+    const tall = (el) => el && el.getBoundingClientRect().height > 30;
+    if (tall(nav) || tall(brand)) root.classList.add('hdr-2row');
+  };
+  let t; const later = () => { clearTimeout(t); t = setTimeout(fit, 60); };
+  window.addEventListener('resize', later);
+  if (window.ResizeObserver) new ResizeObserver(later).observe(wrap);
+  new MutationObserver(later).observe(wrap, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  fit();
+})();
+</script>
 <section class="hero" style="padding-block:0"><div class="wrap">
   <div>
     <h1 id="heroH1">Original watercolours and pencil sketches, <em>painted for your walls</em>.</h1>
