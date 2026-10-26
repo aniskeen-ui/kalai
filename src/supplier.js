@@ -221,6 +221,23 @@ const DL_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['PICKED', 'Pic
 const isDone = (j) => j.cancelled || !!j.invoiceNo;
 async function loadJobs() {
   $('jList').innerHTML = '<p class="muted">Loading…</p>';
+  // Studio looking at a courier / shop it only researched (prospect): no jobs yet, offer to approve it here.
+  if (viewAs && isAdmin() && profile?.status === 'PROSPECT') {
+    $('jList').innerHTML = `<div class="sbox" style="display:grid;gap:8px"><b>${esc(profile.business || 'This supplier')} is not a supplier yet</b>
+      <span class="muted">It is on the list of suppliers to ask for quotes, so it gets no jobs. Its price list is used for planned costs only. Approve it when you have agreed prices with them: it can then be given jobs, and its prices are used first in costing.</span>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" id="jPromote">Make supplier (approve)</button><span class="muted" id="jPromoteMsg"></span></div></div>`;
+    $('jPromote').onclick = async () => {
+      const b = $('jPromote'); b.disabled = true; $('jPromoteMsg').textContent = 'Saving…';
+      try {
+        const r = await client.mutations.marketAdmin({ action: 'promoteSupplier', data: JSON.stringify({ id: profile.id }) });
+        if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+        const out = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+        profile = out.profile || { ...profile, status: 'APPROVED' };
+        $('jPromoteMsg').textContent = '✓ Approved.'; setTimeout(loadJobs, 600);
+      } catch (ex) { $('jPromoteMsg').textContent = ex.message; b.disabled = false; }
+    };
+    return;
+  }
   try { jobs = (await call('jobs')).jobs || []; drawJobs(); } catch (ex) { $('jList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
 }
 $('jReload').onclick = loadJobs;
