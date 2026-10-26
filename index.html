@@ -225,6 +225,9 @@ footer p{margin:2px 0}
 .kmount{background:#fffdf8;padding:18px;display:grid;place-items:center;aspect-ratio:4/5}
 .kmount img{max-width:100%;max-height:100%;display:block}
 .kmount .ph{color:#8a8578;text-align:center;font-size:13px;line-height:1.4}
+.kmount.has-sample{position:relative;grid-template-areas:"s"}
+.kmount .ksample{grid-area:s;opacity:0;transition:opacity 1s ease;max-height:100%;object-fit:contain}.kmount .ksample.on{opacity:1}
+.kmount .kbadge{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(255,255,255,.92);color:#5a5548;font-size:11px;padding:3px 10px;border-radius:99px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .kplate{margin-top:10px;text-align:center;font-family:var(--display);font-size:15px;color:var(--fg)}
 .kplate small{display:block;font-family:var(--body);font-size:12px;color:var(--muted)}
 .safe{margin-top:18px;display:grid;gap:8px;font-size:13px;color:var(--muted)}
@@ -1488,9 +1491,9 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   if(window.kalaiCountries)window.kalaiKidsCountries(window.kalaiCountries);
   $("kCountry").addEventListener("change",()=>{$("kEmBox").hidden=!uae();$("kRegBox").hidden=uae();fee()});
   $("kDraw").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();
-    r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Uploaded drawing";im.onload=kResCheck;$("kMount").replaceChildren(im)};r.readAsDataURL(f)});
+    r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Uploaded drawing";im.onload=kResCheck;$("kMount").classList.remove("has-sample");$("kMount").replaceChildren(im)};r.readAsDataURL(f)});
   /* We print the drawing from this photo: warn when it is too small to print sharply (A4 ≈ 2,500 px, A3 ≈ 3,500 px on the long side). */
-  function kResCheck(){const im=$("kMount").querySelector("img"),box=$("kRes");if(!im||!im.naturalWidth){box.hidden=true;return}
+  function kResCheck(){const im=$("kMount").querySelector("img:not(.ksample)"),box=$("kRes");if(!im||!im.naturalWidth){box.hidden=true;return}
     const long=Math.max(im.naturalWidth,im.naturalHeight),a3=$("kx-large")&&$("kx-large").checked,need=a3?3500:2500;
     box.hidden=false;box.style.color=long>=need?"var(--ok)":"var(--kumkum)";
     box.textContent=long>=need?`✓ Sharp enough to print ${a3?"A3":"A4"} (${im.naturalWidth} × ${im.naturalHeight} px).`
@@ -1677,7 +1680,14 @@ drawChips();drawGrid();updateCount();
   window.kalaiLittleStyle=function(st){st=['base','A','B','C'].includes(st)?st:'A';
     try{localStorage.setItem('kalaiLittleStyle',st)}catch(e){}
     if(document.documentElement.getAttribute('data-lstyle')!==st){document.documentElement.setAttribute('data-lstyle',st);draw()}};
-  fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(l=>{list=l||[];draw()});
+  // Little Artists order form: until a drawing is uploaded, the frame preview shows real children's drawings, one after another.
+  function samples(){const m=document.getElementById('kMount');if(!m||!list.length||!m.querySelector('.ph'))return;
+    const pick=list.slice().sort(()=>Math.random()-.5).slice(0,8);
+    m.classList.add('has-sample');m.innerHTML=pick.map((x,i)=>`<img class="ksample${i?'':' on'}" src="${esc(x.src)}" alt="Example: ${esc(x.caption)}">`).join('')+`<span class="kbadge">Example · ${esc(pick[0].caption)} · yours will appear here</span>`;
+    let i=0;const t=setInterval(()=>{if(!m.querySelector('.ksample')){clearInterval(t);m.classList.remove('has-sample');return}
+      const im=m.querySelectorAll('.ksample');im[i].classList.remove('on');i=(i+1)%im.length;im[i].classList.add('on');
+      const b=m.querySelector('.kbadge');if(b)b.textContent=`Example · ${pick[i].caption} · yours will appear here`},3500);}
+  fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(l=>{list=l||[];draw();samples()});
 })();
 </script>
 <script type="module" src="/src/account.js"></script>
