@@ -302,7 +302,20 @@ a.df[href]:hover{transform:translateY(-2px)}
 .sec-ico{width:18px;height:18px;vertical-align:-3px;margin-right:7px;color:var(--ink);flex:0 0 auto}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sec-ico{color:var(--gold)}}
 :root[data-theme="dark"] .sec-ico{color:var(--gold)}
-.dft .lane-ico{color:inherit;width:16px;height:16px;margin-right:5px}
+.dft .lane-ico{width:16px;height:16px;margin-right:5px}
+/* Coloured section icons: each kind of card its own colour, on a soft round badge */
+.sec-ico{box-sizing:content-box;padding:4px;border-radius:50%;background:color-mix(in srgb,var(--ic,#2f7d4f) 14%,transparent);color:var(--ic,#2f7d4f)!important}
+.ico-user{--ic:#2563eb}.ico-pin{--ic:#dc2626}.ico-truck{--ic:#ea580c}.ico-frame{--ic:#92400e}.ico-printer{--ic:#db2777}.ico-receipt{--ic:#0d9488}
+.ico-card{--ic:#16a34a}.ico-calc{--ic:#7c3aed}.ico-bag{--ic:#b45309}.ico-refund{--ic:#e11d48}.ico-star{--ic:#d97706}.ico-tag{--ic:#c026d3}
+.ico-licence{--ic:#0891b2}.ico-wrench{--ic:#475569}.ico-store{--ic:#9333ea}.ico-bolt{--ic:#ca8a04}.ico-book{--ic:#dc2626}.ico-flow{--ic:#0f766e}
+.ico-box{--ic:#a16207}.ico-palette{--ic:#c026d3}
+:root[data-theme="dark"] .sec-ico{background:color-mix(in srgb,var(--ic) 28%,transparent);color:color-mix(in srgb,var(--ic) 55%,#fff)!important}
+/* Names in the document flow and the order number: highlighted */
+.dft .who{background:linear-gradient(transparent 55%,#fde68a 55%);color:var(--fg);padding:0 2px}
+:root[data-theme="dark"] .dft .who{background:linear-gradient(transparent 55%,rgba(253,230,138,.35) 55%)}
+.refchip{display:inline-flex;gap:0;align-items:center;font:600 13px var(--mono);border-radius:6px;overflow:hidden;box-shadow:0 0 0 1px #e9cf5f}
+.refchip b{background:#fde68a;color:#3b2f05;padding:3px 9px;font-weight:700}.refchip span{background:#fff8d6;color:#6b5a14;padding:3px 9px}
+:root[data-theme="dark"] .refchip b{background:#806a12;color:#fff6cc}:root[data-theme="dark"] .refchip span{background:#3a3210;color:#f1e3a0}
 @media (max-width:640px){.dfl{grid-template-columns:1fr}}
 @container (max-width:720px){.dfl{grid-template-columns:1fr;gap:6px}.dft i{display:inline;margin-right:6px}.df{min-width:96px}}
 </style>

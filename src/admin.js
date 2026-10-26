@@ -1680,7 +1680,7 @@ function docFlow(e, d) {
   const TAG = { done: '✓', draft: '✎', todo: '…', void: '✕' };
   const box = (icon, label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><span class="ic" aria-hidden="true">${icon}</span><span class="tag" aria-hidden="true">${TAG[st(x)]}</span><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : 'to come'))}</span>${x?.total != null ? `<span class="mono">${aed(x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
   const arrow = '<span class="dfa" aria-hidden="true">➜</span>';
-  const lane = (cls, icon, title, boxes) => `<div class="dfl ${cls}"><div class="dft"><i aria-hidden="true">${icon}</i>${esc(title)}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
+  const lane = (cls, icon, title, boxes) => `<div class="dfl ${cls}"><div class="dft"><i aria-hidden="true">${icon}</i>${esc(title).replace(/ · (.+)$/, ' · <span class="who">$1</span>')}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
   const one = (type) => docs.filter((x) => x.type === type).slice(-1)[0];
   const cust = [box('📝', 'Quote', one('Quote')), box('🧾', 'Invoice', one('Invoice')), box('💳', 'Payment', one('Payment received'), e.paymentMethod || ''), box('🚚', 'Delivery challan', one('Delivery challan'), e.status === 'DELIVERED' ? 'delivered' : '')];
   const cn = one('Credit note'); if (cn) cust.push(box('↩️', 'Credit note (refund)', cn));
@@ -2158,7 +2158,7 @@ async function showDetailBody(e) {
   const locked = isLocked(e);
   $('detail').innerHTML = `
     <div class="dtop"><div class="dtop-main">
-    <div><div class="muted" style="font-family:var(--mono);font-size:13px">${esc(e.ref)} · ${esc(KIND[e.kind] || '')}</div>
+    <div><div class="refchip"><b>${esc(e.ref)}</b><span>${esc(KIND[e.kind] || '')}</span></div>
     <h2 style="font-size:22px;margin-top:4px">${esc(e.title)}</h2></div>
     <dl class="kv">
       <dt>Customer</dt><dd>${esc(e.customerName)}${e.customerCode ? ` · <button type="button" class="linkbtn mono" style="font-size:11px;padding:0 3px;border:0;background:none;text-decoration:underline;color:var(--muted)" data-cust="${esc(e.customerCode)}" title="Show all orders of this customer">${esc(e.customerCode)}</button>` : ''}</dd>

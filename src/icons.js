@@ -31,7 +31,7 @@ const RULES = [
   [/^rework|repair/i, 'wrench'], [/^market|seller/i, 'store'], [/^action/i, 'bolt'], [/zoho/i, 'book'],
   [/document flow/i, 'flow'], [/^printing/i, 'printer'], [/^framing/i, 'frame'], [/^artist/i, 'palette'],
 ];
-const svg = (k) => `<svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${P[k]}</svg>`;
+const svg = (k) => `<svg class="sec-ico ico-${k}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${P[k]}</svg>`;
 const pick = (t) => (RULES.find(([re]) => re.test(t.trim())) || [])[1];
 
 function add(el, text) {
