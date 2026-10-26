@@ -97,7 +97,9 @@ function estCosts(e) {
   if (!e) return {};
   const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
   const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name, id: j.framer.supplierId } : pickSupplier(['FRAMER'], d.framer, (card) => frameCost(card, spec));
-  const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, { ...e, deliveryEmirate: e.deliveryEmirate || 'Dubai' }, spec, zoneOf));
+  const outside = ($('cDel')?.value || costings.get(e.id)?.delivery) === 'OUTSIDE', dest = outside ? destOf(e) : null;
+  const to = outside ? { ...e, deliveryCountry: dest.country === 'UAE' ? 'Oman' : dest.country, deliveryEmirate: dest.region } : { ...e, deliveryCountry: 'UAE', deliveryEmirate: e.deliveryCountry && e.deliveryCountry !== 'UAE' ? 'Dubai' : (e.deliveryEmirate || 'Dubai') };
+  const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, to, spec, zoneOf));
   const pr = j.printer?.price != null ? { cost: Number(j.printer.price), name: j.printer.name } : pickSupplier(['PRINTER'], d.printer, (card) => printCost(card, spec)) || (marketPrint(spec.size) != null ? { cost: marketPrint(spec.size), name: 'market estimate (no print shop yet)' } : null);
   return { spec, framing: fr?.cost ?? null, framingFrom: fr?.name || '', framingFromId: fr?.id || '', local: dl?.cost ?? null, localFrom: dl?.name || '', print: pr?.cost ?? null, printFrom: pr?.name || '' };
 }
@@ -953,6 +955,16 @@ window.kalaiSaveActual = async (id) => {
   } catch (ex) { $('actMsg').textContent = ex.message; }
 };
 
+// Delivery outside the UAE: the destination country and state / region (costs JSON destCountry / destRegion),
+// defaulting to the customer's delivery address. The local courier is then the partner's price for that zone.
+function destOf(e) {
+  let cs = {}; try { const raw = costings.get(e.id)?.costs; cs = (typeof raw === 'string' ? JSON.parse(raw) : raw) || {}; if (typeof cs === 'string') cs = JSON.parse(cs); } catch { cs = {}; }
+  const live = $('cDestCountry');
+  const country = (live && live.value) || cs.destCountry || (e.deliveryCountry && e.deliveryCountry !== 'UAE' ? e.deliveryCountry : 'India');
+  const region = live ? ($('cDestRegion')?.value || '') : (cs.destRegion || (country === e.deliveryCountry ? e.deliveryEmirate || '' : ''));
+  return { country, region };
+}
+const ZONE_NAME = { A: 'GCC', B: 'South Asia', C: 'UK & Europe', D: 'USA, Canada, Australia, NZ', E: 'rest of the world' };
 function costingSection(e) {
   if (!hasArtist(e)) return '';
   const c = costings.get(e.id) || {};
@@ -977,6 +989,8 @@ function costingSection(e) {
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select></div>
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
+    <div class="three" id="cDestBox" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}>${(() => { const d = destOf(e); return countryRegionHtml({ country: d.country, region: d.region, prefix: 'cDest', names: false }); })()}</div>
+    <div class="muted" style="font-size:12px" id="cDestNote" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}></div>
     <div class="muted" style="font-size:12px">${fromSiva}</div>
     <div class="field"><label for="cNote">Note to ${esc(who)} <span class="muted" style="font-weight:400;font-size:12px">· shown on the artist's order card and emailed to them${c.studioNoteAt ? `, last changed ${esc(when(c.studioNoteAt))}` : ''}</span></label><textarea id="cNote" rows="2" maxlength="1000" placeholder="e.g. Please sign at the bottom right; customer wants it before 5 Nov.">${esc(c.studioNote || '')}</textarea></div>
     <details ${c.framingOverride != null || c.indiaCourierOverride != null || c.localCourierOverride != null ? 'open' : ''}><summary>Overrides for this order (premium frame, oversized, abroad)</summary>
@@ -1489,7 +1503,7 @@ function renderCost() {
     ${row('Framing', aed(r.framing), $('cFr').value ? 'override' : r.est?.framing != null ? `${esc(r.est.framingFrom)} · ${esc(r.est.spec?.style || '')} ${esc(r.est.spec?.size || '')}` : '<b class="neg">no supplier price</b> for this size / style: add it to a frame shop\'s price list, or type an override')}
     ${row('India courier', aed(r.indiaCourier), $('cIc').value ? 'override' : curAed ? 'none: artist in the UAE' : t ? `master ${$('cTier').value}` : '')}
     ${r.ready ? row('Customs', aed(r.customs, 2), curAed ? 'none: artist in the UAE' : `${(rates.customs * 100).toFixed(1)}% of artist + courier`) : ''}
-    ${row('Local courier', aed(r.localCourier), $('cLc').value ? 'override' : r.est?.local != null ? esc(r.est.localFrom) : '<b class="neg">no supplier price</b> for this address / size: add it to a delivery partner\'s price list, or type an override')}
+    ${row($('cDel')?.value === 'OUTSIDE' ? `Courier to ${esc(curEnq ? destOf(curEnq).country : 'abroad')}` : 'Local courier', aed(r.localCourier), $('cLc').value ? 'override' : r.est?.local != null ? esc(r.est.localFrom) : '<b class="neg">no supplier price</b> for this address / size: add it to a delivery partner\'s price list, or type an override')}
     ${r.ready ? `<tr class="tot"><td>Total cost</td><td class="mono num">${aed(r.total)}</td><td></td></tr>` : ''}
   </tbody></table>`;
   if (r.ready) {
@@ -1542,6 +1556,7 @@ async function saveCosting(e) {
     customs: r.customs != null ? Math.round(r.customs * 100) / 100 : null, total: r.total ?? null, suggested: r.suggested ?? null,
     price: r.price ?? null, margin: r.margin != null ? Math.round(r.margin * 100) / 100 : null, savedAt: new Date().toISOString(),
     framerId: estCosts(e).framingFromId || null, // the frame shop on the order page: the artist sends the work there
+    ...(inp.delivery === 'OUTSIDE' ? { destCountry: destOf(e).country, destRegion: destOf(e).region || null } : {}),
   };
   const existing = costings.get(e.id);
   const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
@@ -2252,6 +2267,17 @@ async function showDetailBody(e) {
   if ($('costOut')) {
     renderCost();
     ['cInr', 'cTier', 'cDel', 'cFr', 'cIc', 'cLc', 'ePrice', 'eDiscT', 'eDiscV'].forEach((id) => { $(id)?.addEventListener('input', renderCost); $(id)?.addEventListener('change', renderCost); });
+    if ($('cDestBox')) {
+      wireRegion($('cDestBox'));
+      const destNote = () => {
+        const out = $('cDel').value === 'OUTSIDE';
+        $('cDestBox').hidden = !out; $('cDestNote').hidden = !out;
+        if (out) { const d = destOf(e); $('cDestNote').textContent = `Courier price from the delivery partner's ${d.country === 'UAE' ? 'GCC' : ZONE_NAME[zoneOf(d.country)]} rate (zone ${d.country === 'UAE' ? 'A' : zoneOf(d.country)}) for ${[d.region, d.country].filter(Boolean).join(', ')}. No UAE VAT on exports.`; }
+      };
+      $('cDel').addEventListener('change', destNote);
+      ['change', 'input'].forEach((k) => $('cDestBox').addEventListener(k, () => { destNote(); renderCost(); }));
+      destNote();
+    }
   }
 
   showThumb(e, det);
