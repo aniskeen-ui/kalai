@@ -14,7 +14,7 @@ Not copied unless asked: orders (test orders stay on the test site), customers, 
 Accounts (sign-ins) are not copied: people sign up again on the live site with the same email. An artist's or
 supplier's profile then joins their new account by itself at their first sign-in.
 """
-import argparse, sys, boto3
+import argparse, sys, time, boto3
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--go', action='store_true', help='really copy (default: dry run)')
@@ -54,16 +54,21 @@ def copy(env_name, rows=None, change=None):
         print(f"  {env_name}: not set up, skipped"); return
     keys = key_of(dst)
     have = {tuple(str(i[k]) for k in keys) for i in scan(dst)}
-    n = 0
+    todo = []
     for item in (rows if rows is not None else scan(src)):
         if tuple(str(item[k]) for k in keys) in have:
             continue
-        if change:
-            item = change(item)
-        n += 1
-        if a.go:
-            ddb.put_item(TableName=dst, Item=item)
-    print(f"  {env_name[:-6].title():14} {n} new row(s){'' if a.go else ' (dry run)'}")
+        todo.append(change(item) if change else item)
+    if a.go:
+        # 25 rows per call (fast), retrying anything DynamoDB hands back.
+        for i in range(0, len(todo), 25):
+            req = {dst: [{'PutRequest': {'Item': it}} for it in todo[i:i + 25]]}
+            for _ in range(8):
+                left = ddb.batch_write_item(RequestItems=req).get('UnprocessedItems') or {}
+                if not left:
+                    break
+                req = left; time.sleep(0.5)
+    print(f"  {env_name[:-6].title():14} {len(todo)} new row(s){'' if a.go else ' (dry run)'}", flush=True)
 
 def mark_migrated(item):
     # Profiles join the person's new live-site account at their first sign-in (same email).
