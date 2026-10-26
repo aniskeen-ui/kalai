@@ -432,8 +432,16 @@ html[data-lstyle="C"] .lp-line{display:block;position:relative;max-width:1150px;
 .lp-gallery.taped figcaption{font:500 13px var(--body);color:#555;padding:6px 4px 4px;text-align:center}
 .lp-gallery.framed{display:block;columns:4 210px;column-gap:28px;background:#efe9de;padding:30px;border-radius:12px}
 :root[data-theme="dark"] .lp-gallery.framed{background:#2a2620}
-.lp-gallery.framed figure{break-inside:avoid;margin:0 0 28px;padding:12px;border:0;border-radius:0;background:var(--fc,#2b2b2b);box-shadow:0 10px 24px rgba(0,0,0,.22)}
-.lp-gallery.framed img{aspect-ratio:auto;object-fit:contain;background:#fff;padding:14px;border-radius:0}
+.lp-gallery.framed figure{break-inside:avoid;margin:0 0 30px;padding:16px;border:0;border-radius:2px;position:relative;box-shadow:inset 2px 2px 3px rgba(255,255,255,.35),inset -3px -3px 5px rgba(0,0,0,.45),0 16px 30px rgba(0,0,0,.30),0 3px 6px rgba(0,0,0,.2)}
+.lp-gallery.framed .mat{background:#fbfaf6;padding:18px;box-shadow:inset 3px 3px 5px rgba(0,0,0,.28),inset -1px -1px 2px rgba(255,255,255,.9)}
+.lp-gallery.framed img{display:block;width:100%;height:auto;aspect-ratio:auto;object-fit:contain;padding:0;border-radius:0;background:#fff;outline:4px solid #f1ede3;outline-offset:0;box-shadow:0 0 0 5px #d9d2c2}
+.lp-gallery.framed figure::after{content:"";position:absolute;inset:34px 34px 52px;pointer-events:none;background:linear-gradient(120deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,0) 32%,rgba(255,255,255,0) 70%,rgba(255,255,255,.12) 100%)}
+.lp-gallery.framed .fr-0{background:linear-gradient(145deg,#4a4a4a 0%,#141414 30%,#262626 55%,#070707 100%)}
+.lp-gallery.framed .fr-1{background:repeating-linear-gradient(92deg,rgba(110,70,25,.16) 0 2px,transparent 2px 6px,rgba(255,240,200,.12) 6px 7px,transparent 7px 13px),linear-gradient(135deg,#e2bd85,#b98b4f 45%,#d6ad72 70%,#a77a42)}
+.lp-gallery.framed .fr-2{padding:20px!important;background:linear-gradient(135deg,#7b5a17 0%,#f4dc8c 18%,#a67b25 36%,#f8e7a6 52%,#9c7322 70%,#efd27c 86%,#7b5a17 100%);box-shadow:inset 0 0 0 3px #6e5012,inset 0 0 0 6px #f2d98a,inset 0 0 0 8px #8a651c,inset 3px 3px 4px rgba(255,255,255,.5),inset -4px -4px 6px rgba(0,0,0,.45),0 16px 30px rgba(0,0,0,.3)!important}
+.lp-gallery.framed .fr-3{background:repeating-linear-gradient(98deg,rgba(0,0,0,.18) 0 3px,transparent 3px 8px,rgba(255,200,150,.07) 8px 9px,transparent 9px 15px),linear-gradient(135deg,#7a4b2b,#3f2414 50%,#6a3f22 75%,#2f1a0e)}
+.lp-gallery.framed .fr-4{background:linear-gradient(135deg,#ffffff,#ece8e0 50%,#f8f6f1 75%,#d9d4c9)}
+.lp-gallery.framed figcaption{position:relative;z-index:1}
 .lp-gallery.framed figcaption{margin:10px auto -2px;width:max-content;max-width:100%;background:linear-gradient(#e9d9a8,#c9a95e);color:#3b2e12;font:600 12px var(--body);padding:4px 10px;border-radius:2px;box-shadow:0 1px 2px rgba(0,0,0,.3);text-align:center}
 .lp-peg span,.lp-tape span{display:block;font:600 11px var(--body);color:#555;text-align:center;padding:5px 2px 2px;line-height:1.25}
 .lp-peg span{background:#fff;margin-top:-1px;box-shadow:0 10px 18px rgba(0,0,0,.12)}
@@ -1647,8 +1655,9 @@ drawChips();drawGrid();updateCount();
     if(!list.length){g.closest('.lp-sec').hidden=true;return}
     // gallery
     g.className='lp-gallery'+(st==='C'?' framed':st==='base'?'':' taped');
-    const FC=['#2b2b2b','#c8a46a','#f4f1ea','#7a5230','#2b2b2b','#d9d4c7'];
-    g.innerHTML=list.map((x,i)=>`<figure style="--r:${st==='base'||st==='C'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg;--fc:${FC[i%FC.length]}"><img src="${esc(x.src)}" alt="${esc(x.caption||"A child's drawing")}" loading="lazy"${x.w?` width="${x.w}" height="${x.h}"`:''}><figcaption>${esc(x.caption)}</figcaption></figure>`).join('');
+    g.innerHTML=list.map((x,i)=>{const im=`<img src="${esc(x.src)}" alt="${esc(x.caption||"A child's drawing")}" loading="lazy"${x.w?` width="${x.w}" height="${x.h}"`:''}>`;
+      return st==='C'?`<figure class="fr-${[0,1,3,2,4,0,1,2,3,4][i%10]}"><div class="mat">${im}</div><figcaption>${esc(x.caption)}</figcaption></figure>`
+        :`<figure style="--r:${st==='base'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg">${im}<figcaption>${esc(x.caption)}</figcaption></figure>`}).join('');
     const t=document.getElementById('lpGalTitle'); if(t)t.textContent=st==='C'?'This is what it looks like, framed':'Drawn by little hands';
     // A: taped down both sides (big screens) or strips between sections (phones)
     const sc=document.getElementById('lpScatter');
