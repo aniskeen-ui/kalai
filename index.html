@@ -381,6 +381,53 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 @media (max-width:1100px){html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:860px){html[data-skin="green"] .modal .box.wide{grid-template-columns:1fr}html[data-skin="green"] .similar,html[data-skin="green"] .modal .box.wide>#mSimilar .similar{grid-template-columns:repeat(2,minmax(0,1fr))}html[data-skin="green"] .viewer .stage{min-height:300px}}
 .vsai{margin:0;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:center;background:var(--surface,#fff);border:1px solid var(--line);border-radius:14px;padding:18px}.vsai img{width:100%;height:auto;border-radius:10px;display:block}.vsai h3{margin:0 0 8px;font-size:24px}.vsai p{margin:0 0 10px;font-size:15px;line-height:1.55}.vsai .vsai-tag{margin:6px 0 0;color:var(--kumkum)}@media(max-width:760px){.vsai{grid-template-columns:1fr;padding:12px}}
+
+/* Little Artists page styles (Settings → Look & theme): A scattered (default), B living screen, C washing line + framed wall */
+#littlePage{position:relative;overflow:hidden}
+.lp-scatter,.lp-screen,.lp-line,.lp-strip{display:none}
+.lp-tape{position:absolute;background:#fff;padding:7px;box-shadow:0 8px 18px rgba(0,0,0,.18)}
+.lp-tape::before{content:"";position:absolute;top:-10px;left:50%;width:64px;height:20px;margin-left:-32px;background:rgba(240,220,150,.85);transform:rotate(var(--t,3deg))}
+.lp-tape img{display:block;width:100%;height:auto}
+/* A: drawings taped down both sides */
+html[data-lstyle="A"] .lp-scatter{display:block;position:absolute;inset:0;pointer-events:none;z-index:3}
+@media(min-width:1280px){html[data-lstyle="A"] #littlePage .wrap{max-width:960px}}
+@media(max-width:1279px){html[data-lstyle="A"] .lp-scatter{display:none}html[data-lstyle="A"] .lp-strip{display:flex}}
+.lp-strip{gap:18px;overflow-x:auto;padding:22px 16px 14px;scrollbar-width:none}.lp-strip::-webkit-scrollbar{display:none}
+.lp-strip .lp-tape{position:relative;flex:0 0 auto;width:120px}
+/* B: living screen of drawings behind the headline */
+html[data-lstyle="B"] .lp-screen{display:block;position:relative;height:min(78vh,720px);min-height:520px;overflow:hidden;background:#111}
+html[data-lstyle="B"] .lp-hero .lp-grid>div:first-child{display:none}
+html[data-lstyle="B"] .lp-hero .lp-grid{grid-template-columns:minmax(0,1fr);max-width:820px}
+.lp-cols{position:absolute;inset:-80px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;transform:rotate(-4deg) scale(1.08)}
+.lp-col{display:flex;flex-direction:column;gap:12px;animation:lpUp 70s linear infinite}.lp-col:nth-child(2n){animation-direction:reverse;animation-duration:90s}
+.lp-col img{width:100%;border-radius:8px;display:block}
+@keyframes lpUp{to{transform:translateY(-50%)}}
+@media (prefers-reduced-motion:reduce){.lp-col{animation:none}}
+.lp-shade{position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.1),rgba(0,0,0,.32))}
+.lp-scard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(660px,calc(100% - 32px));background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(8px);border-radius:22px;padding:clamp(22px,4vw,40px);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.lp-scard h1{font-size:clamp(32px,4.5vw,52px)!important;margin:12px 0}.lp-scard h1 em{font-style:normal;color:var(--kumkum)}.lp-scard p{color:var(--muted);font-size:17px}
+@media(max-width:700px){.lp-cols{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* C: washing line in the hero, framed wall for the gallery */
+html[data-lstyle="C"] .lp-line{display:block;position:relative;max-width:1150px;margin:34px auto 0;padding:0 16px}
+.lp-line svg{position:absolute;top:0;left:16px;right:16px;width:calc(100% - 32px);height:40px}
+.lp-pegs{display:flex;justify-content:space-around;gap:10px;padding-top:10px}
+.lp-peg{position:relative;width:clamp(90px,13vw,150px);transform-origin:top center}
+.lp-peg::before{content:"";position:absolute;top:-16px;left:50%;margin-left:-6px;width:12px;height:30px;background:#c49a6c;border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.3);z-index:1}
+.lp-peg img{width:100%;display:block;background:#fff;padding:6px;box-shadow:0 10px 18px rgba(0,0,0,.18)}
+@media(max-width:700px){.lp-peg:nth-child(n+4){display:none}}
+/* gallery: taped polaroids (A, B) or a framed wall (C) */
+.lp-gallery.taped{display:block;columns:4 200px;column-gap:22px}
+.lp-gallery.taped figure{break-inside:avoid;margin:0 0 26px;background:#fff;padding:8px 8px 4px;border:0;border-radius:2px;box-shadow:0 8px 18px rgba(0,0,0,.14);position:relative;transform:rotate(var(--r,0deg))}
+.lp-gallery.taped figure::before{content:"";position:absolute;top:-9px;left:50%;width:60px;height:18px;margin-left:-30px;background:rgba(240,220,150,.85);transform:rotate(var(--t,3deg))}
+.lp-gallery.taped img,.lp-gallery.framed img{height:auto}
+.lp-gallery.taped img{aspect-ratio:auto;object-fit:contain;background:#fff}
+.lp-gallery.taped figcaption{font:500 13px var(--body);color:#555;padding:6px 4px 4px;text-align:center}
+.lp-gallery.framed{display:block;columns:4 210px;column-gap:28px;background:#efe9de;padding:30px;border-radius:12px}
+:root[data-theme="dark"] .lp-gallery.framed{background:#2a2620}
+.lp-gallery.framed figure{break-inside:avoid;margin:0 0 28px;padding:12px;border:0;border-radius:0;background:var(--fc,#2b2b2b);box-shadow:0 10px 24px rgba(0,0,0,.22)}
+.lp-gallery.framed img{aspect-ratio:auto;object-fit:contain;background:#fff;padding:14px;border-radius:0}
+.lp-gallery.framed figcaption{display:none}
+.lp-gallery figure{transition:transform .25s ease}.lp-gallery figure:hover{transform:rotate(0) scale(1.03)}
 /* Little Artists page (/#little-artists): its own page in the same site, with the full header */
 #littlePage{display:none;font-size:16px;line-height:1.6;--warm:#fff6e9}
 html[data-skin="green"] #littlePage{--warm:#f6f9ef}
@@ -472,7 +519,11 @@ html.lp #little .vsai{display:none}
   fit();
 })();
 </script>
-<div id="littlePage">
+<div id="littlePage"><div class="lp-scatter" id="lpScatter" aria-hidden="true"></div>
+<div class="lp-screen" id="lpScreen"><div class="lp-cols" id="lpCols" aria-hidden="true"></div><div class="lp-shade"></div>
+  <div class="lp-scard"><div class="lp-eyebrow">Little Artists · Kalai Art House</div><h1>No machine can paint <em>like your child.</em></h1>
+  <p>Every drawing behind this card was made by a real child's hand. Not one was made by AI. We frame them in Dubai, so they get the wall they deserve.</p>
+  <div class="lp-cta" style="justify-content:center"><a class="lp-btn lp-primary" href="#kidsOrder">Frame my child's drawing</a><a class="lp-btn lp-ghost" href="#lp-how">How it works</a></div></div></div>
 <div class="lp-sec lp-hero"><div class="wrap lp-grid">
   <div>
     <div class="lp-eyebrow">Little Artists · Kalai Art House</div>
@@ -480,8 +531,10 @@ html.lp #little .vsai{display:none}
     <p class="lead">A wobbly line, a sun with a smile, a parrot with a beak bigger than its head. Your child put their whole heart into it. We frame it in Dubai, so it gets the wall it deserves and becomes a gift someone will keep for life.</p>
     <div class="lp-cta"><a class="lp-btn lp-primary" href="#kidsOrder">Frame my child's drawing</a><a class="lp-btn lp-ghost" href="#lp-how">How it works</a></div>
   </div>
-  <div class="lp-pair"><img src="/img/little-vs-ai.jpg" alt="Left: a parrot painted by a young child in watercolour. Right: the same parrot made by AI, neat and polished." width="1024" height="755"><span class="lp-lab lp-l">❤ Painted by tiny hands</span><span class="lp-lab lp-r">Made by AI in seconds</span></div>
+  <div class="lp-pair" id="lpPair"><img src="/img/little-vs-ai.jpg" alt="Left: a parrot painted by a young child in watercolour. Right: the same parrot made by AI, neat and polished." width="1024" height="755"><span class="lp-lab lp-l">❤ Painted by tiny hands</span><span class="lp-lab lp-r">Made by AI in seconds</span></div>
 </div></div>
+<div class="lp-line" id="lpLine" aria-hidden="true"><svg viewBox="0 0 1150 40" preserveAspectRatio="none"><path d="M0 4 Q575 46 1150 4" stroke="#8a6a4a" stroke-width="2" fill="none"/></svg><div class="lp-pegs" id="lpPegs"></div></div>
+<div class="lp-strip" id="lpStrip1" aria-hidden="true"></div>
 
 <div class="lp-sec"><div class="wrap">
   <p class="lp-quote">AI made it perfect. <b>Your child made it priceless.</b></p>
@@ -503,6 +556,7 @@ html.lp #little .vsai{display:none}
   </div>
 </div></div>
 
+<div class="lp-strip" id="lpStrip2" aria-hidden="true"></div>
 <div id="lp-how" class="lp-sec" style="background:var(--sunk)"><div class="wrap">
   <div class="lp-eyebrow">How it works</div>
   <h2 style="font-size:34px;margin-top:8px">From the kitchen table to the wall</h2>
@@ -523,7 +577,7 @@ html.lp #little .vsai{display:none}
 
 <div id="lp-gallery" class="lp-sec" style="padding-top:0"><div class="wrap">
   <div class="lp-eyebrow">Little masterpieces</div>
-  <h2 style="font-size:34px;margin-top:8px">Drawn by little hands</h2>
+  <h2 style="font-size:34px;margin-top:8px" id="lpGalTitle">Drawn by little hands</h2>
   <div class="lp-gallery" id="lpGallery"></div>
 </div></div>
 
@@ -554,6 +608,9 @@ html.lp #little .vsai{display:none}
 </div></div>
 
 </div>
+<script>
+try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("kalaiLittleStyle")||"A")}catch(e){document.documentElement.setAttribute("data-lstyle","A")}
+</script>
 <script>
 /* Little Artists page: /#little-artists (and /little.html) shows only the Little Artists page (the landing, then the
    order form), with the same header, cart, language and currency. Any other menu link goes back to the shop. */
@@ -1565,12 +1622,44 @@ drawChips();drawGrid();updateCount();
   menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();
 </script>
 <script>
-// Gallery: photos listed in /data/little-gallery.json ([{ "src": "/img/…", "caption": "…" }]).
-fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(list=>{
-  const g=document.getElementById('lpGallery'),esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  if(!list.length){document.getElementById('lpGallery').closest('section').hidden=true;return}
-  g.innerHTML=list.map(x=>`<figure><img src="${esc(x.src)}" alt="${esc(x.caption||'A child\'s drawing')}" loading="lazy"><figcaption>${esc(x.caption)}</figcaption></figure>`).join('');
-});
+// Little Artists page: the children's drawings in /data/little-gallery.json ([{src, caption, w, h}]), shown in the
+// style chosen in Settings → Look & theme: base (plain gallery), A taped down the sides (default), B a living screen,
+// C a washing line and a framed wall. window.kalaiLittleStyle(style) switches it (account.js, from Settings).
+(function(){
+  const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const sm=src=>src.replace('/img/kids/','/img/kids/s/');
+  let list=[];
+  const rnd=(i,a,b)=>{const x=Math.sin(i*99.7+7)*10000;return a+(x-Math.floor(x))*(b-a)};
+  const tape=(x,i,style)=>`<div class="lp-tape" style="--t:${Math.round(rnd(i,-6,6))}deg;transform:rotate(${Math.round(rnd(i+3,-7,7))}deg);${style||''}"><img src="${esc(sm(x.src))}" alt="" loading="lazy"></div>`;
+  function draw(){
+    const st=document.documentElement.getAttribute('data-lstyle')||'A', g=document.getElementById('lpGallery');
+    if(!g)return;
+    if(!list.length){g.closest('.lp-sec').hidden=true;return}
+    // gallery
+    g.className='lp-gallery'+(st==='C'?' framed':st==='base'?'':' taped');
+    const FC=['#2b2b2b','#c8a46a','#f4f1ea','#7a5230','#2b2b2b','#d9d4c7'];
+    g.innerHTML=list.map((x,i)=>`<figure style="--r:${st==='base'||st==='C'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg;--fc:${FC[i%FC.length]}"><img src="${esc(x.src)}" alt="${esc(x.caption||"A child's drawing")}" loading="lazy"${x.w?` width="${x.w}" height="${x.h}"`:''}><figcaption>${esc(x.caption)}</figcaption></figure>`).join('');
+    const t=document.getElementById('lpGalTitle'); if(t)t.textContent=st==='C'?'This is what it looks like, framed':'Drawn by little hands';
+    // A: taped down both sides (big screens) or strips between sections (phones)
+    const sc=document.getElementById('lpScatter');
+    if(st==='A'&&sc){const n=Math.min(list.length,16);let h='';for(let i=0;i<n;i++){const left=i%2===0,row=Math.floor(i/2);
+        h+=tape(list[(i*7)%list.length],i,`top:${3+row*12.2}%;${left?'left':'right'}:${Math.round(rnd(i,10,34))}px;width:${Math.round(rnd(i+1,118,150))}px`)}
+      sc.innerHTML=h;
+      document.getElementById('lpStrip1').innerHTML=list.slice(0,6).map((x,i)=>tape(x,i)).join('');
+      document.getElementById('lpStrip2').innerHTML=list.slice(6,12).map((x,i)=>tape(x,i+6)).join('');}
+    // B: the screen of drawings (each column twice, so the slow scroll loops)
+    const cols=document.getElementById('lpCols');
+    if(st==='B'&&cols&&!cols.childElementCount){let h='';for(let c=0;c<7;c++){const col=[];for(let k=0;k<6;k++)col.push(list[(c*5+k*3)%list.length]);
+        const imgs=col.map(x=>`<img src="${esc(sm(x.src))}" alt="" loading="lazy">`).join('');h+=`<div class="lp-col">${imgs}${imgs}</div>`}cols.innerHTML=h}
+    // C: the washing line
+    const pegs=document.getElementById('lpPegs');
+    if(st==='C'&&pegs)pegs.innerHTML=list.slice(0,6).map((x,i)=>`<div class="lp-peg" style="transform:rotate(${[-4,3,-2,5,-3,2][i]}deg);margin-top:${[18,10,22,8,16,12][i]}px"><img src="${esc(sm(x.src))}" alt="" loading="lazy"></div>`).join('');
+  }
+  window.kalaiLittleStyle=function(st){st=['base','A','B','C'].includes(st)?st:'A';
+    try{localStorage.setItem('kalaiLittleStyle',st)}catch(e){}
+    if(document.documentElement.getAttribute('data-lstyle')!==st){document.documentElement.setAttribute('data-lstyle',st);draw()}};
+  fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(l=>{list=l||[];draw()});
+})();
 </script>
 <script type="module" src="/src/account.js"></script>
 <script>(function(){function h(){var e=document.querySelector("header.top");if(e)document.documentElement.style.setProperty("--hdr",e.offsetHeight+"px")}h();addEventListener("resize",h);addEventListener("load",function(){h();try{if(location.hash){var t=document.getElementById(location.hash.slice(1));if(t&&t.tagName==="SECTION")t.scrollIntoView()}}catch(e){}});})();</script>

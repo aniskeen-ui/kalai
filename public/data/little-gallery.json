@@ -1,3 +1,122 @@
 [
- { "src": "/img/little-vs-ai.jpg", "caption": "A parrot in watercolour, painted by a little one (left), next to an AI version (right)." }
+ {
+  "src": "/img/kids/kid-01-crab.jpg",
+  "caption": "A crab with a big grin",
+  "w": 824,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-02-fox.jpg",
+  "caption": "Fox with big eyes",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-03-giraffe.jpg",
+  "caption": "A giraffe, spots and all",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-04-cow.jpg",
+  "caption": "Our cow",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-05-picnic.jpg",
+  "caption": "Picnic treats",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-06-friends.jpg",
+  "caption": "Best friends on the grass",
+  "w": 880,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-07-house-and-bird.jpg",
+  "caption": "House and bird",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-08-house-and-bird-2.jpg",
+  "caption": "House and bird, again",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-09-shapes.jpg",
+  "caption": "Shapes everywhere",
+  "w": 801,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-10-triangles.jpg",
+  "caption": "Red, blue and pink",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-11-tabby-cat.jpg",
+  "caption": "Tabby cat",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-12-orange-cat.jpg",
+  "caption": "Orange cat",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-13-blue-cat.jpg",
+  "caption": "The blue cat",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-14-two-birds.jpg",
+  "caption": "Two little birds",
+  "w": 1100,
+  "h": 820
+ },
+ {
+  "src": "/img/kids/kid-15-lion-cub.jpg",
+  "caption": "Lion cub",
+  "w": 1100,
+  "h": 820
+ },
+ {
+  "src": "/img/kids/kid-16-robin.jpg",
+  "caption": "Robin",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-17-rainbow-whale.jpg",
+  "caption": "A whale in a rainbow",
+  "w": 1100,
+  "h": 820
+ },
+ {
+  "src": "/img/kids/kid-18-black-cat.jpg",
+  "caption": "Black cat in the grass",
+  "w": 820,
+  "h": 1100
+ },
+ {
+  "src": "/img/kids/kid-19-tree-and-sky.jpg",
+  "caption": "Tree, sky and a little house",
+  "w": 1100,
+  "h": 820
+ },
+ {
+  "src": "/img/kids/kid-20-cat-family.jpg",
+  "caption": "The cat family",
+  "w": 1100,
+  "h": 807
+ }
 ]

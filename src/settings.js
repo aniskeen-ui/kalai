@@ -116,6 +116,8 @@ export async function showSettings() {
         <div class="muted" style="font-size:12px">Visitors can change it with the flag button in the header (or choose the Kalai classic look). Try one: <a href="/" target="_blank" rel="noopener">open the website</a>, pick a language or a flag.</div></div>
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=green" target="_blank" rel="noopener">preview 2. Monda theme</a> · <a href="/?look=classic" target="_blank" rel="noopener">preview 1. Original theme</a> · <a href="/?look=auto" target="_blank" rel="noopener">end preview</a>. A preview changes only your own browser.</div></div>
+      <div class="field" style="max-width:560px"><label for="st-lstyle">Little Artists page: how the children's drawings are shown</label><select id="st-lstyle" style="max-width:420px"><option value="A">1. Drawings taped down the sides (default)</option><option value="B">2. Living screen of drawings behind the headline</option><option value="C">3. Washing line + framed gallery wall</option><option value="base">4. Base: plain page, drawings in a simple gallery</option></select>
+        <div class="muted" style="font-size:12px">The drawings are listed in data/little-gallery.json. <a href="/#little-artists" target="_blank" rel="noopener">Open the Little Artists page</a> after saving.</div></div>
       <h3 style="margin:0;font-size:17px">Room photo for "On a wall"</h3>
       <div class="field" style="max-width:720px">
         <div class="muted" style="font-size:12px">Use a real photo of a living room with an empty wall above a sofa (your own, or a free photo from Unsplash or Pexels; not from another shop's website). Then mark the sofa so every artwork is hung on it to scale. Without a photo, the drawn room is used.</div>
@@ -184,6 +186,7 @@ export async function showSettings() {
     FIELDS.forEach((f) => { $('st-' + f.k).value = row?.[f.k] ?? f.def ?? 10; });
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = row?.siteLook === 'green' ? 'green' : 'classic';
+    $('st-lstyle').value = ['A', 'B', 'C', 'base'].includes(row?.littleStyle) ? row.littleStyle : 'A';
     { let ct = {}; try { ct = JSON.parse(row?.countryThemes || '{}') || {}; } catch { ct = {}; } $('st-ctOn').checked = ct.on !== false; $('st-ctFest').checked = ct.fest !== false; }
     { // Website languages: saved list, else the recommended set.
       const on = new Set(String(row?.siteLangs || '').split(',').map((x) => x.trim()).filter(Boolean).length ? String(row.siteLangs).split(',').map((x) => x.trim()) : DEFAULT_LANGS);
@@ -238,6 +241,7 @@ async function save() {
   }
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
+  rec.littleStyle = $('st-lstyle').value;
   rec.countryThemes = JSON.stringify({ on: $('st-ctOn').checked, fest: $('st-ctFest').checked });
   try { localStorage.setItem('kalai-ct-cfg', rec.countryThemes); } catch { /* */ }
   rec.siteLangDefault = $('st-langDef').value || 'en';

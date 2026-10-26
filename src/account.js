@@ -60,6 +60,8 @@ let kuralSec = 10;
       if (st.siteLook === 'green') document.documentElement.setAttribute('data-skin', 'green');
       else document.documentElement.removeAttribute('data-skin');
     }
+    // Little Artists page style (Settings → Look & theme): base | A (default) | B | C.
+    window.kalaiLittleStyle?.(st.littleStyle || 'A');
     // Real room photo for "On a wall" (marked in Settings).
     try {
       const mk = st.roomMarks ? JSON.parse(st.roomMarks) : null;
