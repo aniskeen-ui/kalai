@@ -1697,6 +1697,38 @@ drawChips();drawGrid();updateCount();
   fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(l=>{list=l||[];draw();samples()});
 })();
 </script>
+<script>
+/* Other languages: the English layout stays fixed. Each heading, text, button and menu keeps the number of lines it
+   has in English (measured while the page is in English); a longer translation gets a smaller font, never a new
+   line or a cut-off word. Smallest: 60% of the English size. */
+(function(){
+  const SEL='h1,h2,h3,.lead,#littlePage .lp-hero p,.lp-scard p,.btn,.lp-btn,.lp-lab,.lp-eyebrow,.eyebrow,nav.links,.cur-sel,header.top button,.cart-btn,.kind,.vsai-tag';
+  const isEn=()=>!document.documentElement.dataset.tr;
+  const lines=el=>{if(el.matches('nav.links')){const t=new Set();[...el.children].forEach(c=>{if(c.offsetParent)t.add(Math.round(c.offsetTop))});return t.size}
+    const r=document.createRange();r.selectNodeContents(el);const t=new Set();for(const x of r.getClientRects())if(x.width>1)t.add(Math.round(x.top/4));return t.size};
+  const over=el=>el.scrollWidth>el.clientWidth+2&&getComputedStyle(el).overflow!=='visible';
+  function remember(){document.querySelectorAll(SEL).forEach(el=>{if(!el.offsetParent||el.dataset.enl)return;const n=lines(el);if(n)el.dataset.enl=n})}
+  function reset(){document.querySelectorAll('[data-fit]').forEach(el=>{el.style.fontSize='';delete el.dataset.fit;el.querySelectorAll?.('[data-fitkid]').forEach(k=>{k.style.fontSize='';delete k.dataset.fitkid})})}
+  function fit(){
+    if(isEn()){reset();remember();return}
+    document.querySelectorAll(SEL).forEach(el=>{
+      if(!el.offsetParent)return;
+      const max=+el.dataset.enl||(el.matches('h1')?3:el.matches('h2,h3')?2:el.matches('.lead,p')?0:1);if(!max)return;
+      const nav=el.matches('nav.links'),kids=nav?[...el.children]:[el];
+      if(!el.dataset.fit){el.dataset.fit=1;kids.forEach(k=>{k.dataset.fitkid=1;k.dataset.fs=parseFloat(getComputedStyle(k).fontSize)})}
+      kids.forEach(k=>k.style.fontSize='');
+      let f=1;
+      while((lines(el)>max||over(el))&&f>0.6){f-=0.04;kids.forEach(k=>k.style.fontSize=(k.dataset.fs*f).toFixed(1)+'px')}
+    });
+  }
+  let t;const later=()=>{clearTimeout(t);t=setTimeout(fit,120)};
+  if(isEn())remember(); // the page is still English here: before the translations load
+  addEventListener('DOMContentLoaded',()=>{if(isEn())remember();
+    new MutationObserver(later).observe(document.body,{subtree:true,childList:true,characterData:true});
+    new MutationObserver(()=>{if(isEn())reset();later()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-tr','lang']});
+    addEventListener('resize',later);addEventListener('hashchange',()=>setTimeout(()=>{if(isEn())remember();fit()},150));later();});
+})();
+</script>
 <script type="module" src="/src/account.js"></script>
 <script>(function(){function h(){var e=document.querySelector("header.top");if(e)document.documentElement.style.setProperty("--hdr",e.offsetHeight+"px")}h();addEventListener("resize",h);addEventListener("load",function(){h();try{if(location.hash){var t=document.getElementById(location.hash.slice(1));if(t&&t.tagName==="SECTION")t.scrollIntoView()}}catch(e){}});})();</script>
 </body>
