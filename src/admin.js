@@ -1972,11 +1972,40 @@ async function wireDiscount(e) {
     try { const r = await client.mutations.applyCode({ id: e.id, code: null }); if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, '')); vchCache = null; await refreshOne(e.id); } catch (ex) { m.textContent = ex.message; }
   };
   currentDiscountType = e.discountType || '';
-  // Code on the order: show that a new price gets the code worked out again on Save.
+  // Code on the order: the breakdown follows the Price box live (same rule as the server), saved on Save.
   if ($('codeRe') && $('ePrice')) {
-    const re = () => { const v = Number($('ePrice').value || 0), was = Number(e.listPrice || 0); $('codeRe').hidden = !(v > 0) || v === was;
-      $('codeRe').textContent = `New price ⃃ ${v.toLocaleString('en-US')}: when you save, ${e.discountCode} is worked out again on it (was − ⃃ ${Number(e.discountAmount || 0).toLocaleString('en-US')} on ⃃ ${was.toLocaleString('en-US')}).`; };
-    ['input', 'change'].forEach((k) => $('ePrice').addEventListener(k, re)); re();
+    const f = (n) => { const x = Number(n || 0); return x.toLocaleString('en-US', Number.isInteger(x) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    const was = Number(e.listPrice || 0), prevAmt = Number(e.discountAmount || 0), loy = Number(e.loyaltyAmount || 0);
+    let rule = null; // { t: 'PCT'|'AED'|'GIFT', v, min }
+    const ruleOf = async () => {
+      try {
+        if (!vchCache) { const out = []; let nt = null; do { const r = await client.models.Voucher.list({ limit: 500, nextToken: nt }); out.push(...(r.data || [])); nt = r.nextToken; } while (nt); vchCache = out; }
+        const v = vchCache.find((x) => String(x.code).toUpperCase() === String(e.discountCode).toUpperCase());
+        if (v) return v.kind === 'GIFT' ? { t: 'GIFT', v: Number(v.balance || 0) + prevAmt } : { t: v.discountType === 'AED' ? 'AED' : 'PCT', v: Number(v.discountValue || 0), min: Number(v.minOrder || 0) };
+        const pr = ((await client.models.Promotion.list({ limit: 500 })).data || []).find((x) => String(x.code).toUpperCase() === String(e.discountCode).toUpperCase());
+        if (pr) return { t: pr.discountType === 'AED' ? 'AED' : 'PCT', v: Number(pr.discountValue || 0), min: Number(pr.minOrder || 0) };
+      } catch { /* fall back below */ }
+      return was > 0 ? { t: 'PCT', v: Math.round((prevAmt / was) * 10000) / 100 } : null;
+    };
+    const re = () => {
+      const v = Number($('ePrice').value || 0), changed = v > 0 && v !== was;
+      const list = changed ? v : was;
+      let amt = prevAmt, why = '';
+      if (changed && rule) {
+        if (rule.min && list < rule.min) { amt = 0; why = `needs an order of at least ⃃ ${f(rule.min)}`; }
+        else amt = Math.max(0, Math.min(list - 2, rule.t === 'GIFT' ? rule.v : rule.t === 'AED' ? rule.v : Math.round(list * rule.v) / 100));
+        amt = Math.round(amt * 100) / 100;
+      }
+      const pays = Math.round((list - amt - loy) * 100) / 100;
+      $('cbList').textContent = `⃃ ${f(list)}`; $('cbDisc').textContent = `− ⃃ ${f(amt)}`; $('cbPays').textContent = `⃃ ${f(pays)}`;
+      $('cbPct').textContent = rule && rule.t === 'PCT' ? `(${rule.v}%)` : '';
+      $('cbZoho').textContent = `Zoho shows the same: ⃃ ${f(list)} with ⃃ ${f(list - pays)} in the Discount column.`;
+      $('codeRe').hidden = !changed;
+      $('codeRe').textContent = !changed ? '' : why ? `New price ⃃ ${f(list)}: the code no longer applies (${why}). Save to keep this price without it.`
+        : `Not saved yet: ⃃ ${f(list)} − ⃃ ${f(amt)} = ⃃ ${f(pays)}. Press Save to apply it (was ⃃ ${f(was)} − ⃃ ${f(prevAmt)}).`;
+    };
+    ['input', 'change'].forEach((k) => $('ePrice').addEventListener(k, re));
+    ruleOf().then((r) => { rule = r; re(); });
   }
   if (!$('eDiscT')) return;
   const show = () => {
@@ -2134,11 +2163,11 @@ async function showDetailBody(e) {
           ${e.loyaltyAt ? `<span class="muted" style="font-size:12px">✦ Kalai Circle: customer earned <b>${Number(e.loyaltyPoints || 0).toLocaleString('en-US')} points</b> on this order (${new Date(e.loyaltyAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}).</span>` : e.customerCode && !['CANCELLED', 'REFUNDED'].includes(e.status) && e.quotedPrice ? `<span class="muted" style="font-size:12px">✦ Kalai Circle points for this order are added 48 hours after it is delivered${e.status === 'DELIVERED' && e.deliveredAt ? `: due ${new Date(new Date(e.deliveredAt).getTime() + 49 * 3600_000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}. The balance is under Customers → this customer.</span>` : ''}
           ${e.discountCode && !e.discountType ? (() => { const f = (n) => Number(n || 0).toLocaleString('en-US'); const c = String(e.discountCode); const what = /^REF-/.test(c) ? 'Invite code' : /^PRG-/.test(c) ? 'Programme code' : /^(KAL|GIFT)-/.test(c) ? 'Voucher / gift card' : 'Offer code';
             return `<div style="font-size:13px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;display:grid;gap:2px;background:var(--surface)">
-              <div style="display:flex;justify-content:space-between"><span>Price</span><span class="mono">⃃ ${f(e.listPrice)}</span></div>
-              <div style="display:flex;justify-content:space-between;color:var(--ok)"><span>${what} <b class="mono">${esc(c)}</b></span><span class="mono">− ⃃ ${f(e.discountAmount)}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Price</span><span class="mono" id="cbList">⃃ ${f(e.listPrice)}</span></div>
+              <div style="display:flex;justify-content:space-between;color:var(--ok)"><span>${what} <b class="mono">${esc(c)}</b> <span id="cbPct"></span></span><span class="mono" id="cbDisc">− ⃃ ${f(e.discountAmount)}</span></div>
               ${e.loyaltyAmount ? `<div style="display:flex;justify-content:space-between;color:var(--ok)"><span>Kalai Circle points (${f(e.loyaltyRedeemed)})</span><span class="mono">− ⃃ ${f(e.loyaltyAmount)}</span></div>` : ''}
-              <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--line);padding-top:2px"><span>Customer pays</span><span class="mono">⃃ ${f(e.quotedPrice)}</span></div>
-              <span class="muted" style="font-size:11px">Zoho shows the same: ⃃ ${f(e.listPrice)} with ⃃ ${f(Number(e.listPrice || 0) - Number(e.quotedPrice || 0))} in the Discount column. Price above = before the code: if you change it, the code is worked out again on the new price when you save.</span><b id="codeRe" style="font-size:12px;color:var(--kumkum)" hidden></b>${!priceLocked(e) && BEFORE_PAYMENT.includes(e.status || 'RECEIVED') ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px"><button type="button" class="btn small ghost" id="eCodeRemove">Remove this code</button><span class="muted" id="eCodeMsg" style="font-size:11px"></span></div>` : ''}</div>`; })() : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
+              <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--line);padding-top:2px"><span>Customer pays</span><span class="mono" id="cbPays">⃃ ${f(e.quotedPrice)}</span></div>
+              <span class="muted" style="font-size:11px"><span id="cbZoho">Zoho shows the same: ⃃ ${f(e.listPrice)} with ⃃ ${f(Number(e.listPrice || 0) - Number(e.quotedPrice || 0))} in the Discount column.</span> Price above = before the code: if you change it, the code is worked out again on the new price when you save.</span><b id="codeRe" style="font-size:12px;color:var(--kumkum)" hidden></b>${!priceLocked(e) && BEFORE_PAYMENT.includes(e.status || 'RECEIVED') ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px"><button type="button" class="btn small ghost" id="eCodeRemove">Remove this code</button><span class="muted" id="eCodeMsg" style="font-size:11px"></span></div>` : ''}</div>`; })() : ''}${e.kind === 'GIFT' && e.quotedPrice == null ? `<span class="muted" style="font-size:12px">Filled from the customer's form: framing ${/age (\d+)/.test(String(det.Child || '')) && Number(String(det.Child).match(/age (\d+)/)[1]) <= 10 ? 'free (age 10 and under)' : '⃃ 79 (age 11–17)'} + delivery ${esc(det['Delivery charge'] || '')}${det.Extras ? ` + extras (${esc(det.Extras)})` : ''} = ${esc(det.Total || '')}. Check it, then save with status <b>Price sent</b>.</span>` : ''}</div>
       </div>
       ${e.kind === 'LICENCE' ? licenceSection(e) : `${addressSection(e)}
       ${shippingSection(e)}
