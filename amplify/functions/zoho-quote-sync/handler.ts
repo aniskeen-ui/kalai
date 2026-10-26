@@ -2396,7 +2396,7 @@ async function sellerAction(ev: ApiEvent) {
       : profile.type === 'FRAMER'
       ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']).x ?? {},
           uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now }
-      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), country: countryGrid(d.country), notes: txt(d.notes, 500), at: now };
+      : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), country: countryGrid(d.country), from: d.from === 'India' ? 'India' : 'UAE', notes: txt(d.notes, 500), at: now, basis: 'list' };
     const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
     await putRow(S, row);
     return { profile: row };
@@ -2939,12 +2939,35 @@ async function marketAdmin(ev: ApiEvent) {
     const items = Array.isArray(d.items) ? (d.items as Dict[]).slice(0, 200) : [];
     const all = (await scanAll(S)).map(plain).filter((x): x is Dict => !!x);
     const now = new Date().toISOString();
-    let added = 0, skipped = 0;
+    let added = 0, skipped = 0, updated = 0;
     for (const it of items) {
       const name = txt(it.name, 120), email = txt(it.email, 120).toLowerCase();
       if (!name) { skipped++; continue; }
       const ptype = ['PRINTER', 'FRAMER', 'COURIER'].includes(String(it.type)) ? String(it.type) : 'ARTIST'; // supplier prospects too (print shops to ask for quotes)
-      if (all.some((x) => x.type === ptype && ((email && String(x.email ?? '').toLowerCase() === email) || String(x.business ?? '').toLowerCase() === name.toLowerCase()))) { skipped++; continue; }
+      const same = all.find((x) => x.type === ptype && ((email && String(x.email ?? '').toLowerCase() === email) || String(x.business ?? '').toLowerCase() === name.toLowerCase()));
+      // Researched couriers: refresh the estimate on a prospect that hasn't entered its own prices yet, and fill only
+      // the empty cells of the approved courier with the same name (e.g. Aramex → "ARAMAX"); their own prices stay.
+      if (d.refresh === true && ptype === 'COURIER' && it.rateCard && typeof it.rateCard === 'object') {
+        const est = it.rateCard as Dict;
+        const cardOf = (x: Dict): Dict => { try { let v: unknown = x.rateCard; for (let i = 0; i < 2 && typeof v === 'string'; i++) v = JSON.parse(v); return (v && typeof v === 'object' ? v : {}) as Dict; } catch { return {}; } };
+        const fill = (mine: unknown, add: unknown): unknown => {
+          if (add == null || typeof add !== 'object') return mine ?? add;
+          const o = { ...((mine && typeof mine === 'object' ? mine : {}) as Dict) };
+          for (const [k, v] of Object.entries(add as Dict)) o[k] = fill(o[k], v);
+          return o;
+        };
+        const appr = all.find((x) => x.type === 'COURIER' && x.status === 'APPROVED' && String(x.business ?? '').trim().toLowerCase() === txt(it.approvedName, 120).toLowerCase());
+        if (appr) {
+          const cur = cardOf(appr);
+          const next = { ...cur, uae: fill(cur.uae, est.uae), intl: fill(cur.intl, est.intl), country: fill(cur.country, est.country), from: cur.from ?? est.from, notes: cur.notes || est.notes, at: now };
+          await putRow(S, { ...appr, rateCard: JSON.stringify(next), updatedAt: now }); updated++;
+          if (!same) continue; // already a supplier: no prospect row as well
+        }
+        if (same && same.status === 'PROSPECT' && !['list'].includes(String(cardOf(same).basis ?? ''))) {
+          await putRow(S, { ...same, rateCard: JSON.stringify(est), updatedAt: now }); updated++; continue;
+        }
+      }
+      if (same) { skipped++; continue; }
       const link = txt(it.link, 300);
       const row = { id: `pro-${crypto.randomUUID()}`, __typename: 'SellerProfile', createdAt: now, updatedAt: now, appliedAt: now,
         type: ptype, status: 'PROSPECT', business: name, ...(ptype !== 'ARTIST' ? { address: txt(it.based, 300) || undefined, rateCard: it.rateCard ? JSON.stringify(it.rateCard) : undefined } : {}), contactName: name, email: email || undefined, phone: txt(it.phone, 40) || undefined,
@@ -2954,7 +2977,7 @@ async function marketAdmin(ev: ApiEvent) {
         outreach: txt(it.status, 40) || 'To contact', commissionPct: 0, sampleKeys: '[]' };
       await putRow(S, row); all.push(row); added++;
     }
-    return { added, skipped };
+    return { added, skipped, updated };
   }
   if (action === 'prospectUpdate' || action === 'removeProspect') {
     const p = plain(await getRow(S, { id: { S: txt(d.id, 80) } }));

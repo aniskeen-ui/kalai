@@ -440,7 +440,7 @@ function openRates(back) {
   $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
   $('rNote').textContent = pr ? 'Your price in ⃃ to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don\'t print that size). A4 = 21×30 cm, A3 = 30×42 cm.' : fr
     ? "Your price per frame, in ⃃, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
-    : 'Your charge in ⃃ to deliver one framed work (packed, with glass) from Dubai, by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.';
+    : 'Your charge in ⃃ to deliver one framed work (packed, with glass) from where you ship (below), by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.';
   $('rGrid').innerHTML = pr
     ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (⃃)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
     : fr
@@ -453,7 +453,8 @@ function openRates(back) {
        <h3 style="font-size:15px;margin:14px 0 4px">If you also deliver: your delivery charge to each emirate (optional)</h3>
        <table class="rc"><thead><tr><th>To</th><th>Small parcel (up to A3 / 40×50)</th><th>Large parcel</th></tr></thead><tbody>
         ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th><td>${cell(`uae.${em}.small`, card.uae?.[em]?.small)}</td><td>${cell(`uae.${em}.large`, card.uae?.[em]?.large)}</td></tr>`).join('')}</tbody></table>`
-    : `<table class="rc"><thead><tr><th>To</th>${RC_PARCELS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>
+    : `<div class="field" style="max-width:280px;margin:8px 0"><label for="rFrom">I ship from</label><select id="rFrom"><option value="UAE" ${(card.from || 'UAE') === 'UAE' ? 'selected' : ''}>UAE (Dubai)</option><option value="India" ${card.from === 'India' ? 'selected' : ''}>India</option></select></div>
+       <table class="rc"><thead><tr><th>To</th>${RC_PARCELS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>
         ${RC_EMIRATES.map((em) => `<tr><th>${esc(em)}</th>${pRow(`uae.${em}`, card.uae?.[em])}</tr>`).join('')}
         <tr><th colspan="${RC_PARCELS.length + 1}" style="padding-top:12px">Outside the UAE (optional): price per zone</th></tr>
         ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th>${pRow(`intl.${z}`, card.intl?.[z])}</tr>`).join('')}</tbody></table>
@@ -497,6 +498,7 @@ $('rateForm').addEventListener('submit', async (ev) => {
   if ($('rcCountry')) { const cc = readCountries(); if (cc.bad) bad = true; data.country = cc.rows; }
   if (bad) { $('rErr').textContent = 'Enter amounts in ⃃ from 0 to 5,000.'; return; }
   if ($('rIncl')) data.fixingIncluded = $('rIncl').checked;
+  if ($('rFrom')) data.from = $('rFrom').value;
   const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';
   try { profile = (await call('saveRates', data)).profile; $('rMsg').textContent = 'Saved. Kalai Art House sees your prices when giving out jobs.'; } catch (ex) { $('rErr').textContent = ex.message; } finally { b.disabled = false; }
 });

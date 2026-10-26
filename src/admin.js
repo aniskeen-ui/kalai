@@ -87,8 +87,9 @@ const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString
 // Costs from the supplier price lists (Pricing → Margin & charges picks the default supplier, or the cheapest):
 // the supplier on the order's job if one is assigned, else the default one's price for this size / style / address.
 // No silent fallback: a missing price stays null and the costing says "no supplier price".
-function pickSupplier(types, pref, costFn) {
-  const list = suppliers.filter((s) => types.includes(s.type)).map((s) => ({ s, c: costFn(parseCard(s)) })).filter((x) => x.c != null);
+const fromOf = (s) => parseCard(s).from || 'UAE';
+function pickSupplier(types, pref, costFn, from) {
+  const list = suppliers.filter((s) => types.includes(s.type) && (!from || fromOf(s) === from)).map((s) => ({ s, c: costFn(parseCard(s)) })).filter((x) => x.c != null);
   const mine = pref && pref !== 'cheapest' ? list.find((x) => x.s.id === pref) : null;
   const x = mine || list.sort((a, b) => a.c - b.c)[0];
   return x ? { cost: x.c, name: x.s.business, id: x.s.id } : null;
@@ -98,8 +99,9 @@ function estCosts(e) {
   const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
   const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name, id: j.framer.supplierId } : pickSupplier(['FRAMER'], d.framer, (card) => frameCost(card, spec));
   const outside = ($('cDel')?.value || costings.get(e.id)?.delivery) === 'OUTSIDE', dest = outside ? destOf(e) : null;
-  const to = outside ? { ...e, deliveryCountry: dest.country === 'UAE' ? 'Oman' : dest.country, deliveryEmirate: dest.region } : { ...e, deliveryCountry: 'UAE', deliveryEmirate: e.deliveryCountry && e.deliveryCountry !== 'UAE' ? 'Dubai' : (e.deliveryEmirate || 'Dubai') };
-  const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, to, spec, zoneOf));
+  const from = outside ? dest.from : 'UAE';
+  const to = outside ? { ...e, deliveryCountry: dest.country === 'UAE' && from === 'UAE' ? 'Oman' : dest.country, deliveryEmirate: dest.country === 'UAE' ? (dest.region || 'Dubai') : dest.region } : { ...e, deliveryCountry: 'UAE', deliveryEmirate: e.deliveryCountry && e.deliveryCountry !== 'UAE' ? 'Dubai' : (e.deliveryEmirate || 'Dubai') };
+  const dl = j.delivery?.price != null ? { cost: Number(j.delivery.price), name: j.delivery.name } : (pickSupplier(['COURIER', 'FRAMER'], d.delivery, (card) => deliveryCost(card, to, spec, zoneOf), from) || marketCourier(to, spec, from));
   const pr = j.printer?.price != null ? { cost: Number(j.printer.price), name: j.printer.name } : pickSupplier(['PRINTER'], d.printer, (card) => printCost(card, spec)) || (marketPrint(spec.size) != null ? { cost: marketPrint(spec.size), name: 'market estimate (no print shop yet)' } : null);
   return { spec, framing: fr?.cost ?? null, framingFrom: fr?.name || '', framingFromId: fr?.id || '', local: dl?.cost ?? null, localFrom: dl?.name || '', print: pr?.cost ?? null, printFrom: pr?.name || '' };
 }
@@ -626,12 +628,20 @@ async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
   printProspects = (r.data || []).filter((p) => p.type === 'PRINTER' && p.status === 'PROSPECT' && parseCard(p).fineArt !== false);
+  courierProspects = (r.data || []).filter((p) => p.type === 'COURIER' && p.status === 'PROSPECT');
   suppliers = (r.data || []).filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type) && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
 }
 let suppliers = []; // approved frame shops (FRAMER) and delivery partners (COURIER)
 // Print shops not approved yet (prospects with a fine-art estimate): their median is the "market estimate" for print
 // until a print shop is approved (Artists & sellers → Frame, print & delivery → Print shops to ask for quotes).
 let printProspects = [];
+// Couriers researched but not approved yet (Delivery partners → couriers to ask for quotes): the cheapest of their
+// estimate / published prices is the planned delivery cost until an approved courier has a price for that place.
+let courierProspects = [];
+function marketCourier(to, spec, from) {
+  const x = courierProspects.filter((p) => fromOf(p) === from).map((p) => ({ p, c: deliveryCost(parseCard(p), to, spec, zoneOf) })).filter((v) => v.c != null).sort((a, b) => a.c - b.c)[0];
+  return x ? { cost: x.c, name: `${x.p.business} (market estimate)` } : null;
+}
 function marketPrint(size) {
   const v = printProspects.map((p) => Number(parseCard(p).print?.[size])).filter((x) => x > 0).sort((a, b) => a - b);
   return v.length ? v[Math.floor((v.length - 1) / 2)] : null;
@@ -962,7 +972,8 @@ function destOf(e) {
   const live = $('cDestCountry');
   const country = (live && live.value) || cs.destCountry || (e.deliveryCountry && e.deliveryCountry !== 'UAE' ? e.deliveryCountry : 'India');
   const region = live ? ($('cDestRegion')?.value || '') : (cs.destRegion || (country === e.deliveryCountry ? e.deliveryEmirate || '' : ''));
-  return { country, region };
+  const from = ($('cShipFrom')?.value) || cs.shipFrom || 'UAE';
+  return { country, region, from };
 }
 const ZONE_NAME = { A: 'GCC', B: 'South Asia', C: 'UK & Europe', D: 'USA, Canada, Australia, NZ', E: 'rest of the world' };
 function costingSection(e) {
@@ -989,7 +1000,7 @@ function costingSection(e) {
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select></div>
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
-    <div class="three" id="cDestBox" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}>${(() => { const d = destOf(e); return countryRegionHtml({ country: d.country, region: d.region, prefix: 'cDest', names: false }); })()}</div>
+    <div class="three" id="cDestBox" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}>${(() => { const d = destOf(e); return `<div class="field"><label for="cShipFrom">Ships from</label><select id="cShipFrom"><option value="UAE" ${d.from === 'UAE' ? 'selected' : ''}>UAE (Dubai)</option><option value="India" ${d.from === 'India' ? 'selected' : ''}>India (artist / Indian supplier)</option></select></div>${countryRegionHtml({ country: d.country, region: d.region, prefix: 'cDest', names: false })}`; })()}</div>
     <div class="muted" style="font-size:12px" id="cDestNote" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}></div>
     <div class="muted" style="font-size:12px">${fromSiva}</div>
     <div class="field"><label for="cNote">Note to ${esc(who)} <span class="muted" style="font-weight:400;font-size:12px">· shown on the artist's order card and emailed to them${c.studioNoteAt ? `, last changed ${esc(when(c.studioNoteAt))}` : ''}</span></label><textarea id="cNote" rows="2" maxlength="1000" placeholder="e.g. Please sign at the bottom right; customer wants it before 5 Nov.">${esc(c.studioNote || '')}</textarea></div>
@@ -1556,7 +1567,7 @@ async function saveCosting(e) {
     customs: r.customs != null ? Math.round(r.customs * 100) / 100 : null, total: r.total ?? null, suggested: r.suggested ?? null,
     price: r.price ?? null, margin: r.margin != null ? Math.round(r.margin * 100) / 100 : null, savedAt: new Date().toISOString(),
     framerId: estCosts(e).framingFromId || null, // the frame shop on the order page: the artist sends the work there
-    ...(inp.delivery === 'OUTSIDE' ? { destCountry: destOf(e).country, destRegion: destOf(e).region || null } : {}),
+    ...(inp.delivery === 'OUTSIDE' ? { destCountry: destOf(e).country, destRegion: destOf(e).region || null, shipFrom: destOf(e).from } : {}),
   };
   const existing = costings.get(e.id);
   const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
@@ -2272,7 +2283,7 @@ async function showDetailBody(e) {
       const destNote = () => {
         const out = $('cDel').value === 'OUTSIDE';
         $('cDestBox').hidden = !out; $('cDestNote').hidden = !out;
-        if (out) { const d = destOf(e); const z = d.country === 'UAE' ? 'A' : zoneOf(d.country); $('cDestNote').textContent = `Courier price for ${[d.region, d.country].filter(Boolean).join(', ')}: the delivery partner's price for that region or country if they have one, else their ${ZONE_NAME[z]} zone rate (zone ${z}). No UAE VAT on exports.`; }
+        if (out) { const d = destOf(e); const z = d.country === 'UAE' ? 'A' : zoneOf(d.country); $('cDestNote').textContent = `Courier price from ${d.from === 'India' ? 'India' : 'Dubai'} to ${[d.region, d.country].filter(Boolean).join(', ')}: ${d.country === 'UAE' && d.from === 'India' ? "the delivery partner's price to that emirate." : `the delivery partner's price for that region or country if they have one, else their ${ZONE_NAME[z]} zone rate (zone ${z}). No UAE VAT on exports.`}`; }
       };
       $('cDel').addEventListener('change', destNote);
       ['change', 'input'].forEach((k) => $('cDestBox').addEventListener(k, () => { destNote(); renderCost(); }));

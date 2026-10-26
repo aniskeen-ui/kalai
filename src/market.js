@@ -133,15 +133,16 @@ const RC_SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
 function supplierProspectsView() {
   const ps = sellers.filter((x) => x.status === 'PROSPECT' && SUP(x)).sort((a, b) => SUP_OUTREACH.indexOf(a.outreach || 'To contact') - SUP_OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
   const card = (p) => { try { const v = typeof p.rateCard === 'string' ? JSON.parse(p.rateCard) : p.rateCard; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
-  return `<div class="mk-card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Print shops to ask for quotes</b><span class="muted" style="font-size:12px">${ps.length} shops · not suppliers yet: no jobs, no emails</span>
-      <button class="btn small" type="button" id="spSeed" style="margin-left:auto">Add the researched Dubai print shops</button><span class="muted" id="spMsg" style="font-size:12px"></span></div>
-    <div class="muted" style="font-size:12px">Prices marked <b>est.</b> are an estimate for single prints on matte fine-art paper until the shop quotes; <b>published</b> are from the shop's website. Until a print shop is approved, costing uses the median of the fine-art estimates (shown as “market estimate”). When a quote arrives: correct the prices in its portal, then <b>Make supplier</b>.</div>
+  return `<div class="mk-card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Print shops and couriers to ask for quotes</b><span class="muted" style="font-size:12px">${ps.length} · not suppliers yet: no jobs, no emails</span>
+      <button class="btn small" type="button" id="spSeed" style="margin-left:auto">Add the researched Dubai print shops</button><button class="btn small" type="button" id="cpSeed">Add / refresh the researched couriers</button><span class="muted" id="spMsg" style="font-size:12px"></span></div>
+    <div class="muted" style="font-size:12px">Prices marked <b>est.</b> are an estimate for single prints on matte fine-art paper until the shop quotes; <b>published</b> are from the shop's website. Until a print shop is approved, costing uses the median of the fine-art estimates (shown as “market estimate”). Couriers: until an approved courier has a price for the place, costing uses the cheapest researched courier from the same country (UAE or India). When a quote arrives: correct the prices in its portal, then <b>Make supplier</b>.</div>
     ${ps.length ? `<div class="tablewrap"><table><thead><tr><th>Print shop</th><th>Prints</th><th>Price per print (⃃)</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>${ps.map((p) => {
       const c = card(p), pr = c.print || {}, wa = waLink(p.phone, quoteAsk(p));
-      const prices = RC_SZ.filter((z) => pr[z] != null).map((z) => `${z} <b>${pr[z]}</b>`).join(' · ');
+      const cp = (r) => (r ? r.s1 ?? r.small : null), sample = p.type === 'COURIER' ? [['Dubai', cp(c.uae?.Dubai)], ['India', cp(c.country?.India) ?? cp(c.intl?.B)], ['UK', cp(c.intl?.C)], ['USA', cp(c.intl?.D)]].filter(([, v]) => v != null) : [];
+      const prices = p.type === 'COURIER' ? (sample.length ? `from ${esc(c.from || 'UAE')}, A3 box: ${sample.map(([k, v]) => `${k} <b>${v}</b>`).join(' · ')}` : '') : RC_SZ.filter((z) => pr[z] != null).map((z) => `${z} <b>${pr[z]}</b>`).join(' · ');
       return `<tr class="mk-card" data-seller="${esc(p.id)}" style="display:table-row"><td><b>${esc(p.business)}</b>${p.portfolio ? `<br><a href="${esc(p.portfolio)}" target="_blank" rel="noopener noreferrer" style="font-size:12px">website</a>` : ''}<div class="muted" style="font-size:11px">${esc(p.address || p.city || '')}</div></td>
         <td style="font-size:12px;max-width:260px;white-space:normal">${esc(p.mediums || '')}${c.fineArt ? ' <span class="chip">fine art</span>' : ''}</td>
-        <td style="font-size:12px;max-width:240px;white-space:normal">${prices || '<span class="muted">no paper prices</span>'}${prices ? ` <span class="muted">(${c.basis === 'pub' ? 'published' : c.basis === 'est' ? 'est.' : 'price list'})</span>` : ''}</td>
+        <td style="font-size:12px;max-width:240px;white-space:normal">${prices || `<span class="muted">${p.type === 'COURIER' ? 'no prices yet' : 'no paper prices'}</span>`}${prices ? ` <span class="muted">(${c.basis === 'pub' ? 'published' : c.basis === 'est' ? 'est.' : 'price list'})</span>` : ''}</td>
         <td style="font-size:12px">${p.email ? `${esc(p.email)}<br>` : ''}${esc(p.phone || '')}</td>
         <td><select data-pr="outreach" style="width:auto">${SUP_OUTREACH.map((o) => `<option ${o === (p.outreach || 'To contact') ? 'selected' : ''}>${o}</option>`).join('')}</select>${p.outreachAt ? `<div class="muted" style="font-size:11px">${esc(day(p.outreachAt))}</div>` : ''}</td>
         <td><div style="display:flex;gap:6px;flex-wrap:wrap;min-width:180px;max-width:260px">${wa ? `<a class="btn small ghost" href="${wa}" target="_blank" rel="noopener">Ask for a quote (WhatsApp)</a> ` : ''}<a class="btn small ghost" href="/supplier.html?view=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">Price list</a> <button class="btn small" type="button" data-pr="promote">Make supplier</button> <button class="btn small ghost" type="button" data-pr="remove">Remove</button></div><div class="err" data-msg style="font-size:12px"></div></td></tr>`;
@@ -342,6 +343,14 @@ function wireCards() {
         rateCard: { print: x.print, notes: x.basis === 'pub' ? 'Published prices from the shop website (Oct 2026).' : 'Estimate by Kalai Art House (Oct 2026), not a quote: replace with the shop\'s prices.', fineArt: x.fineArt, basis: x.basis, at: new Date().toISOString() } }));
       const r = await act('addProspects', { items }); msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} already there` : ''}.`; await load();
     } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+  };
+  if ($('cpSeed')) $('cpSeed').onclick = async () => {
+    const b = $('cpSeed'), msg = $('spMsg'); b.disabled = true; msg.textContent = 'Adding…';
+    try {
+      const list = await (await fetch('/data/courier-estimates.json', { cache: 'no-store' })).json();
+      const r = await act('addProspects', { refresh: true, items: list.map((x) => ({ type: 'COURIER', name: x.name, phone: x.phone, email: x.email, based: x.based, link: x.link, work: x.work, status: 'To contact', rateCard: x.card, approvedName: x.approvedName })) });
+      msg.textContent = `Added ${r.added}${r.updated ? `, prices refreshed on ${r.updated}` : ''}${r.skipped ? `, ${r.skipped} kept` : ''}.`; await load();
+    } catch (ex) { msg.textContent = ex.message; } finally { b.disabled = false; }
   };
   $('prImport')?.addEventListener('change', (e) => { const f = e.target.files?.[0]; if (f) importProspects(f); });
   document.querySelectorAll('#mkBody [data-pr]').forEach((el) => {

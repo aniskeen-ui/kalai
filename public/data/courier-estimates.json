@@ -1,0 +1,954 @@
+[
+ {
+  "type": "COURIER",
+  "name": "Aramex",
+  "based": "Dubai, UAE",
+  "link": "https://www.aramex.com/ae/en/ship/calculate-rates",
+  "phone": "+97142864000",
+  "email": "",
+  "work": "UAE domestic and international express. Biggest UAE e-commerce courier.",
+  "approvedName": "ARAMAX",
+  "card": {
+   "uae": {
+    "Dubai": {
+     "s1": 22,
+     "40×50": 35,
+     "50×70": 55,
+     "60×80": 75,
+     "70×100": 130
+    },
+    "Sharjah": {
+     "s1": 22,
+     "40×50": 35,
+     "50×70": 55,
+     "60×80": 75,
+     "70×100": 130
+    },
+    "Ajman": {
+     "s1": 22,
+     "40×50": 35,
+     "50×70": 55,
+     "60×80": 75,
+     "70×100": 130
+    },
+    "Abu Dhabi": {
+     "s1": 32,
+     "40×50": 45,
+     "50×70": 65,
+     "60×80": 90,
+     "70×100": 150
+    },
+    "Ras Al Khaimah": {
+     "s1": 32,
+     "40×50": 45,
+     "50×70": 65,
+     "60×80": 90,
+     "70×100": 150
+    },
+    "Umm Al Quwain": {
+     "s1": 32,
+     "40×50": 45,
+     "50×70": 65,
+     "60×80": 90,
+     "70×100": 150
+    },
+    "Fujairah": {
+     "s1": 32,
+     "40×50": 45,
+     "50×70": 65,
+     "60×80": 90,
+     "70×100": 150
+    }
+   },
+   "intl": {
+    "A": {
+     "s1": 363,
+     "40×50": 444.5,
+     "50×70": 655.5,
+     "60×80": 766,
+     "70×100": 949.5
+    },
+    "B": {
+     "s1": 453.5,
+     "40×50": 555.5,
+     "50×70": 819.5,
+     "60×80": 963,
+     "70×100": 1202
+    },
+    "C": {
+     "s1": 607.5,
+     "40×50": 747,
+     "50×70": 1096,
+     "60×80": 1281.5,
+     "70×100": 1591
+    },
+    "D": {
+     "s1": 677,
+     "40×50": 830.5,
+     "50×70": 1220,
+     "60×80": 1439.5,
+     "70×100": 1805.5
+    },
+    "E": {
+     "s1": 745,
+     "40×50": 913.5,
+     "50×70": 1342,
+     "60×80": 1588.5,
+     "70×100": 1999
+    }
+   },
+   "country": {
+    "Nepal": {
+     "s1": 745,
+     "40×50": 913.5,
+     "50×70": 1342,
+     "60×80": 1588.5,
+     "70×100": 1999
+    },
+    "Australia": {
+     "s1": 745,
+     "40×50": 913.5,
+     "50×70": 1342,
+     "60×80": 1588.5,
+     "70×100": 1999
+    },
+    "New Zealand": {
+     "s1": 745,
+     "40×50": 913.5,
+     "50×70": 1342,
+     "60×80": 1588.5,
+     "70×100": 1999
+    },
+    "Egypt": {
+     "s1": 548,
+     "40×50": 674,
+     "50×70": 994.5,
+     "60×80": 1163,
+     "70×100": 1443.5
+    },
+    "South Africa": {
+     "s1": 829.5,
+     "40×50": 1020,
+     "50×70": 1558,
+     "60×80": 1858.5,
+     "70×100": 2359
+    }
+   },
+   "from": "UAE",
+   "basis": "est",
+   "notes": "Estimate by Kalai Art House (Oct 2026), not a quote. International = Aramex calculator 1 kg to India (AED 231.73) scaled on DHL 2026 zones; UAE = market range for next-day. Excludes fuel surcharge, VAT and destination duties; remote areas extra.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "DHL Express UAE",
+  "based": "Dubai, UAE",
+  "link": "https://mydhl.express.dhl/content/dam/downloads/ae/en/rate-guide/service_and_rate_guide_ae_en_2026.pdf.coredownload.pdf",
+  "phone": "+97143180000",
+  "email": "",
+  "work": "International express, 1-4 days. Published 2026 list prices (no account discount).",
+  "card": {
+   "uae": {},
+   "intl": {
+    "A": {
+     "s1": 649.5,
+     "40×50": 795.5,
+     "50×70": 1173.5,
+     "60×80": 1370.5,
+     "70×100": 1699
+    },
+    "B": {
+     "s1": 811.5,
+     "40×50": 994.5,
+     "50×70": 1466.5,
+     "60×80": 1723,
+     "70×100": 2151
+    },
+    "C": {
+     "s1": 1087.5,
+     "40×50": 1336.5,
+     "50×70": 1961,
+     "60×80": 2293,
+     "70×100": 2847
+    },
+    "D": {
+     "s1": 1211.5,
+     "40×50": 1486,
+     "50×70": 2183,
+     "60×80": 2576,
+     "70×100": 3231
+    },
+    "E": {
+     "s1": 1333,
+     "40×50": 1634.5,
+     "50×70": 2401.5,
+     "60×80": 2842.5,
+     "70×100": 3578
+    }
+   },
+   "country": {
+    "Nepal": {
+     "s1": 1333,
+     "40×50": 1634.5,
+     "50×70": 2401.5,
+     "60×80": 2842.5,
+     "70×100": 3578
+    },
+    "Australia": {
+     "s1": 1333,
+     "40×50": 1634.5,
+     "50×70": 2401.5,
+     "60×80": 2842.5,
+     "70×100": 3578
+    },
+    "New Zealand": {
+     "s1": 1333,
+     "40×50": 1634.5,
+     "50×70": 2401.5,
+     "60×80": 2842.5,
+     "70×100": 3578
+    },
+    "Egypt": {
+     "s1": 981,
+     "40×50": 1206,
+     "50×70": 1779.5,
+     "60×80": 2081,
+     "70×100": 2583.5
+    },
+    "South Africa": {
+     "s1": 1484.5,
+     "40×50": 1825.5,
+     "50×70": 2788.5,
+     "60×80": 3326,
+     "70×100": 4221.5
+    }
+   },
+   "from": "UAE",
+   "basis": "pub",
+   "notes": "DHL Express Worldwide 2026 UAE list price (non-document), billed on volumetric kg (L×W×H ÷ 5000). Excludes fuel surcharge, VAT, duties. Remote area AED 2/kg, min AED 105. Business accounts get large discounts.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "UPS UAE",
+  "based": "Dubai, UAE",
+  "link": "https://www.ups.com/assets/resources/webcontent/en_GB/tariff-guide-ae.pdf",
+  "phone": "+97143398877",
+  "email": "",
+  "work": "International (Expedited) and UAE domestic (Express Saver). Published tariff.",
+  "card": {
+   "uae": {
+    "Dubai": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    },
+    "Sharjah": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    },
+    "Ajman": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    },
+    "Abu Dhabi": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    },
+    "Ras Al Khaimah": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    },
+    "Umm Al Quwain": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    },
+    "Fujairah": {
+     "s1": 62,
+     "40×50": 62,
+     "50×70": 93,
+     "60×80": 110,
+     "70×100": 138
+    }
+   },
+   "intl": {
+    "A": {
+     "s1": 794,
+     "40×50": 1004,
+     "50×70": 1217,
+     "60×80": 1310,
+     "70×100": 1456
+    },
+    "B": {
+     "s1": 794,
+     "40×50": 1004,
+     "50×70": 1217,
+     "60×80": 1310,
+     "70×100": 1456
+    },
+    "C": {
+     "s1": 932,
+     "40×50": 1188,
+     "50×70": 1487,
+     "60×80": 1623,
+     "70×100": 1843
+    },
+    "D": {
+     "s1": 1218,
+     "40×50": 1518,
+     "50×70": 1985,
+     "60×80": 2166,
+     "70×100": 2456
+    },
+    "E": {
+     "s1": 1395,
+     "40×50": 1755,
+     "50×70": 2323,
+     "60×80": 2519,
+     "70×100": 2842
+    }
+   },
+   "country": {
+    "Pakistan": {
+     "s1": 932,
+     "40×50": 1188,
+     "50×70": 1487,
+     "60×80": 1623,
+     "70×100": 1843
+    },
+    "Sri Lanka": {
+     "s1": 1395,
+     "40×50": 1755,
+     "50×70": 2323,
+     "60×80": 2519,
+     "70×100": 2842
+    },
+    "Australia": {
+     "s1": 1395,
+     "40×50": 1755,
+     "50×70": 2323,
+     "60×80": 2519,
+     "70×100": 2842
+    },
+    "New Zealand": {
+     "s1": 1395,
+     "40×50": 1755,
+     "50×70": 2323,
+     "60×80": 2519,
+     "70×100": 2842
+    }
+   },
+   "from": "UAE",
+   "basis": "pub",
+   "notes": "UPS Expedited export and UAE domestic Express Saver from the UPS UAE tariff guide. Excludes fuel and extended-area surcharges and VAT.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "FedEx UAE",
+  "based": "Dubai, UAE",
+  "link": "https://images.fedex.com/content/dam/fedex/international/rates/fedex-rates-export-en-ae.pdf",
+  "phone": "800 33339",
+  "email": "",
+  "work": "International Priority / Economy. 2026 rate sheet published (zone table to be read with them).",
+  "card": {
+   "from": "UAE",
+   "basis": "est",
+   "notes": "Ask for a quote: rate sheet published from 5 Jan 2026 but no prices entered yet.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "Emirates Post",
+  "based": "UAE",
+  "link": "https://www.emiratespost.ae",
+  "phone": "600599999",
+  "email": "",
+  "work": "Postal parcels: UAE domestic and international standard (up to 15 days) / express. Usually cheapest, slower.",
+  "card": {
+   "from": "UAE",
+   "basis": "est",
+   "notes": "Ask for a quote: published prices are \"from\" amounts only (international standard from about AED 47).",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "Delhivery",
+  "based": "India",
+  "link": "https://www.delhivery.com",
+  "phone": "+911246719500",
+  "email": "",
+  "work": "India domestic surface/express, very wide PIN-code reach. Good for artist → buyer within India.",
+  "card": {
+   "uae": {},
+   "intl": {},
+   "country": {
+    "India": {
+     "s1": 7.5,
+     "40×50": 10,
+     "50×70": 18,
+     "60×80": 23,
+     "70×100": 31
+    },
+    "India|Jammu and Kashmir": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Ladakh": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Assam": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Arunachal Pradesh": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Manipur": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Meghalaya": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Mizoram": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Nagaland": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Sikkim": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Tripura": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Andaman and Nicobar Islands": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    },
+    "India|Lakshadweep": {
+     "s1": 9.5,
+     "40×50": 13,
+     "50×70": 23.5,
+     "60×80": 30,
+     "70×100": 40.5
+    }
+   },
+   "from": "India",
+   "basis": "est",
+   "notes": "Estimate (Oct 2026) from published indicative surface rates to another zone, ₹ at 0.042 AED. North East, J&K, Ladakh, islands +30%. Same-city/state is cheaper.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "DTDC",
+  "based": "India",
+  "link": "https://www.dtdc.in",
+  "phone": "+917305770577",
+  "email": "",
+  "work": "India domestic and India → UAE economy.",
+  "card": {
+   "uae": {
+    "Dubai": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    },
+    "Sharjah": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    },
+    "Ajman": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    },
+    "Abu Dhabi": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    },
+    "Ras Al Khaimah": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    },
+    "Umm Al Quwain": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    },
+    "Fujairah": {
+     "s1": 119.5,
+     "40×50": 138.5,
+     "50×70": 201.5,
+     "60×80": 239.5,
+     "70×100": 302.5
+    }
+   },
+   "intl": {},
+   "country": {
+    "India": {
+     "s1": 6,
+     "40×50": 8,
+     "50×70": 14.5,
+     "60×80": 18.5,
+     "70×100": 25
+    },
+    "India|Jammu and Kashmir": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Ladakh": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Assam": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Arunachal Pradesh": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Manipur": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Meghalaya": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Mizoram": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Nagaland": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Sikkim": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Tripura": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Andaman and Nicobar Islands": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    },
+    "India|Lakshadweep": {
+     "s1": 8,
+     "40×50": 10.5,
+     "50×70": 19,
+     "60×80": 24,
+     "70×100": 32.5
+    }
+   },
+   "from": "India",
+   "basis": "est",
+   "notes": "Estimate (Oct 2026): domestic indicative surface rates to another zone; to UAE economy ₹2,100 (1 kg) / ₹2,400 (2 kg) published, about ₹300 per extra kg assumed. ₹ at 0.042 AED.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "Blue Dart",
+  "based": "India",
+  "link": "https://www.bluedart.com",
+  "phone": "+9118602331234",
+  "email": "",
+  "work": "India domestic air express (DHL group). Faster, dearer.",
+  "card": {
+   "uae": {},
+   "intl": {},
+   "country": {
+    "India": {
+     "s1": 12,
+     "40×50": 16,
+     "50×70": 30,
+     "60×80": 38,
+     "70×100": 51.5
+    },
+    "India|Jammu and Kashmir": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Ladakh": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Assam": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Arunachal Pradesh": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Manipur": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Meghalaya": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Mizoram": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Nagaland": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Sikkim": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Tripura": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Andaman and Nicobar Islands": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    },
+    "India|Lakshadweep": {
+     "s1": 16,
+     "40×50": 21,
+     "50×70": 38.5,
+     "60×80": 49,
+     "70×100": 67
+    }
+   },
+   "from": "India",
+   "basis": "est",
+   "notes": "Estimate (Oct 2026): about 10% over Delhivery express (published example ₹98 for 0.6 kg to another zone). ₹ at 0.042 AED.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "India Post Speed Post",
+  "based": "India",
+  "link": "https://www.indiapost.gov.in",
+  "phone": "18002666868",
+  "email": "",
+  "work": "Government post, every PIN code incl. villages. Cheapest reach, slower.",
+  "card": {
+   "uae": {},
+   "intl": {},
+   "country": {
+    "India": {
+     "s1": 13.5,
+     "40×50": 18.5,
+     "50×70": 35.5,
+     "60×80": 45.5,
+     "70×100": 62
+    },
+    "India|Jammu and Kashmir": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Ladakh": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Assam": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Arunachal Pradesh": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Manipur": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Meghalaya": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Mizoram": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Nagaland": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Sikkim": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Tripura": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Andaman and Nicobar Islands": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    },
+    "India|Lakshadweep": {
+     "s1": 16,
+     "40×50": 22,
+     "50×70": 42.5,
+     "60×80": 54.5,
+     "70×100": 74.5
+    }
+   },
+   "from": "India",
+   "basis": "pub",
+   "notes": "Speed Post published slabs (1,001–2,000 km band: ₹80 first 500 g + ₹40 per extra 500 g), excl. GST; far regions about +20%. ₹ at 0.042 AED.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ },
+ {
+  "type": "COURIER",
+  "name": "Global India Express",
+  "based": "Delhi, India",
+  "link": "https://www.globalindiaexpress.com/blog/india-to-dubai-courier-charges/",
+  "phone": "",
+  "email": "",
+  "work": "India → UAE economy (9-18 days) through DHL/FedEx/UPS networks. For the artist sending originals to Dubai.",
+  "card": {
+   "uae": {
+    "Dubai": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    },
+    "Sharjah": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    },
+    "Ajman": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    },
+    "Abu Dhabi": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    },
+    "Ras Al Khaimah": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    },
+    "Umm Al Quwain": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    },
+    "Fujairah": {
+     "s1": 73,
+     "40×50": 90.5,
+     "50×70": 157.5,
+     "60×80": 214,
+     "70×100": 308.5
+    }
+   },
+   "intl": {},
+   "country": {},
+   "from": "India",
+   "basis": "pub",
+   "notes": "Published India → UAE economy (Aug 2026): ₹1,050 1 kg, ₹2,150 5 kg, ₹3,750 10 kg, ₹450/kg above 11 kg. Excludes GST, duty, fuel. ₹ at 0.042 AED.",
+   "at": "2026-10-26T16:00:00Z"
+  }
+ }
+]
