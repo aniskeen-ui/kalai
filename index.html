@@ -1682,7 +1682,7 @@ drawChips();drawGrid();updateCount();
     if(document.documentElement.getAttribute('data-lstyle')!==st){document.documentElement.setAttribute('data-lstyle',st);draw()}};
   // Child vs AI pictures (hero of the Little Artists page and the home-page block): start with a random pair, then
   // fade to the next one every 7 seconds. Add more pairs here (same layout: child on the left, AI on the right).
-  (function(){const P=['/img/little-vs-ai.jpg','/img/little-vs-ai-cow.jpg'];
+  (function(){const P=['/img/little-vs-ai.jpg','/img/little-vs-ai-cow.jpg','/img/little-vs-ai-crab.jpg'];
     const imgs=[...document.querySelectorAll('#lpPair img,.vsai img')];if(!imgs.length||P.length<2)return;
     let k=Math.floor(Math.random()*P.length);P.forEach(u=>{const i=new Image();i.src=u});
     imgs.forEach(im=>{im.style.transition='opacity .6s ease';im.src=P[k]});
