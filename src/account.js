@@ -55,10 +55,11 @@ let kuralSec = 10;
     // Home page texts from Order Management → Settings (blank = keep the built-in text).
     // Website look from Settings (a ?look= preview in this browser wins).
     let preview = null;
-    try { localStorage.setItem('kalaiLook', st.siteLook === 'green' ? 'green' : 'classic'); preview = localStorage.getItem('kalaiLookPreview'); } catch { /* storage blocked */ }
+    const look = /^(green|red|pink|blue|orange|yellow)$/.test(st.siteLook || '') ? st.siteLook : 'classic';
+    try { localStorage.setItem('kalaiLook', look); preview = localStorage.getItem('kalaiLookPreview'); } catch { /* storage blocked */ }
     if (!preview) {
-      if (st.siteLook === 'green') document.documentElement.setAttribute('data-skin', 'green');
-      else document.documentElement.removeAttribute('data-skin');
+      if (look !== 'classic') document.documentElement.setAttribute('data-skin', 'green'); else document.documentElement.removeAttribute('data-skin');
+      if (look !== 'classic' && look !== 'green') document.documentElement.setAttribute('data-hue', look); else document.documentElement.removeAttribute('data-hue');
     }
     // Little Artists page style (Settings → Look & theme): base | A (default) | B | C.
     window.kalaiLittleStyle?.(st.littleStyle || 'A');
