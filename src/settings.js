@@ -119,6 +119,7 @@ export async function showSettings() {
       <div class="field" style="max-width:560px"><label for="st-look">Theme</label><select id="st-look" style="max-width:300px"><option value="classic">1. Original theme (navy and gold)</option><option value="green">2. Monda theme (green, artwork pages)</option><option value="red">3. Monda layout · light red</option><option value="pink">4. Monda layout · pink</option><option value="blue">5. Monda layout · blue</option><option value="orange">6. Monda layout · orange</option><option value="yellow">7. Monda layout · yellow</option></select>
       <div class="muted" style="font-size:12px">Try it first: <a href="/?look=classic" target="_blank" rel="noopener">1. Original</a> · <a href="/?look=green" target="_blank" rel="noopener">2. Green</a> · <a href="/?look=red" target="_blank" rel="noopener">3. Light red</a> · <a href="/?look=pink" target="_blank" rel="noopener">4. Pink</a> · <a href="/?look=blue" target="_blank" rel="noopener">5. Blue</a> · <a href="/?look=orange" target="_blank" rel="noopener">6. Orange</a> · <a href="/?look=yellow" target="_blank" rel="noopener">7. Yellow</a> · <a href="/?look=auto" target="_blank" rel="noopener">back to the saved theme</a></div></div>
       <div class="field" style="max-width:560px"><label for="st-lstyle">Little Artists page: how the children's drawings are shown</label><select id="st-lstyle" style="max-width:420px"><option value="A">1. Drawings taped down the sides (default)</option><option value="B">2. Living screen of drawings behind the headline</option><option value="C">3. Washing line + framed gallery wall</option><option value="base">4. Base: plain page, drawings in a simple gallery</option></select>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:6px 0"><input type="checkbox" id="st-lbg" style="width:auto"> Light background of children's drawings behind the whole Little Artists page (the order section always has it)</label>
         <div class="muted" style="font-size:12px">The drawings are listed in data/little-gallery.json. <a href="/#little-artists" target="_blank" rel="noopener">Open the Little Artists page</a> after saving.</div></div>
       <h3 style="margin:0;font-size:17px">Room photo for "On a wall"</h3>
       <div class="field" style="max-width:720px">
@@ -189,6 +190,7 @@ export async function showSettings() {
     TEXTS.forEach((t) => { $('st-' + t.k).value = row?.[t.k] ?? ''; });
     $('st-look').value = ['green', 'red', 'pink', 'blue', 'orange', 'yellow'].includes(row?.siteLook) ? row.siteLook : 'classic';
     $('st-lstyle').value = ['A', 'B', 'C', 'base'].includes(row?.littleStyle) ? row.littleStyle : 'A';
+    $('st-lbg').checked = row?.littleBg === true;
     { let ct = {}; try { ct = JSON.parse(row?.countryThemes || '{}') || {}; } catch { ct = {}; } $('st-ctOn').checked = ct.on !== false; $('st-ctFest').checked = ct.fest !== false; }
     { // Website languages: saved list, else the recommended set.
       const on = new Set(String(row?.siteLangs || '').split(',').map((x) => x.trim()).filter(Boolean).length ? String(row.siteLangs).split(',').map((x) => x.trim()) : DEFAULT_LANGS);
@@ -245,6 +247,7 @@ async function save() {
   for (const t of TEXTS) rec[t.k] = $('st-' + t.k).value.trim() || null;
   rec.siteLook = $('st-look').value;
   rec.littleStyle = $('st-lstyle').value;
+  rec.littleBg = $('st-lbg').checked;
   rec.countryThemes = JSON.stringify({ on: $('st-ctOn').checked, fest: $('st-ctFest').checked });
   try { localStorage.setItem('kalai-ct-cfg', rec.countryThemes); } catch { /* */ }
   rec.siteLangDefault = $('st-langDef').value || 'en';

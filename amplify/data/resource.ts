@@ -505,6 +505,7 @@ const schema = a.schema({
       orderLayout: a.string(), // Order Management order screen: original | a (tabs) | b (dashboard) | c (journey)
       instalments: a.string(), // '' (off) | Tabby | Tamara: shows "4 interest-free payments" on the website
       helpMode: a.string(), // Order Management "What next?" helper: on (opens with each order) | tab (folded) | off
+      littleBg: a.boolean(), // drawings background behind the whole Little Artists page (off by default; the order section always has it)
       littleStyle: a.string(), // Little Artists page: base | A (drawings taped down the sides, default) | B (living screen) | C (washing line + framed wall)
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),

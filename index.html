@@ -216,7 +216,7 @@ footer p{margin:2px 0}
 /* little artists */
 .kids{background:var(--gold-soft)}
 /* The order section: the drawings' wash under the theme colour (pink, green…), so it keeps the site's look. */
-.kids{--kv:color-mix(in srgb,var(--gold-soft) 80%,transparent);background:linear-gradient(var(--kv),var(--kv)),#fffaf3 url(/img/little-bg.jpg) repeat center top/1400px auto}
+.kids{--kv:color-mix(in srgb,var(--gold-soft) 72%,transparent);background:linear-gradient(var(--kv),var(--kv)),#fffaf3 url(/img/little-bg.jpg) repeat center top/1400px auto}
 :root[data-theme="dark"] .kids{background:var(--gold-soft)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .kids{background:var(--gold-soft)}}
 .join-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:18px}
@@ -394,11 +394,11 @@ html[data-skin="green"] .similar button{background:var(--surface);border:1px sol
 
 /* Little Artists page styles (Settings → Look & theme): A scattered (default), B living screen, C washing line + framed wall */
 #littlePage{position:relative;overflow:hidden}
-/* Background: a light wash of the children's drawings (img/little-bg.jpg, made from the gallery), so the page has their
-   colour and the text stays clear. Dark theme: the same, under a dark veil. */
-#littlePage{background:#fffaf3 url(/img/little-bg.jpg) repeat center top/1400px auto}
-:root[data-theme="dark"] #littlePage{background-image:linear-gradient(rgba(22,20,32,.9),rgba(22,20,32,.9)),url(/img/little-bg.jpg)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #littlePage{background-image:linear-gradient(rgba(22,20,32,.9),rgba(22,20,32,.9)),url(/img/little-bg.jpg)}}
+/* Background of the whole page: a light wash of the children's drawings (img/little-bg.jpg) — only when switched on in
+   Settings → Look & theme (html[data-lbg]). Dark theme: under a dark veil. */
+html[data-lbg] #littlePage{background:#fffaf3 url(/img/little-bg.jpg) repeat center top/1400px auto}
+:root[data-lbg][data-theme="dark"] #littlePage{background-image:linear-gradient(rgba(22,20,32,.9),rgba(22,20,32,.9)),url(/img/little-bg.jpg)}
+@media (prefers-color-scheme:dark){:root[data-lbg]:not([data-theme="light"]) #littlePage{background-image:linear-gradient(rgba(22,20,32,.9),rgba(22,20,32,.9)),url(/img/little-bg.jpg)}}
 .lp-scatter,.lp-screen,.lp-line,.lp-strip{display:none}
 .lp-tape{position:absolute;background:#fff;padding:7px;box-shadow:0 8px 18px rgba(0,0,0,.18)}
 .lp-tape::before{content:"";position:absolute;top:-10px;left:50%;width:64px;height:20px;margin-left:-32px;background:rgba(240,220,150,.85);transform:rotate(var(--t,3deg))}

@@ -507,15 +507,17 @@ def _(b):
     return errs
 
 
-@check('Little Artists: light background made of the children\'s drawings loads (order section and page)')
+@check('Little Artists: drawings background on the order section; on the whole page only when switched on in Settings (Anis, 28 Oct)')
 def _(b):
     pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
-    for sel in ['#littlePage', 'section.kids']:
-        bg = pg.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundImage")
-        need('little-bg.jpg' in bg, f'{sel} has no drawings background: {bg[:80]}')
+    bg = lambda sel: pg.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundImage")
+    need('little-bg.jpg' in bg('section.kids'), 'order section has no drawings background')
+    need('little-bg.jpg' not in bg('#littlePage'), 'whole page has the drawings background while the setting is off')
     ok = pg.evaluate("new Promise(r => { const i = new Image(); i.onload = () => r(i.naturalWidth); i.onerror = () => r(0); i.src = '/img/little-bg.jpg'; })")
     need(ok > 1000, 'background picture missing')
-    return errs
+    pg2, errs2 = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': [], 'site': {'id': 'site', 'littleBg': True}}, wait=2500, width=1300)
+    need('little-bg.jpg' in pg2.evaluate("getComputedStyle(document.querySelector('#littlePage')).backgroundImage"), 'setting on, but the whole page has no drawings background')
+    return errs + errs2
 
 
 @check('Little Artists order form: "Outside the UAE? Ask for the delivery price" like on the artworks (Anis, 28 Oct)')

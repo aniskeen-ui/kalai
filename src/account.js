@@ -63,6 +63,7 @@ let kuralSec = 10;
     }
     // Little Artists page style (Settings → Look & theme): base | A (default) | B | C.
     window.kalaiLittleStyle?.(st.littleStyle || 'A');
+    document.documentElement.toggleAttribute('data-lbg', st.littleBg === true); // drawings background on the whole page
     // Real room photo for "On a wall" (marked in Settings).
     try {
       const mk = st.roomMarks ? JSON.parse(st.roomMarks) : null;
