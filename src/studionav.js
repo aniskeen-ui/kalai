@@ -62,7 +62,8 @@ async function chainHtml(enquiryId, role) {
     const a = e.artistId && people?.find((p) => p.id === e.artistId);
     S.push({ k: 'artist', what: 'Artist makes it', name: e.artistName || a?.business || 'Siva Raja', href: a ? portalOf(a) : (e.artistId ? `/seller.html?view=${encodeURIComponent(e.artistId)}` : '/artist.html'), done: e.artistStage === 'SHIPPED', state: { STARTED: 'working', FINISHED: 'finished, not sent', SHIPPED: 'sent' }[e.artistStage] || (e.zohoPOId ? 'not started' : 'price / order') });
     const ib = sup(j.inbound, 'COURIER');
-    S.push({ k: 'inbound', what: 'Courier → frame shop', name: ib?.name || 'not allocated', href: ib?.href, done: e.artistStage === 'SHIPPED', state: j.inbound?.awb ? `AWB ${j.inbound.awb}` : '' });
+    const ibc = !ib && e.artistCourier ? (people?.find((p) => p.type === 'COURIER' && String(p.business || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(String(e.artistCourier).toLowerCase().replace(/[^a-z0-9]/g, ''))) || null) : null;
+    S.push({ k: 'inbound', what: 'Courier → frame shop', name: ib?.name || e.artistCourier || 'not allocated', href: ib?.href || (ibc ? portalOf(ibc) : ''), done: e.artistStage === 'SHIPPED', state: (j.inbound?.awb || e.artistAwb) ? `AWB ${j.inbound?.awb || e.artistAwb}${!ib && e.artistCourier ? ' · by the artist' : ''}` : '' });
   }
   if (j.printer || ['PHOTO', 'GIFT'].includes(e.kind)) { const p = sup(j.printer, 'PRINTER'); S.push({ k: 'printer', what: 'Print shop', name: p?.name || 'not given', href: p?.href, done: ['READY', 'COLLECTED'].includes(j.printer?.stage), state: (j.printer?.stage || '').toLowerCase() }); }
   if (e.kind !== 'LICENCE' && e.kind !== 'MARKET') { const f = sup(j.framer, 'FRAMER'); S.push({ k: 'framer', what: 'Frame shop', name: f?.name || 'not given', href: f?.href, done: ['READY', 'COLLECTED'].includes(j.framer?.stage), state: (j.framer?.stage || '').toLowerCase() }); }

@@ -747,10 +747,17 @@ function deliveryDocs(dj) {
 function inboundRow(e, j) {
   const ib = j.inbound, sent = e.artistStage === 'SHIPPED';
   const list = suppliers.filter((s) => s.type === 'COURIER');
+  // No courier allocated by the studio, but the artist typed one in their portal (courier + AWB): show that.
+  const typed = !ib && (e.artistCourier || e.artistAwb) ? { name: e.artistCourier || 'Courier', awb: e.artistAwb || '' } : null;
+  const nm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const typedId = typed ? (list.find((s) => nm(s.business) && (nm(s.business).includes(nm(typed.name)) || nm(typed.name).includes(nm(s.business))))?.id || '') : '';
+  const head = ib ? `<span class="muted">${esc(ib.name)}${ib.awb ? ` · AWB <span class="mono">${esc(ib.awb)}</span>` : ` · airway bill made when the artist marks it finished`}</span>`
+    : typed ? `<span class="muted"><b style="color:var(--fg)">${esc(typed.name)}</b>${typed.awb ? ` · AWB <span class="mono">${esc(typed.awb)}</span>` : ''} · entered by the artist${sent ? ` · sent ${esc(String(e.artistShippedAt || '').slice(0, 10))}` : ''}</span>`
+    : '<span class="muted">not allocated: the artist types the courier and AWB</span>';
   return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)" data-inbound>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → frame shop courier</b>${ib ? `<span class="muted">${esc(ib.name)}${ib.awb ? ` · AWB <span class="mono">${esc(ib.awb)}</span>` : ` · airway bill made when the artist marks it finished`}</span>` : '<span class="muted">not allocated: the artist types the courier and AWB</span>'}</div>
-    ${sent && ib?.awb ? '' : `<div class="three" style="align-items:end">
-      <div class="field"><label>Courier</label><select data-ib="sid"><option value="">${list.length ? 'Choose…' : 'none approved yet (Artists & sellers)'}</option>${list.map((s) => `<option value="${esc(s.id)}" ${ib?.supplierId === s.id ? 'selected' : ''}>${esc(s.business)}</option>`).join('')}</select></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → frame shop courier</b>${head}</div>
+    ${sent && (ib?.awb || typed?.awb) ? (typed ? '<span class="muted" style="font-size:12px">The parcel is on its way to the frame shop. To correct it, use “Correct courier / AWB” on the artist’s card.</span>' : '') : `<div class="three" style="align-items:end">
+      <div class="field"><label>Courier</label><select data-ib="sid"><option value="">${list.length ? 'Choose…' : 'none approved yet (Artists & sellers)'}</option>${list.map((s) => `<option value="${esc(s.id)}" ${(ib ? ib.supplierId === s.id : typedId === s.id) ? 'selected' : ''}>${esc(s.business)}</option>`).join('')}</select></div>
       <div class="field" style="grid-column:span 2"><label>Pickup address (blank = the artist's profile)</label><input data-ib="addr" maxlength="300" value="${esc(ib?.from?.address || '')}" placeholder="Artist's address for the courier"></div></div>
       <div class="three" style="align-items:end"><div class="field"><label>Artist name on the label</label><input data-ib="name" maxlength="120" value="${esc(ib?.from?.name || (e.artistId ? '' : 'Siva Raja'))}"></div><div class="field"><label>Artist phone</label><input data-ib="phone" maxlength="30" value="${esc(ib?.from?.phone || '')}"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-ibsave>${ib ? 'Update courier' : 'Allocate courier'}</button>${ib ? '<button type="button" class="btn small ghost" data-ibremove>Remove</button>' : ''}</div></div>`}
