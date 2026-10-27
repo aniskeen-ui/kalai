@@ -471,7 +471,7 @@ def _(b):
     return errs
 
 
-@check('Little Artists: Real / AI tabs show only the child\'s half or the machine\'s half of every pair, in the same frame (both by default)')
+@check('Little Artists: Real / AI tabs show only the child\'s half or the machine\'s half of every pair, in the same frame; a Both tab (default) shows both again')
 def _(b):
     pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
     rect = lambda sel: pg.evaluate(f"(() => {{ const r = document.querySelector('{sel}').getBoundingClientRect(); return [r.width, r.height, r.left]; }})()")
@@ -486,8 +486,24 @@ def _(b):
     c, i = clip(), img()
     need(abs(i[2] + i[0] / 2 - c[2]) < 2, 'AI tab does not show the right half')
     need(not pg.locator('#lp-vs figcaption .hl').first.is_visible(), '"Made with love" still shown under AI')
-    pg.click('#lp-vs [data-vs="ai"]'); pg.wait_for_timeout(200)
-    need(abs(clip()[0] - box0[0]) < 2, 'clicking the open tab again does not go back to both')
+    pg.click('#lp-vs [data-vs=""]'); pg.wait_for_timeout(200)
+    need(abs(clip()[0] - box0[0]) < 2, 'Both tab does not show both pictures again (Anis, 28 Oct)')
+    need(pg.get_attribute('#lp-vs [data-vs=""]', 'aria-pressed') == 'true', 'Both tab not marked as chosen')
+    return errs
+
+
+@check('Little Artists: clicking a Made-with-love pair opens the order form with the child\'s drawing in the frame')
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
+    fig = pg.locator('#lp-vs figure[data-kid]').nth(4)
+    want = fig.get_attribute('data-kid'); name = fig.locator('figcaption b').inner_text()
+    fig.scroll_into_view_if_needed(); fig.click(); pg.wait_for_timeout(1500)
+    shown = pg.evaluate("[...document.querySelectorAll('#kMount img')].map(i => i.getAttribute('src'))")
+    need(shown == [want], f'frame shows {shown}, wanted {want}')
+    need(name in pg.inner_text('#kMount .kbadge'), 'badge does not name the drawing')
+    need(pg.evaluate("location.hash") == '#kidsOrder', 'did not go to the order form')
+    broken = pg.evaluate("Promise.all([...document.querySelectorAll('#lp-vs figure[data-kid]')].map(f => new Promise(r => { const i = new Image(); i.onload = () => r(null); i.onerror = () => r(f.dataset.kid); i.src = f.dataset.kid; }))).then(x => x.filter(Boolean))")
+    need(not broken, f'missing child pictures: {broken}')
     return errs
 
 
