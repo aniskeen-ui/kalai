@@ -92,6 +92,7 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .warnline{font-size:12px;border-left:3px solid var(--gold);padding-left:8px}
 @media (max-width:480px){.three{grid-template-columns:1fr}}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}.awb-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 2px}.awb-box{border:1px solid var(--line,#ddd);border-radius:8px;padding:10px 12px;font-size:14px;margin:6px 0}
+.kindtag{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:2px 7px}.kindtag.coll{background:#e3edfb;color:#1c3d6e}.kindtag.comm{background:#fce4ee;color:#7a1f52}
 </style>
 <style>
 .alist{display:grid;gap:14px;max-width:820px;margin:0 auto}
@@ -260,13 +261,13 @@ body:has(#deskPane:not([hidden])) .wrapc{max-width:1240px} /* the artist desk us
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><img id="dPhoto" alt="" hidden style="width:44px;height:44px;object-fit:cover;border-radius:50%"><h2 id="dBiz" style="margin-right:auto"></h2><button class="btn ghost small" id="dProfile" type="button">My details</button><button class="btn" id="dNew" type="button">New listing</button></div>
       <div class="muted" id="dTerms" style="font-size:13px"></div>
     </div>
-    <div class="authtabs" role="tablist"><button type="button" id="tabProducts" aria-pressed="true">My products</button><button type="button" id="tabOrders" aria-pressed="false">Orders</button><button type="button" id="tabComm" aria-pressed="false" hidden>Commissions</button><button type="button" id="tabDesk" aria-pressed="false" hidden>Studio orders</button></div>
+    <div class="authtabs" role="tablist"><button type="button" id="tabProducts" aria-pressed="true">My products</button><button type="button" id="tabOrders" aria-pressed="false">Orders</button><button type="button" id="tabComm" aria-pressed="false" hidden>Orders to make</button><button type="button" id="tabDesk" aria-pressed="false" hidden>Studio orders</button></div>
     <div id="productsPane" style="display:grid;gap:12px">
       <div id="editBox" hidden></div>
       <div style="display:flex;gap:8px;align-items:center"><input id="lFind" type="search" placeholder="Find a listing: title, category" aria-label="Find a listing" style="max-width:320px"><span class="muted find-count" style="font-size:12px"></span></div>
       <div id="lList" style="display:grid;gap:8px"></div>
     </div>
-    <div id="commPane" hidden style="display:grid;gap:8px"><p class="muted" style="font-size:13px;margin:0">Commissions and artwork requests Kalai Art House has allocated to you. Give your price for the artwork itself; once the customer pays, the order is placed and the price is fixed. Then mark your progress and send it to our frame shop.</p><div id="cList" style="display:grid;gap:8px"></div></div>
+    <div id="commPane" hidden style="display:grid;gap:8px"><p class="muted" style="font-size:13px;margin:0">Works Kalai Art House has asked you to make: <b>Collection</b> (a work from the website, ordered by a customer) and <b>Commission</b> (made to order from the customer's photo or brief). Give your price for the artwork itself; once the customer pays, the order is placed and the price is fixed. Then mark your progress and send it to our frame shop.</p><div id="cList" style="display:grid;gap:8px"></div></div>
     <div id="ordersPane" hidden style="display:grid;gap:8px"><div id="oSum" class="muted" style="font-size:13px"></div><div id="oList" style="display:grid;gap:8px"></div></div>
     <div id="deskPane" hidden><p class="muted" style="font-size:13px;margin:0 0 6px">Kalai Art House's own orders for you: commissions and artworks to price, progress and send to the frame shop, and naming your works.</p><iframe id="deskFrame" title="Studio orders" style="width:100%;min-height:70vh;border:1px solid var(--line);border-radius:12px;background:var(--bg)"></iframe></div>
   </section>

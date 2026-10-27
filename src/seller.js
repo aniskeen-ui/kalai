@@ -406,7 +406,7 @@ async function loadComms() {
 }
 function drawComms() {
   const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length;
-  $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions';
+  $('tabComm').textContent = open ? `Orders to make (${open})` : 'Orders to make';
   if (!comms.length) { $('cList').innerHTML = '<p class="muted">Nothing allocated to you yet. We email you when we do.</p>'; return; }
   const price = (x) => (commCur === 'AED' ? x.artistPriceAed : x.artistPriceInr);
   $('cList').innerHTML = comms.map((x) => {
@@ -414,7 +414,7 @@ function drawComms() {
     const canPrice = !x.locked && !['CLOSED'].includes(x.stage);
     const canWork = x.ordered && !x.stopped && !x.onHold && x.progress !== 'SHIPPED';
     return `<article class="ocard" data-c="${esc(x.id)}">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(x.title)}</h3><span class="st ${x.stage === 'NEEDED' ? 'SUBMITTED' : x.stage === 'PAID' ? 'APPROVED' : ''}">${esc(x.label)}</span><span class="muted" style="margin-left:auto;font-family:var(--mono)">${esc(x.ref)} · ${esc(dd(x.createdAt))}</span></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="kindtag ${x.kind === 'COMMISSION' ? 'comm' : 'coll'}" title="${x.kind === 'COMMISSION' ? 'Made to order from the customer\'s photo or brief' : 'A work from the collection on the website'}">${x.kind === 'COMMISSION' ? 'Commission' : 'Collection'}</span><h3>${esc(x.title)}</h3><span class="st ${x.stage === 'NEEDED' ? 'SUBMITTED' : x.stage === 'PAID' ? 'APPROVED' : ''}">${esc(x.label)}</span><span class="muted" style="margin-left:auto;font-family:var(--mono)">${esc(x.ref)} · ${esc(dd(x.createdAt))}</span></div>
       ${x.imageKey ? `<img alt="${esc(x.title)}" data-okey="${esc(x.imageKey)}" style="max-width:200px;max-height:200px;object-fit:contain;border:1px solid var(--line);border-radius:4px;display:block">` : ''}
       ${x.studioNote ? `<div style="border-left:3px solid #c08a1e;background:#fff8e6;color:#3a2a05;border-radius:6px;padding:8px 10px;font-size:14px;white-space:pre-wrap"><b>Note from Kalai Art House</b><div>${esc(x.studioNote)}</div></div>` : ''}
       ${x.brief?.length ? `<div class="to">${x.brief.map((b) => `<div><b>${esc(b.k)}:</b> ${esc(b.v)}</div>`).join('')}</div>` : ''}
