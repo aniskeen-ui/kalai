@@ -227,6 +227,13 @@ table.costs tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .cg-webprice{font-size:12px;align-self:center;white-space:nowrap}
 .kstat{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:8px;padding:12px 14px;margin:0 0 14px;display:grid;gap:6px;font-size:14px}.kstat .kt{white-space:pre-line;font-size:15px}
 .old-msgs{margin-top:10px}.old-msgs>summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:10px}
+.pc-sim{margin:10px 0;border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:var(--surface);display:grid;gap:8px}
+.pc-simhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pc-simrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 210px;gap:8px;align-items:stretch}
+@media (max-width:900px){.pc-simrow{grid-template-columns:repeat(2,minmax(0,1fr))}.pc-simrule{grid-column:1/-1}}
+.pc-simbox{display:grid;gap:2px;text-align:left;padding:8px 10px;border:2px solid var(--line);border-radius:10px;background:var(--sunk);cursor:pointer;font:inherit;color:inherit;min-width:0}
+.pc-simbox span{font-size:12px;color:var(--muted)}.pc-simbox[aria-pressed="true"]{border-color:var(--gold);background:var(--surface);box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 25%,transparent)}
+.pc-simrule{display:grid;gap:4px;font-size:13px;align-content:start;min-width:0}.pc-simrule select{width:100%}.pc-simrule input{width:52px!important;padding:4px 6px}.pc-simedit summary{cursor:pointer;font-size:13px;font-weight:600}
 .marketline{font-size:12.5px;background:var(--sunk);border-left:3px solid var(--gold);padding:6px 9px;border-radius:4px;line-height:1.5}.warn-t{color:var(--kumkum)}.ok-t{color:var(--ok)}
 .warnline{font-size:12px;border-left:3px solid var(--gold);padding-left:8px}
 @media (max-width:480px){.three{grid-template-columns:1fr}}

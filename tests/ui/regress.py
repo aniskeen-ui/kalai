@@ -441,6 +441,36 @@ def _(b):
     return errs
 
 
+@check('Pricing: competitor simulation boxes 1–3 suggest a price from each UAE competitor, 4 mixes them, "Use" fills the website price')
+def _(b):
+    sellers = [dict(SELLERS[0]), dict(SELLERS[1], rateCard=json.dumps({'frames': {k: {'30×40': 50, '40×50': 60} for k in ['black', 'white', 'oak', 'walnut', 'gold']}, 'fixingIncluded': True}))]
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': sellers, 'items': [], 'listings': [], 'costing': [],
+            'products': [{'id': 'w1', 'title': 'Coconut Palm', 'size': '21 × 30 cm', 'medium': 'Watercolour on paper', 'imageKey': 'x.jpg', 'status': 'LIVE', 'kind': 'painting'}],
+            'aprices': [{'productId': 'w1', 'artistPrice': 3000, 'currency': 'INR'}]}
+    pg, errs = open_page(b, 'admin.html#pricing', seed, wait=3500)
+    pg.click('[data-f="ALL"]') if pg.locator('[data-f="ALL"]').count() else None
+    pg.click('[data-open="w1"]'); pg.wait_for_timeout(800)
+    need(pg.locator('.pc-simbox').count() == 4, f"{pg.locator('.pc-simbox').count()} simulation boxes")
+    names = pg.locator('.pc-simbox b').all_inner_texts()
+    need(names[:3] == ['1. Artezaar', '2. Gallery One', '3. Art Smiley'] and names[3] == '4. Mix', f'boxes: {names}')
+    # Box 1: Artezaar S ⃃650 at −10% = 585 → ⃃600 (above the cost-based price)
+    pg.click('[data-sim="0"]'); pg.wait_for_timeout(200)
+    need(pg.inner_text('[data-simp="black"]') == '600', f"Artezaar black {pg.inner_text('[data-simp=black]')}")
+    pg.click('[data-sim="2"]'); pg.wait_for_timeout(200)
+    art = int(pg.inner_text('[data-simp="black"]'))
+    # Mix: lowest = Art Smiley's 400 (or the cost floor), highest = Artezaar's 600
+    pg.select_option('#simRule', 'high'); pg.wait_for_timeout(200)
+    need(pg.inner_text('[data-simp="black"]') == '600', 'highest rule is not Artezaar')
+    pg.select_option('#simRule', 'low'); pg.wait_for_timeout(200)
+    need(int(pg.inner_text('[data-simp="black"]')) == art, 'lowest rule is not Art Smiley')
+    pg.select_option('#simRule', 'weighted'); pg.wait_for_timeout(200)
+    need(pg.locator('#simW input').count() == 3, 'no weight boxes for the weighted rule')
+    pg.click('[data-sim="0"]'); pg.wait_for_timeout(200); pg.click('#simUse'); pg.wait_for_timeout(300)
+    need(pg.input_value('[data-final="black"]') == '600', f"website price box {pg.input_value('[data-final=black]')}")
+    need(pg.evaluate("document.documentElement.scrollWidth") <= 1401, 'page scrolls sideways')
+    return errs
+
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):

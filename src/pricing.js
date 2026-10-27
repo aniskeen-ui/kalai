@@ -6,6 +6,7 @@
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
 import { parseCard, parcelPrice, setInrFx } from './ratecard.js';
+import { loadComp, drawSim } from './competitors.js';
 import { cleanTitle } from './title.js';
 
 const client = generateClient();
@@ -150,6 +151,7 @@ async function loadAll() {
     // Default suppliers (Pricing → Margin & charges); older Pricing pages saved the frame shop here.
     frameSource: base.defaults?.framer || base.pricing?.frameSource || 'cheapest', deliverySource: base.defaults?.delivery || 'cheapest' };
   market = { ...structuredClone(DEFAULT_MARKET), ...(base.market || {}) };
+  await loadComp(client);
   try {
     const sp = ((await client.models.SellerProfile.list({ limit: 500 })).data || []).filter((p) => p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));
     framers = sp.filter((p) => p.type === 'FRAMER');
@@ -343,6 +345,7 @@ function drawCalc(w) {
       <div class="marketline">Market check (${b.tier}, ${md === 'sk' ? 'sketch' : 'watercolour'}): Kalai band <b>${aed(band[0])}–${aed(band[1])}</b> · <span id="pcVerdict"></span><br>
         <span class="muted">Competitors, similar originals: Saatchi Art ${esc(mk?.saatchi || '')} · Dubai print shops (copies, not originals) ⃃ 125–400.</span>
         <div style="margin-top:4px"><button type="button" class="linkbtn" id="pcBand">Set the black-frame price to the middle of the band</button></div></div>
+      <div id="pcSim"></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn" type="button" id="pcApprove">${m ? 'Update prices on the website' : 'Approve and show on the website'}</button>
         ${m ? '<button class="btn ghost small" type="button" id="pcRemove">Remove price (back to "Ask for price")</button>' : ''}
@@ -381,6 +384,7 @@ function drawCalc(w) {
     const setFinals = (fn) => { STYLES.forEach((s) => { box.querySelector(`[data-final="${s.k}"]`).value = fn(s); }); check(); };
     $('pcUseProp').onclick = () => setFinals((s) => b.styles[s.k].price + lift);
     $('pcUseCost').onclick = () => setFinals((s) => b.styles[s.k].price);
+    drawSim($('pcSim'), { tier: b.tier, md, styles: STYLES, b, pct, now: (k) => basePrice(m, k), setFinals, client });
     if ($('pcUseNow')) $('pcUseNow').onclick = () => setFinals((s) => basePrice(m, s.k) ?? b.styles[s.k].price);
     $('pcBand').onclick = () => {
       // Lift every frame style by the same amount, so the black frame sits mid-band.
