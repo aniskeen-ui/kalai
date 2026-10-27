@@ -471,6 +471,26 @@ def _(b):
     return errs
 
 
+@check('Little Artists: Real / AI tabs show only the child\'s half or the machine\'s half of every pair, in the same frame (both by default)')
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
+    rect = lambda sel: pg.evaluate(f"(() => {{ const r = document.querySelector('{sel}').getBoundingClientRect(); return [r.width, r.height, r.left]; }})()")
+    box0 = rect('#lp-vs .vsbox'); clip = lambda: rect('#lp-vs .vsclip'); img = lambda: rect('#lp-vs .vsclip img')
+    need(abs(clip()[0] - box0[0]) < 2, 'default does not show both halves')
+    pg.click('#lp-vs [data-vs="real"]'); pg.wait_for_timeout(200)
+    c, i = clip(), img()
+    need(abs(rect('#lp-vs .vsbox')[1] - box0[1]) < 2, 'frame changed size')
+    need(abs(c[0] - box0[0] / 2) < 2 and abs(i[2] - c[2]) < 2, 'Real tab does not show the left (child) half')
+    need(not pg.locator('#lp-vs figcaption .r').first.is_visible(), '"Made by a machine" still shown under Real')
+    pg.click('#lp-vs [data-vs="ai"]'); pg.wait_for_timeout(200)
+    c, i = clip(), img()
+    need(abs(i[2] + i[0] / 2 - c[2]) < 2, 'AI tab does not show the right half')
+    need(not pg.locator('#lp-vs figcaption .hl').first.is_visible(), '"Made with love" still shown under AI')
+    pg.click('#lp-vs [data-vs="ai"]'); pg.wait_for_timeout(200)
+    need(abs(clip()[0] - box0[0]) < 2, 'clicking the open tab again does not go back to both')
+    return errs
+
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
