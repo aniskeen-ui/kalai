@@ -1653,8 +1653,12 @@ async function saveCosting(e) {
   };
   const existing = costings.get(e.id);
   // An empty artist-price box never wipes a price the artist (or you) already gave: Siva's order needs it.
-  if (inp.artistPriceInr == null && existing?.artistPriceInr != null) inp.artistPriceInr = existing.artistPriceInr;
-  if (inp.artistPriceAed == null && existing?.artistPriceAed != null) inp.artistPriceAed = existing.artistPriceAed;
+  let kept = existing;
+  if (inp.artistPriceInr == null && inp.artistPriceAed == null && existing?.artistPriceInr == null && existing?.artistPriceAed == null) {
+    try { kept = (await client.models.Costing.get({ enquiryId: e.id })).data || existing; } catch { /* keep what we have */ }
+  }
+  if (inp.artistPriceInr == null && kept?.artistPriceInr != null) inp.artistPriceInr = kept.artistPriceInr;
+  if (inp.artistPriceAed == null && kept?.artistPriceAed != null) inp.artistPriceAed = kept.artistPriceAed;
   const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
   // Artist price typed (or changed) here by the studio: record who entered it and when.
   if ((inp.artistPriceInr != null && Number(inp.artistPriceInr) !== Number(existing?.artistPriceInr ?? NaN)) || (inp.artistPriceAed != null && Number(inp.artistPriceAed) !== Number(existing?.artistPriceAed ?? NaN))) {
