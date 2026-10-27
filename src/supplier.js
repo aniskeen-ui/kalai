@@ -39,6 +39,12 @@ async function call(action, data) {
   if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
   return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
 }
+// The studio login with no supplier chosen: nothing of its own to edit, so ask to pick one.
+function studioNoPick() {
+  if (!(isAdmin() && !viewAs)) return false;
+  show('statusView'); $('statusBox').innerHTML = '<h2>Studio view</h2><p>Choose a frame shop, print shop or courier above to see and work in their portal (their frames, price list and details), exactly as they see it.</p>';
+  return true;
+}
 function show(view) {
   ['loginView', 'applyView', 'statusView', 'jobsView', 'ratesView', 'framesView'].forEach((v) => { $(v).hidden = v !== view; });
   $('signOutBtn').hidden = view === 'loginView';
@@ -201,6 +207,7 @@ function typeText() {
 // Approved suppliers (and the studio for them) update their details with the same form: name, contact, address, bank.
 let editingDetails = false;
 function openDetails() {
+  if (studioNoPick()) return;
   editingDetails = true;
   show('applyView'); fillApply();
   $('applyTitle').textContent = 'My details';
@@ -466,6 +473,7 @@ function readCountries() {
   return { rows: out, bad };
 }
 function openRates(back) {
+  if (studioNoPick()) return;
   ratesBack = back;
   const card = parseCard(profile), fr = profile.type === 'FRAMER';
   const pr = profile.type === 'PRINTER';
@@ -542,6 +550,7 @@ const urlCache = new Map();
 const imgUrl = (k) => { if (!urlCache.has(k)) urlCache.set(k, getUrl({ path: k, options: { expiresIn: 3600 } }).then((r) => r.url.toString()).catch(() => '')); return urlCache.get(k); };
 const STY = [...RC_STYLES, ['other', 'Other']];
 function openFrames(back) {
+  if (studioNoPick()) return;
   framesBack = back;
   try { frames = JSON.parse(profile.catalogue || '[]') || []; } catch { frames = []; }
   drawFrames(); show('framesView');
