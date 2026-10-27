@@ -792,7 +792,7 @@ function inboundRow(e, j) {
     : '<span class="muted">not allocated: the artist types the courier and AWB</span>';
   return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)" data-inbound>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → Frame shop</b>${head}</div>
-    ${sent && (ib?.awb || typed?.awb) ? (typed ? '<span class="muted" style="font-size:12px">The parcel is on its way to the frame shop. To correct it, use “Correct courier / AWB” on the artist’s card.</span>' : '') : `<div class="three" style="align-items:end">
+    ${sent && (ib?.awb || typed?.awb) ? (typed ? `<span class="muted" style="font-size:12px">${j.framer && j.framer.stage !== 'ASSIGNED' ? `Arrived: ${esc(j.framer.name)} has the artwork.` : 'The parcel is on its way to the frame shop.'} To correct the courier or AWB, use “Correct courier / AWB” on the artist’s card.</span>` : '') : `<div class="three" style="align-items:end">
       <div class="field"><label>Courier</label><select data-ib="sid"><option value="">${list.length ? 'Choose…' : 'none approved yet (Artists & sellers)'}</option>${list.map((s) => `<option value="${esc(s.id)}" ${(ib ? ib.supplierId === s.id : typedId === s.id) ? 'selected' : ''}>${esc(s.business)}</option>`).join('')}</select></div>
       <div class="field" style="grid-column:span 2"><label>Pickup address (blank = the artist's profile)</label><input data-ib="addr" maxlength="300" value="${esc(ib?.from?.address || '')}" placeholder="Artist's address for the courier"></div></div>
       <div class="three" style="align-items:end"><div class="field"><label>Artist name on the label</label><input data-ib="name" maxlength="120" value="${esc(ib?.from?.name || (e.artistId ? '' : 'Siva Raja'))}"></div><div class="field"><label>Artist phone</label><input data-ib="phone" maxlength="30" value="${esc(ib?.from?.phone || '')}"></div>
@@ -1240,7 +1240,7 @@ function shippingSection(e) {
     <legend>Delivery</legend>
     ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.deliveryMessage)}</div>` : ''}
     ${dj ? `<div style="font-size:14px"><b>${supLink(dj.name, dj.name) || esc(dj.name)}</b> (delivery partner)${dj.awb ? ` · AWB <span class="mono">${esc(dj.awb)}</span>` : ' · waiting for the pickup'}${dj.deliveredAt ? ` · delivered ${esc(day(dj.deliveredAt))}` : dj.pickedAt ? ` · picked up ${esc(day(dj.pickedAt))}` : ''}</div>
-      <div class="muted" style="font-size:12px">Filled in automatically from ${esc(dj.name)}'s portal (Picked up → Shipped, Delivered → Delivered). To use another courier, take the delivery job back under Frame shop &amp; delivery.</div>` : ''}
+      <div class="muted" style="font-size:12px">Filled in automatically from ${esc(dj.name)}'s portal (Picked up → Shipped, Delivered → Delivered). To use another courier, take the delivery job back in the Courier box (Frame shop → Customer).</div>` : ''}
     ${dj?.pod || dj?.deliveredAt ? '<div class="muted" style="font-size:12px">Proof of delivery: in the Courier box (Frame shop → Customer).</div>' : ''}
     <div class="two" ${dj ? 'hidden' : ''}>
       <div class="field"><label for="eCourierSel">Courier</label>
