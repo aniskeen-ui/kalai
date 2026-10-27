@@ -767,6 +767,15 @@ function inboundRow(e, j) {
 }
 function wireSuppliers(e) {
   const box = $('supplierBox'); if (!box) return;
+  // The artist may have typed the courier / AWB after this list was loaded: read the order fresh once and redraw.
+  if (['PRICE', 'COMMISSION'].includes(e.kind) && !jobsOf(e).inbound && !e.artistAwb && !e._ibFresh) {
+    e._ibFresh = true;
+    client.models.Enquiry.get({ id: e.id }).then((r) => {
+      const f = r?.data; if (!f || !(f.artistCourier || f.artistAwb)) return;
+      Object.assign(e, { artistCourier: f.artistCourier, artistAwb: f.artistAwb, artistStage: f.artistStage, artistShippedAt: f.artistShippedAt, artistFinishedAt: f.artistFinishedAt, artistStartedAt: f.artistStartedAt });
+      const b = $('supplierBox'); if (b) { b.outerHTML = supplierSection(e); wireSuppliers(e); }
+    }).catch(() => {});
+  }
   const v = (k) => box.querySelector(`[data-js="${k}"]`);
   box.querySelectorAll('[data-awbbox]').forEach((ab) => {
     const m = ab.querySelector('[data-awbmsg]');
