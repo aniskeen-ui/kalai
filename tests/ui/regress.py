@@ -342,6 +342,16 @@ def _(b):
     need("k: 'supInv'" in num and "source: 'external', ext: 'Supplier types their own'" in num, 'Settings default for supplier invoices is not External')
     return []
 
+
+@check('Artist desk: searching an order number finds it even under another tab (Price needed)')
+def _(b):
+    it = order(id='c8', ref='KA-261022-77QM', kind='COMMISSION', title='Commission: Pet portrait', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None)
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'costing': []}
+    pg, errs = open_page(b, 'artist.html', seed, wait=3000)
+    pg.fill('#qRef', '77QM'); pg.wait_for_timeout(700)
+    need('KA-261022-77QM' in pg.inner_text('#list'), 'order not found by search from the default tab')
+    return errs
+
 # ---------------------------------------------------------------- Every page loads without errors
 @check('All pages load without script errors')
 def _(b):

@@ -209,6 +209,8 @@ function render() {
   const list = (filter === 'NEEDED' ? needed
     : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage)).filter(stMatch)
     : items.filter(stMatch)).filter(found);
+  // An order number typed in the search box finds the order whichever tab it sits under (e.g. Price needed).
+  if (!list.length && $('qRef').value.trim()) list.push(...items.filter(found));
   if (!list.length) {
     $('list').innerHTML = `<p class="muted">${searching() ? 'Nothing matches your search. <button type="button" class="linkbtn" onclick="document.getElementById(\'qClear\').click()">Clear search</button>' : filter === 'NEEDED' ? 'Nothing to price right now.' : filter === 'OPEN' && $('qSt').value ? 'No orders with this status. <button type="button" class="linkbtn" onclick="var s=document.getElementById(\'qSt\');s.value=\'\';s.dispatchEvent(new Event(\'change\'))">Show all statuses</button>' : filter === 'OPEN' ? 'No orders yet. Orders appear here once a customer has paid.' : 'No enquiries yet.'}</p>`;
     return;
