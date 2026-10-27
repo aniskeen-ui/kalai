@@ -244,6 +244,16 @@ def _(b):
     need('ConditionExpression' in body and 'JOBS_READ' in body and 'ConditionalCheckFailedException' in body, 'saveJobs overwrites the whole job list again')
     return []
 
+
+@check('Little Artists: "Made with love · Made by a machine" pairs all load, no sideways scroll on a phone')
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=390)
+    pg.evaluate("document.querySelectorAll('#lp-vs img').forEach(i => i.loading = 'eager')"); pg.wait_for_timeout(2500)
+    n, broken = pg.evaluate("[document.querySelectorAll('#lp-vs img').length, [...document.querySelectorAll('#lp-vs img')].filter(i => !i.naturalWidth).map(i => i.src)]")
+    need(n >= 12, f'only {n} pairs'); need(not broken, f'missing pictures: {broken}')
+    need(pg.evaluate('document.documentElement.scrollWidth') <= 391, 'page scrolls sideways on a phone')
+    return errs
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
