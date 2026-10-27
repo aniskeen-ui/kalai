@@ -27,8 +27,8 @@ export function parseCard(p) {
 export function specOf(e, det) {
   // "Natural oak frame 50×70 cm, white mount": the mount colour is not the frame's.
   const t = `${det.Framing || ''} ${det.Frame || ''} ${det['Frame style'] || ''}`.toLowerCase().replace(/(white|cream|black)?\s*mount/g, '');
-  const style = /black/.test(t) ? 'black' : /white/.test(t) ? 'white' : /walnut/.test(t) ? 'walnut' : /gold/.test(t) ? 'gold' : /oak|wood|natural/.test(t) ? 'oak' : /unframed|no frame/.test(t) ? 'none' : 'black';
-  const m = String(det.Framing || det['Frame size'] || '').match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/);
+  const style = /black/.test(t) ? 'black' : /white/.test(t) ? 'white' : /walnut/.test(t) ? 'walnut' : /gold/.test(t) ? 'gold' : /oak|wood|natural|teak|mango|pine|bamboo/.test(t) ? 'oak' : /unframed|no frame/.test(t) ? 'none' : 'black';
+  const m = String(det.Framing || det['Frame size'] || (e.kind === 'COMMISSION' ? det.Size : '') || '').match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/);
   let size = m ? `${m[1]}×${m[2]}` : '';
   // Photo framing: the size the customer picked ("A4 (21 × 30 cm)", "50 × 70 cm").
   if (e.kind === 'PHOTO') { const z = String(det.Size || ''); const n = z.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/); size = /^A4/.test(z) ? 'A4' : /^A3/.test(z) ? 'A3' : n ? `${n[1]}×${n[2]}` : 'A4'; }

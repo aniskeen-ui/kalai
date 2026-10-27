@@ -187,6 +187,18 @@ def _(b):
     need(pg.input_value('#ePrice') == '104', f'price box: "{pg.input_value("#ePrice")}"')
     return errs
 
+
+@check('Commission costing: "Medium · 40 × 50 cm" → tier M, teak frame = wood, delivery to India → Outside UAE')
+def _(b):
+    it = order(id='c7', ref='KA-261022-77QM', kind='COMMISSION', title='Commission: Pet portrait (Watercolour)', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None,
+               deliveryCountry='India', deliveryEmirate='Tamil Nadu',
+               details=json.dumps({'Frame': 'Teak frame', 'Size': 'Medium · 40 × 50 cm', 'Style': 'Watercolour', 'Subject': 'Pet portrait'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [], 'items': [it], 'costing': [{'enquiryId': 'c7'}]}
+    pg, errs = open_page(b, 'admin.html#order=c7', seed)
+    need(pg.input_value('#cTier') == 'M', f'tier {pg.input_value("#cTier")} (should be M for Medium)')
+    need(pg.input_value('#cDel') == 'OUTSIDE', 'delivery to India still costed as UAE')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}

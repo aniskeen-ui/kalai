@@ -1045,6 +1045,9 @@ const ZONE_NAME = { A: 'GCC', B: 'South Asia', C: 'UK & Europe', D: 'USA, Canada
 function tierFromSize(e) {
   const d = parseDetails(e.details);
   const txt = [d.Size, d['Frame size'], d.Artwork, e.title].filter(Boolean).join(' ');
+  // The size the customer picked by name ("Medium · 40 × 50 cm") decides first.
+  const word = String(d.Size || '').match(/\b(small|medium|large)\b/i);
+  if (word) { const t = { small: 'S', medium: 'M', large: 'L' }[word[1].toLowerCase()]; if (rates.tiers[t]) return t; }
   const m = String(txt).match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)\s*cm/i);
   if (!m) return /\bA4\b/.test(txt) ? 'S' : /\bA3\b/.test(txt) ? 'M' : '';
   const long = Math.max(Number(m[1]), Number(m[2]));
@@ -1062,6 +1065,8 @@ function costingSection(e) {
   const artistOpts = `<option value="">Siva Raja · Artist desk (artist.html, anchorsiva@rediffmail.com)</option>${artists.map((a) => `<option value="${esc(a.id)}" data-name="${esc(a.business)}" data-country="${esc(a.country || 'UAE')}" ${a.id === e.artistId ? 'selected' : ''}>${esc(a.business)} · artist portal${a.email ? ` (${esc(a.email)})` : ''} (${esc(a.country || 'UAE')}${a.mediums ? ` · ${esc(a.mediums)}` : ''})</option>`).join('')}${e.artistId && !artists.some((a) => a.id === e.artistId) ? `<option value="${esc(e.artistId)}" selected>${esc(e.artistName || 'Artist')}</option>` : ''}`;
   // No tier saved yet: take it from the work's size (e.g. "28 × 40 cm" in Artwork / Size), so the costing shows a total straight away.
   const guess = c.sizeTier ? '' : tierFromSize(e);
+  // Not chosen yet: the delivery follows the order's address (India, UK… = outside the UAE).
+  const delOut = c.delivery ? c.delivery === 'OUTSIDE' : !!e.deliveryCountry && e.deliveryCountry !== 'UAE';
   const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${(c.sizeTier || guess) === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
   const fromSiva = c.artistAt
     ? `${c.artistBy && /^Kalai Art House/.test(c.artistBy) ? `Entered by you on ${esc(who)}’s behalf` : `From ${esc(c.artistBy || who)}`} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
@@ -1075,10 +1080,10 @@ function costingSection(e) {
     <div class="three">
       <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? '⃃' : '₹'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select>${guess ? '<span class="muted" style="font-size:11px">from the work\'s size: check, then Save</span>' : ''}</div>
-      <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
+      <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${!delOut ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${delOut ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
-    <div class="three" id="cDestBox" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}>${(() => { const d = destOf(e); return `<div class="field"><label for="cShipFrom">Ships from</label><select id="cShipFrom"><option value="UAE" ${d.from === 'UAE' ? 'selected' : ''}>UAE (Dubai)</option><option value="India" ${d.from === 'India' ? 'selected' : ''}>India (artist / Indian supplier)</option></select></div>${countryRegionHtml({ country: d.country, region: d.region, prefix: 'cDest', names: false })}`; })()}</div>
-    <div class="muted" style="font-size:12px" id="cDestNote" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}></div>
+    <div class="three" id="cDestBox" ${delOut ? '' : 'hidden'}>${(() => { const d = destOf(e); return `<div class="field"><label for="cShipFrom">Ships from</label><select id="cShipFrom"><option value="UAE" ${d.from === 'UAE' ? 'selected' : ''}>UAE (Dubai)</option><option value="India" ${d.from === 'India' ? 'selected' : ''}>India (artist / Indian supplier)</option></select></div>${countryRegionHtml({ country: d.country, region: d.region, prefix: 'cDest', names: false })}`; })()}</div>
+    <div class="muted" style="font-size:12px" id="cDestNote" ${delOut ? '' : 'hidden'}></div>
     <div class="muted" style="font-size:12px">${fromSiva}</div>
     <div class="field"><label for="cNote">Note to ${esc(who)} <span class="muted" style="font-weight:400;font-size:12px">· shown on the artist's order card and emailed to them${c.studioNoteAt ? `, last changed ${esc(when(c.studioNoteAt))}` : ''}</span></label><textarea id="cNote" rows="2" maxlength="1000" placeholder="e.g. Please sign at the bottom right; customer wants it before 5 Nov.">${esc(c.studioNote || '')}</textarea></div>
     <details ${c.framingOverride != null || c.indiaCourierOverride != null || c.localCourierOverride != null ? 'open' : ''}><summary>Overrides for this order (premium frame, oversized, abroad)</summary>
