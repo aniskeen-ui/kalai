@@ -9,7 +9,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // Documents you can set. ext = what "External" means for that document.
 const DOCS = [
-  { k: 'supInv', name: 'Supplier invoice (frame, print & delivery shops)', prefix: '', digits: 8, source: 'internal', ext: 'Supplier types their own', perSupplier: true },
+  { k: 'supInv', name: 'Supplier invoice (frame, print & delivery shops)', prefix: '', digits: 8, source: 'external', ext: 'Supplier types their own', perSupplier: true },
   { k: 'inv', name: 'Customer invoice (Zoho)', prefix: 'KAH-INV-', digits: 4, source: 'internal', ext: 'Zoho numbers it' },
   { k: 'cn', name: 'Credit note (Zoho)', prefix: 'KAH-CN-', digits: 4, source: 'internal', ext: 'Zoho numbers it' },
   { k: 'qt', name: 'Quote (Zoho)', prefix: 'KAH-QT-', digits: 4, source: 'external', ext: 'Zoho numbers it' },

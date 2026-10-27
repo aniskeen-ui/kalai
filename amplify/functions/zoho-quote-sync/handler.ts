@@ -68,7 +68,7 @@ const CREDIT_PREFIX = 'KAH-CN-';
 type SeriesDoc = { prefix: string; mode: 'alpha' | 'numeric'; source: 'internal' | 'external'; digits: number };
 type NumberSeries = { docs: Record<string, SeriesDoc>; sup: Record<string, { code: string; next: number; name?: string }>; counters?: Record<string, number> };
 const SERIES_DEF: Record<string, SeriesDoc> = {
-  supInv: { prefix: '', mode: 'alpha', source: 'internal', digits: 8 },
+  supInv: { prefix: '', mode: 'alpha', source: 'external', digits: 8 },
   inv: { prefix: INVOICE_PREFIX, mode: 'alpha', source: 'internal', digits: 4 },
   cn: { prefix: CREDIT_PREFIX, mode: 'alpha', source: 'internal', digits: 4 },
   qt: { prefix: 'KAH-QT-', mode: 'alpha', source: 'external', digits: 4 },

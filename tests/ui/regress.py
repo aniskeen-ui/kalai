@@ -240,6 +240,16 @@ def _(b):
     need(not bad, f'{len(bad)} place(s) read details as a plain string: use detStr()')
     return []
 
+
+@check('Supplier invoices: Zoho bill uses the supplier\'s own invoice number by default (Anis, 27 Oct)')
+def _(b):
+    root = os.path.dirname(os.path.dirname(HERE))
+    src = open(os.path.join(root, 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    num = open(os.path.join(root, 'src', 'numbers.js')).read()
+    need("supInv: { prefix: '', mode: 'alpha', source: 'external'" in src, 'server default for supplier invoices is not External')
+    need("k: 'supInv'" in num and "source: 'external', ext: 'Supplier types their own'" in num, 'Settings default for supplier invoices is not External')
+    return []
+
 # ---------------------------------------------------------------- Every page loads without errors
 @check('All pages load without script errors')
 def _(b):
