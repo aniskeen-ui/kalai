@@ -731,9 +731,39 @@ function supplierSection(e) {
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small" data-jobsend="${role}">${cur ? 'Update the job' : 'Send the job'}</button>${cur ? `<button type="button" class="btn small ghost" data-jobremove="${role}">Take it back</button>` : ''}<span class="muted" data-jobmsg="${role}" style="font-size:12px"></span></div>`}
     </div>`;
   };
-  return `<fieldset class="cost" id="supplierBox"><legend>Frame shop &amp; delivery</legend>
+  return `<fieldset class="cost" id="supplierBox"><legend>Artist, print shop, frame shop &amp; courier</legend>
     <div class="muted" style="font-size:12px">They see this order in their supplier portal: the photo, frame spec and size, your price, and the pickup and delivery addresses. Their steps update the order (Being framed, Shipped, Delivered) and their invoice becomes a Zoho bill.</div>
-    ${['PRICE', 'COMMISSION'].includes(e.kind) ? inboundRow(e, j) : ''}${gift ? row('printer', 'Print shop', 'PRINTER') + handover(j) : ''}${row('framer', 'Frame shop', 'FRAMER')}${row('delivery', `${gift && j.printer && !j.framer ? 'Print shop' : 'Frame shop'} → Customer <span class="muted" style="font-weight:400">(courier)</span>`, 'COURIER')}</fieldset>`;
+    ${flowStrip(e, j, gift)}
+    ${hasArtist(e) ? partyBox('🎨', 'Artist', artistBox(e)) : ''}
+    ${gift ? partyBox('🖨', 'Print shop', row('printer', 'Print shop', 'PRINTER')) : ''}
+    ${partyBox('🖼', 'Frame shop', row('framer', 'Frame shop', 'FRAMER'))}
+    ${partyBox('🚚', 'Courier', `${hasArtist(e) ? inboundRow(e, j) : handover(j)}${row('delivery', `${gift && j.printer && !j.framer ? 'Print shop' : 'Frame shop'} → Customer`, 'COURIER')}`)}</fieldset>`;
+}
+// One box per party (artist, print shop, frame shop, courier) and, above them, the flow for this kind of order.
+function partyBox(icon, title, body) {
+  return `<div style="border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:10px;background:var(--surface,#fff)"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">${icon} ${title}</div>${body}</div>`;
+}
+function flowStrip(e, j, gift) {
+  const ib = j.inbound || (e.artistAwb ? { name: e.artistCourier, awb: e.artistAwb } : null);
+  const node = (label, who, done, now) => `<span style="display:inline-flex;flex-direction:column;border:1px solid ${done ? '#2f7d4f' : now ? 'var(--k,#4f7a1d)' : 'var(--line)'};${now ? 'border-width:2px;' : ''}border-radius:8px;padding:4px 10px;background:var(--surface,#fff);line-height:1.25"><small style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">${done ? '✓ ' : ''}${label}</small><b style="font-size:13px">${esc(who)}</b></span>`;
+  const leg = (txt, done) => `<span style="display:inline-flex;flex-direction:column;align-items:center;font-size:11px;color:${done ? '#2f7d4f' : 'var(--muted)'}"><span>${esc(txt)}</span><span style="font-size:16px;line-height:1">⟶</span></span>`;
+  const fDone = ['READY', 'COLLECTED'].includes(j.framer?.stage), dDone = !!j.delivery?.deliveredAt || e.status === 'DELIVERED';
+  const parts = [];
+  if (hasArtist(e)) {
+    const aDone = e.artistStage === 'SHIPPED';
+    parts.push(node('Artist', artistOf(e), aDone, !aDone), leg(ib ? `${ib.name}${ib.awb ? ` · ${ib.awb}` : ''}` : 'courier?', aDone));
+  } else if (gift) {
+    const pDone = ['READY', 'COLLECTED'].includes(j.printer?.stage);
+    parts.push(node('Print shop', j.printer?.name || 'not chosen', pDone, !pDone), leg(j.printer?.stage === 'COLLECTED' ? 'collected' : 'frame shop collects', j.printer?.stage === 'COLLECTED'));
+  }
+  const aOk = hasArtist(e) ? e.artistStage === 'SHIPPED' : gift ? ['READY', 'COLLECTED'].includes(j.printer?.stage) : true;
+  parts.push(node('Frame shop', j.framer?.name || 'not chosen', fDone, aOk && !fDone), leg(j.delivery ? `${j.delivery.name}${j.delivery.awb ? ` · ${j.delivery.awb}` : ''}` : 'courier?', dDone), node('Customer', e.customerName || e.customerCode || 'customer', dDone, fDone && !dDone));
+  return `<div style="margin-top:8px"><div class="muted" style="font-size:12px">Flow for a ${esc(KIND[e.kind] || 'order')} order: ${hasArtist(e) ? 'Artist → Frame shop → Customer' : 'Print shop → Frame shop → Customer'}</div><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:6px">${parts.join('')}</div></div>`;
+}
+function artistBox(e) {
+  const st = { STARTED: 'working on it', FINISHED: 'finished, not sent yet', SHIPPED: `sent to the frame shop${e.artistShippedAt ? ` ${String(e.artistShippedAt).slice(0, 10)}` : ''}` }[e.artistStage] || (e.zohoPOId ? 'not started yet' : 'price / order not placed yet');
+  const href = e.artistId ? `/seller.html?view=${encodeURIComponent(e.artistId)}` : '/artist.html';
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:6px 0"><a href="${href}"><b>${esc(artistOf(e))}</b></a><span class="muted">· ${esc(st)}</span></div>`;
 }
 // Print shop → Frame shop: the frame shop collects the print from the print shop (it marks it Collected in its portal).
 function handover(j) {
@@ -761,7 +791,7 @@ function inboundRow(e, j) {
     : typed ? `<span class="muted"><b style="color:var(--fg)">${esc(typed.name)}</b>${typed.awb ? ` · AWB <span class="mono">${esc(typed.awb)}</span>` : ''} · entered by the artist${sent ? ` · sent ${esc(String(e.artistShippedAt || '').slice(0, 10))}` : ''}</span>`
     : '<span class="muted">not allocated: the artist types the courier and AWB</span>';
   return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)" data-inbound>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → Frame shop <span class="muted" style="font-weight:400">(courier)</span></b>${head}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → Frame shop</b>${head}</div>
     ${sent && (ib?.awb || typed?.awb) ? (typed ? '<span class="muted" style="font-size:12px">The parcel is on its way to the frame shop. To correct it, use “Correct courier / AWB” on the artist’s card.</span>' : '') : `<div class="three" style="align-items:end">
       <div class="field"><label>Courier</label><select data-ib="sid"><option value="">${list.length ? 'Choose…' : 'none approved yet (Artists & sellers)'}</option>${list.map((s) => `<option value="${esc(s.id)}" ${(ib ? ib.supplierId === s.id : typedId === s.id) ? 'selected' : ''}>${esc(s.business)}</option>`).join('')}</select></div>
       <div class="field" style="grid-column:span 2"><label>Pickup address (blank = the artist's profile)</label><input data-ib="addr" maxlength="300" value="${esc(ib?.from?.address || '')}" placeholder="Artist's address for the courier"></div></div>
@@ -1211,7 +1241,7 @@ function shippingSection(e) {
     ${e.deliveryMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.deliveryMessage)}</div>` : ''}
     ${dj ? `<div style="font-size:14px"><b>${supLink(dj.name, dj.name) || esc(dj.name)}</b> (delivery partner)${dj.awb ? ` · AWB <span class="mono">${esc(dj.awb)}</span>` : ' · waiting for the pickup'}${dj.deliveredAt ? ` · delivered ${esc(day(dj.deliveredAt))}` : dj.pickedAt ? ` · picked up ${esc(day(dj.pickedAt))}` : ''}</div>
       <div class="muted" style="font-size:12px">Filled in automatically from ${esc(dj.name)}'s portal (Picked up → Shipped, Delivered → Delivered). To use another courier, take the delivery job back under Frame shop &amp; delivery.</div>` : ''}
-    ${dj?.pod || dj?.deliveredAt ? '<div class="muted" style="font-size:12px">Proof of delivery: under Frame shop &amp; delivery → Delivery.</div>' : ''}
+    ${dj?.pod || dj?.deliveredAt ? '<div class="muted" style="font-size:12px">Proof of delivery: in the Courier box (Frame shop → Customer).</div>' : ''}
     <div class="two" ${dj ? 'hidden' : ''}>
       <div class="field"><label for="eCourierSel">Courier</label>
         <select id="eCourierSel">
