@@ -1,0 +1,3 @@
+export function uploadData({path,data}){const p=typeof path==='function'?path({identityId:'id-1'}):path;try{(window.__blobs||={})[p]=URL.createObjectURL(data)}catch{}return{result:Promise.resolve({path:p})}}
+export async function getUrl({path,options}){if(options&&options.validateObjectExistence&&!(window.__blobs&&window.__blobs[path]))throw new Error('NotFound');return{url:new URL((window.__blobs&&window.__blobs[path])||((/sign/.test(String(path))?location.origin+'/sign.png':null)||(/art\d+\.jpg$/.test(String(path))?location.origin+'/'+String(path).split('/').pop():null)||location.origin+'/art'+(1+[...String(path)].reduce((a,c)=>a+c.charCodeAt(0),0)%8)+'.jpg'))}}
+export async function remove(){return{}}

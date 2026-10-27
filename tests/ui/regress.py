@@ -1,0 +1,191 @@
+"""Regression checks for the Kalai screens, run before every push to main / production.
+
+  python3 tests/ui/regress.py            # builds the stubbed site, runs every check, exits 1 on any failure
+
+Each check seeds the stub database (localStorage 'stubdb'), opens a page and asserts what a person would see.
+When a bug is found (in testing or by Anis), add a check here so it can't come back.
+"""
+import json, os, socket, subprocess, sys, tempfile, threading, time, traceback
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from functools import partial
+from playwright.sync_api import sync_playwright
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = tempfile.mkdtemp(prefix='kalai-ui-')
+subprocess.run([sys.executable, os.path.join(HERE, 'build.py'), OUT], check=True, stdout=subprocess.DEVNULL)
+sock = socket.socket(); sock.bind(('127.0.0.1', 0)); PORT = sock.getsockname()[1]; sock.close()
+srv = ThreadingHTTPServer(('127.0.0.1', PORT), partial(type('Q', (SimpleHTTPRequestHandler,), {'log_message': lambda *a: None}), directory=OUT))
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+BASE = f'http://127.0.0.1:{PORT}'
+
+ADMIN = {'admin@kalai.com': {'password': 'S', 'confirmed': True, 'groups': ['ADMINS']}}
+SELLERS = [
+    {'id': 'c1', 'type': 'COURIER', 'status': 'APPROVED', 'business': 'ARAMAX', 'rateCard': json.dumps({'uae': {'Dubai': {'s1': 22, '40×50': 35}}})},
+    {'id': 'f1', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'Rafi Frames', 'rateCard': '{}'},
+    {'id': 'p1', 'type': 'PRINTER', 'status': 'APPROVED', 'business': 'Print Hub', 'rateCard': '{}'},
+]
+def order(**kw):
+    o = {'id': 'e1', 'ref': 'KA-261020-YWXE', 'kind': 'PRICE', 'title': 'Lily Pond Steps', 'status': 'FRAMING', 'quotedPrice': 500,
+         'createdAt': '2026-10-21T08:00:00Z', 'zohoInvoiceId': 'x', 'customerName': 'Ponns',
+         'details': json.dumps({'Artwork': 'Lily Pond Steps (Watercolour on paper, 38 × 28 cm)', 'Framing': 'Framed, ready to hang', 'Size': 'Medium · 40 × 50 cm'})}
+    o.update(kw); return o
+
+RESULTS = []
+def check(name):
+    def wrap(fn):
+        RESULTS.append((name, fn)); return fn
+    return wrap
+
+def open_page(b, path, seed, wait=2500, width=1400):
+    pg = b.new_page(viewport={'width': width, 'height': 1000}); errs = []
+    pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.goto(f'{BASE}/{path.split("#")[0].split("?")[0]}')
+    pg.evaluate(f"localStorage.clear();localStorage.setItem('stubdb',JSON.stringify({json.dumps(seed)}))")
+    pg.goto(f'{BASE}/{path}'); pg.reload(); pg.wait_for_timeout(wait)
+    return pg, errs
+
+def need(cond, msg):
+    if not cond: raise AssertionError(msg)
+
+# ---------------------------------------------------------------- Order Management: supplier boxes
+@check('Order: artist-typed courier + AWB shows in Artist → Frame shop (was blank)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,
+            'items': [order(artistStage='SHIPPED', artistCourier='DHL', artistAwb='DHL0000007', artistShippedAt='2026-10-27T06:00:00Z')],
+            'costing': [{'enquiryId': 'e1', 'supplierJobs': json.dumps({'framer': {'supplierId': 'f1', 'name': 'Rafi Frames', 'stage': 'READY', 'price': 75}})}]}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed)
+    t = pg.inner_text('#supplierBox')
+    need('DHL0000007' in t and 'entered by the artist' in t, 'artist AWB not shown in the courier box')
+    need('Arrived' in t, 'artist parcel should show Arrived once the frame shop has it')
+    need('not allocated: the artist types' not in t, 'still says not allocated')
+    return errs
+
+@check('Order: one box per party + flow by order kind (Collection)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [order()], 'costing': []}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed)
+    t = pg.inner_text('#supplierBox')
+    for w in ['Artist → Frame shop → Customer', '🎨 ARTIST', '🖼 FRAME SHOP', '🚚 COURIER', 'Frame shop → Customer']:
+        need(w in t, f'missing "{w}"')
+    need('PRINT SHOP' not in t, 'Collection order should not show a print shop box')
+    return errs
+
+@check('Order: Little Artists flow Print shop → Frame shop → Customer')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,
+            'items': [order(id='g1', kind='GIFT', title='Little Artists', details='{}')],
+            'costing': [{'enquiryId': 'g1', 'supplierJobs': json.dumps({'printer': {'supplierId': 'p1', 'name': 'Print Hub', 'stage': 'READY', 'price': 20}, 'framer': {'supplierId': 'f1', 'name': 'Rafi Frames', 'stage': 'ACCEPTED', 'price': 75}})}]}
+    pg, errs = open_page(b, 'admin.html#order=g1', seed)
+    t = pg.inner_text('#supplierBox')
+    for w in ['Print shop → Frame shop → Customer', 'PRINT SHOP', 'Print shop → Frame shop', 'collects it from Print Hub']:
+        need(w in t, f'missing "{w}"')
+    need('🎨 ARTIST' not in t, 'Little Artists order should not show an artist box')
+    return errs
+
+@check('Order: cheapest courier pre-selected with price even without an address')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [order()],
+            'costing': [{'enquiryId': 'e1', 'supplierJobs': json.dumps({'framer': {'supplierId': 'f1', 'name': 'Rafi Frames', 'stage': 'READY', 'price': 75}})}]}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed)
+    need(pg.input_value('[data-js="delivery-sid"]') == 'c1', 'ARAMAX not pre-selected')
+    need(pg.input_value('[data-js="delivery-price"]') == '35', 'courier price not prefilled')
+    need('Dubai (assumed' in pg.inner_text('#supplierBox'), 'no "Dubai (assumed)" note')
+    return errs
+
+@check('Order: a failed "Send the job" shows a clear red error (was easy to miss)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [order()], 'costing': [], 'listings': []}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed)
+    pg.select_option('[data-js="framer-sid"]', 'f1'); pg.evaluate("localStorage.setItem('failNext','1')")
+    pg.locator('[data-jobsend="framer"]').click(); pg.wait_for_timeout(1200)
+    m = pg.locator('[data-jobmsg="framer"]')
+    need('Not sent' in m.inner_text(), f'no clear failure message: "{m.inner_text()}"')
+    need(m.evaluate('e => e.style.fontWeight') == '700', 'failure message not bold/red')
+    return errs
+
+# ---------------------------------------------------------------- Supplier portal
+def sup_seed(session, jobs):
+    users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
+    sellers = [dict(SELLERS[1], id='rafi@x.com')] + SELLERS
+    return {'users': users, 'session': session, 'sellers': sellers, 'items': [], 'supJobs': jobs, 'listings': []}
+JOB = {'id': 'e1', 'role': 'framer', 'ref': 'KA-261020-YWXE', 'title': 'Lily Pond Steps', 'kind': 'PRICE', 'stage': 'READY', 'price': 75, 'specs': [], 'from': None, 'to': {'name': 'Ponns', 'address': 'Al Barsha'}}
+
+@check('Supplier: invoiced frame still waiting for pickup stays in To do')
+def _(b):
+    pg, errs = open_page(b, 'supplier.html', sup_seed('rafi@x.com', [dict(JOB, invoiceNo='T-RF1', invoiceAmt=75)]))
+    need('KA-261020-YWXE' in pg.inner_text('#jList'), 'invoiced READY job dropped out of To do')
+    return errs
+
+@check('Supplier: order search box + drop-down filter the jobs')
+def _(b):
+    jobs = [JOB, dict(JOB, id='e2', ref='KA-261025-AAAA', title='Other work', to={'name': 'Zed', 'address': 'Marina'})]
+    pg, errs = open_page(b, 'supplier.html', sup_seed('rafi@x.com', jobs))
+    need(pg.locator('#jPick option').count() == 3, 'order drop-down not filled')
+    pg.fill('#jQ', 'zed'); pg.wait_for_timeout(300)
+    t = pg.inner_text('#jList')
+    need('KA-261025-AAAA' in t and 'KA-261020-YWXE' not in t, 'search did not filter')
+    return errs
+
+@check('Supplier: non-admin never sees the studio bar')
+def _(b):
+    pg, errs = open_page(b, 'supplier.html', sup_seed('rafi@x.com', [JOB]))
+    need(not pg.is_visible('#adminBar'), 'studio bar visible to a supplier')
+    need(pg.locator('.sn-bar').count() == 0, 'studio drop-downs present for a supplier')
+    return errs
+
+@check('Supplier: admin sees the studio bar marked Admin only; sign-out hides it')
+def _(b):
+    pg, errs = open_page(b, 'supplier.html', sup_seed('admin@kalai.com', [JOB]))
+    need(pg.is_visible('#adminBar') and 'Admin only' in pg.inner_text('#adminBar'), 'admin bar / Admin only tag missing')
+    pg.click('#signOutBtn'); pg.wait_for_timeout(500)
+    need(not pg.is_visible('#adminBar'), 'studio bar still visible after sign-out')
+    return errs
+
+@check('Supplier: studio login with no supplier chosen cannot open an empty My frames')
+def _(b):
+    pg, errs = open_page(b, 'supplier.html', sup_seed('admin@kalai.com', [JOB]))
+    btn = pg.locator('#jTabs [data-t="frames"]')
+    if btn.count() and btn.is_visible():
+        btn.click(); pg.wait_for_timeout(400)
+        need(not pg.is_visible('#framesView'), 'empty My frames opened for the studio login')
+    return errs
+
+# ---------------------------------------------------------------- Artist desk
+@check('Artist desk: paper size taken from the artwork (was "not stated")')
+def _(b):
+    it = order(status='PAID', zohoPOId='po1', title='Lily Pond Steps (Watercolour on paper, 38 × 28 cm)')
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'costing': [{'enquiryId': 'e1', 'artistPriceInr': 15000}]}
+    pg, errs = open_page(b, 'artist.html', seed, wait=3000)
+    t = pg.inner_text('body')
+    need('Paper size: not stated' not in t, 'paper size still "not stated"')
+    need('38 × 28 cm' in t, 'paper size 38 × 28 cm not shown')
+    return errs
+
+# ---------------------------------------------------------------- Every page loads without errors
+@check('All pages load without script errors')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [order()], 'costing': [], 'listings': []}
+    bad = []
+    for p in ['index.html', 'admin.html', 'supplier.html', 'artist.html', 'seller.html']:
+        pg, errs = open_page(b, p, seed, wait=2000)
+        bad += [f'{p}: {e}' for e in errs]; pg.close()
+    return bad
+
+def main():
+    failed = 0
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        for name, fn in RESULTS:
+            try:
+                errs = fn(b) or []
+                if errs: raise AssertionError('script errors: ' + ' | '.join(errs[:3]))
+                print(f'  ✓ {name}')
+            except Exception as ex:
+                failed += 1
+                print(f'  ✗ {name}\n      {ex if isinstance(ex, AssertionError) else traceback.format_exc(limit=2)}')
+        b.close()
+    srv.shutdown()
+    print(f'\n{len(RESULTS) - failed}/{len(RESULTS)} checks passed')
+    sys.exit(1 if failed else 0)
+
+main()
