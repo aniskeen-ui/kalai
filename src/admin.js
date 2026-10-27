@@ -997,7 +997,7 @@ function costingSection(e) {
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}${artNo(e) ? ` <button type="button" class="linkbtn" data-openprice="${esc(artNo(e))}" style="font-size:12px;margin-left:8px" title="Open this artwork in Pricing">Price calculation for ${esc(artNo(e))} →</button>` : ''}</legend>
     ${rates.saved ? '' : '<div class="muted warnline">Margin &amp; charges are not saved yet: set them under <b>Pricing → Margin &amp; charges</b>.</div>'}
     <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
-      <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Commissions in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
+      <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Orders to make in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">
       <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? '⃃' : '₹'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select></div>
@@ -2340,7 +2340,7 @@ async function showDetailBody(e) {
       curAed = !!$('cArtist').value && (o.dataset.country || 'UAE') !== 'India';
       $('cInrLabel').textContent = `Artist price (${curAed ? '⃃' : '₹'})`;
       $('cInr').value = '';
-      $('cArtistNote').textContent = $('cArtist').value ? `Save to allocate to ${o.dataset.name}: they get an email and see it under Commissions in their portal (price in ${curAed ? '⃃' : '₹'}).` : 'Siva sees it on his Artist desk.';
+      $('cArtistNote').textContent = $('cArtist').value ? `Save to allocate to ${o.dataset.name}: they get an email and see it under Orders to make in their portal (price in ${curAed ? '⃃' : '₹'}).` : 'Siva sees it on his Artist desk.';
       renderCost();
     });
   }
