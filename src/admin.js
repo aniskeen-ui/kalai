@@ -1653,6 +1653,20 @@ async function mailNote(e, oldSt, newSt, prevMsg) {
   if ((e.adminMessage || '') && (e.adminMessage || '') !== prevMsg) return `Your message was emailed ${to}.`;
   return `No email this time (status and message unchanged). To send it anyway, use “Email the customer again” below.`;
 }
+/** After the artist's order is placed the price is fixed, but the shipping plan (UAE / outside, ships from, destination,
+ *  frame shop) can still change: save just that part of the costing. */
+async function saveShipping(e) {
+  if (!$('cDel')) return;
+  const existing = costings.get(e.id);
+  let costs = {}; try { const raw = existing?.costs; costs = (typeof raw === 'string' ? JSON.parse(raw) : raw) || {}; if (typeof costs === 'string') costs = JSON.parse(costs); } catch { costs = {}; }
+  const delivery = $('cDel').value === 'OUTSIDE' ? 'OUTSIDE' : 'UAE';
+  const d = destOf(e);
+  const next = { ...costs, framerId: estCosts(e).framingFromId || costs.framerId || null, ...(delivery === 'OUTSIDE' ? { destCountry: d.country, destRegion: d.region || null, shipFrom: d.from } : {}) };
+  const rec = { enquiryId: e.id, delivery, costs: JSON.stringify(next) };
+  const res = existing ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec);
+  if (res.errors?.length) throw new Error(res.errors[0].message);
+  costings.set(e.id, { ...(existing || {}), ...(res.data || {}), ...rec });
+}
 async function saveCosting(e) {
   const { local, ...inp } = readCosting();
   const r = calc({ ...inp, local }, n(finalPriceStr()));
@@ -2643,7 +2657,7 @@ async function showDetailBody(e) {
       || (locked && hasArtist(e) && (!e.zohoPOId || (invNo && invNo !== (e.artistInvoiceNo || '')) || (paidRef && paidRef !== (e.artistPaidRef || ''))));
     const rw = readRework(e);
     try {
-      if (costingChanged) await saveCosting(e);
+      if (costingChanged) await saveCosting(e); else if ($('costing') && e.zohoPOId) await saveShipping(e);
       if ($('cNote') && $('cNote').value.trim() !== (costings.get(e.id)?.studioNote || '')) {
         const note = $('cNote').value.trim(), cur = costings.get(e.id);
         const rec = { enquiryId: e.id, studioNote: note || null, studioNoteAt: new Date().toISOString() };

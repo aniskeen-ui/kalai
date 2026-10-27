@@ -230,6 +230,22 @@ def _(b):
     need('Customs' not in out or '⃃ 0' in out.split('Customs')[1][:20], 'UAE customs charged on an India-to-India order')
     return errs
 
+
+@check('After Siva\'s order is placed, "Ships from" can still be changed and saved (it reverted to UAE)')
+def _(b):
+    it = order(id='c12', ref='KA-261022-77QM', kind='COMMISSION', title='Commission', status='PAID', quotedPrice=1875, zohoInvoiceId='x', zohoPOId='po',
+               deliveryCountry='India', deliveryEmirate='Tamil Nadu', details=json.dumps({'Frame': 'Teak frame', 'Size': 'Medium · 40 × 50 cm'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [], 'items': [it],
+            'costing': [{'enquiryId': 'c12', 'artistPriceInr': 12000, 'delivery': 'OUTSIDE', 'sizeTier': 'M', 'costs': json.dumps({'shipFrom': 'UAE', 'destCountry': 'India'})}]}
+    pg, errs = open_page(b, 'admin.html#order=c12', seed)
+    pg.select_option('#ePayMethod', 'OTHER'); pg.fill('#ePayRef', 'R')
+    pg.select_option('#cShipFrom', 'India'); pg.click('#eSave'); pg.wait_for_timeout(2500)
+    c = pg.evaluate("JSON.parse(localStorage.stubdb).costing[0]")
+    costs = json.loads(c['costs']) if isinstance(c.get('costs'), str) else c.get('costs')
+    need(costs.get('shipFrom') == 'India', f'ships from saved as {costs.get("shipFrom")}')
+    need(c.get('artistPriceInr') == 12000, 'artist price changed')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
