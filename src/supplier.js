@@ -245,6 +245,7 @@ async function loadJobs() {
   try { jobs = (await call('jobs')).jobs || []; drawJobs(); } catch (ex) { $('jList').innerHTML = `<p class="err">${esc(ex.message)}</p>`; }
 }
 $('jReload').onclick = loadJobs;
+$('jQ').oninput = () => drawJobs(); $('jPick').onchange = () => drawJobs(); $('jClear').onclick = () => { $('jQ').value = ''; $('jPick').value = ''; drawJobs(); };
 $('jTabs').querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { if (b.dataset.t === 'details') { openDetails(); return; } if (b.dataset.t === 'rates') { openRates('jobsView'); return; } if (b.dataset.t === 'frames') { openFrames('jobsView'); return; } tab = b.dataset.t; $('jTabs').querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawJobs(); }; });
 
 function addr(x) { return x ? `<b>${esc(x.name)}</b>${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}${x.address ? `<br>${esc(x.address)}` : ''}` : '–'; }
@@ -334,9 +335,18 @@ function jobCard(j) {
     <div class="err" data-msg></div>
   </article>`;
 }
+// Search box + order drop-down above the jobs (order no., title, customer, addresses, AWB).
+const jobText = (j) => [j.ref, j.title, j.kind, j.awb, j.label?.awb, j.to?.name, j.to?.address, j.from?.name, j.artist?.awb, j.artist?.courier, j.note, j.invoiceNo].filter(Boolean).join(' ').toLowerCase();
 function drawJobs() {
-  const list = jobs.filter((j) => (tab === 'all' ? true : tab === 'done' ? isDone(j) : !isDone(j)));
-  $('jList').innerHTML = list.length ? list.map(jobCard).join('') : `<div class="sbox"><p class="muted" style="margin:0">${tab === 'open' ? 'No open jobs right now. We email you when there is a new one.' : 'Nothing here yet.'}</p></div>`;
+  const inTab = jobs.filter((j) => (tab === 'all' ? true : tab === 'done' ? isDone(j) : !isDone(j)));
+  const pick = $('jPick'), q = ($('jQ')?.value || '').trim().toLowerCase();
+  if (pick) {
+    const cur = pick.value, seen = new Set();
+    pick.innerHTML = `<option value="">All orders (${inTab.length})</option>` + inTab.filter((j) => !seen.has(j.ref) && seen.add(j.ref)).map((j) => `<option value="${esc(j.ref)}">${esc(j.ref)} · ${esc(String(j.title || '').slice(0, 60))}${j.to?.name ? ` · ${esc(j.to.name)}` : ''}</option>`).join('');
+    pick.value = seen.has(cur) ? cur : '';
+  }
+  const list = inTab.filter((j) => (!pick?.value || j.ref === pick.value) && (!q || q.split(/\s+/).every((w) => jobText(j).includes(w))));
+  $('jList').innerHTML = list.length ? list.map(jobCard).join('') : `<div class="sbox"><p class="muted" style="margin:0">${($('jQ')?.value || $('jPick')?.value) && inTab.length ? 'No order matches the search.' : tab === 'open' ? 'No open jobs right now. We email you when there is a new one.' : 'Nothing here yet.'}</p></div>`;
   $('jList').querySelectorAll('.job').forEach((card) => {
     const [id, role] = card.dataset.key.split(':');
     const msg = card.querySelector('[data-msg]');
