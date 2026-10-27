@@ -1464,6 +1464,12 @@ async function artistQuote(args: ApiEvent['arguments'], by = 'Siva', currency: '
     }),
   );
   console.log(`Artist price ${currency} ${price} saved for ${str(e, 'ref')}`);
+  // Tell the studio: the costing on the order now has the artist's price; next is "Use this price" → send it to the customer.
+  if (!by.startsWith('Kalai Art House') && !note.startsWith('Catalogue price')) await sendMail({ to: STUDIO_EMAIL, subject: `Price from ${by}: ${str(e, 'ref')} · ${currency} ${price}`,
+    lines: [`${h(by)} gave their price for <b>${h(str(e, 'title'))}</b> (${h(str(e, 'ref'))}): <b>${currency} ${price.toLocaleString('en-US')}</b>${readyBy ? `, ready by ${h(readyBy)}` : ''}.`,
+      ...(note ? [`Their note: ${h(note)}`] : []),
+      'It is already in the order\'s Costing. Next: check the costing, press <b>Use this price</b> and Save to send the price and payment link to the customer.'],
+    button: { label: 'Open the order', url: `${SITE}/admin.html#order=${id}` }, footer: 'Studio notification from art.pranixtechno.com' }).catch(() => {});
   return { ok: true, ref: str(e, 'ref'), currency, artistPriceInr: currency === 'INR' ? price : null, artistPriceAed: currency === 'AED' ? price : null, artistReadyBy: readyBy, artistNote: note };
 }
 

@@ -51,7 +51,8 @@ export function stepsFor(e, x) {
   switch (s) {
     case 'RECEIVED':
       now = 'New order or enquiry: nothing sent to the customer yet.';
-      if (art && !c.artistPriceInr && !c.artistPriceAed) t(`Get ${name}'s price for the artwork (Costing).`, 'you', '#costing');
+      if (art && !e.artistId && !e.artistName) t('Choose the artist doing this work (Costing) and Save: they get an email and see it in their portal.', 'you', '#cArtist');
+      if (art && !c.artistPriceInr && !c.artistPriceAed) t(`${name} gives their price in the portal (Orders to make): it fills the Costing by itself and you get an email. Or type it here.`, 'artist', '#costing', true);
       t('Check the costing, then press “Use this price” (or type the price).', 'you', '#costing');
       t('Write a short message and Save: the status moves to Price sent and the customer gets the price and Ziina payment link.', 'you', '#eMsg');
       break;
