@@ -264,6 +264,18 @@ def _(b):
     need(n >= 14, f'rotation has {n} pairs')
     return []
 
+
+@check('Little Artists: pair names readable in dark mode, pictures smaller (4 per row on a computer)')
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1500)
+    pg.emulate_media(color_scheme='dark'); pg.evaluate("document.documentElement.setAttribute('data-theme','dark')"); pg.wait_for_timeout(300)
+    col = pg.evaluate("getComputedStyle(document.querySelector('#lp-vs figcaption b')).color")
+    need(col == 'rgb(31, 42, 34)', f'name colour in dark mode: {col}')
+    w = pg.evaluate("document.querySelector('#lp-vs figure').getBoundingClientRect().width")
+    need(w <= 260, f'pair card {w:.0f}px wide')
+    need(pg.evaluate("document.getElementById('lpPair').getBoundingClientRect().width") <= 441, 'top picture wider than 440px')
+    return errs
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
