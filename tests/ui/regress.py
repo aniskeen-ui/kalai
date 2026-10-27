@@ -259,6 +259,19 @@ def _(b):
     need('KA-261020-YWXE' in pg.inner_text('#jList'), 'invoiced READY job dropped out of To do')
     return errs
 
+@check('Supplier price list: old dirham figures of a shop in India open as ⃃, and the currency choice relabels the text')
+def _(b):
+    seed = sup_seed('rafi@x.com', [JOB])
+    seed['sellers'][0] = dict(seed['sellers'][0], address='Bengaluru, India', rateCard=json.dumps({'frames': {'black': {'40×50': 63}}, 'from': 'India', 'basis': 'est'}))
+    pg, errs = open_page(b, 'supplier.html', seed)
+    pg.click('[data-t="rates"]'); pg.wait_for_timeout(800)
+    need(pg.input_value('#rCur') == 'AED', f"old ⃃ list shown as {pg.input_value('#rCur')}")
+    need('in ⃃' in pg.inner_text('#rNote'), 'note not in ⃃')
+    pg.select_option('#rCur', 'INR'); pg.wait_for_timeout(200)
+    need('in ₹' in pg.inner_text('#rNote'), 'note still says ⃃ after choosing rupees')
+    need('rupees' in pg.inner_text('#rCurHint'), 'no warning that the amounts are still dirhams')
+    return errs
+
 @check('Supplier: order search box + drop-down filter the jobs')
 def _(b):
     jobs = [JOB, dict(JOB, id='e2', ref='KA-261025-AAAA', title='Other work', to={'name': 'Zed', 'address': 'Marina'})]

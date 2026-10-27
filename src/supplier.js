@@ -496,13 +496,16 @@ function openRates(back) {
   // As entered: a supplier in India keeps its prices in rupees.
   const card = rawCard(profile), fr = profile.type === 'FRAMER';
   const pr = profile.type === 'PRINTER';
-  const cur = card.currency || (/india/i.test(`${profile.country || ''} ${profile.city || ''} ${profile.address || ''}`) || card.from === 'India' ? 'INR' : 'AED'), S = cur === 'INR' ? '₹' : '⃃';
-  $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
-  $('rNote').textContent = pr ? `Your price in ${S} to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don't print that size). A4 = 21×30 cm, A3 = 30×42 cm.` : fr
+  // A list saved before currencies existed is in dirhams; a new, empty list for a shop in India starts in rupees.
+  const hasPrices = ['frames', 'fixing', 'print', 'uae', 'intl', 'country'].some((k) => card[k] && JSON.stringify(card[k]).match(/\d/));
+  const cur = card.currency || (!hasPrices && (/india/i.test(`${profile.country || ''} ${profile.city || ''} ${profile.address || ''}`) || card.from === 'India') ? 'INR' : 'AED'), S = cur === 'INR' ? '₹' : '⃃';
+  const noteFor = (S) => (pr ? `Your price in ${S} to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don't print that size). A4 = 21×30 cm, A3 = 30×42 cm.` : fr
     ? `Your price per frame, in ${S}, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it.`
-    : `Your charge in ${S} to deliver one framed work (packed, with glass) from where you ship (below), by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.`;
+    : `Your charge in ${S} to deliver one framed work (packed, with glass) from where you ship (below), by frame size. Leave a size blank if you don't take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.`);
+  $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
+  $('rNote').textContent = noteFor(S);
   $('rGrid').innerHTML = pr
-    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (${S})</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (<span class="rSym">${S}</span>)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
     : fr
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
@@ -522,7 +525,13 @@ function openRates(back) {
   $('rNotes').value = card.notes || '';
   // Currency of the whole price list (frame shops and couriers in India quote in rupees).
   $('rCurWrap')?.remove();
-  $('rGrid').insertAdjacentHTML('beforebegin', `<div class="field" id="rCurWrap" style="max-width:280px;margin:8px 0"><label for="rCur">My prices are in</label><select id="rCur"><option value="AED" ${cur === 'AED' ? 'selected' : ''}>UAE dirhams (⃃)</option><option value="INR" ${cur === 'INR' ? 'selected' : ''}>Indian rupees (₹)</option></select></div>`);
+  $('rGrid').insertAdjacentHTML('beforebegin', `<div class="field" id="rCurWrap" style="max-width:280px;margin:8px 0"><label for="rCur">My prices are in</label><select id="rCur"><option value="AED" ${cur === 'AED' ? 'selected' : ''}>UAE dirhams (⃃)</option><option value="INR" ${cur === 'INR' ? 'selected' : ''}>Indian rupees (₹)</option></select><div class="muted" id="rCurHint" style="font-size:12px;margin-top:4px"></div></div>`);
+  $('rCur').onchange = () => {
+    const s = $('rCur').value === 'INR' ? '₹' : '⃃';
+    $('rNote').textContent = noteFor(s); $('rGrid').querySelectorAll('.rSym').forEach((x) => { x.textContent = s; });
+    // The numbers are not converted: the shop enters its prices in the new currency.
+    $('rCurHint').textContent = $('rCur').value !== cur && hasPrices ? `The amounts below are still the ones saved in ${cur === 'INR' ? 'rupees' : 'dirhams'}: change them to ${$('rCur').value === 'INR' ? 'rupees' : 'dirhams'} before saving.` : '';
+  };
   if (!fr && !pr) wireCountries();
   // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.
   $('rEst')?.remove();
