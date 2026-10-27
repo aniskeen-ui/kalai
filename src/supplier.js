@@ -480,12 +480,19 @@ function wireCountries() {
   });
 }
 /** Country rows from the screen: { "India": {...}, "India|Kerala": {...} }; rows without any price are dropped. */
+// Rupees per dirham: the website's daily rate (Settings → INR rate), else about 23.8.
+let INR_PER_AED = null;
+async function inrPerAed() {
+  if (INR_PER_AED) return INR_PER_AED;
+  try { const { data } = await client.models.SiteSetting.get({ id: 'site' }, { authMode: 'apiKey' }); INR_PER_AED = Number(data?.inrPerAed) > 0 ? Number(data.inrPerAed) : null; } catch { /* offline */ }
+  return INR_PER_AED || 23.8;
+}
 function readCountries() {
   const out = {}; let bad = false;
   $('rGrid').querySelectorAll('[data-cc]').forEach((tr) => {
     const c = tr.querySelector('[data-cc-country]').value, r = tr.querySelector('[data-cc-region]').value.trim().replace(/\|/g, ' ');
     const row = {};
-    tr.querySelectorAll('[data-cp]').forEach((i) => { if (i.value === '') return; const v = Number(i.value); if (!(v >= 0 && v <= 5000)) bad = true; else row[i.dataset.cp] = v; });
+    tr.querySelectorAll('[data-cp]').forEach((i) => { if (i.value === '') return; const v = Number(i.value); if (!(v >= 0 && v <= ($('rCur')?.value === 'INR' ? 200000 : 5000))) bad = true; else row[i.dataset.cp] = v; });
     if (Object.keys(row).length) out[r ? `${c}|${r}` : c] = row;
   });
   return { rows: out, bad };
@@ -526,11 +533,15 @@ function openRates(back) {
   // Currency of the whole price list (frame shops and couriers in India quote in rupees).
   $('rCurWrap')?.remove();
   $('rGrid').insertAdjacentHTML('beforebegin', `<div class="field" id="rCurWrap" style="max-width:280px;margin:8px 0"><label for="rCur">My prices are in</label><select id="rCur"><option value="AED" ${cur === 'AED' ? 'selected' : ''}>UAE dirhams (⃃)</option><option value="INR" ${cur === 'INR' ? 'selected' : ''}>Indian rupees (₹)</option></select><div class="muted" id="rCurHint" style="font-size:12px;margin-top:4px"></div></div>`);
-  $('rCur').onchange = () => {
-    const s = $('rCur').value === 'INR' ? '₹' : '⃃';
+  let was = cur;
+  $('rCur').onchange = async () => {
+    const to = $('rCur').value, s = to === 'INR' ? '₹' : '⃃';
     $('rNote').textContent = noteFor(s); $('rGrid').querySelectorAll('.rSym').forEach((x) => { x.textContent = s; });
-    // The numbers are not converted: the shop enters its prices in the new currency.
-    $('rCurHint').textContent = $('rCur').value !== cur && hasPrices ? `The amounts below are still the ones saved in ${cur === 'INR' ? 'rupees' : 'dirhams'}: change them to ${$('rCur').value === 'INR' ? 'rupees' : 'dirhams'} before saving.` : '';
+    // Convert the amounts already entered at today's rate (₹ per ⃃ from Settings, updated daily); the shop checks and saves.
+    const r = await inrPerAed(), inputs = [...$('rGrid').querySelectorAll('input[data-n], input[data-cp]')].filter((i) => i.value !== '' && Number.isFinite(Number(i.value)));
+    if (to !== was) inputs.forEach((i) => { const v = Number(i.value); i.value = to === 'INR' ? Math.round(v * r / 10) * 10 : Math.round(v / r * 100) / 100; });
+    $('rCurHint').textContent = to !== was && inputs.length ? `Amounts converted at ₹${r.toFixed(2)} per ⃃ 1 (rounded). Check them, then press Save.` : '';
+    was = to;
   };
   if (!fr && !pr) wireCountries();
   // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.

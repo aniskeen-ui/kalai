@@ -259,17 +259,23 @@ def _(b):
     need('KA-261020-YWXE' in pg.inner_text('#jList'), 'invoiced READY job dropped out of To do')
     return errs
 
-@check('Supplier price list: old dirham figures of a shop in India open as ⃃, and the currency choice relabels the text')
+@check('Supplier price list: old dirham figures of a shop in India open as ⃃; choosing ₹ converts the amounts and relabels the text')
 def _(b):
     seed = sup_seed('rafi@x.com', [JOB])
     seed['sellers'][0] = dict(seed['sellers'][0], address='Bengaluru, India', rateCard=json.dumps({'frames': {'black': {'40×50': 63}}, 'from': 'India', 'basis': 'est'}))
+    seed['site'] = {'id': 'site', 'inrPerAed': 24}
     pg, errs = open_page(b, 'supplier.html', seed)
     pg.click('[data-t="rates"]'); pg.wait_for_timeout(800)
     need(pg.input_value('#rCur') == 'AED', f"old ⃃ list shown as {pg.input_value('#rCur')}")
     need('in ⃃' in pg.inner_text('#rNote'), 'note not in ⃃')
     pg.select_option('#rCur', 'INR'); pg.wait_for_timeout(200)
     need('in ₹' in pg.inner_text('#rNote'), 'note still says ⃃ after choosing rupees')
-    need('rupees' in pg.inner_text('#rCurHint'), 'no warning that the amounts are still dirhams')
+    v = pg.input_value('[data-n="frames.black.40×50"]')
+    need(v == '1510', f'⃃63 not converted to ₹ at 24 (shows {v})')
+    need('converted' in pg.inner_text('#rCurHint'), 'no note that the amounts were converted')
+    pg.select_option('#rCur', 'AED'); pg.wait_for_timeout(300)
+    v = pg.input_value('[data-n="frames.black.40×50"]')
+    need(abs(float(v) - 62.92) < 0.01, f'back to ⃃ gives {v}')
     return errs
 
 @check('Supplier: order search box + drop-down filter the jobs')
