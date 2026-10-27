@@ -234,6 +234,15 @@ def _(b):
         need(not pg.is_visible('#framesView'), 'empty My frames opened for the studio login')
     return errs
 
+
+@check('Print shop portal: says the frame shop collects the print (not "Kalai allocates the courier")')
+def _(b):
+    job = dict(JOB, role='printer', stage='READY', courier='', handTo={'name': 'Rafi Frames', 'phone': '', 'address': 'Karama'})
+    pg, errs = open_page(b, 'supplier.html', sup_seed('rafi@x.com', [job]))
+    t = pg.inner_text('#jList')
+    need('collects the print from you' in t and 'allocates the courier' not in t, 'print shop still told a courier is coming')
+    return errs
+
 # ---------------------------------------------------------------- Artist desk
 @check('Artist desk: paper size taken from the artwork (was "not stated")')
 def _(b):

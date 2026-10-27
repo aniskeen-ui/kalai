@@ -343,7 +343,7 @@ function jobCard(j) {
     ${j.label ? `<div class="awb-box" data-awbbox><div><span class="muted">Airway bill</span> ${j.label.awb ? `<b class="mono">${esc(j.label.awb)}</b>` : ''} · courier <b>${esc(j.label.courier)}</b></div>
       ${awbButtons()}
       <div class="muted" style="font-size:12px">${j.role === 'delivery' ? 'The shop sticks this label on the parcel: scan it at pickup.' : 'Print it (4 × 6 in label, or on A4 and cut it out), stick it on the packed parcel: the courier scans it at pickup.'}</div></div>`
-      : j.courier !== undefined && !j.cancelled && !j.invoiceNo ? `<div class="awb-box muted">${j.courier ? `Courier <b>${esc(j.courier)}</b> collects it from you: the airway bill (barcode / QR label) appears here when you mark it ${pr ? 'printed' : 'ready'}.` : 'Kalai Art House allocates the courier: the airway bill label appears here once it is.'}</div>` : ''}
+      : j.courier !== undefined && !j.cancelled && !j.invoiceNo ? `<div class="awb-box muted">${j.courier ? `Courier <b>${esc(j.courier)}</b> collects it from you: the airway bill (barcode / QR label) appears here when you mark it ${pr ? 'printed' : 'ready'}.` : pr ? (j.handTo?.name ? `<b>${esc(j.handTo.name)}</b> (frame shop) collects the print from you: no courier label needed.` : 'Kalai Art House tells you who collects the print (usually the frame shop): no courier label needed.') : 'Kalai Art House allocates the courier: the airway bill label appears here once it is.'}</div>` : ''}
     ${supGuide(j, fr, pr)}
     <div style="display:grid;gap:8px;justify-items:start">${act}</div>
     <div class="err" data-msg></div>
