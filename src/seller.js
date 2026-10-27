@@ -72,14 +72,19 @@ function show(view) {
   $('signOutBtn').hidden = view === 'loginView';
 }
 
+// Not a studio admin (or signed out): no studio bar, no "view as" supplier, and the address bar without ?view=.
+function dropStudio() {
+  viewAs = '';
+  const b = document.getElementById('adminBar'); if (b) { b.hidden = true; b.querySelectorAll('.sn-bar').forEach((x) => x.remove()); }
+  const u = new URL(location.href); if (u.searchParams.has('view')) { u.searchParams.delete('view'); history.replaceState(null, '', u); }
+}
 async function start() {
   brand();
   try { await getCurrentUser(); } catch { show('loginView'); setMode('in'); return; }
   const attrs = await fetchUserAttributes().catch(() => ({}));
   $('who').textContent = attrs.email || '';
   groups = (await fetchAuthSession().catch(() => null))?.tokens?.accessToken?.payload?.['cognito:groups'] || [];
-  if (isAdminUser()) await adminBar();
-  else viewAs = '';
+  if (isAdminUser()) await adminBar(); else dropStudio();
   try {
     const r = await call('me');
     profile = r.profile; listings = r.listings || [];
@@ -225,7 +230,7 @@ $('authForm').addEventListener('submit', async (e) => {
       : ex.name === 'UsernameExistsException' ? 'This email already has an account: sign in instead.' : (ex.message || 'Something went wrong.');
   } finally { b.disabled = false; }
 });
-$('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
+$('signOutBtn').onclick = async () => { await signOut(); groups = []; dropStudio(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
 
 // ---------- application (artists and sellers) ----------
 const AF = { pTrain: 'training', pBorn: 'bornYear', pCity: 'city', pBiz: 'business', pName: 'contactName', pPhone: 'phone', pLic: 'tradeLicence', pCat: 'categories', pAddr: 'address', pAbout: 'about', pBank: 'bankName', pAcc: 'accountName', pIban: 'iban', pAccNo: 'accountNumber', pIfsc: 'ifsc', pExp: 'experience', pComm: 'commissions', pPrints: 'allowPrints', pLicences: 'allowLicences', pLink: 'portfolio' };

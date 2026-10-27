@@ -50,12 +50,18 @@ function show(view) {
   $('signOutBtn').hidden = view === 'loginView';
 }
 
+// Not a studio admin (or signed out): no studio bar, no "view as" supplier, and the address bar without ?view=.
+function dropStudio() {
+  viewAs = '';
+  const b = document.getElementById('adminBar'); if (b) { b.hidden = true; b.querySelectorAll('.sn-bar').forEach((x) => x.remove()); }
+  const u = new URL(location.href); if (u.searchParams.has('view')) { u.searchParams.delete('view'); history.replaceState(null, '', u); }
+}
 async function start() {
   try { await getCurrentUser(); } catch { show('loginView'); setMode('in'); return; }
   const attrs = await fetchUserAttributes().catch(() => ({}));
   $('who').textContent = attrs.email || '';
   groups = (await fetchAuthSession().catch(() => null))?.tokens?.accessToken?.payload?.['cognito:groups'] || [];
-  if (isAdmin()) await adminBar(); else viewAs = '';
+  if (isAdmin()) await adminBar(); else dropStudio();
   await load();
 }
 async function load() {
@@ -187,7 +193,7 @@ $('authForm').addEventListener('submit', async (e) => {
       : ex.name === 'UsernameExistsException' ? 'This email already has an account: sign in instead.' : (ex.message || 'Something went wrong.');
   } finally { b.disabled = false; }
 });
-$('signOutBtn').onclick = async () => { await signOut(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
+$('signOutBtn').onclick = async () => { await signOut(); groups = []; dropStudio(); $('who').textContent = ''; profile = null; show('loginView'); setMode('in'); };
 
 // ---------- application ----------
 const AF = { sWeb: 'portfolio', sBiz: 'business', sName: 'contactName', sPhone: 'phone', sEmirate: 'emirate', sAddr: 'address', sLic: 'tradeLicence', sAbout: 'about', sBank: 'bankName', sAcc: 'accountName', sIban: 'iban' };
