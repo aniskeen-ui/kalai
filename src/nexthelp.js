@@ -96,9 +96,11 @@ export function stepsFor(e, x) {
       supplierTodo();
       break;
     case 'FRAMING':
-      now = `Being framed${j.framer?.name ? ` by ${j.framer.name}` : ''}.`;
-      t('The frame shop presses “Framed, ready for pickup”.', 'supplier', null, true);
-      if (!j.delivery && !j.framer?.canDeliver) t('Allocate the delivery partner: the airway bill is made when the frame is ready.', 'you', '#supplierBox');
+      { const ready = ['READY', 'COLLECTED'].includes(j.framer?.stage);
+      now = ready ? `Framed and ready for pickup at ${j.framer?.name || 'the frame shop'}.` : `Being framed${j.framer?.name ? ` by ${j.framer.name}` : ''}.`;
+      if (!ready) t('The frame shop presses “Framed, ready for pickup”.', 'supplier', null, true); }
+      if (!e.deliveryAddress && !e.deliveryEmirate) t('Add the customer\'s delivery address (Delivery address card), so the courier price and label are right.', 'you', '#addrBox');
+      if (!j.delivery && !j.framer?.canDeliver) t('Send the delivery job: the cheapest courier is pre-selected under Frame shop & delivery → Delivery. The airway bill is made when the frame is ready.', 'you', '#supplierBox');
       else t(`${j.delivery?.name || 'The courier'} picks it up: the order moves to Shipped by itself.`, 'supplier', null, true);
       break;
     case 'SHIPPED':
