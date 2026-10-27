@@ -518,6 +518,18 @@ def _(b):
     return errs
 
 
+@check('Little Artists order form: "Outside the UAE? Ask for the delivery price" like on the artworks (Anis, 28 Oct)')
+def _(b):
+    pg, errs = open_page(b, 'index.html#kidsOrder', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
+    btn = pg.locator('#kAskShip [data-askship]')
+    need(btn.count() == 1 and btn.is_visible(), 'no "Outside the UAE?" button on the Little Artists form')
+    btn.click(); pg.wait_for_timeout(300)
+    need(pg.locator('#kAskShip [data-asform] select[data-k="country"]').is_visible(), 'the delivery-price form does not open')
+    pg.click('#kAskShip [data-assend]'); pg.wait_for_timeout(200)
+    need('name and mobile' in pg.inner_text('#kAskShip [data-asok]'), 'Ask button does nothing without name/mobile')
+    return errs
+
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):

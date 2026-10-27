@@ -870,6 +870,7 @@ try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("ka
     </div>
     <div class="field" id="kEmBox"><label for="kEmirate">Emirate</label>
         <select id="kEmirate"><option value="25">Dubai</option><option value="25">Sharjah</option><option value="25">Ajman</option><option value="35">Abu Dhabi</option><option value="35">Ras Al Khaimah</option><option value="35">Umm Al Quwain</option><option value="35">Fujairah</option></select></div>
+    <div id="kAskShip"></div>
     <div class="field" id="kRegBox" hidden><label for="kRegion">State, province or city</label><input id="kRegion" maxlength="60" placeholder="e.g. Kerala, Ontario, London"></div>
     <fieldset class="field" style="border:0;padding:0;margin:0"><legend style="font-size:13px;font-weight:600;margin-bottom:6px">Optional extras</legend>
       <label class="check"><input type="checkbox" id="kx-premium" data-price="45"><span>Premium frame with glass and double mount <b class="mono" data-kp="45">+ AED 45</b></span></label>
@@ -1034,15 +1035,16 @@ function askShip(name,code,what){return `<div class="askship" data-asname="${esc
 document.addEventListener("click",e=>{const b=e.target.closest("[data-askship]");if(!b)return;const w=b.closest(".askship"),f=w.querySelector("[data-asform]");
   if(!f.hidden){f.hidden=true;return}
   const cs=(window.kalaiCountries||[]).filter(c=>c.key!=="UAE");
-  f.innerHTML=`<form novalidate><div class="two"><div class="field"><label>Country</label><select data-k="country">${cs.length?cs.map((c,i)=>`${i===1?'<option disabled>──────────</option>':''}<option value="${esc2(c.key)}">${esc2(c.name)}</option>`).join(""):'<option>India</option>'}</select></div>
+  f.innerHTML=`<div class="asf"><div class="two"><div class="field"><label>Country</label><select data-k="country">${cs.length?cs.map((c,i)=>`${i===1?'<option disabled>──────────</option>':''}<option value="${esc2(c.key)}">${esc2(c.name)}</option>`).join(""):'<option>India</option>'}</select></div>
     <div class="field"><label>State / region / city</label><input data-k="region" maxlength="80" placeholder="e.g. Kerala, Kochi"></div></div>
     <div class="two"><div class="field"><label>Postal code</label><input data-k="pin" maxlength="12" placeholder="If your country uses one"></div>
     <div class="field"><label>Your name</label><input data-k="name" autocomplete="name" maxlength="80"></div></div>
     <div class="field"><label>Mobile / WhatsApp</label><input data-k="phone" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="+91 98765 43210"></div>
-    <button class="btn primary" type="submit">Ask for the delivery price</button><div class="ok-msg" data-asok hidden></div>
-    <p class="note" style="margin:0;font-size:12px">We reply with the shipping charge by courier, usually within one working day. Any import duty in your country is paid on arrival.</p></form>`;
+    <button class="btn primary" type="button" data-assend>Ask for the delivery price</button><div class="ok-msg" data-asok hidden></div>
+    <p class="note" style="margin:0;font-size:12px">We reply with the shipping charge by courier, usually within one working day. Any import duty in your country is paid on arrival.</p></div>`;
   f.hidden=false;
-  f.querySelector("form").onsubmit=ev=>{ev.preventDefault();const v=k=>f.querySelector(`[data-k="${k}"]`).value.trim(),ok=f.querySelector("[data-asok]");
+  // A plain block, not a <form>: it also sits inside the Little Artists order form.
+  f.querySelector("[data-assend]").onclick=ev=>{ev.preventDefault();const v=k=>f.querySelector(`[data-k="${k}"]`).value.trim(),ok=f.querySelector("[data-asok]");
     ok.hidden=false;ok.style.color="var(--kumkum)";
     if(!v("name")||!v("phone")){ok.textContent="Please add your name and mobile number so we can send the price.";return}
     const pr=w.parentElement.querySelector(".pprice b"),note=w.parentElement.querySelector(".pprice .note");
@@ -1572,7 +1574,9 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   // Every country once the list has loaded (account.js); UAE and India first.
   window.kalaiKidsCountries=list=>{const s=$("kCountry"),v=s.value;s.innerHTML=list.map((c,i)=>`${i===2?"<option disabled>──────────</option>":""}<option value="${c.key.replace(/"/g,"&quot;")}">${c.name}</option>`).join("");s.value=v||"UAE";fee()};
   if(window.kalaiCountries)window.kalaiKidsCountries(window.kalaiCountries);
-  $("kCountry").addEventListener("change",()=>{$("kEmBox").hidden=!uae();$("kRegBox").hidden=uae();fee()});
+  $("kCountry").addEventListener("change",()=>{$("kEmBox").hidden=!uae();$("kRegBox").hidden=uae();$("kAskShip").hidden=!uae();fee()});
+  // Same "Outside the UAE? Ask for the delivery price" as on the artworks (the form can also price a country directly).
+  $("kAskShip").innerHTML=askShip("Little Artists: child's drawing, framed","KIDS","Framed child's drawing (A4)");
   $("kDraw").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();
     r.onload=()=>{const im=document.createElement("img");im.src=r.result;im.alt="Uploaded drawing";im.onload=kResCheck;$("kMount").classList.remove("has-sample");$("kMount").replaceChildren(im)};r.readAsDataURL(f)});
   /* We print the drawing from this photo: warn when it is too small to print sharply (A4 ≈ 2,500 px, A3 ≈ 3,500 px on the long side). */
