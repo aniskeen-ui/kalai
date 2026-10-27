@@ -162,6 +162,31 @@ def _(b):
     need('(1)' not in pg.inner_text('#tabSellers'), 'tab still shows (1) after rejecting')
     return errs
 
+
+@check('Order screen (layout b, wide window): Action column stays inside the window (no sideways scroll)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [], 'site': {'id': 'site', 'orderLayout': 'b'},
+            'items': [order(id='g2', kind='GIFT', title='Little Artists gift for Appa', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None, discountType='PCT', discountValue=25,
+                            details=json.dumps({'Card message': 'to appa', 'Frame': 'white', 'Total': 'AED 104', 'Gift for': 'Appa'}))], 'costing': []}
+    bad = []
+    for w in (1885, 1500, 1280):
+        pg, errs = open_page(b, 'admin.html#order=g2', seed, width=w); pg.wait_for_timeout(800)
+        sw, cw = pg.evaluate('[document.documentElement.scrollWidth, document.documentElement.clientWidth]')
+        if sw > cw + 1: bad.append(f'{w}px: page is {sw}px wide')
+        pg.close()
+    need(not bad, '; '.join(bad))
+    return []
+
+
+@check('Little Artists order: price taken from "Total AED 104" (was empty)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [], 'costing': [],
+            'items': [order(id='g3', kind='GIFT', title='Little Artists gift for Appa', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None,
+                            details=json.dumps({'Frame': 'white', 'Total': 'AED 104'}))]}
+    pg, errs = open_page(b, 'admin.html#order=g3', seed)
+    need(pg.input_value('#ePrice') == '104', f'price box: "{pg.input_value("#ePrice")}"')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}

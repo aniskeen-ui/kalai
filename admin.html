@@ -93,7 +93,9 @@ td.mono{font-family:var(--mono);font-size:13px}
 .desk[data-layout="b"] > .detail{position:static}
 .lay-grid3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(260px,330px);gap:14px;align-items:start}
 .lay-grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:14px;align-items:start}
-.lay-col{display:grid;gap:12px;min-width:0;align-content:start}
+.lay-col{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0;align-content:start}
+.lay-side .lay-act{grid-template-columns:minmax(0,1fr)!important}.lay-side .lay-act > *,.lay-side .two > *{min-width:0}.lay-side input,.lay-side select,.lay-side textarea{max-width:100%;min-width:0;box-sizing:border-box}
+.lay-side #discBox{grid-template-columns:minmax(0,1fr) 80px!important}.lay-side #discBox > :not(#eDiscT):not(#eDiscV){grid-column:1/-1}
 .lay-side{position:sticky;top:10px}
 .lay-side .two{grid-template-columns:1fr}.lay-side .lay-act{grid-template-columns:1fr}.lay-side .lay-act > *{grid-column:1/-1!important}
 @media (max-width:1100px){.lay-grid3{grid-template-columns:1fr 1fr}.lay-grid3 > .lay-side{grid-column:1/-1;position:static}}
