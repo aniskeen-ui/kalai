@@ -878,7 +878,7 @@ function wireSuppliers(e) {
         data.price = v(`${role}-price`).value; data.due = v(`${role}-due`).value; data.note = v(`${role}-note`).value.trim();
         if (role === 'framer' && v('framer-deliver')) { data.canDeliver = v('framer-deliver').checked; data.deliveryPrice = v('framer-dprice').value; }
       }
-      b.disabled = true; msg.textContent = remove ? 'Taking it back…' : 'Sending…';
+      b.disabled = true; msg.style.color = ''; msg.style.fontWeight = ''; msg.textContent = remove ? 'Taking it back…' : 'Sending…';
       try {
         const r = await client.mutations.marketAdmin({ action: remove ? 'removeJob' : 'assignJob', data: JSON.stringify(data) });
         if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
@@ -886,7 +886,7 @@ function wireSuppliers(e) {
         costings.set(e.id, { ...(costings.get(e.id) || { enquiryId: e.id }), supplierJobs: JSON.stringify(out.jobs || {}) });
         box.outerHTML = supplierSection(e); wireSuppliers(e);
         $('supplierBox').querySelector(`[data-jobmsg="${role}"]`) && ($('supplierBox').querySelector(`[data-jobmsg="${role}"]`).textContent = remove ? 'Taken back; they were emailed.' : 'Sent: they were emailed and see it in their portal.');
-      } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+      } catch (ex) { msg.textContent = `⚠ Not sent: ${ex.message || 'no answer from the server'}. Press again; if it repeats, send us this message.`; msg.style.color = 'var(--kumkum, #b3261e)'; msg.style.fontWeight = '700'; b.disabled = false; }
     };
   });
 }
