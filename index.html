@@ -1744,11 +1744,11 @@ drawChips();drawGrid();updateCount();
     if(document.documentElement.getAttribute('data-lstyle')!==st){document.documentElement.setAttribute('data-lstyle',st);draw()}};
   // Child vs AI pictures (hero of the Little Artists page and the home-page block): start with a random pair, then
   // fade to the next one every 7 seconds. Add more pairs here (same layout: child on the left, AI on the right).
-  (function(){const P=['/img/little-vs-ai.jpg','/img/little-vs-ai-cow.jpg','/img/little-vs-ai-crab.jpg','/img/little-vs-ai-blackcat.jpg','/img/little-vs-ai-giraffe.jpg','/img/little-vs-ai-bluecat.jpg','/img/little-vs-ai-robin.jpg','/img/little-vs-ai-tabby.jpg','/img/little-vs-ai-housebird.jpg','/img/little-vs-ai-housebird2.jpg'];
+  (function(){const P=['/img/little-vs-ai.jpg','/img/little-vs-ai-cow.jpg','/img/little-vs-ai-crab.jpg','/img/little-vs-ai-blackcat.jpg','/img/little-vs-ai-giraffe.jpg','/img/little-vs-ai-bluecat.jpg','/img/little-vs-ai-robin.jpg','/img/little-vs-ai-tabby.jpg','/img/little-vs-ai-housebird.jpg','/img/little-vs-ai-housebird2.jpg','/img/little-vs-ai-birds.jpg','/img/little-vs-ai-catfamily.jpg','/img/little-vs-ai-tree.jpg','/img/little-vs-ai-friends.jpg'];
     const imgs=[...document.querySelectorAll('#lpPair img,.vsai img')];if(!imgs.length||P.length<2)return;
     let k=Math.floor(Math.random()*P.length);P.forEach(u=>{const i=new Image();i.src=u});
     imgs.forEach(im=>{im.style.transition='opacity .6s ease';im.src=P[k]});
-    setInterval(()=>{k=(k+1)%P.length;imgs.forEach(im=>{im.style.opacity=0;setTimeout(()=>{im.src=P[k];im.style.opacity=1},600)})},7000);})();
+    setInterval(()=>{k=(k+1)%P.length;imgs.forEach(im=>{im.style.opacity=0;setTimeout(()=>{im.src=P[k];im.style.opacity=1},600)})},5000);})();
   // Little Artists order form: until a drawing is uploaded, the frame preview shows real children's drawings, one after another.
   function samples(){const m=document.getElementById('kMount');if(!m||!list.length||!m.querySelector('.ph'))return;
     const pick=list.slice().sort(()=>Math.random()-.5).slice(0,8);

@@ -254,6 +254,16 @@ def _(b):
     need(pg.evaluate('document.documentElement.scrollWidth') <= 391, 'page scrolls sideways on a phone')
     return errs
 
+
+@check('Little Artists: the top picture rotates through all 14 child vs AI pairs')
+def _(b):
+    import re
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'index.html')).read()
+    m = re.search(r"const P=\[([^\]]*)\]", src)
+    n = len(re.findall(r"little-vs-ai", m.group(1))) if m else 0
+    need(n >= 14, f'rotation has {n} pairs')
+    return []
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
