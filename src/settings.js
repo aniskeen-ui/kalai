@@ -86,6 +86,8 @@ export async function showSettings() {
         <input id="st-launchNote" maxlength="200" placeholder="${LAUNCH_DEF}">
         <div class="muted" style="font-size:12px">Blank text = the suggested one. Untick on launch day (when Zoho and Ziina test modes are off).</div></div>
       <h3 style="margin:0;font-size:17px">Order screen layout (Order Management)</h3>
+      <div class="field" style="max-width:560px"><label for="st-help">“What next?” helper on the order screen</label><select id="st-help" style="max-width:420px"><option value="on">On: opens with every order (default)</option><option value="tab">Folded: a small “💡 What next?” tab, click to open</option><option value="off">Off</option></select>
+        <div class="muted" style="font-size:12px">A card in the corner of Order Management that says what to do next on the open order, who does it, and jumps to the right box.</div></div>
       <div class="field" style="max-width:640px"><label for="st-layout">How an order opens in Orders</label><select id="st-layout" style="max-width:340px"><option value="original">Original (list left, details right)</option><option value="a">A · Tabs (full width, action strip on top)</option><option value="b">B · Dashboard (three columns, sticky action panel)</option><option value="c">C · Journey (timeline, action panel on the right)</option></select>
         <span class="muted" style="font-size:12px">Choosing one switches this browser straight away so you can try it on a few orders; Save settings makes it the layout for everyone.</span></div>
       <h3 style="margin:0;font-size:17px">Kalai Circle (loyalty points)</h3>
@@ -205,6 +207,7 @@ export async function showSettings() {
       (L.tiers || D.tiers).slice(0, 3).forEach((t, i) => { $(`lyN${i}`).value = t.name; if (i) { $(`lyS${i}`).value = t.spend || ''; $(`lyO${i}`).value = t.orders || ''; } $(`lyP${i}`).value = t.pct; });
       $('lyVal').value = L.pointValue; $('lyMin').value = L.minRedeem; $('lyMax').value = L.maxPct; $('lyExp').value = L.expiryMonths;
       $('lyFr').value = L.friendAed; $('lyFrMin').value = L.friendMin; $('lyRef').value = L.referrerAed; $('lyRefMax').value = L.refMaxYear; }
+    $('st-help').value = ['on', 'tab', 'off'].includes(row?.helpMode) ? row.helpMode : 'on'; $('st-help').onchange = () => window.kalaiHelpMode?.($('st-help').value);
     { const cur = row?.orderLayout || 'original'; $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value, false); } // preview only: Save makes it the layout for every browser
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
@@ -251,6 +254,8 @@ async function save() {
       friendAed: n('lyFr', 50), friendMin: n('lyFrMin', 300), referrerAed: n('lyRef', 50), refMaxYear: n('lyRefMax', 10) }); }
   rec.siteLangs = ['en', ...[...document.querySelectorAll('[data-lang]')].filter((b) => b.checked && b.dataset.lang !== 'en').map((b) => b.dataset.lang)].join(',');
   rec.orderLayout = $('st-layout').value;
+  rec.helpMode = $('st-help').value;
+  window.kalaiHelpMode?.(rec.helpMode);
   window.kalaiSetLayout?.(rec.orderLayout);
   const inr = Number($('st-inr').value);
   if (!(inr >= 1 && inr <= 100)) { $('stMsg').textContent = 'Rupees per dirham: enter a number like 24.'; return; }

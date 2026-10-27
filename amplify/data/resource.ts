@@ -504,6 +504,7 @@ const schema = a.schema({
       licencePcts: a.string(), // JSON {WEB, MEDIA, COMMERCIAL}: image licence price as % of the artwork's price
       orderLayout: a.string(), // Order Management order screen: original | a (tabs) | b (dashboard) | c (journey)
       instalments: a.string(), // '' (off) | Tabby | Tamara: shows "4 interest-free payments" on the website
+      helpMode: a.string(), // Order Management "What next?" helper: on (opens with each order) | tab (folded) | off
       littleStyle: a.string(), // Little Artists page: base | A (drawings taped down the sides, default) | B (living screen) | C (washing line + framed wall)
     })
     .authorization((allow) => [allow.group('ADMINS'), allow.publicApiKey().to(['read'])]),

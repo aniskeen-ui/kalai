@@ -13,6 +13,7 @@ import { showPromotions } from './promotions.js';
 import { showSettings, showSettingTab } from './settings.js';
 import { showNumbers } from './numbers.js';
 import { showPricing, openPriceFor } from './pricing.js';
+import { showNextHelp, hideNextHelp, setHelpMode } from './nexthelp.js';
 import { showPrintsMaster, showLicMaster } from './pricemasters.js';
 import { showCustomers, openCustomerCode } from './customers.js';
 import { countryRegionHtml, wireRegion, addressLine } from './phone.js';
@@ -2065,7 +2066,7 @@ async function wireDiscount(e) {
 let LAYOUT = 'original';
 try { LAYOUT = localStorage.getItem('kalaiOrderLayout') || 'original'; } catch { /* storage blocked */ }
 // The layout saved in Settings is the same in every browser (this browser's copy is only a cache).
-client.models.SiteSetting.get({ id: 'site' }).then((r) => { const v = r?.data?.orderLayout || 'original'; if (v !== LAYOUT) { LAYOUT = v; try { localStorage.setItem('kalaiOrderLayout', v); } catch { /* */ } applyDeskLayout(); } }).catch(() => {});
+client.models.SiteSetting.get({ id: 'site' }).then((r) => { setHelpMode(r?.data?.helpMode || 'on'); const v = r?.data?.orderLayout || 'original'; if (v !== LAYOUT) { LAYOUT = v; try { localStorage.setItem('kalaiOrderLayout', v); } catch { /* */ } applyDeskLayout(); } }).catch(() => {});
 window.kalaiSetLayout = (v, keep = true) => { LAYOUT = v || 'original'; if (keep) { try { localStorage.setItem('kalaiOrderLayout', LAYOUT); } catch { /* */ } } applyDeskLayout(); };
 let layoutTab = 'order';
 function applyDeskLayout() {
@@ -2080,6 +2081,8 @@ async function showDetail(e) {
   try { arrangeDetail(e); } catch (err) { console.warn('Layout', err); }
   // Orders without a Zoho box still get the status track under the order list.
   if (!document.getElementById('checkZoho')) showFlow(e, null);
+  // "What next?" helper in the corner (Settings → General).
+  try { showNextHelp(e, { jobs: jobsOf(e), costing: costings.get(e.id) || {}, artistOf, hasArtist, STATUS }); } catch (err) { console.warn('Help', err); }
 }
 function arrangeDetail(e) {
   const LAYOUT_SAVED = savedLayout();
@@ -2164,6 +2167,7 @@ const PAY_LABEL_UI = { ZIINA: 'Ziina', BANK: 'Bank transfer', CASH: 'Cash', CARD
 async function showDetailBody(e) {
   restoreFlow();
   showFlow(null);
+  hideNextHelp();
   const det = parseDetails(e.details);
   const s = e.status || 'RECEIVED';
   const locked = isLocked(e);
