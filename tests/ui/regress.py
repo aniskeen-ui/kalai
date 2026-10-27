@@ -507,6 +507,17 @@ def _(b):
     return errs
 
 
+@check('Little Artists: light background made of the children\'s drawings loads (order section and page)')
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
+    for sel in ['#littlePage', 'section.kids']:
+        bg = pg.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundImage")
+        need('little-bg.jpg' in bg, f'{sel} has no drawings background: {bg[:80]}')
+    ok = pg.evaluate("new Promise(r => { const i = new Image(); i.onload = () => r(i.naturalWidth); i.onerror = () => r(0); i.src = '/img/little-bg.jpg'; })")
+    need(ok > 1000, 'background picture missing')
+    return errs
+
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
