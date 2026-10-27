@@ -50,8 +50,6 @@ async function load() {
   $('mkBody').innerHTML = '<p class="muted">Loading…</p>';
   try {
     [sellers, listings] = await Promise.all([listAll('SellerProfile'), listAll('Listing')]);
-    const n = sellers.filter((s) => s.status === 'APPLIED').length + listings.filter((l) => l.status === 'SUBMITTED').length;
-    $('tabSellers').textContent = n ? `Artists & sellers (${n})` : 'Artists & sellers';
     draw();
   } catch (ex) { $('mkBody').innerHTML = `<p class="err">Could not load: ${esc(ex.message)}</p>`; }
 }
@@ -72,6 +70,9 @@ function priceOf(l, pct, fee) {
 }
 
 function draw() {
+  // The tab count follows the list as it is now (e.g. right after Approve / Reject), not only after a reload.
+  const n = sellers.filter((s) => s.status === 'APPLIED').length + listings.filter((l) => l.status === 'SUBMITTED').length;
+  $('tabSellers').textContent = n ? `Artists & sellers (${n})` : 'Artists & sellers';
   const queueS = sellers.filter((s) => s.status === 'APPLIED');
   const queueL = listings.filter((l) => l.status === 'SUBMITTED');
   let html = '';

@@ -149,6 +149,19 @@ def _(b):
     need('again ()' not in t, 'empty brackets in Email the customer again')
     return errs
 
+
+@check('Artists & sellers: tab count drops right after rejecting an application (still showed (1))')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [],
+            'sellers': SELLERS + [{'id': 'k1', 'type': 'FRAMER', 'status': 'APPLIED', 'business': 'KUMAR ANis', 'contactName': 'Kumar', 'phone': '+97155', 'appliedAt': '2026-10-27T08:00:00Z'}]}
+    pg, errs = open_page(b, 'admin.html#sellers', seed, wait=3000)
+    need('(1)' in pg.inner_text('#tabSellers'), 'no pending count to start with')
+    act = pg.locator('.mk-act', has=pg.locator('[data-a="rejectSeller"]')).first
+    act.locator('input[data-f="note"]').fill('Test registration')
+    act.locator('[data-a="rejectSeller"]').click(); pg.wait_for_timeout(1500)
+    need('(1)' not in pg.inner_text('#tabSellers'), 'tab still shows (1) after rejecting')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
