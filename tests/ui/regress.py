@@ -163,13 +163,13 @@ def _(b):
     return errs
 
 
-@check('Order screen (layout b, wide window): Action column stays inside the window (no sideways scroll)')
+@check('Order screen: no sideways scroll, wide window to phone (Action column, header)')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [], 'site': {'id': 'site', 'orderLayout': 'b'},
             'items': [order(id='g2', kind='GIFT', title='Little Artists gift for Appa', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None, discountType='PCT', discountValue=25,
                             details=json.dumps({'Card message': 'to appa', 'Frame': 'white', 'Total': 'AED 104', 'Gift for': 'Appa'}))], 'costing': []}
     bad = []
-    for w in (1885, 1500, 1280):
+    for w in (1885, 1500, 1280, 474, 390):
         pg, errs = open_page(b, 'admin.html#order=g2', seed, width=w); pg.wait_for_timeout(800)
         sw, cw = pg.evaluate('[document.documentElement.scrollWidth, document.documentElement.clientWidth]')
         if sw > cw + 1: bad.append(f'{w}px: page is {sw}px wide')

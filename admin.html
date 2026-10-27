@@ -27,7 +27,8 @@ document.addEventListener('DOMContentLoaded',function(){var r=document.documentE
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--body)}
 header.top{background:var(--ink);color:var(--on-ink)}
-header.top .in{display:flex;align-items:center;gap:16px;padding:14px max(16px,env(safe-area-inset-left,0px))}
+header.top .in{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px max(16px,env(safe-area-inset-left,0px))}
+@media (max-width:620px){header.top #who{display:none}header.top b{font-size:18px}}
 header.top b{font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.06em;margin-right:auto}
 header.top button{background:transparent;color:var(--on-ink);border:1px solid #6d6596;border-radius:999px;padding:6px 14px;font:inherit;font-size:14px;cursor:pointer}
 main{padding:20px max(16px,env(safe-area-inset-left,0px)) 40px}
