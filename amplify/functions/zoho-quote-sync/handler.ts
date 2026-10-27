@@ -2514,17 +2514,45 @@ async function jobsOf(enquiryId: string): Promise<Jobs> {
   const row = await getRow(t, { enquiryId: { S: enquiryId } });
   return parseJobs(row?.supplierJobs?.S);
 }
+// The JSON each jobs object was read from, so saveJobs can tell which roles this request changed.
+const JOBS_READ = new WeakMap<object, string>();
 function parseJobs(raw?: string): Jobs {
-  try { let v: unknown = JSON.parse(raw || '{}'); if (typeof v === 'string') v = JSON.parse(v); return (v && typeof v === 'object' ? v : {}) as Jobs; } catch { return {}; }
+  let out: Jobs;
+  try { let v: unknown = JSON.parse(raw || '{}'); if (typeof v === 'string') v = JSON.parse(v); out = (v && typeof v === 'object' ? v : {}) as Jobs; } catch { out = {}; }
+  JOBS_READ.set(out, JSON.stringify(out));
+  return out;
 }
+/** Saves the jobs of one order without losing a change made at the same time by another request (e.g. the frame shop job
+ *  and the delivery job sent a second apart): only the roles this request changed are written over the latest saved copy,
+ *  with a conditional write that retries if the row changed in between. `jobs` is updated to what was saved. */
 async function saveJobs(enquiryId: string, jobs: Jobs) {
   const t = process.env.COSTING_TABLE;
   if (!t) throw new Error('Not configured');
-  const now = new Date().toISOString();
-  await ddb.send(new UpdateItemCommand({ TableName: t, Key: { enquiryId: { S: enquiryId } },
-    UpdateExpression: 'SET supplierJobs = :j, updatedAt = :n, createdAt = if_not_exists(createdAt, :n), #tn = if_not_exists(#tn, :t)',
-    ExpressionAttributeNames: { '#tn': '__typename' },
-    ExpressionAttributeValues: { ':j': { S: JSON.stringify(jobs) }, ':n': { S: now }, ':t': { S: 'Costing' } } }));
+  const before = JSON.parse(JOBS_READ.get(jobs) ?? '{}') as Record<string, unknown>;
+  const mine = jobs as unknown as Record<string, unknown>;
+  const changed = [...new Set([...Object.keys(before), ...Object.keys(mine)])].filter((r) => JSON.stringify(before[r]) !== JSON.stringify(mine[r]));
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const row = (await ddb.send(new GetItemCommand({ TableName: t, Key: { enquiryId: { S: enquiryId } }, ConsistentRead: true }))).Item as Img | undefined;
+    const rawNow = row?.supplierJobs?.S;
+    const latest = parseJobs(rawNow) as unknown as Record<string, unknown>;
+    for (const r of changed) { if (mine[r] === undefined) delete latest[r]; else latest[r] = mine[r]; }
+    const now = new Date().toISOString();
+    try {
+      await ddb.send(new UpdateItemCommand({ TableName: t, Key: { enquiryId: { S: enquiryId } },
+        UpdateExpression: 'SET supplierJobs = :j, updatedAt = :n, createdAt = if_not_exists(createdAt, :n), #tn = if_not_exists(#tn, :t)',
+        ConditionExpression: rawNow === undefined ? 'attribute_not_exists(supplierJobs)' : 'supplierJobs = :old',
+        ExpressionAttributeNames: { '#tn': '__typename' },
+        ExpressionAttributeValues: { ':j': { S: JSON.stringify(latest) }, ':n': { S: now }, ':t': { S: 'Costing' }, ...(rawNow === undefined ? {} : { ':old': { S: rawNow } }) } }));
+      for (const k of Object.keys(mine)) delete mine[k];
+      Object.assign(mine, latest);
+      JOBS_READ.set(jobs, JSON.stringify(latest));
+      return;
+    } catch (err) {
+      if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') throw err;
+      await new Promise((r) => setTimeout(r, 120 + attempt * 150)); // someone saved in between: read again and re-apply
+    }
+  }
+  throw new Error('Another change to this order was being saved: please press again.');
 }
 async function enquiryRow(id: string) {
   const table = process.env.ENQUIRY_TABLE;

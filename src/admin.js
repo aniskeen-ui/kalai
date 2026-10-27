@@ -878,6 +878,10 @@ function wireSuppliers(e) {
         data.price = v(`${role}-price`).value; data.due = v(`${role}-due`).value; data.note = v(`${role}-note`).value.trim();
         if (role === 'framer' && v('framer-deliver')) { data.canDeliver = v('framer-deliver').checked; data.deliveryPrice = v('framer-dprice').value; }
       }
+      // One job at a time: the other Send buttons wait until this one has been saved (no two saves of the same order at once).
+      const others = [...box.querySelectorAll('[data-jobsend],[data-jobremove],[data-ibsave],[data-ibremove]')].filter((x) => x !== b && !x.disabled);
+      others.forEach((x) => { x.disabled = true; x.dataset.waiting = '1'; x.title = 'Wait: another job is being sent'; });
+      const release = () => others.forEach((x) => { if (x.isConnected) { x.disabled = false; delete x.dataset.waiting; x.title = ''; } });
       b.disabled = true; msg.style.color = ''; msg.style.fontWeight = ''; msg.textContent = remove ? 'Taking it back…' : 'Sending…';
       try {
         const r = await client.mutations.marketAdmin({ action: remove ? 'removeJob' : 'assignJob', data: JSON.stringify(data) });
@@ -886,7 +890,7 @@ function wireSuppliers(e) {
         costings.set(e.id, { ...(costings.get(e.id) || { enquiryId: e.id }), supplierJobs: JSON.stringify(out.jobs || {}) });
         box.outerHTML = supplierSection(e); wireSuppliers(e);
         $('supplierBox').querySelector(`[data-jobmsg="${role}"]`) && ($('supplierBox').querySelector(`[data-jobmsg="${role}"]`).textContent = remove ? 'Taken back; they were emailed.' : 'Sent: they were emailed and see it in their portal.');
-      } catch (ex) { msg.textContent = `⚠ Not sent: ${ex.message || 'no answer from the server'}. Press again; if it repeats, send us this message.`; msg.style.color = 'var(--kumkum, #b3261e)'; msg.style.fontWeight = '700'; b.disabled = false; }
+      } catch (ex) { msg.textContent = `⚠ Not sent: ${ex.message || 'no answer from the server'}. Press again; if it repeats, send us this message.`; msg.style.color = 'var(--kumkum, #b3261e)'; msg.style.fontWeight = '700'; b.disabled = false; release(); }
     };
   });
 }

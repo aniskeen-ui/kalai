@@ -208,6 +208,29 @@ def _(b):
     return errs
 
 
+
+@check('Send the job: frame shop and courier sent one after the other both arrive (second one was lost)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [],
+            'items': [order(status='ARTIST_SENT', artistStage='SHIPPED', artistCourier='DHL Express UAE', artistAwb='T1', deliveryEmirate='Dubai', deliveryAddress='Villa 1')],
+            'costing': [{'enquiryId': 'e1'}]}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed, width=1500)
+    pg.evaluate("localStorage.setItem('slowMs','1200')")
+    pg.select_option('[data-js="framer-sid"]', 'f1'); pg.click('[data-jobsend="framer"]'); pg.wait_for_timeout(150)
+    need(pg.locator('[data-jobsend="delivery"]').is_disabled(), 'courier Send was clickable while the frame shop job was still saving')
+    pg.wait_for_timeout(1600)
+    pg.click('[data-jobsend="delivery"]'); pg.wait_for_timeout(1800)
+    jobs = json.loads(pg.evaluate("JSON.parse(localStorage.stubdb).costing[0].supplierJobs"))
+    need('framer' in jobs and 'delivery' in jobs, f'jobs saved: {list(jobs)}')
+    return errs
+
+@check('Server: saveJobs merges with a conditional write (two saves at once must not lose a job)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    body = src[src.index('async function saveJobs'):src.index('async function enquiryRow')]
+    need('ConditionExpression' in body and 'JOBS_READ' in body and 'ConditionalCheckFailedException' in body, 'saveJobs overwrites the whole job list again')
+    return []
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
