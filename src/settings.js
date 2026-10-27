@@ -205,7 +205,7 @@ export async function showSettings() {
       (L.tiers || D.tiers).slice(0, 3).forEach((t, i) => { $(`lyN${i}`).value = t.name; if (i) { $(`lyS${i}`).value = t.spend || ''; $(`lyO${i}`).value = t.orders || ''; } $(`lyP${i}`).value = t.pct; });
       $('lyVal').value = L.pointValue; $('lyMin').value = L.minRedeem; $('lyMax').value = L.maxPct; $('lyExp').value = L.expiryMonths;
       $('lyFr').value = L.friendAed; $('lyFrMin').value = L.friendMin; $('lyRef').value = L.referrerAed; $('lyRefMax').value = L.refMaxYear; }
-    { let cur = row?.orderLayout || 'original'; try { cur = localStorage.getItem('kalaiOrderLayout') || cur; } catch { /* */ } $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value); }
+    { const cur = row?.orderLayout || 'original'; $('st-layout').value = cur; $('st-layout').onchange = () => window.kalaiSetLayout?.($('st-layout').value, false); } // preview only: Save makes it the layout for every browser
     $('st-inr').value = row?.inrPerAed ?? 24;
     $('st-inrAuto').checked = row?.inrAuto !== false;
     $('st-usdRound').value = String(row?.usdRound || 5);

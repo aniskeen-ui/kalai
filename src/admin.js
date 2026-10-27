@@ -2064,8 +2064,9 @@ async function wireDiscount(e) {
 // button and field keeps working). Original leaves it as it is.
 let LAYOUT = 'original';
 try { LAYOUT = localStorage.getItem('kalaiOrderLayout') || 'original'; } catch { /* storage blocked */ }
-client.models.SiteSetting.get({ id: 'site' }).then((r) => { const v = r?.data?.orderLayout; if (v && v !== LAYOUT) { LAYOUT = v; try { localStorage.setItem('kalaiOrderLayout', v); } catch { /* */ } applyDeskLayout(); } }).catch(() => {});
-window.kalaiSetLayout = (v) => { LAYOUT = v || 'original'; try { localStorage.setItem('kalaiOrderLayout', LAYOUT); } catch { /* */ } applyDeskLayout(); };
+// The layout saved in Settings is the same in every browser (this browser's copy is only a cache).
+client.models.SiteSetting.get({ id: 'site' }).then((r) => { const v = r?.data?.orderLayout || 'original'; if (v !== LAYOUT) { LAYOUT = v; try { localStorage.setItem('kalaiOrderLayout', v); } catch { /* */ } applyDeskLayout(); } }).catch(() => {});
+window.kalaiSetLayout = (v, keep = true) => { LAYOUT = v || 'original'; if (keep) { try { localStorage.setItem('kalaiOrderLayout', LAYOUT); } catch { /* */ } } applyDeskLayout(); };
 let layoutTab = 'order';
 function applyDeskLayout() {
   const desk = $('desk'); if (!desk) return;
@@ -2083,7 +2084,8 @@ async function showDetail(e) {
 function arrangeDetail(e) {
   const LAYOUT_SAVED = savedLayout();
   // On a tablet (iPad) the original side-by-side layout is too narrow: use the stacked one (list on top, order below).
-  const LAYOUT = LAYOUT_SAVED === 'original' && window.innerWidth <= 1366 ? 'b' : LAYOUT_SAVED;
+  const tablet = window.innerWidth <= 1366 && !!window.matchMedia?.('(pointer:coarse)').matches; // a real touch tablet, not a laptop window
+  const LAYOUT = LAYOUT_SAVED === 'original' && (tablet || window.innerWidth <= 1000) ? 'b' : LAYOUT_SAVED;
   const desk = $('desk'), box = $('detail');
   desk.dataset.layout = LAYOUT;
   desk.classList.toggle('open', !!$('editForm') && LAYOUT === 'a');
