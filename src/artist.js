@@ -9,6 +9,7 @@ import { wireFind } from './find.js';
 import { SUGGEST } from './suggest.js';
 import { cleanTitle } from './title.js';
 import { awbButtons, wireAwb } from './awb.js';
+import { chainOnCards } from './studionav.js';
 
 const client = generateClient();
 // Shown inside the artist & seller portal (seller.html "Studio orders" tab): no own header there.
@@ -37,6 +38,7 @@ async function start() {
   const groups = session.tokens?.accessToken?.payload?.['cognito:groups'] || [];
   if (!groups.includes('ARTISTS') && !groups.includes('ADMINS')) { show('denyView'); return; }
   isAdmin = groups.includes('ADMINS');
+  if (isAdmin) chainOnCards(document.body, 'article.acard[id^="c-"]', (c) => [c.id.slice(2), 'artist']);
   show('deskView');
   await load();
 }

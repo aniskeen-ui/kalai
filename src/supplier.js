@@ -14,6 +14,7 @@ import {
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones } from './phone.js';
+import { studioBar, chainOnCards } from './studionav.js';
 import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, PRINT_SIZES, parcelPrice, parseCard, zoneOf, countriesInZone } from './ratecard.js';
 import { COUNTRIES, IN_STATES } from './phone.js';
 
@@ -84,6 +85,9 @@ async function adminBar() {
     if (!$('viewAs').value) viewAs = '';
     $('adminNote').textContent = sup.length ? '' : 'No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them.';
   } catch (ex) { $('adminNote').textContent = ex.message; }
+  // Jump to any artist / frame shop / print shop / courier; the chain of each order under its job card.
+  studioBar($('adminBar'), viewAs).catch(() => {});
+  chainOnCards($('jList'), 'article.job[data-key]', (c) => c.dataset.key.split(':'));
   $('viewAs').onchange = () => {
     viewAs = $('viewAs').value;
     const u = new URL(location.href); if (viewAs) u.searchParams.set('view', viewAs); else u.searchParams.delete('view');

@@ -11,6 +11,7 @@ import {
   fetchUserAttributes, resetPassword, confirmResetPassword,
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
+import { studioBar, chainOnCards } from './studionav.js';
 import { uploadData, getUrl, remove } from 'aws-amplify/storage';
 import { autoPhones, countryRegionHtml, wireRegion } from './phone.js';
 
@@ -99,6 +100,9 @@ async function adminBar() {
     $('viewAs').value = list.some((p) => p.id === viewAs) ? viewAs : '';
     if (!$('viewAs').value) viewAs = '';
   } catch (ex) { $('adminNote').textContent = ex.message; }
+  // Jump to any artist / frame shop / print shop / courier; the chain of each order under its card.
+  studioBar($('adminBar').querySelector('.sbox'), viewAs).catch(() => {});
+  chainOnCards($('cList'), 'article.ocard[data-c]', (c) => [c.dataset.c, 'artist']);
   $('viewAs').onchange = async () => {
     viewAs = $('viewAs').value;
     const u = new URL(location.href); if (viewAs) u.searchParams.set('view', viewAs); else u.searchParams.delete('view'); u.hash = '';
