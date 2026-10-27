@@ -992,7 +992,7 @@ function costingSection(e) {
   const fromSiva = c.artistAt
     ? `${c.artistBy && /^Kalai Art House/.test(c.artistBy) ? `Entered by you on ${esc(who)}’s behalf` : `From ${esc(c.artistBy || who)}`} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
     : (c.artistPriceInr ?? c.artistPriceAed) != null ? `Entered by you on ${esc(who)}’s behalf.`
-    : `${esc(who)} hasn't priced this yet (${e.artistId ? 'artist portal → Commissions' : 'Artist desk'}). You can also type the price here.`;
+    : `${esc(who)} hasn't priced this yet (${e.artistId ? 'artist portal → Orders to make' : 'Artist desk'}). You can also type the price here.`;
   return `<fieldset class="cost" id="costing">
     <legend>Costing ${lockedPO ? `<span class="muted">· locked: ${esc(e.zohoPO)} placed</span>` : ''}${artNo(e) ? ` <button type="button" class="linkbtn" data-openprice="${esc(artNo(e))}" style="font-size:12px;margin-left:8px" title="Open this artwork in Pricing">Price calculation for ${esc(artNo(e))} →</button>` : ''}</legend>
     ${rates.saved ? '' : '<div class="muted warnline">Margin &amp; charges are not saved yet: set them under <b>Pricing → Margin &amp; charges</b>.</div>'}
@@ -1026,7 +1026,7 @@ const needsSiva = (e) => hasArtist(e) && !!e.zohoPOId && e.purchaseState !== 'CA
 const sivaDone = (e) => e.artistStage === 'SHIPPED';
 // The artist doing this order (Siva unless a portal artist was chosen), and where the studio marks progress for them.
 const artistOf = (e) => e.artistName || 'Siva';
-const artistPage = (e) => (e.artistId ? `<a href="/seller.html?view=${encodeURIComponent(e.artistId)}" target="_blank" rel="noopener">their artist portal</a> → Commissions` : 'his Artist desk');
+const artistPage = (e) => (e.artistId ? `<a href="/seller.html?view=${encodeURIComponent(e.artistId)}" target="_blank" rel="noopener">their artist portal</a> → Orders to make` : 'his Artist desk');
 // Order life-cycle. Forward one step at a time; one step back to correct a mistake (before money moves);
 // after payment no way back to the quote stages; Delivered / Refunded / Cancelled close the order.
 //   Received → Price sent → Paid → Being framed → Shipped → Delivered
