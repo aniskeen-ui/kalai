@@ -235,7 +235,8 @@ $('applyForm').addEventListener('submit', async (e) => {
 const FR_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['READY', 'Framed, ready'], ['COLLECTED', 'Collected']];
 const PR_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['READY', 'Printed, ready'], ['COLLECTED', 'Collected']];
 const DL_STEPS = [['ASSIGNED', 'New'], ['ACCEPTED', 'Accepted'], ['PICKED', 'Picked up'], ['DELIVERED', 'Delivered']];
-const isDone = (j) => j.cancelled || !!j.invoiceNo;
+// Done = cancelled, or invoiced AND the work has left them (collected / delivered). An invoiced frame still waiting for pickup stays in To do.
+const isDone = (j) => j.cancelled || (!!j.invoiceNo && (j.role === 'delivery' ? j.stage === 'DELIVERED' : j.stage === 'COLLECTED'));
 async function loadJobs() {
   $('jList').innerHTML = '<p class="muted">Loading…</p>';
   // Studio looking at a courier / shop it only researched (prospect): no jobs yet, offer to approve it here.
