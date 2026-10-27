@@ -203,7 +203,10 @@ footer p{margin:2px 0}
 @media (max-width:860px){
   .hero .wrap,.studio .wrap{grid-template-columns:1fr}
   .hero-art{justify-self:start}
-  nav.links{display:none}
+  nav.links{display:flex;order:9;flex:0 0 100%;flex-wrap:nowrap;overflow-x:auto;gap:4px 18px;justify-content:flex-start;padding:2px 2px 6px;font-size:14px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  nav.links::-webkit-scrollbar{display:none}
+  nav.links a{flex:0 0 auto}
+  header.top .wrap{flex-wrap:wrap;row-gap:8px}
   .modal .box{grid-template-columns:1fr}
 }
 @media (max-width:760px){#artist .wrap{grid-template-columns:1fr!important}}

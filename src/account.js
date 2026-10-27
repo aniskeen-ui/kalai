@@ -1484,8 +1484,8 @@ async function showDailyMessage() {
     box.addEventListener('mouseenter', () => { paused = true; bar?.classList.remove('run'); });
     box.addEventListener('mouseleave', () => { paused = false; restart(); if (bar && !fixed) { void bar.offsetWidth; bar.classList.add('run'); } });
     if (rot) { rot.style.cursor = 'pointer'; rot.title = 'Next language'; rot.onclick = () => { if (!fixed) { next(); restart(); } }; }
-    box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); };
-    tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); show(lang, false); restart(); };
+    box.querySelector('.kmsg-x').onclick = () => { box.hidden = true; tab.hidden = false; clearInterval(timer); lsSet('kalai-msg-closed', m.id); lsSet('kalai-msg-open', ''); };
+    tab.onclick = () => { box.hidden = false; tab.hidden = true; lsSet('kalai-msg-closed', ''); lsSet('kalai-msg-open', m.id); show(lang, false); restart(); };
     // On an artwork page the card would cover the buttons: fold it into the small tab while the page is open.
     const modal = document.getElementById('modal');
     let autoFolded = false;
@@ -1505,7 +1505,9 @@ async function showDailyMessage() {
     show(lang, false);
     restart();
     // Closed this same message before: keep it as the small tab.
-    if (lsGet('kalai-msg-closed') === m.id) { box.hidden = true; tab.hidden = false; clearInterval(timer); }
+    // Phones: start as the small tab (the card would cover the page); a tap opens it.
+    const phone = window.matchMedia?.('(max-width:700px)').matches;
+    if (lsGet('kalai-msg-closed') === m.id || (phone && lsGet('kalai-msg-open') !== m.id)) { box.hidden = true; tab.hidden = false; clearInterval(timer); }
   } catch { /* no message */ }
 }
 showDailyMessage();
