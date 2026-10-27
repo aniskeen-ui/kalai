@@ -134,7 +134,7 @@ function supplierProspectsView() {
   const ps = sellers.filter((x) => x.status === 'PROSPECT' && SUP(x) && (!supType || x.type === supType)).sort((a, b) => SUP_OUTREACH.indexOf(a.outreach || 'To contact') - SUP_OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
   const card = (p) => { try { const v = typeof p.rateCard === 'string' ? JSON.parse(p.rateCard) : p.rateCard; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
   return `<div class="mk-card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>${supType === 'COURIER' ? 'Couriers' : supType === 'PRINTER' ? 'Print shops' : 'Print shops and couriers'} to ask for quotes</b><span class="muted" style="font-size:12px">${ps.length} · not suppliers yet: no jobs, no emails</span>
-      <span style="margin-left:auto"></span>${supType !== 'COURIER' ? '<button class="btn small" type="button" id="spSeed">Add the researched Dubai print shops</button>' : ''}${supType !== 'PRINTER' ? '<button class="btn small" type="button" id="cpSeed">Add / refresh the researched couriers</button>' : ''}<span class="muted" id="spMsg" style="font-size:12px"></span></div>
+      <span style="margin-left:auto"></span>${supType !== 'COURIER' ? '<button class="btn small" type="button" id="spSeed">Add the researched Dubai print shops</button>' : ''}${supType !== 'PRINTER' ? '<button class="btn small" type="button" id="cpSeed">Add / refresh the researched couriers</button>' : ''}${supType !== 'PRINTER' && supType !== 'COURIER' ? '<button class="btn small" type="button" id="fsSeed">Add the researched Bangalore frame shops</button>' : ''}<span class="muted" id="spMsg" style="font-size:12px"></span></div>
     <div class="muted" style="font-size:12px">Prices marked <b>est.</b> are an estimate for single prints on matte fine-art paper until the shop quotes; <b>published</b> are from the shop's website. Until a print shop is approved, costing uses the median of the fine-art estimates (shown as “market estimate”). Couriers: until an approved courier has a price for the place, costing uses the cheapest researched courier from the same country (UAE or India). When a quote arrives: correct the prices in its portal, then <b>Make supplier</b>.</div>
     ${ps.length ? `<div class="tablewrap"><table><thead><tr><th>${supType === 'COURIER' ? 'Courier' : supType === 'PRINTER' ? 'Print shop' : 'Supplier'}</th><th>${supType === 'COURIER' ? 'Service' : supType === 'PRINTER' ? 'Prints' : 'What they do'}</th><th>${supType === 'COURIER' ? 'Delivery price, A3 box (⃃)' : supType === 'PRINTER' ? 'Price per print (⃃)' : 'Prices (⃃)'}</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>${ps.map((p) => {
       const c = card(p), pr = c.print || {};
@@ -347,6 +347,15 @@ function wireCards() {
       const { PRINT_SHOPS } = await import('./supplier-prospects-seed.js');
       const items = PRINT_SHOPS.map((x) => ({ type: 'PRINTER', name: x.name, phone: x.phone, email: x.email, based: x.based, link: x.link, work: x.work, status: 'To contact',
         rateCard: { print: x.print, notes: x.basis === 'pub' ? 'Published prices from the shop website (Oct 2026).' : 'Estimate by Kalai Art House (Oct 2026), not a quote: replace with the shop\'s prices.', fineArt: x.fineArt, basis: x.basis, at: new Date().toISOString() } }));
+      const r = await act('addProspects', { items }); msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} already there` : ''}.`; await load();
+    } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+  };
+  if ($('fsSeed')) $('fsSeed').onclick = async () => {
+    const b = $('fsSeed'), msg = $('spMsg'); b.disabled = true; msg.textContent = 'Adding…';
+    try {
+      const { FRAME_SHOPS_INDIA } = await import('./supplier-prospects-seed.js');
+      const items = FRAME_SHOPS_INDIA.map((x) => ({ type: 'FRAMER', name: x.name, phone: x.phone, email: x.email, based: x.based, link: x.link, work: x.work, status: 'To contact',
+        rateCard: { frames: x.frames, fixingIncluded: true, from: 'India', basis: 'est', notes: 'Estimate by Kalai Art House (Oct 2026), not a quote: replace with the shop\'s prices. Frame with mount and glass, fitting included.', at: new Date().toISOString() } }));
       const r = await act('addProspects', { items }); msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} already there` : ''}.`; await load();
     } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
   };

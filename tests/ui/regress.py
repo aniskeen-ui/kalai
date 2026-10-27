@@ -211,6 +211,25 @@ def _(b):
     need(v == 12000, f'artist price after save: {v}')
     return errs
 
+
+@check('India customer + artist in India: India frame shop and India courier come first, no UAE customs')
+def _(b):
+    card_in = json.dumps({'frames': {'oak': {'40×50': 82}}, 'fixingIncluded': True, 'from': 'India'})
+    card_ae = json.dumps({'frames': {'oak': {'40×50': 60}}, 'fixingIncluded': True})
+    sellers = SELLERS + [{'id': 'fin', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'FNM Custom Framing', 'country': 'India', 'rateCard': card_in},
+                         {'id': 'fae', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'Dubai Frames', 'rateCard': card_ae},
+                         {'id': 'cin', 'type': 'COURIER', 'status': 'APPROVED', 'business': 'DTDC', 'rateCard': json.dumps({'from': 'India', 'country': {'India': {'40×50': 12}}})}]
+    it = order(id='c10', ref='KA-261022-77QM', kind='COMMISSION', title='Commission: Pet portrait', status='PAID', quotedPrice=1875, zohoInvoiceId='x',
+               deliveryCountry='India', deliveryEmirate='Tamil Nadu', details=json.dumps({'Frame': 'Teak frame', 'Size': 'Medium · 40 × 50 cm'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': sellers, 'listings': [], 'items': [it], 'costing': [{'enquiryId': 'c10', 'artistPriceInr': 12000}]}
+    pg, errs = open_page(b, 'admin.html#order=c10', seed)
+    need(pg.input_value('[data-js="framer-sid"]') == 'fin', f'frame shop pre-selected: {pg.input_value("[data-js=framer-sid]")}')
+    need(pg.input_value('#cShipFrom') == 'India', 'ships from should default to India')
+    out = pg.inner_text('#costOut')
+    need('FNM Custom Framing' in out, 'costing does not use the India frame shop')
+    need('Customs' not in out or '⃃ 0' in out.split('Customs')[1][:20], 'UAE customs charged on an India-to-India order')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
