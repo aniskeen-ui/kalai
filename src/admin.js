@@ -1,7 +1,7 @@
 // Studio desk: list every enquiry, view uploads, set price / payment link / status / message.
 import './fresh.js';
 import './stage.js';
-import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf, printCost, copiesOf } from './ratecard.js';
+import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf, printCost, copiesOf, setInrFx } from './ratecard.js';
 import './amplify-config.js';
 import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
@@ -157,6 +157,7 @@ async function loadRates() {
     const d = data?.data ? (typeof data.data === 'string' ? JSON.parse(data.data) : data.data) : null;
     if (d) rates = { ...structuredClone(DEFAULT_RATES), ...d, tiers: { ...DEFAULT_RATES.tiers, ...(d.tiers || {}) }, market: { ...structuredClone(DEFAULT_RATES.market), ...(d.market || {}) }, saved: true };
   } catch { /* keep placeholders */ }
+  setInrFx(rates.fx); // frame shops in India keep prices in ₹
 }
 async function loadCostings() {
   costings.clear();
@@ -1780,7 +1781,7 @@ function showRates() {
         try { let nt = null; do { const x = await client.models.Product.list({ limit: 500, nextToken: nt }); for (const w of (x.data || []).filter((w) => !w.artistId && w.kind !== 'photo')) await client.models.Product.update({ id: w.id, printRoyalty: data.sivaRoyalty }); nt = x.nextToken; } while (nt); } catch { /* next save retries */ }
       }
       if (res.errors?.length) throw new Error(res.errors[0].message);
-      rates = { ...data, saved: true };
+      rates = { ...data, saved: true }; setInrFx(rates.fx);
       showRates(); $('ratesMsg').textContent = 'Saved. Pricing and new order costings use these figures straight away.';
     } catch (ex) {
       $('ratesMsg').insertAdjacentHTML('afterend', `<div class="err">Could not save rates: ${esc(ex.message)}</div>`);

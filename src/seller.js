@@ -13,6 +13,7 @@ import {
 } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/data';
 import { studioBar, chainOnCards } from './studionav.js';
+import { countryOf } from './country.js';
 import { uploadData, getUrl, remove } from 'aws-amplify/storage';
 import { autoPhones, countryRegionHtml, wireRegion } from './phone.js';
 
@@ -101,9 +102,22 @@ async function adminBar() {
   try {
     const list = (await call('portals')).portals || [];
     const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)}${p.country === 'India' ? ' (India)' : ''} · ${esc(({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' })[p.status] || p.status)}</option>`;
-    const art = list.filter((p) => p.type === 'ARTIST'), sel = list.filter((p) => p.type !== 'ARTIST' && p.type !== 'FRAMER' && p.type !== 'COURIER' && p.type !== 'PRINTER');
-    $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${art.length ? `<optgroup label="Artists">${art.map(opt).join('')}</optgroup>` : ''}${sel.length ? `<optgroup label="Sellers">${sel.map(opt).join('')}</optgroup>` : ''}`;
-    $('viewAs').value = list.some((p) => p.id === viewAs) ? viewAs : '';
+    const mine = list.filter((p) => !['FRAMER', 'COURIER', 'PRINTER'].includes(p.type));
+    // Country filter (India / UAE …), remembered on this computer.
+    let ctry = ''; try { ctry = localStorage.getItem('kalaiPortalCountry') || ''; } catch { /* */ }
+    const cs = [...new Set(mine.map(countryOf))].sort();
+    const curP = mine.find((p) => p.id === viewAs);
+    if (curP && ctry && countryOf(curP) !== ctry) ctry = '';
+    $('pCountry').innerHTML = `<option value="">All countries</option>${cs.map((c) => `<option ${c === ctry ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+    $('pCountry').value = cs.includes(ctry) ? ctry : '';
+    const fill = () => {
+      const k = $('pCountry').value, shown = mine.filter((p) => !k || countryOf(p) === k);
+      const art = shown.filter((p) => p.type === 'ARTIST'), sel = shown.filter((p) => p.type !== 'ARTIST');
+      $('viewAs').innerHTML = `<option value="">My own portal (studio login)</option>${art.length ? `<optgroup label="Artists">${art.map(opt).join('')}</optgroup>` : ''}${sel.length ? `<optgroup label="Sellers">${sel.map(opt).join('')}</optgroup>` : ''}`;
+      $('viewAs').value = shown.some((p) => p.id === viewAs) ? viewAs : '';
+    };
+    fill();
+    $('pCountry').onchange = () => { try { localStorage.setItem('kalaiPortalCountry', $('pCountry').value); } catch { /* */ } fill(); };
     if (!$('viewAs').value) viewAs = '';
   } catch (ex) { $('adminNote').textContent = ex.message; }
   // Jump to any artist / frame shop / print shop / courier; the chain of each order under its card.

@@ -16,7 +16,8 @@ import { generateClient } from 'aws-amplify/data';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import { autoPhones } from './phone.js';
 import { studioBar, chainOnCards } from './studionav.js';
-import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, PRINT_SIZES, parcelPrice, parseCard, zoneOf, countriesInZone } from './ratecard.js';
+import { countryOf } from './country.js';
+import { RC_STYLES, RC_SIZES, RC_EMIRATES, RC_ZONES, RC_PARCELS, PRINT_SIZES, parcelPrice, parseCard, rawCard, zoneOf, countriesInZone } from './ratecard.js';
 import { COUNTRIES, IN_STATES } from './phone.js';
 
 autoPhones();
@@ -80,7 +81,15 @@ async function adminBar() {
   try {
     const list = ((await client.mutations.sellerAction({ action: 'portals' })).data);
     const all = (typeof list === 'string' ? JSON.parse(list) : list).portals || [];
-    const sup = all.filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type));
+    const supAll = all.filter((p) => ['FRAMER', 'COURIER', 'PRINTER'].includes(p.type));
+    // Country filter (India / UAE …), remembered on this computer.
+    let ctry = ''; try { ctry = localStorage.getItem('kalaiPortalCountry') || ''; } catch { /* */ }
+    const cs = [...new Set(supAll.map(countryOf))].sort();
+    $('pCountry').innerHTML = `<option value="">All countries</option>${cs.map((c) => `<option ${c === ctry ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+    const curP = supAll.find((p) => p.id === viewAs);
+    if (curP && ctry && countryOf(curP) !== ctry) ctry = '';
+    $('pCountry').value = cs.includes(ctry) ? ctry : '';
+    let sup = supAll.filter((p) => !$('pCountry').value || countryOf(p) === $('pCountry').value);
     const opt = (p) => `<option value="${esc(p.id)}">${esc(p.business || p.contactName)} · ${p.type === 'FRAMER' ? 'frame shop' : p.type === 'PRINTER' ? 'print shop' : 'delivery'} · ${esc({ APPLIED: 'to approve', APPROVED: 'approved', REJECTED: 'rejected', SUSPENDED: 'suspended' }[p.status] || p.status)}</option>`;
     const grp = (t, l) => { const xs = sup.filter((p) => p.type === t); return xs.length ? `<optgroup label="${l}">${xs.map(opt).join('')}</optgroup>` : ''; };
     // Category filter: only frame shops, print shops or delivery partners in the list.
@@ -94,6 +103,7 @@ async function adminBar() {
       $('viewAs').value = sup.some((p) => p.id === viewAs && (!c || p.type === c)) ? viewAs : '';
     };
     fill();
+    $('pCountry').onchange = () => { try { localStorage.setItem('kalaiPortalCountry', $('pCountry').value); } catch { /* */ } sup = supAll.filter((p) => !$('pCountry').value || countryOf(p) === $('pCountry').value); fill(); };
     $('supCat').onchange = () => { try { localStorage.setItem('kalaiSupCat', $('supCat').value); } catch { /* */ } fill(); };
     if (!$('viewAs').value) viewAs = '';
     $('adminNote').textContent = sup.length ? '' : 'No frame shops or delivery partners yet. Share art.pranixtechno.com/supplier.html with them.';
@@ -483,14 +493,16 @@ function readCountries() {
 function openRates(back) {
   if (studioNoPick()) return;
   ratesBack = back;
-  const card = parseCard(profile), fr = profile.type === 'FRAMER';
+  // As entered: a supplier in India keeps its prices in rupees.
+  const card = rawCard(profile), fr = profile.type === 'FRAMER';
   const pr = profile.type === 'PRINTER';
+  const cur = card.currency || (/india/i.test(`${profile.country || ''} ${profile.city || ''} ${profile.address || ''}`) || card.from === 'India' ? 'INR' : 'AED'), S = cur === 'INR' ? '₹' : '⃃';
   $('rTitle').textContent = pr ? 'My print prices' : fr ? 'My frame price list' : 'My delivery charges';
-  $('rNote').textContent = pr ? 'Your price in ⃃ to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don\'t print that size). A4 = 21×30 cm, A3 = 30×42 cm.' : fr
-    ? "Your price per frame, in ⃃, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it."
-    : 'Your charge in ⃃ to deliver one framed work (packed, with glass) from where you ship (below), by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.';
+  $('rNote').textContent = pr ? `Your price in ${S} to print one copy on good matte / fine-art paper from the full-size file we send, per size (leave blank if you don't print that size). A4 = 21×30 cm, A3 = 30×42 cm.` : fr
+    ? `Your price per frame, in ${S}, for each style and size you offer (leave blank if you don't offer it). A4 = 21×30 cm, A3 = 30×42 cm; other sizes are the outside frame size in cm. Add the fixing charge per size (mount, glass and fitting the work), or tick “included” if your frame prices already include it.`
+    : `Your charge in ${S} to deliver one framed work (packed, with glass) from where you ship (below), by frame size. Leave a size blank if you don\'t take it. Outside the UAE is optional: a price per zone, and if you like a price per country or region.`;
   $('rGrid').innerHTML = pr
-    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (⃃)</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="rc"><thead><tr><th>Size</th><th>Print price (${S})</th></tr></thead><tbody>${['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'].map((z) => `<tr><th>${esc(z)}</th><td>${cell(`print.${z}`, card.print?.[z])}</td></tr>`).join('')}</tbody></table>`
     : fr
     ? `<table class="rc"><thead><tr><th>Size</th>${RC_STYLES.map(([, n]) => `<th>${esc(n)}</th>`).join('')}<th>Fixing charge</th></tr></thead><tbody>
         ${RC_SIZES.map((sz) => `<tr><th>${esc(sz)}</th>${RC_STYLES.map(([k]) => `<td>${cell(`frames.${k}.${sz}`, card.frames?.[k]?.[sz])}</td>`).join('')}<td>${cell(`fixing.${sz}`, card.fixing?.[sz])}</td></tr>`).join('')}</tbody></table>
@@ -508,6 +520,9 @@ function openRates(back) {
         ${RC_ZONES.map(([z, n]) => `<tr><th>${esc(n)}</th>${pRow(`intl.${z}`, card.intl?.[z])}</tr>`).join('')}</tbody></table>
        ${countrySection(card)}`;
   $('rNotes').value = card.notes || '';
+  // Currency of the whole price list (frame shops and couriers in India quote in rupees).
+  $('rCurWrap')?.remove();
+  $('rGrid').insertAdjacentHTML('beforebegin', `<div class="field" id="rCurWrap" style="max-width:280px;margin:8px 0"><label for="rCur">My prices are in</label><select id="rCur"><option value="AED" ${cur === 'AED' ? 'selected' : ''}>UAE dirhams (⃃)</option><option value="INR" ${cur === 'INR' ? 'selected' : ''}>Indian rupees (₹)</option></select></div>`);
   if (!fr && !pr) wireCountries();
   // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.
   $('rEst')?.remove();
@@ -538,13 +553,14 @@ $('rateForm').addEventListener('submit', async (ev) => {
   let bad = false;
   $('rGrid').querySelectorAll('[data-n]').forEach((i) => {
     if (i.value === '') return;
-    const v = Number(i.value); if (!(v >= 0 && v <= 5000)) { bad = true; return; }
+    const v = Number(i.value); if (!(v >= 0 && v <= ($('rCur')?.value === 'INR' ? 200000 : 5000))) { bad = true; return; }
     const path = i.dataset.n.split('.'); let o = data;
     path.slice(0, -1).forEach((k) => { o = o[k] ??= {}; });
     o[path[path.length - 1]] = v;
   });
   if ($('rcCountry')) { const cc = readCountries(); if (cc.bad) bad = true; data.country = cc.rows; }
-  if (bad) { $('rErr').textContent = 'Enter amounts in ⃃ from 0 to 5,000.'; return; }
+  if (bad) { $('rErr').textContent = $('rCur')?.value === 'INR' ? 'Enter amounts in ₹ from 0 to 2,00,000.' : 'Enter amounts in ⃃ from 0 to 5,000.'; return; }
+  if ($('rCur')) data.currency = $('rCur').value;
   if ($('rIncl')) data.fixingIncluded = $('rIncl').checked;
   if ($('rFrom')) data.from = $('rFrom').value;
   const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';

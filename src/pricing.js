@@ -5,7 +5,7 @@
 // on the website.
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
-import { parseCard, parcelPrice } from './ratecard.js';
+import { parseCard, parcelPrice, setInrFx } from './ratecard.js';
 import { cleanTitle } from './title.js';
 
 const client = generateClient();
@@ -143,6 +143,7 @@ async function loadAll() {
   try { ratesRow = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : null; } catch { ratesRow = null; }
   // Start from the order calculator's figures where the pricing master hasn't been saved yet.
   const base = ratesRow || {};
+  setInrFx(base.fx); // frame shops in India keep prices in ₹
   P = { ...structuredClone(DEFAULT_P), fx: base.fx ?? DEFAULT_P.fx, customs: base.customs ?? DEFAULT_P.customs, local: base.local ?? DEFAULT_P.local, margin: base.margins?.collection ?? base.margin ?? DEFAULT_P.margin,
     fee: base.fee ?? DEFAULT_P.fee, ins: base.ins ?? DEFAULT_P.ins, reserve: base.reserve ?? DEFAULT_P.reserve, round9: base.round9 ?? false, round25: base.round25 ?? true,
     courier: Object.fromEntries(TIERS.map((t) => [t, base.tiers?.[t]?.courier ?? base.pricing?.courier?.[t] ?? DEFAULT_P.courier[t]])),

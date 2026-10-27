@@ -451,7 +451,7 @@ html[data-lstyle="C"] .lp-line{display:block;position:relative;max-width:1150px;
 .lp-gallery.framed figcaption{margin:10px auto -2px;width:max-content;max-width:100%;background:linear-gradient(#e9d9a8,#c9a95e);color:#3b2e12;font:600 12px var(--body);padding:4px 10px;border-radius:2px;box-shadow:0 1px 2px rgba(0,0,0,.3);text-align:center}
 .lp-peg span,.lp-tape span{display:block;font:600 11px var(--body);color:#555;text-align:center;padding:5px 2px 2px;line-height:1.25}
 .lp-peg span{background:#fff;margin-top:-1px;box-shadow:0 10px 18px rgba(0,0,0,.12)}
-.lp-gallery figure{transition:transform .25s ease}.lp-gallery figure:hover{transform:rotate(0) scale(1.03)}
+#lpGallery figure,.lp-tape[data-src],.lp-peg[data-src]{cursor:pointer}.lp-gallery figure{transition:transform .25s ease}.lp-gallery figure:hover{transform:rotate(0) scale(1.03)}
 /* Little Artists page (/#little-artists): its own page in the same site, with the full header */
 #littlePage{display:none;font-size:16px;line-height:1.6;--warm:#fff6e9}
 html[data-skin="green"] #littlePage{--warm:#f6f9ef}
@@ -1714,7 +1714,7 @@ drawChips();drawGrid();updateCount();
   const sm=src=>src.replace('/img/kids/','/img/kids/s/');
   let list=[];
   const rnd=(i,a,b)=>{const x=Math.sin(i*99.7+7)*10000;return a+(x-Math.floor(x))*(b-a)};
-  const tape=(x,i,style)=>`<div class="lp-tape" style="--t:${Math.round(rnd(i,-6,6))}deg;transform:rotate(${Math.round(rnd(i+3,-7,7))}deg);${style||''}"><img src="${esc(sm(x.src))}" alt="${esc(x.caption)}" loading="lazy"><span>${esc(x.caption)}</span></div>`;
+  const tape=(x,i,style)=>`<div class="lp-tape" data-src="${esc(x.src)}" style="--t:${Math.round(rnd(i,-6,6))}deg;transform:rotate(${Math.round(rnd(i+3,-7,7))}deg);${style||''}"><img src="${esc(sm(x.src))}" alt="${esc(x.caption)}" loading="lazy"><span>${esc(x.caption)}</span></div>`;
   function draw(){
     const st=document.documentElement.getAttribute('data-lstyle')||'A', g=document.getElementById('lpGallery');
     if(!g)return;
@@ -1722,8 +1722,8 @@ drawChips();drawGrid();updateCount();
     // gallery
     g.className='lp-gallery'+(st==='C'?' framed':st==='base'?'':' taped');
     g.innerHTML=list.map((x,i)=>{const im=`<img src="${esc(x.src)}" alt="${esc(x.caption||"A child's drawing")}" loading="lazy"${x.w?` width="${x.w}" height="${x.h}"`:''}>`;
-      return st==='C'?`<figure class="fr-${[0,1,3,2,4,0,1,2,3,4][i%10]}"><div class="mat">${im}</div><figcaption>${esc(x.caption)}</figcaption></figure>`
-        :`<figure style="--r:${st==='base'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg">${im}<figcaption>${esc(x.caption)}</figcaption></figure>`}).join('');
+      return st==='C'?`<figure data-src="${esc(x.src)}" class="fr-${[0,1,3,2,4,0,1,2,3,4][i%10]}"><div class="mat">${im}</div><figcaption>${esc(x.caption)}</figcaption></figure>`
+        :`<figure data-src="${esc(x.src)}" style="--r:${st==='base'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg">${im}<figcaption>${esc(x.caption)}</figcaption></figure>`}).join('');
     const t=document.getElementById('lpGalTitle'); if(t)t.textContent=st==='C'?'This is what it looks like, framed':'Drawn by little hands';
     // A: taped down both sides (big screens) or strips between sections (phones)
     const sc=document.getElementById('lpScatter');
@@ -1738,7 +1738,7 @@ drawChips();drawGrid();updateCount();
         const imgs=col.map(x=>`<img src="${esc(sm(x.src))}" alt="" loading="lazy">`).join('');h+=`<div class="lp-col">${imgs}${imgs}</div>`}cols.innerHTML=h}
     // C: the washing line
     const pegs=document.getElementById('lpPegs');
-    if(st==='C'&&pegs)pegs.innerHTML=list.slice(0,6).map((x,i)=>`<div class="lp-peg" style="transform:rotate(${[-4,3,-2,5,-3,2][i]}deg);margin-top:${[18,10,22,8,16,12][i]}px"><img src="${esc(sm(x.src))}" alt="${esc(x.caption)}" loading="lazy"><span>${esc(x.caption)}</span></div>`).join('');
+    if(st==='C'&&pegs)pegs.innerHTML=list.slice(0,6).map((x,i)=>`<div class="lp-peg" data-src="${esc(x.src)}" style="transform:rotate(${[-4,3,-2,5,-3,2][i]}deg);margin-top:${[18,10,22,8,16,12][i]}px"><img src="${esc(sm(x.src))}" alt="${esc(x.caption)}" loading="lazy"><span>${esc(x.caption)}</span></div>`).join('');
   }
   window.kalaiLittleStyle=function(st){st=['base','A','B','C'].includes(st)?st:'A';
     try{localStorage.setItem('kalaiLittleStyle',st)}catch(e){}
@@ -1751,10 +1751,19 @@ drawChips();drawGrid();updateCount();
     imgs.forEach(im=>{im.style.transition='opacity .6s ease';im.src=P[k]});
     setInterval(()=>{k=(k+1)%P.length;imgs.forEach(im=>{im.style.opacity=0;setTimeout(()=>{im.src=P[k];im.style.opacity=1},600)})},5000);})();
   // Little Artists order form: until a drawing is uploaded, the frame preview shows real children's drawings, one after another.
+  // Clicking a drawing anywhere on the page opens the order form with that drawing in the frame preview
+  // (unless the customer has already uploaded their own).
+  let rot=0;
+  function showDrawing(x){const m=document.getElementById('kMount');if(!m)return;
+    if(!m.querySelector('img:not(.ksample)')){clearInterval(rot);m.classList.add('has-sample');
+      m.innerHTML=`<img class="ksample on" src="${esc(x.src)}" alt="Example: ${esc(x.caption)}"><span class="kbadge">Example · ${esc(x.caption)} · yours will appear here</span>`}
+    const o=document.getElementById('kidsOrder');if(o){history.replaceState(null,'','#kidsOrder');o.scrollIntoView({behavior:'smooth',block:'start'})}}
+  document.addEventListener('click',e=>{const el=e.target.closest('#lpGallery figure[data-src],.lp-tape[data-src],.lp-peg[data-src]');if(!el)return;
+    const x=list.find(d=>d.src===el.dataset.src);if(x){e.preventDefault();showDrawing(x)}});
   function samples(){const m=document.getElementById('kMount');if(!m||!list.length||!m.querySelector('.ph'))return;
     const pick=list.slice().sort(()=>Math.random()-.5).slice(0,8);
     m.classList.add('has-sample');m.innerHTML=pick.map((x,i)=>`<img class="ksample${i?'':' on'}" src="${esc(x.src)}" alt="Example: ${esc(x.caption)}">`).join('')+`<span class="kbadge">Example · ${esc(pick[0].caption)} · yours will appear here</span>`;
-    let i=0;const t=setInterval(()=>{if(!m.querySelector('.ksample')){clearInterval(t);m.classList.remove('has-sample');return}
+    let i=0;const t=rot=setInterval(()=>{if(!m.querySelector('.ksample')){clearInterval(t);m.classList.remove('has-sample');return}
       const im=m.querySelectorAll('.ksample');im[i].classList.remove('on');i=(i+1)%im.length;im[i].classList.add('on');
       const b=m.querySelector('.kbadge');if(b)b.textContent=`Example · ${pick[i].caption} · yours will appear here`},3500);}
   fetch('/data/little-gallery.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]).then(l=>{list=l||[];draw();samples()});

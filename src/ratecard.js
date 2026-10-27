@@ -17,10 +17,26 @@ export const parcelPrice = (row, size) => {
   return v == null || v === '' ? null : Number(v);
 };
 
-export function parseCard(p) {
+export function rawCard(p) {
   let v = p?.rateCard;
   try { if (typeof v === 'string') v = JSON.parse(v); if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
   return v && typeof v === 'object' ? v : {};
+}
+// A supplier in India keeps its price list in rupees (currency 'INR'). Costing works in dirhams, so parseCard
+// converts every price at the Rates exchange rate (⃃ per ₹, set by the page with setInrFx). rawCard = as entered.
+let INR_FX = 0.042;
+export const setInrFx = (v) => { if (Number(v) > 0) INR_FX = Number(v); };
+export const inrFx = () => INR_FX;
+export const cardSym = (c) => (c?.currency === 'INR' ? '₹' : '⃃');
+const PRICE_KEYS = ['frames', 'fixing', 'print', 'uae', 'intl', 'country'];
+export function parseCard(p) {
+  const c = rawCard(p);
+  if (c.currency !== 'INR') return c;
+  const conv = (o) => (o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, conv(v)]))
+    : typeof o === 'number' || (typeof o === 'string' && o !== '' && !Number.isNaN(Number(o))) ? Math.round(Number(o) * INR_FX * 100) / 100 : o);
+  const out = { ...c, currency: 'AED', currencyEntered: 'INR' };
+  for (const k of PRICE_KEYS) if (c[k] != null) out[k] = conv(c[k]);
+  return out;
 }
 
 /** Frame style and size of an order, from what the customer chose. */

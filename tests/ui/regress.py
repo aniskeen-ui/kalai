@@ -5,7 +5,7 @@
 Each check seeds the stub database (localStorage 'stubdb'), opens a page and asserts what a person would see.
 When a bug is found (in testing or by Anis), add a check here so it can't come back.
 """
-import json, os, socket, subprocess, sys, tempfile, threading, time, traceback
+import json, re, os, socket, subprocess, sys, tempfile, threading, time, traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from functools import partial
 from playwright.sync_api import sync_playwright
@@ -369,6 +369,58 @@ def _(b):
     need(w <= 200, f"pair card {w:.0f}px wide")
     need(pg.evaluate("document.getElementById('lpPair').getBoundingClientRect().width") <= 441, 'top picture wider than 440px')
     return errs
+
+@check('Little Artists: clicking a drawing in the gallery opens the order form with that drawing in the frame')
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
+    fig = pg.locator('#lpGallery figure[data-src]').nth(3)
+    want = fig.get_attribute('data-src'); cap = fig.locator('figcaption').inner_text()
+    fig.scroll_into_view_if_needed(); fig.click(); pg.wait_for_timeout(4200)
+    shown = pg.evaluate("[...document.querySelectorAll('#kMount img')].map(i => i.getAttribute('src'))")
+    need(shown == [want], f'frame shows {shown}, wanted {want}')
+    need(cap in pg.inner_text('#kMount .kbadge'), 'badge does not name the clicked drawing')
+    need(pg.evaluate("location.hash") == '#kidsOrder', 'did not go to the order form')
+    top = pg.evaluate("document.getElementById('kidsOrder').getBoundingClientRect().top")
+    need(abs(top) < 200, f'order form not in view (top {top:.0f})')
+    return errs
+
+
+INDIA_FRAMER = {'id': 'g1', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'Guddis Frames of Arts', 'country': 'UAE',
+                'address': 'No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, India',
+                'rateCard': json.dumps({'frames': {'black': {'40×50': 1900}}, 'currency': 'INR', 'from': 'India', 'basis': 'est'})}
+
+
+@check('Artists & sellers: country filter shows only the India frame shops (Guddis saved as UAE by default)')
+def _(b):
+    sellers = [dict(s, address='Al Quoz, Dubai') if s['id'] == 'f1' else s for s in SELLERS] + [INDIA_FRAMER]
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [], 'sellers': sellers}
+    pg, errs = open_page(b, 'admin.html#sellers', seed, wait=3000)
+    pg.click('[data-mk="suppliers"]'); pg.wait_for_timeout(500)
+    need(pg.locator('#mkCountry').count() == 1, 'no country filter')
+    pg.select_option('#mkCountry', 'India'); pg.wait_for_timeout(500)
+    body = pg.inner_text('#mkBody')
+    need('Guddis' in body, 'India frame shop missing under India'); need('Rafi Frames' not in body and 'ARAMAX' not in body, 'UAE suppliers still shown under India')
+    pg.select_option('#mkCountry', 'UAE'); pg.wait_for_timeout(500)
+    body = pg.inner_text('#mkBody')
+    need('Guddis' not in body and 'Rafi Frames' in body, 'UAE filter wrong')
+    return errs
+
+
+@check('Frame shops in India: prices kept in ₹ and costed in ⃃ at the exchange rate (were entered as ⃃)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [],
+            'sellers': SELLERS + [dict(INDIA_FRAMER, id='g2', status='PROSPECT', business='Van Gogh Frames')]}
+    pg, errs = open_page(b, 'admin.html#sellers', seed, wait=3000)
+    v = pg.evaluate("""import('/src/ratecard.js').then(m => { m.setInrFx(0.04); const c = m.parseCard({ rateCard: JSON.stringify({ currency: 'INR', frames: { black: { '40×50': 2000 } } }) });
+      return [c.frames.black['40×50'], m.frameCost(c, { style: 'black', size: '40×50' }), m.parseCard({ rateCard: '{"frames":{"black":{"40×50":79}}}' }).frames.black['40×50']]; })""")
+    need(v == [80, 80, 79], f'₹2,000 at 0.04 should cost ⃃80 (AED cards unchanged): {v}')
+    pg.click('[data-mk="suppliers"]'); pg.wait_for_timeout(600)
+    need('₹1,900' in pg.inner_text('#mkBody'), 'prospect price not shown in ₹')
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'src', 'supplier-prospects-seed.js')).read()
+    i = src.index('FRAME_SHOPS_INDIA'); m = re.search(r'"40×50": (\d+)', src[i:])
+    need(m and int(m.group(1)) >= 500, f'Bangalore seed prices not in ₹ ({m and m.group(1)})')
+    return errs
+
 
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')

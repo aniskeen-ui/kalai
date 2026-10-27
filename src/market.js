@@ -1,4 +1,5 @@
 // Sellers tab (Order Management): approve sellers (commission % + Kalai delivery fee) and approve their listings.
+import { countryOf } from './country.js';
 import { wireFind } from './find.js';
 import { generateClient } from 'aws-amplify/data';
 import { getUrl, uploadData } from 'aws-amplify/storage';
@@ -69,12 +70,28 @@ function priceOf(l, pct, fee) {
   return { markup, sellerPrice, commission, delivery, customerPrice: Math.ceil(sellerPrice + commission + delivery) };
 }
 
+// Country filter (every tab): see country.js.
+let mkCountry = ''; try { mkCountry = localStorage.getItem('kalaiMkCountry') || ''; } catch { /* storage blocked */ }
+const inC = (s) => !mkCountry || countryOf(s) === mkCountry;
+function countryPicker() {
+  const list = [...new Set(sellers.map(countryOf))].sort((a, b) => (a === 'Not stated') - (b === 'Not stated') || a.localeCompare(b));
+  let sel = $('mkCountry');
+  if (!sel) {
+    $('mkFind').insertAdjacentHTML('afterend', '<select id="mkCountry" aria-label="Country" style="width:auto;margin-left:8px"></select>');
+    sel = $('mkCountry'); sel.onchange = () => { mkCountry = sel.value; try { localStorage.setItem('kalaiMkCountry', mkCountry); } catch { /* storage blocked */ } draw(); };
+  }
+  if (mkCountry && !list.includes(mkCountry)) list.push(mkCountry);
+  sel.innerHTML = `<option value="">All countries</option>${list.map((c) => `<option ${c === mkCountry ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+}
+
 function draw() {
+  countryPicker();
   // The tab count follows the list as it is now (e.g. right after Approve / Reject), not only after a reload.
   const n = sellers.filter((s) => s.status === 'APPLIED').length + listings.filter((l) => l.status === 'SUBMITTED').length;
   $('tabSellers').textContent = n ? `Artists & sellers (${n})` : 'Artists & sellers';
-  const queueS = sellers.filter((s) => s.status === 'APPLIED');
-  const queueL = listings.filter((l) => l.status === 'SUBMITTED');
+  const byId = new Map(sellers.map((s) => [s.id, s])), lInC = (l) => !mkCountry || inC(byId.get(l.sellerId) || {});
+  const queueS = sellers.filter((s) => s.status === 'APPLIED' && inC(s));
+  const queueL = listings.filter((l) => l.status === 'SUBMITTED' && lInC(l));
   let html = '';
   if (view === 'queue') {
     const qa = queueS.filter((s) => s.type === 'ARTIST'), qs = queueS.filter((s) => s.type !== 'ARTIST' && !SUP(s)), qp = queueS.filter(SUP);
@@ -84,18 +101,19 @@ function draw() {
       + (queueL.length ? `<h2 style="font-size:17px;margin:8px 0 4px">Listings to approve</h2>${queueL.map(listingCard).join('')}` : '')
       || '<p class="muted">Nothing waiting for approval.</p>';
   } else if (view === 'suppliers') {
-    const these = sellers.filter((x) => SUP(x) && x.status !== 'PROSPECT' && (!supType || x.type === supType)).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
+    const these = sellers.filter((x) => SUP(x) && x.status !== 'PROSPECT' && (!supType || x.type === supType) && inC(x)).sort((a, b) => String(a.type).localeCompare(String(b.type)) || String(a.business).localeCompare(String(b.business)));
     html = supTypeBar() + (flash ? `<div class="enq-msg" style="border-left:4px solid var(--ok);padding:8px 10px;margin:6px 0;background:var(--surface)">${esc(flash)}</div>` : '') + ((!supType || supType === 'PRINTER' || supType === 'COURIER') ? supplierProspectsView() : '') + addSupplierForm() + (these.length ? these.map(sellerCard).join('') : '<p class="muted">No frame shops or delivery partners yet. Add one above, or share art.pranixtechno.com/supplier.html with them (they choose "frame shop" or "delivery partner" when applying).</p>');
   } else if (view === 'prospects') {
     html = prospectsView();
   } else if (view === 'artists' || view === 'sellers') {
     const wantArtist = view === 'artists';
-    const these = sellers.filter((s) => !SUP(s) && s.status !== 'PROSPECT' && (s.type === 'ARTIST') === wantArtist).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
+    const these = sellers.filter((s) => !SUP(s) && s.status !== 'PROSPECT' && (s.type === 'ARTIST') === wantArtist && inC(s)).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)));
     html = these.length ? these.map(sellerCard).join('') : wantArtist
       ? '<p class="muted">No artists yet. Share art.pranixtechno.com/seller.html?as=artist (or the “Become an artist” page) with artists.</p>'
       : '<p class="muted">No sellers yet. Share art.pranixtechno.com/seller.html with craftspeople who want to sell.</p>';
   } else {
-    html = listings.length ? listings.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map(listingCard).join('') : '<p class="muted">No listings yet.</p>';
+    const ls = listings.filter(lInC);
+    html = ls.length ? ls.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map(listingCard).join('') : '<p class="muted">No listings yet.</p>';
   }
   $('mkBody').innerHTML = html;
   wireCards();
@@ -107,7 +125,7 @@ let findRun = null;
 const OUTREACH = ['To contact', 'Contacted', 'Replied - interested', 'Not interested', 'No reply'];
 const artistInvite = (s) => `Hello ${s.business}, this is Anis from Kalai Art House in Dubai (art.pranixtechno.com). I came across your work and really like it. We're an online gallery for original paintings and commissions: you set your own price and receive it in full; we list, frame, deliver, collect the payment and pay you, and you can earn a royalty on framed prints if you wish. If that interests you, you can apply in a few minutes at art.pranixtechno.com/seller.html?as=artist${s.email ? ` (please sign up with ${s.email})` : ''}. Happy to answer any questions. Thank you!`;
 function prospectsView() {
-  const ps = sellers.filter((s) => s.status === 'PROSPECT' && s.type === 'ARTIST').sort((a, b) => OUTREACH.indexOf(a.outreach || 'To contact') - OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
+  const ps = sellers.filter((s) => s.status === 'PROSPECT' && s.type === 'ARTIST' && inC(s)).sort((a, b) => OUTREACH.indexOf(a.outreach || 'To contact') - OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
   const counts = OUTREACH.map((o) => `${o}: <b>${ps.filter((p) => (p.outreach || 'To contact') === o).length}</b>`).join(' · ');
   return `<div class="mk-card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Artists you are inviting</b><span class="muted" style="font-size:12px">${counts}</span>
       <button class="btn small" type="button" id="prSeed" style="margin-left:auto">Add the 26 researched artists</button><label class="btn small ghost" style="cursor:pointer">Import outreach sheet (.xlsx)<input type="file" accept=".xlsx" id="prImport" hidden></label><span class="muted" id="prMsg" style="font-size:12px"></span></div>
@@ -131,15 +149,15 @@ function supTypeBar() {
 const SUP_OUTREACH = ['To contact', 'Quote requested', 'Quote received', 'Not suitable'];
 const RC_SZ = ['A4', 'A3', '30×40', '40×50', '50×70', '60×80', '70×100'];
 function supplierProspectsView() {
-  const ps = sellers.filter((x) => x.status === 'PROSPECT' && SUP(x) && (!supType || x.type === supType)).sort((a, b) => SUP_OUTREACH.indexOf(a.outreach || 'To contact') - SUP_OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
+  const ps = sellers.filter((x) => x.status === 'PROSPECT' && SUP(x) && (!supType || x.type === supType) && inC(x)).sort((a, b) => SUP_OUTREACH.indexOf(a.outreach || 'To contact') - SUP_OUTREACH.indexOf(b.outreach || 'To contact') || String(a.business).localeCompare(String(b.business)));
   const card = (p) => { try { const v = typeof p.rateCard === 'string' ? JSON.parse(p.rateCard) : p.rateCard; return (typeof v === 'string' ? JSON.parse(v) : v) || {}; } catch { return {}; } };
   return `<div class="mk-card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>${supType === 'COURIER' ? 'Couriers' : supType === 'PRINTER' ? 'Print shops' : 'Print shops and couriers'} to ask for quotes</b><span class="muted" style="font-size:12px">${ps.length} · not suppliers yet: no jobs, no emails</span>
-      <span style="margin-left:auto"></span>${supType !== 'COURIER' ? '<button class="btn small" type="button" id="spSeed">Add the researched Dubai print shops</button>' : ''}${supType !== 'PRINTER' ? '<button class="btn small" type="button" id="cpSeed">Add / refresh the researched couriers</button>' : ''}${supType !== 'PRINTER' && supType !== 'COURIER' ? '<button class="btn small" type="button" id="fsSeed">Add the researched Bangalore frame shops</button>' : ''}<span class="muted" id="spMsg" style="font-size:12px"></span></div>
+      <span style="margin-left:auto"></span>${supType !== 'COURIER' ? '<button class="btn small" type="button" id="spSeed">Add the researched Dubai print shops</button>' : ''}${supType !== 'PRINTER' ? '<button class="btn small" type="button" id="cpSeed">Add / refresh the researched couriers</button>' : ''}${supType !== 'PRINTER' && supType !== 'COURIER' ? '<button class="btn small" type="button" id="fsSeed">Add / refresh the Bangalore frame shops (₹)</button>' : ''}<span class="muted" id="spMsg" style="font-size:12px"></span></div>
     <div class="muted" style="font-size:12px">Prices marked <b>est.</b> are an estimate for single prints on matte fine-art paper until the shop quotes; <b>published</b> are from the shop's website. Until a print shop is approved, costing uses the median of the fine-art estimates (shown as “market estimate”). Couriers: until an approved courier has a price for the place, costing uses the cheapest researched courier from the same country (UAE or India). When a quote arrives: correct the prices in its portal, then <b>Make supplier</b>.</div>
-    ${ps.length ? `<div class="tablewrap"><table><thead><tr><th>${supType === 'COURIER' ? 'Courier' : supType === 'PRINTER' ? 'Print shop' : 'Supplier'}</th><th>${supType === 'COURIER' ? 'Service' : supType === 'PRINTER' ? 'Prints' : 'What they do'}</th><th>${supType === 'COURIER' ? 'Delivery price, A3 box (⃃)' : supType === 'PRINTER' ? 'Price per print (⃃)' : 'Prices (⃃)'}</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>${ps.map((p) => {
+    ${ps.length ? `<div class="tablewrap"><table><thead><tr><th>${supType === 'COURIER' ? 'Courier' : supType === 'PRINTER' ? 'Print shop' : 'Supplier'}</th><th>${supType === 'COURIER' ? 'Service' : supType === 'PRINTER' ? 'Prints' : 'What they do'}</th><th>${supType === 'COURIER' ? 'Delivery price, A3 box (⃃)' : supType === 'PRINTER' ? 'Price per print (⃃)' : 'Prices'}</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>${ps.map((p) => {
       const c = card(p), pr = c.print || {};
       const cp = (r) => (r ? r.s1 ?? r.small : null), sample = p.type === 'COURIER' ? [['Dubai', cp(c.uae?.Dubai)], ['India', cp(c.country?.India) ?? cp(c.intl?.B)], ['UK', cp(c.intl?.C)], ['USA', cp(c.intl?.D)]].filter(([, v]) => v != null) : [];
-      const fr = c.frames || {}, f45 = (st) => fr[st]?.['40×50'];
+      const fr = c.frames || {}, f45 = (st) => fr[st]?.['40×50'] == null ? null : `${c.currency === 'INR' ? '₹' : '⃃ '}${Number(fr[st]['40×50']).toLocaleString(c.currency === 'INR' ? 'en-IN' : 'en-US')}`;
       const prices = p.type === 'COURIER' ? (sample.length ? `from ${esc(c.from || 'UAE')}, A3 box: ${sample.map(([k, v]) => `${k} <b>${v}</b>`).join(' · ')}` : '')
         : p.type === 'FRAMER' ? ([['black', 'black'], ['oak', 'wood'], ['gold', 'gold']].filter(([k]) => f45(k) != null).map(([k, l]) => `${l} <b>${f45(k)}</b>`).join(' · ') ? `40×50: ${[['black', 'black'], ['oak', 'wood'], ['gold', 'gold']].filter(([k]) => f45(k) != null).map(([k, l]) => `${l} <b>${f45(k)}</b>`).join(' · ')}${c.from === 'India' ? ' · India' : ''}` : '')
         : RC_SZ.filter((z) => pr[z] != null).map((z) => `${z} <b>${pr[z]}</b>`).join(' · ');
@@ -358,9 +376,9 @@ function wireCards() {
     try {
       const { FRAME_SHOPS_INDIA } = await import('./supplier-prospects-seed.js');
       const items = FRAME_SHOPS_INDIA.map((x) => ({ type: 'FRAMER', name: x.name, phone: x.phone, email: x.email, based: x.based, link: x.link, work: x.work, status: 'To contact',
-        rateCard: { frames: x.frames, fixingIncluded: true, from: 'India', basis: 'est', notes: 'Estimate by Kalai Art House (Oct 2026), not a quote: replace with the shop\'s prices. Frame with mount and glass, fitting included.', at: new Date().toISOString() } }));
-      const r = await act('addProspects', { items }); msg.textContent = `Added ${r.added}${r.skipped ? `, ${r.skipped} already there` : ''}.`; await load();
-    } catch (ex) { msg.textContent = ex.message; b.disabled = false; }
+        rateCard: { frames: x.frames, currency: 'INR', fixingIncluded: true, from: 'India', basis: 'est', notes: 'Estimate by Kalai Art House (Oct 2026), not a quote: replace with the shop\'s prices. Frame with mount and glass, fitting included.', at: new Date().toISOString() } }));
+      const r = await act('addProspects', { refresh: true, items }); msg.textContent = `Added ${r.added}${r.updated ? `, prices updated (in ₹) on ${r.updated}` : ''}${r.skipped ? `, ${r.skipped} kept (their own price list)` : ''}.`; await load();
+    } catch (ex) { msg.textContent = ex.message; } finally { b.disabled = false; }
   };
   if ($('cpSeed')) $('cpSeed').onclick = async () => {
     const b = $('cpSeed'), msg = $('spMsg'); b.disabled = true; msg.textContent = 'Adding…';

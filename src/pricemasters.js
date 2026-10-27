@@ -2,7 +2,7 @@
 // site settings row (photoPrices, licencePcts) because the website reads them from there. Next to each framed-print
 // price: today's cost from the supplier price lists (print shop + frame shop + delivery to Dubai) and the margin.
 import { generateClient } from 'aws-amplify/data';
-import { parseCard, parcelPrice } from './ratecard.js';
+import { parseCard, parcelPrice, setInrFx } from './ratecard.js';
 import { PHOTO_SIZES, LIC_TYPES } from './settings.js';
 
 const client = generateClient();
@@ -21,7 +21,7 @@ async function load() {
   sups = (sp?.data || []).filter((p) => p.status === 'APPROVED' && ['FRAMER', 'PRINTER', 'COURIER'].includes(p.type));
   printPros = (sp?.data || []).filter((p) => p.status === 'PROSPECT' && p.type === 'PRINTER' && parseCard(p).fineArt !== false);
   let rd = {}; try { rd = r?.data?.data ? (typeof r.data.data === 'string' ? JSON.parse(r.data.data) : r.data.data) : {}; } catch { rd = {}; }
-  defaults = rd.defaults || {};
+  defaults = rd.defaults || {}; setInrFx(rd.fx);
   fees = Number(rd.fee || 0) + Number(rd.ins || 0) + Number(rd.reserve || 0);
 }
 /** The default supplier's price for one cell, else the cheapest that has one. */
