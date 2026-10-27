@@ -1652,6 +1652,9 @@ async function saveCosting(e) {
     ...(inp.delivery === 'OUTSIDE' ? { destCountry: destOf(e).country, destRegion: destOf(e).region || null, shipFrom: destOf(e).from } : {}),
   };
   const existing = costings.get(e.id);
+  // An empty artist-price box never wipes a price the artist (or you) already gave: Siva's order needs it.
+  if (inp.artistPriceInr == null && existing?.artistPriceInr != null) inp.artistPriceInr = existing.artistPriceInr;
+  if (inp.artistPriceAed == null && existing?.artistPriceAed != null) inp.artistPriceAed = existing.artistPriceAed;
   const rec = { enquiryId: e.id, ...inp, costs: JSON.stringify(costs) };
   // Artist price typed (or changed) here by the studio: record who entered it and when.
   if ((inp.artistPriceInr != null && Number(inp.artistPriceInr) !== Number(existing?.artistPriceInr ?? NaN)) || (inp.artistPriceAed != null && Number(inp.artistPriceAed) !== Number(existing?.artistPriceAed ?? NaN))) {

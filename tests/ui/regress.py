@@ -199,6 +199,18 @@ def _(b):
     need(pg.input_value('#cDel') == 'OUTSIDE', 'delivery to India still costed as UAE')
     return errs
 
+
+@check('Commission: saving with an empty artist-price box keeps the artist\'s price (Siva\'s ₹12,000 was wiped)')
+def _(b):
+    it = order(id='c9', ref='KA-261022-77QM', kind='COMMISSION', title='Commission: Pet portrait', status='PRICE_SENT', quotedPrice=1875, zohoInvoiceId=None, email='h@x.com',
+               details=json.dumps({'Frame': 'Teak frame', 'Size': 'Medium · 40 × 50 cm'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'listings': [], 'items': [it], 'costing': [{'enquiryId': 'c9', 'artistPriceInr': 12000}]}
+    pg, errs = open_page(b, 'admin.html#order=c9', seed)
+    pg.fill('#cInr', ''); pg.select_option('#ePayMethod', 'OTHER'); pg.fill('#ePayRef', 'R'); pg.select_option('#eStatus', 'PAID'); pg.click('#eSave'); pg.wait_for_timeout(2500)
+    v = pg.evaluate("JSON.parse(localStorage.stubdb).costing[0].artistPriceInr")
+    need(v == 12000, f'artist price after save: {v}')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
