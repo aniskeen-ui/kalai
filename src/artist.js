@@ -220,7 +220,9 @@ function render() {
 /** The paper size to work on: the commission's chosen size, or the collection work's size (from "Artwork"). */
 function paperOf(x) {
   const get = (k) => (x.brief.find((b) => b.k.toLowerCase() === k) || {}).v || '';
-  const raw = get('size') || get('frame size') || (get('artwork').match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)\s*cm/i) || [])[0] || '';
+  const cm = (v) => (String(v || '').match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)\s*cm/i) || [])[0] || '';
+  // The size the customer chose; else "NN × NN cm" in the artwork line or anywhere in the brief (a collection work's own size).
+  const raw = get('size') || get('frame size') || cm(get('artwork')) || x.brief.map((b) => cm(b.v)).find(Boolean) || cm(x.title) || '';
   if (!raw) return '';
   const m = raw.match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)/);
   const [a, b] = m ? [Number(m[1]), Number(m[2])].sort((p, q) => p - q) : [0, 0];
@@ -277,13 +279,14 @@ function card(x) {
 function webTitle(w) { const t = cleanTitle(w.title); return t === 'Original' ? '' : t; }
 function shownTitle(w) { return w.named ? w.title : webTitle(w) || SUGGEST[w.code]?.[0] || ''; }
 let isAdmin = false; // Kalai Art House signed in on Siva's page: may correct a courier / AWB after it was sent.
-const COURIERS = ['DHL', 'Aramex', 'FedEx', 'ShiprocketX', 'India Post (Speed Post)'];
+// Same names as the couriers in Kalai's supplier list, so the order screen links the artist's courier to its portal.
+const COURIERS = ['ARAMAX', 'DHL Express UAE', 'FedEx UAE', 'DTDC', 'Blue Dart', 'Delhivery', 'India Post Speed Post', 'Global India Express', 'Emirates Post', 'ShiprocketX'];
 /** The frame shop the finished work goes to: name, contact and address (from the framing job, or our only frame shop). */
 function shopBox(f) {
   if (!f) return `<div class="shopbox muted">Kalai Art House will confirm the frame shop's address: please ask on WhatsApp before sending.</div>`;
   return `<div class="shopbox"><div class="muted" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Send it to</div>
     <div><b>${esc(f.name)}</b>${f.contact ? ` · ${esc(f.contact)}` : ''}${f.phone ? ` · <a href="tel:${esc(f.phone.replace(/[^+\d]/g, ''))}">${esc(f.phone)}</a>` : ''}</div>
-    ${f.address ? `<div>${esc(f.address)}</div>` : '<div class="muted">Address not on file yet: ask Kalai Art House.</div>'}</div>`;
+    ${f.address ? `<div>${esc(f.address)}</div>` : '<div class="muted">Address not on file yet: ask Kalai Art House.</div>'}${f.assigned === false ? '<div class="muted" style="font-size:12px">Planned frame shop: Kalai Art House is confirming the job with them. If it changes, this box changes too.</div>' : ''}</div>`;
 }
 function progressBlock(x) {
   if (!x.ordered) return '';
