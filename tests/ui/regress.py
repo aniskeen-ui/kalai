@@ -399,6 +399,14 @@ def _(b):
     need('KA-261022-77QM' in pg.inner_text('#list'), 'order not found by search from the default tab')
     return errs
 
+
+@check('Every admin/portal page warns when a newer version is live (stale open tabs ran old code)')
+def _(b):
+    root = os.path.dirname(os.path.dirname(HERE))
+    miss = [f for f in ('admin', 'supplier', 'artist', 'seller') if "import './fresh.js'" not in open(os.path.join(root, 'src', f + '.js')).read()]
+    need(not miss, f'no new-version banner on: {miss}')
+    return []
+
 # ---------------------------------------------------------------- Every page loads without errors
 @check('All pages load without script errors')
 def _(b):

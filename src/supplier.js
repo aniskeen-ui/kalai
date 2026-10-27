@@ -1,3 +1,4 @@
+import './fresh.js';
 import './stage.js';
 import { openPdf } from './pdf.js';
 import { awbButtons, wireAwb } from './awb.js';

@@ -1,4 +1,5 @@
 // Artist desk (Siva): price works for Kalai Art House. No customer details or selling prices are shown here.
+import './fresh.js';
 import './stage.js';
 import './amplify-config.js';
 import './skin.js';

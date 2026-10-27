@@ -1,5 +1,6 @@
 // Seller portal: sign up, apply, and (once approved) list products with a price calculator.
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
+import './fresh.js';
 import './stage.js';
 import { openPdf } from './pdf.js';
 import { awbButtons, wireAwb } from './awb.js';
