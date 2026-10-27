@@ -265,6 +265,7 @@ def _(b):
     pg.evaluate("localStorage.setItem('slowMs','1200')")
     pg.select_option('[data-js="framer-sid"]', 'f1'); pg.click('[data-jobsend="framer"]'); pg.wait_for_timeout(150)
     need(pg.locator('[data-jobsend="delivery"]').is_disabled(), 'courier Send was clickable while the frame shop job was still saving')
+    need(pg.inner_text('[data-jobsend="delivery"]').strip() == 'Wait…', 'waiting courier button does not say Wait…')
     pg.wait_for_timeout(1600)
     pg.click('[data-jobsend="delivery"]'); pg.wait_for_timeout(1800)
     jobs = json.loads(pg.evaluate("JSON.parse(localStorage.stubdb).costing[0].supplierJobs"))

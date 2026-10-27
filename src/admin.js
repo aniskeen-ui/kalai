@@ -880,8 +880,9 @@ function wireSuppliers(e) {
       }
       // One job at a time: the other Send buttons wait until this one has been saved (no two saves of the same order at once).
       const others = [...box.querySelectorAll('[data-jobsend],[data-jobremove],[data-ibsave],[data-ibremove]')].filter((x) => x !== b && !x.disabled);
-      others.forEach((x) => { x.disabled = true; x.dataset.waiting = '1'; x.title = 'Wait: another job is being sent'; });
-      const release = () => others.forEach((x) => { if (x.isConnected) { x.disabled = false; delete x.dataset.waiting; x.title = ''; } });
+      // The waiting buttons say so on the button itself, so a press isn't silently ignored.
+      others.forEach((x) => { x.disabled = true; x.dataset.waiting = '1'; x.dataset.label = x.textContent; x.textContent = 'Wait…'; x.title = 'Wait: another job is being sent'; });
+      const release = () => others.forEach((x) => { if (x.isConnected) { x.disabled = false; delete x.dataset.waiting; x.textContent = x.dataset.label || x.textContent; x.title = ''; } });
       b.disabled = true; msg.style.color = ''; msg.style.fontWeight = ''; msg.textContent = remove ? 'Taking it back…' : 'Sending…';
       try {
         const r = await client.mutations.marketAdmin({ action: remove ? 'removeJob' : 'assignJob', data: JSON.stringify(data) });
