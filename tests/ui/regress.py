@@ -103,6 +103,52 @@ def _(b):
     need(m.evaluate('e => e.style.fontWeight') == '700', 'failure message not bold/red')
     return errs
 
+
+# ---------------------------------------------------------------- Order Management: price, voucher, helper card (test of KA-261021-X3BT)
+def priced_seed(**kw):
+    it = order(id='x1', ref='KA-261021-X3BT', title='Old Town Lane', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None, email='a@x.com',
+               details=json.dumps({'Artwork': 'Old Town Lane (Pen and ink on paper, 28 × 40 cm)', 'Framing': 'Framed, ready to hang'}), **kw)
+    return {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'listings': [],
+            'costing': [{'enquiryId': 'x1', 'artistPriceInr': 9000}],
+            'promos': [{'code': 'DIWALI10', 'discountType': 'PCT', 'discountValue': 10, 'status': 'LIVE'}]}
+
+@check('Costing: size tier taken from the artwork size (28 × 40 cm → M) and used in the costing')
+def _(b):
+    pg, errs = open_page(b, 'admin.html#order=x1', priced_seed())
+    need(pg.input_value('#cTier') == 'M', f'size tier not guessed: "{pg.input_value("#cTier")}"')
+    need('master M' in pg.inner_text('#costOut'), 'costing not worked out from the guessed tier')
+    return errs
+
+@check('Voucher: applying a code keeps unsaved inputs (size tier, message)')
+def _(b):
+    pg, errs = open_page(b, 'admin.html#order=x1', priced_seed())
+    pg.select_option('#cTier', 'L'); pg.fill('#eMsg', 'hello test')
+    pg.fill('#ePrice', '925'); pg.select_option('#eDiscT', 'CODE'); pg.wait_for_timeout(300)
+    pg.fill('#eVch', 'DIWALI10'); pg.click('#eVchApply'); pg.wait_for_timeout(1500)
+    need(pg.input_value('#cTier') == 'L', 'size tier was reset by applying the code')
+    need(pg.input_value('#eMsg') == 'hello test', 'message was lost by applying the code')
+    need('832.5' in pg.inner_text('#detail'), '925 − 10% should show 832.50')
+    return errs
+
+@check('What next card never stays on top of the Save button')
+def _(b):
+    pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
+    need(pg.is_visible('#nhBox'), 'card should open with the order')
+    pg.mouse.wheel(0, 300); pg.wait_for_timeout(300)
+    need(not pg.is_visible('#nhBox'), 'card did not fold on scroll')
+    pg.locator('#eSave').scroll_into_view_if_needed()
+    covered = pg.evaluate("""() => { const b = document.getElementById('eSave').getBoundingClientRect();
+        const t = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return !document.getElementById('eSave').contains(t); }""")
+    need(not covered, 'Save button covered')
+    return errs
+
+@check('"Email the customer again" names the status (was empty brackets)')
+def _(b):
+    pg, errs = open_page(b, 'admin.html#order=x1', priced_seed())
+    t = pg.inner_text('#detail')
+    need('again ()' not in t, 'empty brackets in Email the customer again')
+    return errs
+
 # ---------------------------------------------------------------- Supplier portal
 def sup_seed(session, jobs):
     users = {**ADMIN, 'rafi@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}

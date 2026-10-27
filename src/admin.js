@@ -1036,6 +1036,16 @@ function destOf(e) {
   return { country, region, from };
 }
 const ZONE_NAME = { A: 'GCC', B: 'South Asia', C: 'UK & Europe', D: 'USA, Canada, Australia, NZ', E: 'rest of the world' };
+/** S / M / L from the size in the order details (longest side ≤ 31 cm → S, ≤ 45 cm → M, else L); '' when no size is given. */
+function tierFromSize(e) {
+  const d = parseDetails(e.details);
+  const txt = [d.Size, d['Frame size'], d.Artwork, e.title].filter(Boolean).join(' ');
+  const m = String(txt).match(/(\d{2,3}(?:\.\d)?)\s*[x×]\s*(\d{2,3}(?:\.\d)?)\s*cm/i);
+  if (!m) return /\bA4\b/.test(txt) ? 'S' : /\bA3\b/.test(txt) ? 'M' : '';
+  const long = Math.max(Number(m[1]), Number(m[2]));
+  const t = long <= 31 ? 'S' : long <= 45 ? 'M' : 'L';
+  return rates.tiers[t] ? t : '';
+}
 function costingSection(e) {
   if (!hasArtist(e)) return '';
   const c = costings.get(e.id) || {};
@@ -1045,7 +1055,9 @@ function costingSection(e) {
   curEnq = e;
   const who = e.artistName || 'Siva';
   const artistOpts = `<option value="">Siva Raja · Artist desk (artist.html, anchorsiva@rediffmail.com)</option>${artists.map((a) => `<option value="${esc(a.id)}" data-name="${esc(a.business)}" data-country="${esc(a.country || 'UAE')}" ${a.id === e.artistId ? 'selected' : ''}>${esc(a.business)} · artist portal${a.email ? ` (${esc(a.email)})` : ''} (${esc(a.country || 'UAE')}${a.mediums ? ` · ${esc(a.mediums)}` : ''})</option>`).join('')}${e.artistId && !artists.some((a) => a.id === e.artistId) ? `<option value="${esc(e.artistId)}" selected>${esc(e.artistName || 'Artist')}</option>` : ''}`;
-  const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${c.sizeTier === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
+  // No tier saved yet: take it from the work's size (e.g. "28 × 40 cm" in Artwork / Size), so the costing shows a total straight away.
+  const guess = c.sizeTier ? '' : tierFromSize(e);
+  const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${(c.sizeTier || guess) === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
   const fromSiva = c.artistAt
     ? `${c.artistBy && /^Kalai Art House/.test(c.artistBy) ? `Entered by you on ${esc(who)}’s behalf` : `From ${esc(c.artistBy || who)}`} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`
     : (c.artistPriceInr ?? c.artistPriceAed) != null ? `Entered by you on ${esc(who)}’s behalf.`
@@ -1057,7 +1069,7 @@ function costingSection(e) {
       <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Orders to make in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">
       <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? '⃃' : '₹'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
-      <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select></div>
+      <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select>${guess ? '<span class="muted" style="font-size:11px">from the work\'s size: check, then Save</span>' : ''}</div>
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${c.delivery !== 'OUTSIDE' ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${c.delivery === 'OUTSIDE' ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
     <div class="three" id="cDestBox" ${c.delivery === 'OUTSIDE' ? '' : 'hidden'}>${(() => { const d = destOf(e); return `<div class="field"><label for="cShipFrom">Ships from</label><select id="cShipFrom"><option value="UAE" ${d.from === 'UAE' ? 'selected' : ''}>UAE (Dubai)</option><option value="India" ${d.from === 'India' ? 'selected' : ''}>India (artist / Indian supplier)</option></select></div>${countryRegionHtml({ country: d.country, region: d.region, prefix: 'cDest', names: false })}`; })()}</div>
@@ -1868,8 +1880,32 @@ async function refreshOne(id) {
   const i = all.findIndex((x) => x.id === id);
   if (i >= 0) all[i] = data; else all.push(data);
   render();
-  if (selectedId === id) showDetail(data);
+  if (selectedId === id) {
+    // Keep what was typed but not saved yet (e.g. Size tier, message, note) when the order is redrawn after an action.
+    const keep = unsavedInputs();
+    await showDetail(data);
+    restoreInputs(keep);
+  }
   return data;
+}
+// Changed-but-unsaved fields in the open order (by id). Price and discount fields are left to the server's answer.
+const SERVER_OWNED = new Set(['ePrice', 'eDiscT', 'eDiscV', 'eDiscNote', 'eVch', 'eVchList', 'eStatus', 'eLink']);
+function unsavedInputs() {
+  const out = [];
+  document.querySelectorAll('#detail input[id], #detail select[id], #detail textarea[id]').forEach((el) => {
+    if (SERVER_OWNED.has(el.id) || el.type === 'file' || el.type === 'hidden') return;
+    const dirty = el.tagName === 'SELECT' ? [...el.options].some((o) => o.selected !== o.defaultSelected)
+      : el.type === 'checkbox' || el.type === 'radio' ? el.checked !== el.defaultChecked : el.value !== el.defaultValue;
+    if (dirty) out.push([el.id, el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value]);
+  });
+  return out;
+}
+function restoreInputs(list) {
+  list.forEach(([id, v]) => {
+    const el = document.getElementById(id); if (!el) return;
+    if (el.type === 'checkbox' || el.type === 'radio') el.checked = v; else el.value = v;
+    el.dispatchEvent(new Event(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
+  });
 }
 
 // After a save, Zoho answers within a few seconds: watch for the reply and show it.
@@ -2287,7 +2323,7 @@ async function showDetailBody(e) {
       <button class="btn" type="submit" id="eSave">Save and update customer</button>
     </form>
     <div class="links" id="waLinks"></div>
-    ${e.email ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="linkbtn" id="resendMail" style="font-size:13px">Email the customer again (${esc(STATUS[e.status] || e.status)})</button><span class="muted" id="resendMsg" style="font-size:12px"></span></div>` : ''}`;
+    ${e.email ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="linkbtn" id="resendMail" style="font-size:13px">Email the customer again (${esc(STATUS[e.status || 'RECEIVED'] || e.status || 'Received')})</button><span class="muted" id="resendMsg" style="font-size:12px"></span></div>` : ''}`;
 
   wireDiscount(e);
   wireOffer(e);

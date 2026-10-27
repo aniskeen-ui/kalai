@@ -7,7 +7,8 @@ let mode = 'on';
 try { mode = localStorage.getItem('kalaiHelpMode') || 'on'; } catch { /* */ }
 let last = null;
 
-const CSS = `.nh{position:fixed;right:14px;bottom:14px;z-index:40;width:min(340px,calc(100vw - 28px));background:var(--surface,#fff);color:var(--fg);border:1px solid var(--gold);border-left:5px solid var(--gold);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.18);padding:12px 14px 12px;font-size:13px;animation:nhIn .25s ease}
+const CSS = `body{padding-bottom:64px}
+.nh{position:fixed;right:14px;bottom:14px;z-index:40;width:min(340px,calc(100vw - 28px));background:var(--surface,#fff);color:var(--fg);border:1px solid var(--gold);border-left:5px solid var(--gold);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.18);padding:12px 14px 12px;font-size:13px;animation:nhIn .25s ease}
 @keyframes nhIn{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
 .nh-h{display:flex;align-items:center;gap:8px;margin:0 0 6px}.nh-h b{font-size:14px}.nh-h small{color:var(--muted);font-size:11px;margin-left:auto;margin-right:18px;font-family:var(--mono,monospace)}
 .nh-x{position:absolute;top:6px;right:8px;background:none;border:0;font-size:16px;color:var(--muted);cursor:pointer;line-height:1}
@@ -18,7 +19,7 @@ const CSS = `.nh{position:fixed;right:14px;bottom:14px;z-index:40;width:min(340p
 .nh li.wait i{background:var(--line);color:var(--muted)}
 .nh li .who{display:inline-block;font-size:10.5px;border:1px solid var(--line);border-radius:99px;padding:0 6px;margin-left:4px;color:var(--muted)}
 .nh li button{background:none;border:0;padding:0;color:var(--kumkum,#a3242f);text-decoration:underline;cursor:pointer;font:inherit;font-size:12px;margin-left:4px}
-.nh-tab{position:fixed;right:14px;bottom:14px;z-index:40;border:1px solid var(--gold);background:var(--surface,#fff);color:var(--fg);border-radius:999px;padding:7px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+.nh-tab{position:fixed;left:14px;bottom:14px;z-index:40;border:1px solid var(--gold);background:var(--surface,#fff);color:var(--fg);border-radius:999px;padding:7px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.15)}
 .nh-flash{outline:3px solid var(--gold);outline-offset:3px;transition:outline-color 1.2s}`;
 
 function ensure() {
@@ -141,11 +142,24 @@ export function showNextHelp(e, x) {
     <div class="nh-h"><b>💡 What next?</b><small>${esc(e.ref)}</small></div>
     <div class="nh-now"><b>${esc(x.STATUS?.[e.status || 'RECEIVED'] || e.status)}</b> · ${esc(now)}</div>
     ${steps.length ? `<ol>${steps.map((st, i) => `<li class="${st.wait ? 'wait' : ''}"><i>${st.wait ? '…' : steps.slice(0, i + 1).filter((q) => !q.wait).length}</i><span>${esc(st.text)}<span class="who">${WHO[st.who] || st.who}</span>${st.sel ? `<button type="button" data-go="${esc(st.sel)}">Show me</button>` : ''}</span></li>`).join('')}</ol>` : '<div class="muted">Nothing to do right now.</div>'}`;
-  box.querySelector('.nh-x').onclick = () => { box.hidden = true; tab.hidden = false; };
-  box.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
-  const folded = mode === 'tab';
-  box.hidden = folded; tab.hidden = !folded;
+  const fold = () => { box.hidden = true; tab.hidden = false; folded = key; };
+  box.querySelector('.nh-x').onclick = fold;
+  box.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => { go(b.dataset.go); fold(); }; });
+  // Open only for a new order or a new status; once folded it stays folded for that order + status.
+  const key = `${e.id}:${e.status || ''}`;
+  const show = mode === 'on' && folded !== key;
+  box.hidden = !show; tab.hidden = show;
+  // It must never sit on top of a button: it folds itself on the first click or scroll elsewhere, or after 12 seconds.
+  clearTimeout(timer); unwatch();
+  if (show) {
+    timer = setTimeout(fold, 12000);
+    awayFn = (ev) => { if (box.hidden || box.contains(ev.target) || tab.contains(ev.target)) return; fold(); unwatch(); };
+    setTimeout(() => { if (!awayFn) return; document.addEventListener('pointerdown', awayFn, true); window.addEventListener('wheel', awayFn, true); window.addEventListener('touchmove', awayFn, true); }, 400);
+  }
 }
+function unwatch() { if (!awayFn) return; document.removeEventListener('pointerdown', awayFn, true); window.removeEventListener('wheel', awayFn, true); window.removeEventListener('touchmove', awayFn, true); awayFn = null; }
+let awayFn = null;
+let folded = '', timer = 0;
 export function hideNextHelp() { const b = document.getElementById('nhBox'), t = document.getElementById('nhTab'); if (b) b.hidden = true; if (t) t.hidden = true; }
 /** Settings: 'on' | 'tab' | 'off'. */
 export function setHelpMode(m) {
