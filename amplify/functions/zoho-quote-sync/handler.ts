@@ -148,7 +148,7 @@ async function deliveryLabel(e: Img, jobs: Jobs) {
   if (!dj.awb) throw new Error('No airway bill yet: it is made when the shop marks the job ready (or the courier gives it).');
   const { S } = mtables();
   const shop = plain(await getRow(S, { id: { S: jobs[sr]!.supplierId } }));
-  const det = parseDetails(str(e, 'details'));
+  const det = parseDetails(detStr(e));
   const kind = str(e, 'kind');
   const parcel = sr === 'printer' && !['GIFT', 'PHOTO'].includes(kind) ? 'Print' : sr === 'printer' ? 'Print (flat, do not bend)' : parcelOf(det);
   return {
@@ -173,7 +173,7 @@ async function artistLabel(e: Img, jobs: Jobs) {
   const ib = jobs.inbound!;
   const { S } = mtables();
   const fp = jobs.framer ? plain(await getRow(S, { id: { S: jobs.framer.supplierId } })) : null;
-  const det = parseDetails(str(e, 'details'));
+  const det = parseDetails(detStr(e));
   return {
     awb: ib.awb!, courier: ib.name, ref: str(e, 'ref'), date: dubaiToday(), service: 'Prepaid · Standard', pieces: '1 of 1',
     contents: `${str(e, 'kind') === 'COMMISSION' ? 'Commissioned artwork' : 'Original artwork'} (unframed, flat)${det['Size'] ? `, ${String(det['Size']).slice(0, 30)}` : ''}`, fragile: false,
@@ -377,6 +377,13 @@ async function orderVendor(img: Img): Promise<{ id: string; name: string }> {
 const vendorName = (img: Img) => (img?.artistName?.S ?? '').trim() || VENDOR_NAME;
 
 const str = (img: Img | undefined, k: string) => (img?.[k]?.S ?? '').trim();
+/** The order's details as JSON text: saved as a string by the Lambda, but as a DynamoDB map when the website wrote it (AWSJSON). */
+const detStr = (img: Img | undefined): string => {
+  const a = img?.details as AttributeValue | undefined;
+  if (!a) return '';
+  if ('S' in a && a.S != null) return a.S.trim();
+  try { return JSON.stringify(fromAttr(a)); } catch { return ''; }
+};
 const num = (img: Img | undefined, k: string) => {
   const v = img?.[k]?.N;
   return v === undefined ? null : Number(v);
@@ -402,7 +409,7 @@ function quoteParts(img: Img) {
   const ref = str(img, 'ref');
   const kind = str(img, 'kind');
   const title = str(img, 'title') || KIND[kind] || 'Website enquiry';
-  const details = parseDetails(str(img, 'details'));
+  const details = parseDetails(detStr(img));
   const customerLines = [
     `Website enquiry ${ref} (${KIND[kind] ?? kind})`,
     `Customer: ${str(img, 'customerName')}`,
@@ -1327,7 +1334,7 @@ async function artistList(admin = false) {
 async function useCataloguePrice(id: string, e: Img) {
   const PT = process.env.PRODUCT_TABLE, AT = process.env.ARTPRICE_TABLE;
   if (!PT || !AT) return false;
-  const no = String(parseDetails(str(e, 'details'))['Artwork no.'] ?? '').trim();
+  const no = String(parseDetails(detStr(e))['Artwork no.'] ?? '').trim();
   if (!no) return false;
   const pr = (await scanAll(PT)).find((x) => str(x, 'code') === no);
   if (!pr) return false;
@@ -1382,7 +1389,7 @@ async function artistRows(enquiries: Img[], admin = false) {
   return enquiries
     .map((e) => {
       const c = costing.get(str(e, 'id'));
-      const brief = Object.entries(parseDetails(str(e, 'details')))
+      const brief = Object.entries(parseDetails(detStr(e)))
         .filter(([k, v]) => v && !PRIVATE_KEY.test(k))
         .map(([k, v]) => ({ k, v: String(v).slice(0, 500) }));
       return {
@@ -1395,7 +1402,7 @@ async function artistRows(enquiries: Img[], admin = false) {
         customerName: admin ? str(e, 'customerName') : '',
         brief,
         hasPhoto: str(e, 'kind') === 'COMMISSION' && !!str(e, 'fileKey'),
-        imageKey: str(e, 'kind') === 'PRICE' ? pics.get(String(parseDetails(str(e, 'details'))['Artwork no.'] ?? '').trim()) ?? '' : '',
+        imageKey: str(e, 'kind') === 'PRICE' ? pics.get(String(parseDetails(detStr(e))['Artwork no.'] ?? '').trim()) ?? '' : '',
         artistPriceInr: num(c, 'artistPriceInr'),
         artistPriceAed: num(c, 'artistPriceAed'),
         artistReadyBy: str(c, 'artistReadyBy'),
@@ -1572,7 +1579,7 @@ async function artistPhoto(id: string) {
   let key = str(e, 'fileKey');
   // A collection order: the catalogue work's picture (signed here, so it opens whatever folder it is in).
   if (e && str(e, 'kind') === 'PRICE' && process.env.PRODUCT_TABLE) {
-    const no = String(parseDetails(str(e, 'details'))['Artwork no.'] ?? '').trim();
+    const no = String(parseDetails(detStr(e))['Artwork no.'] ?? '').trim();
     const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no) : undefined;
     key = str(pr, 'imageKey');
     if (!key) throw new Error('No picture for this work');
@@ -1811,7 +1818,7 @@ async function onStreamRecord(rec: StreamRecord) {
     if (!str(img, 'customerCode')) await assignCodes().catch((err) => console.warn('Customer code not assigned', err));
     // A framed print of a painting: whose painting it is and their royalty %, for the costs (paid with their earnings).
     if (str(img, 'kind') === 'PHOTO' && process.env.PRODUCT_TABLE) {
-      const d0 = parseDetails(str(img, 'details')), no = String(d0['Artwork no.'] ?? '').trim();
+      const d0 = parseDetails(detStr(img)), no = String(d0['Artwork no.'] ?? '').trim();
       const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no) : undefined;
       if (pr && str(pr, 'kind') !== 'photo') {
         const pct = await printRoyaltyOf(pr); // the work's %, else the artist's (Artists & sellers; Siva's in Pricing)
@@ -1820,7 +1827,7 @@ async function onStreamRecord(rec: StreamRecord) {
     }
     // An order for a portal artist's collection work goes to that artist (their portal → Commissions).
     if (str(img, 'kind') === 'PRICE' && !str(img, 'artistId') && process.env.PRODUCT_TABLE) {
-      const d0 = parseDetails(str(img, 'details')), no = String(d0['Artwork no.'] ?? '').trim();
+      const d0 = parseDetails(detStr(img)), no = String(d0['Artwork no.'] ?? '').trim();
       const pr = no ? (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'code') === no && str(x, 'artistId')) : undefined;
       if (pr) {
         await writeBack(id, { artistId: str(pr, 'artistId'), artistName: str(pr, 'artist'), artistCountry: str(pr, 'artistCountry') || 'UAE' }).catch(() => {});
@@ -1834,7 +1841,7 @@ async function onStreamRecord(rec: StreamRecord) {
     const quote = await createQuote(img);
     // Little Artists: the form already priced it (framing by age + delivery + extras), so the order starts with that
     // price (the studio checks it before "Price sent"). Not when overseas shipping is still to be quoted.
-    const det = parseDetails(str(img, 'details'));
+    const det = parseDetails(detStr(img));
     const kidsTotal = ['GIFT', 'PHOTO'].includes(str(img, 'kind')) && !/\+/.test(String(det['Total'] ?? '')) ? amount(det['Total']) : 0;
     await writeBack(id, { zohoState: 'QUOTED', zohoQuote: quote.number, zohoMessage: `Quote ${quote.number} created in Zoho${kidsTotal ? ` (AED ${kidsTotal})` : ''}`, ...(kidsTotal > 0 && num(img, 'quotedPrice') == null ? { quotedPrice: kidsTotal } : {}) });
     return;
@@ -2601,7 +2608,7 @@ function jobView(e: Img, jobs: Jobs, role: Role, framerProfile: Dict | null, pri
   const j = jobs[role]!;
   const printed = ['GIFT', 'PHOTO'].includes(str(e, 'kind'));
   const selfDelivery = role === 'delivery' && !!jobs.framer && jobs.framer.supplierId === j.supplierId;
-  const det = parseDetails(str(e, 'details'));
+  const det = parseDetails(detStr(e));
   return {
     id: str(e, 'id'), role, ref: str(e, 'ref'), kind: KIND[str(e, 'kind')] ?? str(e, 'kind'), title: str(e, 'title'), orderStatus: str(e, 'status'),
     canDeliver: role === 'framer' && !!j.canDeliver && !jobs.delivery, deliveryPrice: j.deliveryPrice ?? null, delivering: role === 'framer' && jobs.delivery?.supplierId === j.supplierId, selfDelivery,
@@ -2696,7 +2703,7 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
     if (!bucket) throw new Error('Not configured');
     let key = str(e, 'fileKey');
     if (!key.startsWith('uploads/') && ['PRICE', 'PHOTO'].includes(str(e, 'kind')) && process.env.PRODUCT_TABLE) {
-      const det = parseDetails(str(e, 'details'));
+      const det = parseDetails(detStr(e));
       const name = String(det['Artwork'] || det['Print'] || str(e, 'title')).split(' (')[0].trim().toLowerCase();
       const pr = (await scanAll(process.env.PRODUCT_TABLE)).find((x) => str(x, 'title').trim().toLowerCase() === name || (str(x, 'code') && String(det['Code'] ?? det['Artwork no.'] ?? '').includes(str(x, 'code'))));
       key = (str(e, 'kind') === 'PHOTO' && str(pr, 'printKey')) || str(pr, 'imageKey'); // prints: the full-quality print file when uploaded
@@ -3575,7 +3582,7 @@ async function imageDims(bucket: string, key: string): Promise<{ w: number; h: n
 const coaNumber = (ref: string) => `COA-${ref.replace(/^KA-/, '')}`;
 async function certificateOf(e: Img, forOwner: boolean) {
   const kind = str(e, 'kind');
-  const det = parseDetails(str(e, 'details'));
+  const det = parseDetails(detStr(e));
   const original = ['PRICE', 'COMMISSION'].includes(kind) || (kind === 'MARKET' && String(det['Maker'] ?? '') === 'Artist');
   if (!original) throw new Error('Certificates are for original artworks.');
   if (!paidLike(e)) throw new Error('The certificate is issued once the order is paid.');
@@ -5199,7 +5206,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
 
   if (rec.eventName === 'INSERT') {
     key = 'RECEIVED';
-    const det0 = parseDetails(str(img, 'details'));
+    const det0 = parseDetails(detStr(img));
     const isOrder = ['MARKET', 'LICENCE', 'PHOTO', 'GIFT'].includes(kind) || /^Artwork order/i.test(str(img, 'title')) || /website price/i.test(String(det0['Price'] ?? ''));
     cust(isOrder ? `We've received your order ${ref}` : `We've received your enquiry ${ref}`, [
       kind === 'MARKET' ? `Thank you for your order: <b>${h(title)}</b>${num(img, 'qty') && num(img, 'qty')! > 1 ? ` × ${num(img, 'qty')}` : ''}, total <b>${aed(price)}</b> including delivery in the UAE. We'll send you a secure payment link shortly; your order is confirmed once it is paid.`
@@ -5238,7 +5245,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
     if (st === 'PRICE_SENT' && kind === 'LICENCE') cust(`Pay for your licence: ${title} (${ref})`, [
       `Your <b>${h(title.replace(/^Image licence:\s*/i, ''))}</b> costs <b>${aed(price)}</b>.`,
       str(img, 'paymentLink') ? 'Pay securely with the button below. As soon as it is paid, the full-size file is ready to download under My enquiries & orders.' : 'We will send the payment link shortly.',
-      `What the licence allows: ${h(String(parseDetails(str(img, 'details'))['Allows'] ?? ''))} The artist keeps the copyright; please credit "Artwork © the artist / Kalai Art House".`,
+      `What the licence allows: ${h(String(parseDetails(detStr(img))['Allows'] ?? ''))} The artist keeps the copyright; please credit "Artwork © the artist / Kalai Art House".`,
       `By paying you agree to our <a href="${SITE}/#terms">terms</a>. Licences are digital and can't be cancelled once paid.`],
       str(img, 'paymentLink') ? { label: `Pay ${aed(price)} securely`, url: str(img, 'paymentLink') } : MY);
     else if (st === 'PRICE_SENT') cust(`Your price for ${title} (${ref})`, [
@@ -5378,7 +5385,7 @@ async function artistContactOf(e: Img): Promise<Dict | null> {
   return p;
 }
 function paperLine(e: Img) {
-  const d = parseDetails(str(e, 'details'));
+  const d = parseDetails(detStr(e));
   const raw = String(d['Size'] ?? '') || (String(d['Artwork'] ?? '').match(/\d{2,3}(?:\.\d)?\s*[x×]\s*\d{2,3}(?:\.\d)?\s*cm/i) || [''])[0];
   return raw.replace(/\s*\(.*$/, '').trim();
 }
@@ -5393,7 +5400,7 @@ async function mailArtist(e: Img, subject: string, lines: string[]) {
 }
 async function artistOrderMail(e: Img) {
   const c = (await costingFor([str(e, 'id')])).get(str(e, 'id'));
-  const d = parseDetails(str(e, 'details'));
+  const d = parseDetails(detStr(e));
   const paper = paperLine(e), medium = (String(d['Artwork'] ?? '').match(/\(([^,]+),/) || [])[1] || String(d['Style'] ?? '');
   const ready = str(c, 'artistReadyBy'), note = str(c, 'studioNote');
   await mailArtist(e, `Order placed: ${str(e, 'title')} (${str(e, 'ref')}): please start`, [

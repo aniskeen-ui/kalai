@@ -207,6 +207,16 @@ def _(b):
     need('38 × 28 cm' in t, 'paper size 38 × 28 cm not shown')
     return errs
 
+
+# ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
+@check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
+def _(b):
+    import re
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    bad = re.findall(r"str\(\w+, 'details'\)", src)
+    need(not bad, f'{len(bad)} place(s) read details as a plain string: use detStr()')
+    return []
+
 # ---------------------------------------------------------------- Every page loads without errors
 @check('All pages load without script errors')
 def _(b):
