@@ -204,8 +204,9 @@ function render() {
   $('qSt').hidden = filter === 'NEEDED';
   if (filter === 'WORKS') { renderWorks(); return; }
   fillFinder();
-  // Collection works already have his price (My works & prices): only commissions (and rework) wait for a price here.
-  const needed = items.filter((x) => (x.stage === 'NEEDED' && x.kind !== 'PRICE') || reworkPriceNeeded(x));
+  // Collection orders take his price from My works & prices (filled in by the server before this list loads); one still
+  // "needed" has no price there (or the work could not be found), so it waits here too and never sits unseen (65CF).
+  const needed = items.filter((x) => x.stage === 'NEEDED' || reworkPriceNeeded(x));
   $('cNeeded').textContent = needed.length ? `(${needed.length})` : '';
   const list = (filter === 'NEEDED' ? needed
     : filter === 'OPEN' ? items.filter((x) => ['ORDERED', 'INVOICED', 'PAID'].includes(x.stage)).filter(stMatch)
@@ -480,7 +481,7 @@ function wire(x) {
       b.textContent = 'Update price';
       const pill = document.querySelector(`#c-${CSS.escape(x.id)} .stage`);
       if (pill) { pill.className = `stage ${x.stage}`; pill.textContent = x.label; }
-      { const k = items.filter((i) => (i.stage === 'NEEDED' && i.kind !== 'PRICE') || reworkPriceNeeded(i)).length; $('cNeeded').textContent = k ? `(${k})` : ''; }
+      { const k = items.filter((i) => i.stage === 'NEEDED' || reworkPriceNeeded(i)).length; $('cNeeded').textContent = k ? `(${k})` : ''; }
     } catch (ex) {
       msg.textContent = '';
       msg.insertAdjacentHTML('afterend', `<div class="wide err">Could not send: ${esc(ex.message)}</div>`);

@@ -624,6 +624,25 @@ def _(b):
     return errs
 
 
+@check('Artist desk: a Collection order still without a price shows under Price needed (65CF sat unseen)')
+def _(b):
+    it = order(id='p65', ref='KA-261022-65CF', kind='PRICE', title='Plank Bridge Over the Stream', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None)
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'costing': []}
+    pg, errs = open_page(b, 'artist.html', seed, wait=3000)
+    pg.click('[data-f="NEEDED"]'); pg.wait_for_timeout(500)
+    need('KA-261022-65CF' in pg.inner_text('#list'), 'collection order without a price not under Price needed')
+    need('(1)' in pg.inner_text('#cNeeded'), 'Price needed count does not include it')
+    return errs
+
+
+@check('Server: a Collection order without "Artwork no." finds its work by title for the artist\'s catalogue price (65CF)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    i = src.index('async function useCataloguePrice'); body = src[i:i + 2500]
+    need('byTitle' in body and 'byTitle.length === 1' in body, 'useCataloguePrice has no single-match title fallback')
+    return []
+
+
 @check('Every admin/portal page warns when a newer version is live (stale open tabs ran old code)')
 def _(b):
     root = os.path.dirname(os.path.dirname(HERE))

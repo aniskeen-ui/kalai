@@ -1334,9 +1334,13 @@ async function artistList(admin = false) {
 async function useCataloguePrice(id: string, e: Img) {
   const PT = process.env.PRODUCT_TABLE, AT = process.env.ARTPRICE_TABLE;
   if (!PT || !AT) return false;
-  const no = String(parseDetails(detStr(e))['Artwork no.'] ?? '').trim();
-  if (!no) return false;
-  const pr = (await scanAll(PT)).find((x) => str(x, 'code') === no);
+  const det = parseDetails(detStr(e));
+  const no = String(det['Artwork no.'] ?? '').trim();
+  const all = await scanAll(PT);
+  // Older orders have no "Artwork no." (KA-261022-65CF): find the work by its title, when exactly one work has it.
+  const name = String(det.Artwork ?? str(e, 'title') ?? '').replace(/^(Price enquiry( \(offer\))?|Artwork order): /i, '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+  const byTitle = name ? all.filter((x) => String(str(x, 'title') || '').trim().toLowerCase() === name) : [];
+  const pr = no ? all.find((x) => str(x, 'code') === no) : byTitle.length === 1 ? byTitle[0] : undefined;
   if (!pr) return false;
   const ap = await getRow(AT, { productId: { S: str(pr, 'id') } });
   let price = num(ap, 'artistPrice');
