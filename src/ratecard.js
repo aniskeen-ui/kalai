@@ -43,6 +43,7 @@ export function parseCard(p) {
 }
 
 /** Frame style and size of an order, from what the customer chose. */
+const FIT = [['30×40', 30, 40], ['40×50', 40, 50], ['50×70', 50, 70], ['60×80', 60, 80], ['70×100', 70, 100]]; // = pricing.js FRAME_SIZES
 export function specOf(e, det) {
   // "Natural oak frame 50×70 cm, white mount": the mount colour is not the frame's.
   const t = `${det.Framing || ''} ${det.Frame || ''} ${det['Frame style'] || ''}`.toLowerCase().replace(/(white|cream|black)?\s*mount/g, '');
@@ -51,6 +52,12 @@ export function specOf(e, det) {
   let size = m ? `${m[1]}×${m[2]}` : '';
   // Photo framing: the size the customer picked ("A4 (21 × 30 cm)", "50 × 70 cm").
   if (e.kind === 'PHOTO') { const z = String(det.Size || ''); const n = z.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/); size = /^A4/.test(z) ? 'A4' : /^A3/.test(z) ? 'A3' : n ? `${n[1]}×${n[2]}` : 'A4'; }
+  // A collection work with no frame size on the order ("Framed, ready to hang"): the frame that fits the work with its
+  // mount, as the Pricing tab does (work + 8 cm each way → 21 × 30 cm in a 30×40). HDHX was costed at 40×50.
+  if (!size && e.kind === 'PRICE') {
+    const w = String(det.Artwork || det.Size || '').match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*cm/);
+    if (w) { const lo = Math.min(+w[1], +w[2]) + 8, hi = Math.max(+w[1], +w[2]) + 8; size = (FIT.find(([, a, c]) => a >= lo && c >= hi) || FIT[FIT.length - 1])[0]; }
+  }
   if (!RC_SIZES.includes(size)) size = e.kind === 'GIFT' ? (/A3|Large size/i.test(`${det.Extras || ''}`) ? 'A3' : 'A4') : size || '40×50';
   return { style, size, small: SMALL.includes(size) };
 }

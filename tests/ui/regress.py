@@ -86,6 +86,17 @@ def _(b):
     need(pg2.input_value('[data-js="framer-price"]') == '70', f"original artwork frame price {pg2.input_value('[data-js=framer-price]')} (frame shop ⃃70, not Day to Day)")
     return errs + errs2
 
+@check('Collection order without a frame size is costed at the frame that fits the work (HDHX: 21 × 30 cm → 30×40, not 40×50)')
+def _(b):
+    rafi = dict(SELLERS[1], rateCard=json.dumps({'frames': {'black': {'30×40': 70, '40×50': 75}}, 'fixingIncluded': True}))
+    it = order(id='h1', ref='KA-261021-HDHX', title='Coconut Palm', status='RECEIVED', quotedPrice=None, zohoInvoiceId=None,
+               details=json.dumps({'Artwork': 'Coconut Palm (Pen and ink on paper, 21 × 30 cm)', 'Framing': 'Framed, ready to hang'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [SELLERS[0], rafi, SELLERS[2]], 'items': [it], 'costing': [{'enquiryId': 'h1', 'artistPriceInr': 2000}]}
+    pg, errs = open_page(b, 'admin.html#order=h1', seed)
+    out = pg.inner_text('#costOut')
+    need('30×40' in out and '⃃ 70' in out, f'framing not at 30×40: {out[:200]}')
+    return errs
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,
