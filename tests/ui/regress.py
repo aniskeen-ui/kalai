@@ -764,7 +764,7 @@ def _(b):
 @check('Artist desk: frame shop address shown once ("Send it to" repeated Guddis\'s name and address, 65CF)')
 def _(b):
     pg, errs = open_page(b, 'artist.html', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [], 'costing': []}, wait=2000)
-    v = pg.evaluate("import('/src/artist.js').then(m => m.tidyAddr('No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, India, No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, I, India'))")
+    v = pg.evaluate("import('/src/shopbox.js').then(m => m.tidyAddr('No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, India, No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, I, India'))")
     need(v == 'No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, India', f'address: {v}')
     return errs
 
@@ -776,6 +776,19 @@ def _(b):
     pg, errs = open_page(b, 'seller.html', {'users': users, 'session': 'art@x.com', 'sellers': sellers, 'items': [], 'listings': [], 'costing': []}, wait=3000)
     need(pg.locator('#tabComm').is_visible() and 'Orders to make' in pg.inner_text('#tabComm'), f"work-orders tab: {pg.inner_text('#tabComm')!r}")
     need(not pg.locator('#tabOrders').is_visible(), 'an empty crafts "Orders" tab is shown to an artist')
+    return errs
+
+
+@check('Artist portal: a work order shows where to send the finished work (Sobana had no frame shop address)')
+def _(b):
+    users = {**ADMIN, 'art@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
+    sellers = SELLERS + [{'id': 'art@x.com', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE'}]
+    comm = {'id': 'c9', 'ref': 'KA-261029-BLVP', 'kind': 'PRICE', 'title': 'Circle of Colours', 'stage': 'ORDERED', 'ordered': True, 'progress': 'STARTED', 'details': [], 'artistPrice': 216,
+            'frameShop': {'name': 'Rafi Frames', 'contact': 'Rafi', 'phone': '+971 4 000 0000', 'address': 'Karama, Dubai', 'assigned': True}}
+    pg, errs = open_page(b, 'seller.html#commissions', {'users': users, 'session': 'art@x.com', 'sellers': sellers, 'items': [], 'listings': [], 'costing': [], 'comms': [comm]}, wait=3000)
+    pg.click('#tabComm'); pg.wait_for_timeout(800)
+    txt = pg.inner_text('#cList')
+    need('send it to' in txt.lower() and 'Karama, Dubai' in txt, f'no frame shop address on the artist\'s card: {txt[:200]}')
     return errs
 
 

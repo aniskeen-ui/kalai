@@ -1,5 +1,6 @@
 // Seller portal: sign up, apply, and (once approved) list products with a price calculator.
 // Kalai collects the money from the customer and pays the seller; Kalai's commission is added on top of the seller's price.
+import { shopBox } from './shopbox.js';
 import './fresh.js';
 import './stage.js';
 import { openPdf } from './pdf.js';
@@ -457,6 +458,7 @@ function drawComms() {
         ${awbButtons()}
         <div class="muted" style="font-size:12px">Pack it flat between stiff boards, stick this label on the parcel and hand it to the courier: they scan it at pickup.</div></div>`
         : x.inbound.label ? `<div class="awb-box muted">Courier <b>${esc(x.inbound.courier)}</b>: open this page again in a moment for the airway bill label.</div>` : `<div class="awb-box muted">Courier <b>${esc(x.inbound.courier)}</b> collects it from you: the airway bill label appears here when you mark the work finished.</div>`) : ''}
+      ${x.ordered && !x.stopped && x.progress !== 'SHIPPED' ? shopBox(x.frameShop) : ''}
       ${x.ordered && (x.progress === 'SHIPPED' || x.stopped) && !x.invoiceNo ? `<form class="acts" data-inv novalidate style="margin-top:6px;padding:10px;border:1px dashed var(--line);border-radius:10px">
         <div style="flex-basis:100%;font-size:13px"><b>Send your invoice</b> for ${commCur} ${Number(x.stopped ? (p ?? 0) / 2 : p ?? 0).toLocaleString('en-IN')}${x.stopped ? ' (50% of your price: customer cancelled)' : ''}. Kalai Art House pays it by bank transfer.</div>
         <label class="field" style="gap:2px"><span style="font-size:11px;font-weight:700">Your invoice no.</span><input name="no" maxlength="40" placeholder="e.g. INV-001"></label>
