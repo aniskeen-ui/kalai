@@ -98,6 +98,13 @@ function pickSupplier(types, pref, costFn, from, kind) {
   const x = mine || list.sort((a, b) => a.c - b.c)[0];
   return x ? { cost: x.c, name: x.s.business, id: x.s.id } : null;
 }
+/** "Black slim frame 40×50 cm, white mount, glass" from the order (style and size as costed). '' for no frame. */
+function frameSpecText(e) {
+  const sp = specOf(e, parseDetails(e.details));
+  if (sp.style === 'none') return '';
+  const style = (RC_STYLES.find(([k]) => k === sp.style) || [, ''])[1];
+  return `${style ? `${style} frame` : 'Frame'} ${sp.size}${/×/.test(sp.size) ? ' cm' : ''}${['PRICE', 'COMMISSION'].includes(e.kind) ? ', white mount, glass' : ''}`;
+}
 function estCosts(e) {
   if (!e) return {};
   const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
@@ -890,6 +897,8 @@ function wireSuppliers(e) {
         if (!data.supplierId) { msg.textContent = 'Choose who does it.'; return; }
         data.price = v(`${role}-price`).value; data.due = v(`${role}-due`).value; data.note = v(`${role}-note`).value.trim();
         if (role === 'framer' && v('framer-deliver')) { data.canDeliver = v('framer-deliver').checked; data.deliveryPrice = v('framer-dprice').value; }
+        // The frame the costing used goes with the job, so the frame shop knows what to make (65CF only said "Framed, ready to hang").
+        if (role === 'framer') data.spec = frameSpecText(e);
       }
       // One job at a time: the other Send buttons wait until this one has been saved (no two saves of the same order at once).
       const others = [...box.querySelectorAll('[data-jobsend],[data-jobremove],[data-ibsave],[data-ibremove]')].filter((x) => x !== b && !x.disabled);

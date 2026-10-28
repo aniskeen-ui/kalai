@@ -2601,8 +2601,8 @@ async function assignJob(action: string, d: Dict) {
   const canDeliver = role === 'framer' && !!d.canDeliver && !jobs.delivery;
   const deliveryPrice = canDeliver && d.deliveryPrice !== '' && d.deliveryPrice != null ? numIn(d.deliveryPrice, 100000) : null;
   const job: Job = cur && cur.supplierId === sid
-    ? { ...cur, price, due: txt(d.due, 10), note: txt(d.note, 500), canDeliver, deliveryPrice }
-    : { supplierId: sid, name: String(p.business || p.contactName), price, due: txt(d.due, 10), note: txt(d.note, 500), stage: 'ASSIGNED', assignedAt: now, canDeliver, deliveryPrice };
+    ? { ...cur, price, due: txt(d.due, 10), note: txt(d.note, 500), canDeliver, deliveryPrice, ...(d.spec ? { spec: txt(d.spec, 160) } : {}) }
+    : { supplierId: sid, name: String(p.business || p.contactName), price, due: txt(d.due, 10), note: txt(d.note, 500), stage: 'ASSIGNED', assignedAt: now, canDeliver, deliveryPrice, ...(d.spec ? { spec: txt(d.spec, 160) } : {}) };
   jobs[role] = job;
   if (role === 'delivery') await ensureAwb(jobs).catch((err) => console.warn('AWB not made', err));
   await saveJobs(id, jobs);
@@ -2658,7 +2658,7 @@ function jobView(e: Img, jobs: Jobs, role: Role, framerProfile: Dict | null, pri
     artist: role === 'framer' && ['PRICE', 'COMMISSION'].includes(str(e, 'kind')) ? { stage: str(e, 'artistStage') || '', startedAt: str(e, 'artistStartedAt'), finishedAt: str(e, 'artistFinishedAt'), sentAt: str(e, 'artistShippedAt'), courier: str(e, 'artistCourier'), awb: str(e, 'artistAwb') } : null,
     pod: j.pod ? { name: j.pod.name, at: j.pod.at, signed: !!j.pod.signKey, photos: j.pod.photoKeys?.length ?? 0 } : null,
     specs: role === 'printer' ? [['Print', str(e, 'kind') === 'GIFT' ? giftPrintSpec(det) : photoPrintSpec(det)]]
-      : role === 'framer' ? [...(printed && jobs.printer ? [['Print', `Printed by ${jobs.printer.name}: collect it from them (see below), then frame it.`]] : str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
+      : role === 'framer' ? [...(j.spec ? [['Frame to make', String(j.spec)]] : []), ...(printed && jobs.printer ? [['Print', `Printed by ${jobs.printer.name}: collect it from them (see below), then frame it.`]] : str(e, 'kind') === 'GIFT' ? [['Print', giftPrintSpec(det)]] : str(e, 'kind') === 'PHOTO' ? [['Print', photoPrintSpec(det)]] : []), ...FRAMER_KEYS.filter((k) => det[k]).map((k) => [k, String(det[k]).slice(0, 300)])] : [['Parcel', parcelOf(det)]],
     printJob: role === 'printer' || (role === 'framer' && printed && !jobs.printer),
     hasPhoto: role === 'printer' || (role === 'framer' && (!!str(e, 'fileKey') || ['PRICE', 'PHOTO'].includes(str(e, 'kind')))),
     // Print shop: where the print goes (the frame shop). Frame shop: where to collect the print.
@@ -5029,7 +5029,10 @@ function checkAddress(a: { name?: unknown; phone?: unknown; country?: unknown; e
 /** "Villa 12, Mirdif, Dubai", "12 MG Road, Chennai, Tamil Nadu 600001, India" or "…, London SW1A 2AA, United Kingdom". */
 function addressText(img: Img) {
   const c = str(img, 'deliveryCountry') || 'UAE', away = c !== 'UAE';
-  return [str(img, 'deliveryAddress'), str(img, 'deliveryLandmark') ? `near ${str(img, 'deliveryLandmark')}` : '', `${str(img, 'deliveryEmirate')}${away && str(img, 'deliveryPin') ? ` ${str(img, 'deliveryPin')}` : ''}`, away ? c : ''].filter(Boolean).join(', ');
+  // Parts the typed address already has (state, PIN, country) are not added again (65CF: "…Tamil Nadu, India, Tamil Nadu 629004, India").
+  const addr = str(img, 'deliveryAddress'), has = (x: string) => !!x && addr.toLowerCase().includes(x.toLowerCase());
+  const region = has(str(img, 'deliveryEmirate')) ? '' : str(img, 'deliveryEmirate'), pin = away && !has(str(img, 'deliveryPin')) ? str(img, 'deliveryPin') : '';
+  return [addr, str(img, 'deliveryLandmark') ? `near ${str(img, 'deliveryLandmark')}` : '', [region, pin].filter(Boolean).join(' '), away && !has(c) ? c : ''].filter(Boolean).join(', ');
 }
 async function customerAddress(ev: ApiEvent) {
   const table = process.env.ENQUIRY_TABLE;

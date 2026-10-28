@@ -97,6 +97,21 @@ def _(b):
     need('30×40' in out and '⃃ 70' in out, f'framing not at 30×40: {out[:200]}')
     return errs
 
+@check('Frame job carries the frame to make (65CF: Guddis only saw "Framed, ready to hang")')
+def _(b):
+    rafi = dict(SELLERS[1], rateCard=json.dumps({'frames': {'black': {'40×50': 75}}, 'fixingIncluded': True}))
+    it = order(id='p6', ref='KA-261022-65CF', title='Plank Bridge Over the Stream', status='PAID',
+               details=json.dumps({'Artwork': 'Plank Bridge Over the Stream (Watercolour on paper, 38 × 28 cm)', 'Framing': 'Framed, ready to hang'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [SELLERS[0], rafi, SELLERS[2]], 'items': [it], 'costing': [{'enquiryId': 'p6', 'artistPriceInr': 3350}]}
+    pg, errs = open_page(b, 'admin.html#order=p6', seed)
+    pg.locator('[data-jobsend="framer"]').click(); pg.wait_for_timeout(1500)
+    jobs = pg.evaluate("JSON.parse(JSON.parse(localStorage.getItem('stubdb')).costing.find(c => c.enquiryId === 'p6').supplierJobs)")
+    need(jobs.get('framer', {}).get('spec') == 'Black slim frame 40×50 cm, white mount, glass', f"frame job spec: {jobs.get('framer', {}).get('spec')}")
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    need("['Frame to make', String(j.spec)]" in src, 'server does not show the frame to make to the frame shop')
+    need('has(c)' in src[src.index('function addressText'):src.index('function addressText') + 900], 'address repeats the country')
+    return errs
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,

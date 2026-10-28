@@ -281,7 +281,7 @@ function supGuide(j, fr, pr) {
   const spec = (k) => (j.specs.find(([a]) => a.toLowerCase() === k) || [])[1] || '';
   const ask = `https://wa.me/${STUDIO_WA}?text=${encodeURIComponent(`Hello Kalai Art House, a question about ${pr ? 'printing' : fr ? 'framing' : 'delivery'} job ${j.ref} (${j.title}): `)}`;
   const steps = fr ? [
-    `Frame: <b>${esc(spec('framing') || spec('frame') || 'as given in the details above')}</b>.${spec('size') ? ` Size: <b>${esc(spec('size'))}</b>.` : ''} The frame size is the outer size; the artwork keeps its own size and the white mount fills the space around it.`,
+    `Frame: <b>${esc(spec('frame to make') || spec('framing') || spec('frame') || 'as given in the details above')}</b>.${spec('size') ? ` Size: <b>${esc(spec('size'))}</b>.` : ''} The frame size is the outer size; the artwork keeps its own size and the white mount fills the space around it.`,
     j.printJob ? 'Print first (or collect the print from the print shop shown), then frame it.' : 'When the artwork arrives, check it against the photo here: same picture, same size, no creases, stains or damage. If anything is different or damaged, <b>stop and send us photos</b> before you cut anything.',
     'Mount: acid-free white mount, artwork centred, the mount window overlapping the paper edge by about 5 mm. Keep the artist\'s signature visible. Never trim, glue or fold the artwork: hinge it with acid-free tape only.',
     'Glass: clean on both sides, no dust, hair or fingerprints inside. Close the back neatly and fit D-rings or a hanging wire.',
