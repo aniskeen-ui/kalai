@@ -2470,6 +2470,8 @@ async function showDetailBody(e) {
     for (const [on, sel] of groups) $('detail').querySelectorAll(sel).forEach((el) => { all.add(el); if (on) lockSet.add(el); });
     // Documents stay usable on a closed order: the airway bill label and the proof of delivery.
     [...lockSet].forEach((el) => { if (el.closest('[data-awbbox],[data-podbox]')) lockSet.delete(el); });
+    // A refunded / cancelled order may still have a supplier job nobody started: "Take it back" stays usable (UHBU).
+    if (['REFUNDED', 'CANCELLED'].includes(s)) [...lockSet].forEach((el) => { if (el.matches('[data-jobremove]')) lockSet.delete(el); });
     all.forEach((el) => {
       if (lockSet.has(el)) { if (!el.disabled) { el.disabled = true; el.dataset.doneLock = '1'; } }
       else if (el.dataset.doneLock) { el.disabled = false; delete el.dataset.doneLock; }

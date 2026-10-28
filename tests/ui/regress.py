@@ -236,6 +236,17 @@ def _(b):
     need(not dis, 'Paid is greyed out on an unpaid order that has an old challan')
     return errs
 
+@check('Refunded order: a supplier job nobody started can still be taken back (UHBU: button locked)')
+def _(b):
+    s = priced_seed(); s['items'][0].update(status='REFUNDED', zohoPOId='po1')
+    s['costing'] = [{'enquiryId': 'x1', 'artistPriceInr': 2000, 'supplierJobs': json.dumps({'framer': {'supplierId': 'f1', 'name': 'Rafi Frames', 'stage': 'ASSIGNED', 'price': 70}})}]
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(800)
+    need(pg.locator('[data-jobremove="framer"]').is_enabled(), '"Take it back" is locked on a refunded order')
+    pg.click('[data-jobremove="framer"]'); pg.wait_for_timeout(1200)
+    jobs = pg.evaluate("JSON.parse(JSON.parse(localStorage.getItem('stubdb')).costing[0].supplierJobs)")
+    need('framer' not in jobs, 'job not taken back')
+    return errs
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
