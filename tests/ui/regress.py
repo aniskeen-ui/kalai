@@ -247,6 +247,14 @@ def _(b):
     need('framer' not in jobs, 'job not taken back')
     return errs
 
+@check('Dates are Dubai dates: artist sent at 03:30 Dubai shows that day, not the UTC day before (BLVP showed 28 Oct on 29 Oct)')
+def _(b):
+    s = priced_seed(zohoPOId='po1', artistStage='SHIPPED', artistShippedAt='2026-10-28T23:30:00Z'); s['items'][0]['status'] = 'ARTIST_SENT'
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(800)
+    t = pg.inner_text('#supplierBox')
+    need('2026-10-29' in t and '2026-10-28' not in t, f'artist sent date: {t[t.find("sent"):t.find("sent")+60]!r}')
+    return errs
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)

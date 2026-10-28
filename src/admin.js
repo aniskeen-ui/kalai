@@ -532,7 +532,7 @@ function reportLines() {
   return all
     .filter((e) => SOLD.includes(e.status || ''))
     .filter((e) => !kind || e.kind === kind)
-    .filter((e) => { const d = String(e.createdAt || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); })
+    .filter((e) => { const d = dDay(e.createdAt); return (!from || d >= from) && (!to || d <= to); })
     .map(reportLine);
 }
 
@@ -604,7 +604,7 @@ $('rCsv').onclick = () => {
   const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Planned total cost', 'Planned margin', 'Planned margin %', 'Actual artist', 'Actual framing', 'Actual India courier', 'Actual customs', 'Actual local courier', 'Actual other', 'Actual total cost (planned where no bill)', 'Actual margin', 'Actual margin %', 'Variance', 'Note'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const fx = rFactor(), cv = (v) => (v === '' || v == null || typeof v !== 'number' ? v : Math.round(v * fx * 100) / 100);
-  const rows = reportLines().map((l) => [String(l.e.createdAt || '').slice(0, 10), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
+  const rows = reportLines().map((l) => [dDay(l.e.createdAt), l.e.ref, l.e.title, l.e.customerName, STATUS[l.e.status] || l.e.status,
     l.price, l.refund, l.net, l.k ? r2(l.k.artist) : '', l.k ? r2(l.k.framing) : '', l.k ? r2(l.k.india) : '', l.k ? r2(l.k.customs) : '', l.k ? r2(l.k.local) : '', l.k ? r2(l.k.rework) : '',
     l.fee, l.total ?? '', l.margin ?? '', l.pct == null ? '' : (l.pct * 100).toFixed(1) + '%',
     ...['artist', 'framing', 'india', 'customs', 'local', 'other'].map((f) => { const a = actualOf(costings.get(l.e.id), l.e); return a && a[f] != null && a[f] !== '' ? r2(Number(a[f])) : ''; }),
@@ -781,7 +781,7 @@ function flowStrip(e, j, gift) {
   return `<div style="margin-top:8px"><div class="muted" style="font-size:12px">Flow for a ${esc(KIND[e.kind] || 'order')} order: ${hasArtist(e) ? 'Artist → Frame shop → Customer' : 'Print shop → Frame shop → Customer'}</div><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:6px">${parts.join('')}</div></div>`;
 }
 function artistBox(e) {
-  const st = { STARTED: 'working on it', FINISHED: 'finished, not sent yet', SHIPPED: `sent to the frame shop${e.artistShippedAt ? ` ${String(e.artistShippedAt).slice(0, 10)}` : ''}` }[e.artistStage] || (e.zohoPOId ? 'not started yet' : 'price / order not placed yet');
+  const st = { STARTED: 'working on it', FINISHED: 'finished, not sent yet', SHIPPED: `sent to the frame shop${e.artistShippedAt ? ` ${dDay(e.artistShippedAt)}` : ''}` }[e.artistStage] || (e.zohoPOId ? 'not started yet' : 'price / order not placed yet');
   const href = e.artistId ? `/seller.html?view=${encodeURIComponent(e.artistId)}` : '/artist.html';
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:6px 0"><a href="${href}"><b>${esc(artistOf(e))}</b></a><span class="muted">· ${esc(st)}</span></div>`;
 }
@@ -808,7 +808,7 @@ function inboundRow(e, j) {
   const nm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const typedId = typed ? (list.find((s) => nm(s.business) && (nm(s.business).includes(nm(typed.name)) || nm(typed.name).includes(nm(s.business))))?.id || '') : '';
   const head = ib ? `<span class="muted">${esc(ib.name)}${ib.awb ? ` · AWB <span class="mono">${esc(ib.awb)}</span>` : ` · airway bill made when the artist marks it finished`}</span>`
-    : typed ? `<span class="muted"><b style="color:var(--fg)">${esc(typed.name)}</b>${typed.awb ? ` · AWB <span class="mono">${esc(typed.awb)}</span>` : ''} · entered by the artist${sent ? ` · sent ${esc(String(e.artistShippedAt || '').slice(0, 10))}` : ''}</span>`
+    : typed ? `<span class="muted"><b style="color:var(--fg)">${esc(typed.name)}</b>${typed.awb ? ` · AWB <span class="mono">${esc(typed.awb)}</span>` : ''} · entered by the artist${sent ? ` · sent ${esc(dDay(e.artistShippedAt))}` : ''}</span>`
     : '<span class="muted">not allocated: the artist types the courier and AWB</span>';
   return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)" data-inbound>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Artist → Frame shop</b>${head}</div>
@@ -1128,6 +1128,8 @@ function costingSection(e) {
   </fieldset>`;
 }
 
+/** The Dubai date (YYYY-MM-DD) of a timestamp: a UTC slice put orders after midnight Dubai on the day before. */
+const dDay = (iso) => (iso ? new Date(new Date(iso).getTime() + 4 * 3600_000).toISOString().slice(0, 10) : '');
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '');
 // Status control linked to Siva's page: the work must have left Siva (his "Sent to frame shop") before
 // it can be framed or shipped. Replacements follow their own rework checks; Little Artists has no Siva step.
