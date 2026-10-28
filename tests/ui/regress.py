@@ -255,6 +255,21 @@ def _(b):
     need('2026-10-29' in t and '2026-10-28' not in t, f'artist sent date: {t[t.find("sent"):t.find("sent")+60]!r}')
     return errs
 
+@check('Delivered order: "Customer cancelled" is not offered, only damage; return courier list = approved couriers (77QM)')
+def _(b):
+    s = priced_seed(zohoPOId='po1', artistStartedAt='2026-10-27T05:00:00Z', deliveryCountry='India', deliveryEmirate='Tamil Nadu', deliveryAddress='Nagercoil')
+    s['items'][0].update(status='DELIVERED', zohoInvoiceId='inv1', quotedPrice=1875)
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(800)
+    dis = pg.evaluate("[...document.getElementById('aAction').options].filter(o => o.disabled).map(o => o.value)")
+    need(set(dis) == {'CANCEL_FULL', 'CANCEL_HALF'}, f'disabled after delivery: {dis}')
+    need('so a cancellation is' not in pg.inner_text('#afterBox'), 'still explains the cancellation refund on a delivered order')
+    pg.select_option('#aAction', 'DAMAGED_REPLACE'); pg.wait_for_timeout(300)
+    s2 = priced_seed(); s2['items'][0].update(zohoInvoiceId='inv1', quotedPrice=1875, zohoPOId='po1', status='REPLACEMENT', refundAction='DAMAGED_REPLACE', refundState='REPLACEMENT', reworkType='SIVA_REPAINT', returnMethod='PICKUP')
+    pg2, errs2 = open_page(b, 'admin.html#order=x1', s2); pg2.wait_for_timeout(800)
+    opts = pg2.evaluate("document.getElementById('rtCourier') ? [...document.getElementById('rtCourier').options].map(o => o.text) : []")
+    need('ARAMAX' in opts and 'Jeebly' not in opts, f'return couriers: {opts}')
+    return errs + errs2
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)

@@ -1287,7 +1287,17 @@ function readAddress(e) {
   return { ...v, addressAt: new Date().toISOString(), addressBy: 'Kalai Art House' };
 }
 
-const COURIERS = ['Aramex', 'DHL', 'Jeebly', 'Quiqup', 'Emirates Post', 'SMSA', 'Own delivery'];
+// Couriers to pick by hand (shipping without a courier job, and the return pickup of a damaged piece): the approved
+// delivery partners, those working from the customer's country first (77QM: customer in India, list was UAE-only),
+// then "Own delivery". The old fixed list only when no courier is approved yet.
+const COURIERS_OLD = ['Aramex', 'DHL', 'Jeebly', 'Quiqup', 'Emirates Post', 'SMSA'];
+let COURIERS = [...COURIERS_OLD, 'Own delivery'];
+function couriersFor(e) {
+  const here = e && e.deliveryCountry === 'India' ? 'India' : 'UAE';
+  const mine = suppliers.filter((s) => s.type === 'COURIER').sort((a, b) => (fromOf(b) === here) - (fromOf(a) === here) || String(a.business).localeCompare(String(b.business))).map((s) => String(s.business));
+  COURIERS = [...new Set([...(mine.length ? mine : COURIERS_OLD), 'Own delivery'])];
+  return COURIERS;
+}
 const SHIP_STATUSES = ['SHIPPED', 'DELIVERED'];
 function shippingSection(e) {
   const st = e.deliveryState || '';
@@ -1303,7 +1313,7 @@ function shippingSection(e) {
       <div class="field"><label for="eCourierSel">Courier</label>
         <select id="eCourierSel">
           <option value="">Choose…</option>
-          ${COURIERS.map((c) => `<option value="${c}" ${e.courierName === c ? 'selected' : ''}>${c}</option>`).join('')}
+          ${couriersFor(e).map((c) => `<option value="${esc(c)}" ${e.courierName === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
           <option value="__other" ${e.courierName && !COURIERS.includes(e.courierName) ? 'selected' : ''}>Other…</option>
         </select>
         <input id="eCourier" value="${esc(e.courierName)}" placeholder="Courier name" ${e.courierName && !COURIERS.includes(e.courierName) ? '' : 'hidden'} style="margin-top:6px">
@@ -1480,7 +1490,7 @@ function transportSection(e) {
   return `<div class="muted" style="font-size:12px;font-weight:600;margin-top:4px">Return and transport</div>
     <div class="field"><label for="rtMode">Damaged piece</label><select id="rtMode"><option value="">Choose…</option>${Object.entries(RETURN_MODE).map(([k, v]) => `<option value="${k}" ${mode === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
     <div id="rtPickup" class="three" ${mode === 'PICKUP' ? '' : 'hidden'}>
-      <div class="field"><label for="rtCourier">Return courier</label>${sel('rtCourier', e.returnCourier, COURIERS.filter((c) => c !== 'Own delivery'))}</div>
+      <div class="field"><label for="rtCourier">Return courier</label>${sel('rtCourier', e.returnCourier, couriersFor(e).filter((c) => c !== 'Own delivery'))}</div>
       <div class="field"><label for="rtAwb">Return AWB</label><input id="rtAwb" value="${esc(e.returnAwb)}" placeholder="From the courier's return booking"></div>
       <div class="field"><label for="rtDate">Pickup date</label><input id="rtDate" type="date" value="${esc(e.returnPickupDate)}"></div>
     </div>
@@ -1587,14 +1597,17 @@ function afterSection(e) {
   const st = e.refundState || '';
   const color = st === 'DONE' || st === 'REPLACEMENT' ? 'var(--ok)' : st === 'ERROR' ? 'var(--kumkum)' : st === 'TEST' ? 'var(--gold)' : 'var(--muted)';
   const dis = done ? 'disabled' : '';
+  // Once it has shipped, a customer can't cancel (no change-of-mind returns): only damage in transit applies
+  // (77QM, delivered, still offered "Customer cancelled… 50% refund").
+  const shipped = ['SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(e.status) || !!e.zohoChallanId && !!(e.zohoInvoiceId || e.zohoPaymentId);
   return `<fieldset class="cost" id="afterBox">
     <legend>Cancellation, damage or refund</legend>
     ${requestBanner(e)}
     ${e.refundMessage ? `<div style="font-size:14px;color:${color};overflow-wrap:anywhere">${escSym(e.refundMessage)}</div>` : ''}
-    ${!done && e.zohoPOId ? `<div style="font-size:13px"><b>${esc(artistOf(e))}:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
+    ${!done && e.zohoPOId && !shipped ? `<div style="font-size:13px"><b>${esc(artistOf(e))}:</b> ${e.artistStartedAt ? `started ${esc(day(e.artistStartedAt))}, so a cancellation is a <b>50% refund</b>` : "hasn't marked it started, so a cancellation is a <b>full refund</b>"}.</div>` : ''}
     <div class="field"><label for="aAction">What happened?</label><select id="aAction" ${dis}>
       <option value="">Nothing: order is fine</option>
-      ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${act === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+      ${Object.entries(AFTER).map(([k, v]) => `<option value="${k}" ${act === k ? 'selected' : ''} ${shipped && k.startsWith('CANCEL') && act !== k ? 'disabled' : ''}>${v.label}${shipped && k.startsWith('CANCEL') && act !== k ? ' (not after shipping)' : ''}</option>`).join('')}
     </select></div>
     <div class="err" id="aWarn" hidden></div>
     <div id="aMoney" class="two" ${act && act !== 'DAMAGED_REPLACE' ? '' : 'hidden'}>
