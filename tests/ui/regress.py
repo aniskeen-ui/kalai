@@ -219,6 +219,15 @@ def _(b):
     need('needs the artist' not in pg.inner_text('#costOut'), 'costing says the artist price is needed')
     return errs
 
+@check('Price already sent: the standard discount is not pre-filled (0JWW sent at ⃃599 would have become ⃃449 on save)')
+def _(b):
+    cust = [{'code': 'C1', 'name': 'Ananya', 'discountType': 'PCT', 'discountValue': 25, 'discountArea': 'ALL'}]
+    s = priced_seed(customerCode='C1'); s['items'][0].update(status='PRICE_SENT', quotedPrice=599); s['customers'] = cust
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(1500)
+    need(pg.input_value('#eDiscT') == '', 'standard discount filled on a price already sent')
+    need('price already sent' in pg.inner_text('#eStdOffer'), 'no note about the standard discount')
+    return errs
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)

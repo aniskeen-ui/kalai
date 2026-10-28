@@ -2212,9 +2212,12 @@ async function wireDiscount(e) {
       const fits = !c?.discountArea || c.discountArea === 'ALL' || (AREA_KINDS[c.discountArea] || []).includes(e.kind);
       // An offer the customer made is the agreed price: their standard discount is not filled in (it would look applied
       // while the quote and payment link stay at the offer). Say so; the studio can still pick it by hand.
-      if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value && offerOf(e) != null) {
+      // A price already sent (quote + payment link with the customer) is not changed by filling the discount in either
+      // (0JWW: sent at ⃃599, the box pre-filled 25% and a save would have made it ⃃449 against the customer's link).
+      const sent = (e.status || 'RECEIVED') !== 'RECEIVED' || e.quotedPrice != null;
+      if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value && (offerOf(e) != null || sent)) {
         const sd = c.discountType === 'PCT' ? `${c.discountValue}%` : `⃃ ${c.discountValue}`;
-        $('eDiscOut').innerHTML = `<span style="color:var(--gold)" id="eStdOffer">This customer's standard discount (${esc(sd)}) is not added to an accepted offer. To give it anyway, choose it here and save: the quote and payment link are made again.</span>`;
+        $('eDiscOut').innerHTML = `<span style="color:var(--gold)" id="eStdOffer">This customer's standard discount (${esc(sd)}) is not added ${offerOf(e) != null ? 'to an accepted offer' : 'to a price already sent'}. To give it anyway, choose it here and save: the quote and payment link are made again.</span>`;
       } else if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value) {
         $('eDiscT').value = c.discountType; $('eDiscV').value = c.discountValue; $('eDiscNote').value = c.discountNote || 'Customer\'s standard discount';
         show(); renderCost?.();
