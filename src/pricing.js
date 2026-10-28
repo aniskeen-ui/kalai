@@ -5,7 +5,7 @@
 // on the website.
 import { generateClient } from 'aws-amplify/data';
 import { getUrl } from 'aws-amplify/storage';
-import { parseCard, parcelPrice, setInrFx } from './ratecard.js';
+import { parseCard, parcelPrice, setInrFx, servesKind } from './ratecard.js';
 import { loadComp, drawSim } from './competitors.js';
 import { cleanTitle } from './title.js';
 
@@ -58,7 +58,7 @@ function supplierFrame(style, fsize) {
   if (style === 'none') return null;
   // The default frame shop first; where it has no price for this size / style, the cheapest one that has.
   const mine = src !== 'cheapest' ? framers.filter((f) => f.id === src) : [];
-  const pick = (list) => { let best = null; for (const f of list) { const card = parseCard(f); const fr = card.frames?.[style]?.[fsize]; if (fr == null || fr === '') continue; const fix = card.fixingIncluded ? 0 : Number(card.fixing?.[fsize] || 0); if (!best || Number(fr) + fix < best.frame + best.fixing) best = { frame: Number(fr), fixing: fix, from: f.business }; } return best; };
+  const pick = (list) => { let best = null; for (const f of list) { const card = parseCard(f); if (!servesKind(card, 'PRICE')) continue; /* original artworks: not shop-only frames */ const fr = card.frames?.[style]?.[fsize]; if (fr == null || fr === '') continue; const fix = card.fixingIncluded ? 0 : Number(card.fixing?.[fsize] || 0); if (!best || Number(fr) + fix < best.frame + best.fixing) best = { frame: Number(fr), fixing: fix, from: f.business }; } return best; };
   const got = pick(mine) || pick(framers);
   if (got) return got;
   const list = [];

@@ -27,6 +27,9 @@ export function rawCard(p) {
 let INR_FX = 0.042;
 export const setInrFx = (v) => { if (Number(v) > 0) INR_FX = Number(v); };
 export const inrFx = () => INR_FX;
+/** A supplier kept for some order kinds only (card.onlyFor, e.g. ['GIFT', 'PHOTO'] = Little Artists and framed prints:
+ *  ready-made shop frames like Day to Day). No list = every kind. */
+export const servesKind = (card, kind) => !Array.isArray(card?.onlyFor) || !card.onlyFor.length || !kind || card.onlyFor.includes(kind);
 export const cardSym = (c) => (c?.currency === 'INR' ? '₹' : '⃃');
 const PRICE_KEYS = ['frames', 'fixing', 'print', 'uae', 'intl', 'country'];
 export function parseCard(p) {

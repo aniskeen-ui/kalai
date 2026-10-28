@@ -1,7 +1,7 @@
 // Studio desk: list every enquiry, view uploads, set price / payment link / status / message.
 import './fresh.js';
 import './stage.js';
-import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf, printCost, copiesOf, setInrFx } from './ratecard.js';
+import { RC_STYLES, specOf, frameCost, deliveryCost, parseCard, zoneOf, printCost, copiesOf, setInrFx, servesKind } from './ratecard.js';
 import './amplify-config.js';
 import './skin.js';
 import { signIn, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes } from 'aws-amplify/auth';
@@ -92,8 +92,8 @@ const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString
 const fromOf = (s) => parseCard(s).from || (s.country === 'India' ? 'India' : 'UAE');
 /** Where the work ships from for this order: the costing's "Ships from" (abroad), else the UAE. */
 const shipFromOf = (e) => { const c = costings.get(e.id); const out = ($('cDel')?.value || c?.delivery) === 'OUTSIDE' || (!c?.delivery && !!e.deliveryCountry && e.deliveryCountry !== 'UAE'); return out ? destOf(e).from : 'UAE'; };
-function pickSupplier(types, pref, costFn, from) {
-  const list = suppliers.filter((s) => types.includes(s.type) && (!from || fromOf(s) === from)).map((s) => ({ s, c: costFn(parseCard(s)) })).filter((x) => x.c != null);
+function pickSupplier(types, pref, costFn, from, kind) {
+  const list = suppliers.filter((s) => types.includes(s.type) && (!from || fromOf(s) === from) && servesKind(parseCard(s), kind)).map((s) => ({ s, c: costFn(parseCard(s)) })).filter((x) => x.c != null);
   const mine = pref && pref !== 'cheapest' ? list.find((x) => x.s.id === pref) : null;
   const x = mine || list.sort((a, b) => a.c - b.c)[0];
   return x ? { cost: x.c, name: x.s.business, id: x.s.id } : null;
@@ -105,7 +105,7 @@ function estCosts(e) {
   const shipFrom = outside ? dest.from : 'UAE';
   // Frame shop: one in the country the work ships from (India → a Bangalore shop), else any.
   const fcost = (card) => frameCost(card, spec);
-  const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name, id: j.framer.supplierId } : pickSupplier(['FRAMER'], d.framer, fcost, shipFrom) || pickSupplier(['FRAMER'], d.framer, fcost);
+  const fr = j.framer?.price != null ? { cost: Number(j.framer.price), name: j.framer.name, id: j.framer.supplierId } : pickSupplier(['FRAMER'], d.framer, fcost, shipFrom, e.kind) || pickSupplier(['FRAMER'], d.framer, fcost, undefined, e.kind);
   const frSup = fr?.id ? suppliers.find((x) => x.id === fr.id) : null;
   const framerFrom = frSup ? fromOf(frSup) : 'UAE';
   // The framed work leaves from the frame shop's country.
@@ -720,7 +720,7 @@ function supplierSection(e) {
   const noAddr = !e.deliveryEmirate && (!e.deliveryCountry || e.deliveryCountry === 'UAE');
   const eD = !noAddr ? e : cs0.destCountry && cs0.destCountry !== 'UAE' ? { ...e, deliveryCountry: cs0.destCountry, deliveryEmirate: cs0.destRegion || '' } : { ...e, deliveryCountry: 'UAE', deliveryEmirate: 'Dubai' };
   const addrNote = noAddr ? (eD.deliveryCountry !== 'UAE' ? `${eD.deliveryEmirate ? `${eD.deliveryEmirate}, ` : ''}${eD.deliveryCountry} (from costing; no delivery address yet)` : 'Dubai (assumed: no delivery address on the order yet)') : '';
-  const costFor = (s, role) => (role === 'framer' ? framerCost(parseCard(s)) : role === 'printer' ? printerCost(parseCard(s)) : deliveryCost(parseCard(s), eD, spec, zoneOf));
+  const costFor = (s, role) => (!servesKind(parseCard(s), e.kind) ? null : role === 'framer' ? framerCost(parseCard(s)) : role === 'printer' ? printerCost(parseCard(s)) : deliveryCost(parseCard(s), eD, spec, zoneOf));
   const row = (role, label, type) => {
     const cur = j[role];
     // Delivery: delivery partners, and frame shops that deliver (delivery charges in their price list).

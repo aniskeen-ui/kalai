@@ -2393,6 +2393,10 @@ async function sellerAction(ev: ApiEvent) {
     let prev0: Dict = {}; try { let v: unknown = profile.rateCard; for (let i = 0; i < 2 && typeof v === 'string'; i++) v = JSON.parse(v); prev0 = (v && typeof v === 'object' ? v : {}) as Dict; } catch { prev0 = {}; }
     const currency = d.currency === 'INR' || d.currency === 'AED' ? String(d.currency) : prev0.currency === 'INR' ? 'INR' : 'AED';
     const cap = currency === 'INR' ? 200000 : 5000;
+    // Studio only: a supplier used for some order kinds only (e.g. Day to Day shop frames: Little Artists + framed prints).
+    const KINDS = ['GIFT', 'PHOTO', 'PRICE', 'COMMISSION'];
+    const onlyFor = admin && Array.isArray(d.onlyFor) ? (d.onlyFor as unknown[]).map(String).filter((k) => KINDS.includes(k)) : Array.isArray(prev0.onlyFor) ? prev0.onlyFor : [];
+    const keepOnly = onlyFor.length ? { onlyFor } : {};
     const n = (v: unknown) => (v === '' || v == null ? undefined : Math.min(cap, Math.max(0, Math.round(Number(v) * 100) / 100)));
     const grid = (o: unknown, rows: string[], cols: string[]) => {
       const out: Record<string, Record<string, number>> = {};
@@ -2416,7 +2420,7 @@ async function sellerAction(ev: ApiEvent) {
       ? { print: grid({ x: d.print }, ['x'], PSZ).x ?? {}, notes: txt(d.notes, 500), at: now, currency, ...(prev.fineArt !== undefined ? { fineArt: prev.fineArt } : {}), basis: 'list' }
       : profile.type === 'FRAMER'
       ? { frames: grid(d.frames, ['black', 'white', 'oak', 'walnut', 'gold'], SZ), fixing: grid({ x: d.fixing }, ['x'], SZ).x ?? {}, fixingIncluded: d.fixingIncluded === true, print: grid({ x: d.print }, ['x'], ['A4', 'A3', '30×40', '40×50', '50×70', '60×80']).x ?? {},
-          uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now, basis: 'list', currency, ...(prev.from ? { from: prev.from } : {}) }
+          uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], ['small', 'large']), notes: txt(d.notes, 500), at: now, basis: 'list', currency, ...keepOnly, ...(prev.from ? { from: prev.from } : {}) }
       : { uae: grid(d.uae, ['Dubai', 'Sharjah', 'Ajman', 'Abu Dhabi', 'Ras Al Khaimah', 'Umm Al Quwain', 'Fujairah'], PARCELS), intl: grid(d.intl, ['A', 'B', 'C', 'D', 'E'], PARCELS), country: countryGrid(d.country), from: d.from === 'India' ? 'India' : 'UAE', notes: txt(d.notes, 500), at: now, basis: 'list', currency };
     const row = { ...profile, rateCard: JSON.stringify(card), updatedAt: now };
     await putRow(S, row);

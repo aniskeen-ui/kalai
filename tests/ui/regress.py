@@ -70,6 +70,22 @@ def _(b):
     need('PRINT SHOP' not in t, 'Collection order should not show a print shop box')
     return errs
 
+@check('Day to Day ready-made frames are used for Little Artists only; original artworks keep the frame shop')
+def _(b):
+    dtd = {'id': 'd2d', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'Day to Day', 'rateCard': json.dumps({'frames': {'black': {'A4': 11.99, '30×40': 15.99}, 'white': {'A4': 11.99, '30×40': 15.99}}, 'fixingIncluded': True, 'onlyFor': ['GIFT', 'PHOTO']})}
+    rafi = dict(SELLERS[1], rateCard=json.dumps({'frames': {'black': {'A4': 40, '30×40': 70}, 'white': {'A4': 40, '30×40': 70}}, 'fixingIncluded': True}))
+    sellers = [SELLERS[0], rafi, SELLERS[2], dtd]
+    gift = order(id='g1', kind='GIFT', title='Little Artists', details=json.dumps({'Frame': 'Black'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': sellers, 'items': [gift],
+            'costing': [{'enquiryId': 'g1', 'supplierJobs': json.dumps({'printer': {'supplierId': 'p1', 'name': 'Print Hub', 'stage': 'READY', 'price': 5}})}]}
+    pg, errs = open_page(b, 'admin.html#order=g1', seed)
+    need(pg.input_value('[data-js="framer-price"]') in ('11.99', '12'), f"Little Artists frame price {pg.input_value('[data-js=framer-price]')} (Day to Day ⃃11.99)")
+    art = order(id='a1', kind='PRICE', title='Small work', details=json.dumps({'Framing': 'Black frame 30×40 cm'}), status='PAID')
+    seed2 = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': sellers, 'items': [art], 'costing': []}
+    pg2, errs2 = open_page(b, 'admin.html#order=a1', seed2)
+    need(pg2.input_value('[data-js="framer-price"]') == '70', f"original artwork frame price {pg2.input_value('[data-js=framer-price]')} (frame shop ⃃70, not Day to Day)")
+    return errs + errs2
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,

@@ -543,6 +543,12 @@ function openRates(back) {
     $('rCurHint').textContent = to !== was && inputs.length ? `Amounts converted at ₹${r.toFixed(2)} per ⃃ 1 (rounded). Check them, then press Save.` : '';
     was = to;
   };
+  // Studio only: a shop used for some orders only (Day to Day ready-made frames: Little Artists + framed prints).
+  $('rOnlyWrap')?.remove();
+  if ((fr || pr) && isAdmin() && viewAs) {
+    const only = (card.onlyFor || []).join(',');
+    $('rCurWrap').insertAdjacentHTML('afterend', `<div class="field" id="rOnlyWrap" style="max-width:420px;margin:8px 0"><label for="rOnly">Kalai uses this ${fr ? 'frame' : 'print'} shop for <span class="muted" style="font-weight:400">(studio only)</span></label><select id="rOnly"><option value="" ${!only ? 'selected' : ''}>All orders</option><option value="GIFT,PHOTO" ${only === 'GIFT,PHOTO' ? 'selected' : ''}>Little Artists and framed prints only (ready-made frames)</option></select></div>`);
+  }
   if (!fr && !pr) wireCountries();
   // Studio only: fill a courier's empty list with market estimates (Aramex-type retail rates, Oct 2026) until real prices come.
   $('rEst')?.remove();
@@ -581,6 +587,7 @@ $('rateForm').addEventListener('submit', async (ev) => {
   if ($('rcCountry')) { const cc = readCountries(); if (cc.bad) bad = true; data.country = cc.rows; }
   if (bad) { $('rErr').textContent = $('rCur')?.value === 'INR' ? 'Enter amounts in ₹ from 0 to 2,00,000.' : 'Enter amounts in ⃃ from 0 to 5,000.'; return; }
   if ($('rCur')) data.currency = $('rCur').value;
+  if ($('rOnly')) data.onlyFor = $('rOnly').value ? $('rOnly').value.split(',') : [];
   if ($('rIncl')) data.fixingIncluded = $('rIncl').checked;
   if ($('rFrom')) data.from = $('rFrom').value;
   const b = $('rBtn'); b.disabled = true; $('rErr').textContent = '';
