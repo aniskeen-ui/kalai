@@ -285,12 +285,19 @@ function shownTitle(w) { return w.named ? w.title : webTitle(w) || SUGGEST[w.cod
 let isAdmin = false; // Kalai Art House signed in on Siva's page: may correct a courier / AWB after it was sent.
 // Same names as the couriers in Kalai's supplier list, so the order screen links the artist's courier to its portal.
 const COURIERS = ['ARAMAX', 'DHL Express UAE', 'FedEx UAE', 'DTDC', 'Blue Dart', 'Delhivery', 'India Post Speed Post', 'Global India Express', 'Emirates Post', 'ShiprocketX'];
+/** An address built from address + city + country can repeat itself (Guddis: "…Bengaluru 560042, India, No. 108, …, I,
+ *  India"): keep each part once and drop stray stubs ("I") that start another part. */
+export function tidyAddr(s) {
+  const parts = String(s || '').split(/\s*,\s*/).filter(Boolean), seen = new Set(), out = [];
+  for (const p of parts) { const k = p.toLowerCase(); if (seen.has(k)) continue; seen.add(k); out.push(p); }
+  return out.filter((p) => !(p.length <= 2 && out.some((q) => q !== p && q.toLowerCase().startsWith(p.toLowerCase())))).join(', ');
+}
 /** The frame shop the finished work goes to: name, contact and address (from the framing job, or our only frame shop). */
 function shopBox(f) {
   if (!f) return `<div class="shopbox muted">Kalai Art House will confirm the frame shop's address: please ask on WhatsApp before sending.</div>`;
   return `<div class="shopbox"><div class="muted" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Send it to</div>
-    <div><b>${esc(f.name)}</b>${f.contact ? ` · ${esc(f.contact)}` : ''}${f.phone ? ` · <a href="tel:${esc(f.phone.replace(/[^+\d]/g, ''))}">${esc(f.phone)}</a>` : ''}</div>
-    ${f.address ? `<div>${esc(f.address)}</div>` : '<div class="muted">Address not on file yet: ask Kalai Art House.</div>'}${f.assigned === false ? '<div class="muted" style="font-size:12px">Planned frame shop: Kalai Art House is confirming the job with them. If it changes, this box changes too.</div>' : ''}</div>`;
+    <div><b>${esc(f.name)}</b>${f.contact && f.contact.trim().toLowerCase() !== String(f.name || '').trim().toLowerCase() ? ` · ${esc(f.contact)}` : ''}${f.phone ? ` · <a href="tel:${esc(f.phone.replace(/[^+\d]/g, ''))}">${esc(f.phone)}</a>` : ''}</div>
+    ${f.address ? `<div>${esc(tidyAddr(f.address))}</div>` : '<div class="muted">Address not on file yet: ask Kalai Art House.</div>'}${f.assigned === false ? '<div class="muted" style="font-size:12px">Planned frame shop: Kalai Art House is confirming the job with them. If it changes, this box changes too.</div>' : ''}</div>`;
 }
 function progressBlock(x) {
   if (!x.ordered) return '';

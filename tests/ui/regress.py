@@ -670,6 +670,14 @@ def _(b):
     return []
 
 
+@check('Artist desk: frame shop address shown once ("Send it to" repeated Guddis\'s name and address, 65CF)')
+def _(b):
+    pg, errs = open_page(b, 'artist.html', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [], 'costing': []}, wait=2000)
+    v = pg.evaluate("import('/src/artist.js').then(m => m.tidyAddr('No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, India, No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, I, India'))")
+    need(v == 'No. 108, Shree Complex, 73 St Johns Rd, Bengaluru 560042, India', f'address: {v}')
+    return errs
+
+
 @check('Every admin/portal page warns when a newer version is live (stale open tabs ran old code)')
 def _(b):
     root = os.path.dirname(os.path.dirname(HERE))
