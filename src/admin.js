@@ -1192,7 +1192,9 @@ function statusBlock(e, k, s) {
   const FLOW = ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'SHIPPED', 'DELIVERED'];
   if (FLOW.includes(k) && s !== 'REPLACEMENT' && e.refundAction !== 'DAMAGED_REPLACE') {
     const jj = jobsOf(e), fj = jj.framer, dj = jj.delivery, pj = jj.printer;
-    const floor = dj?.deliveredAt ? 'DELIVERED' : dj?.pickedAt || dj?.awb || e.zohoChallanId || ['DRAFT', 'OPEN', 'DELIVERED'].includes(e.deliveryState) ? 'SHIPPED'
+    // A delivery challan counts only on a paid order (0JWW kept a challan from an old test while still unpaid: Paid was blocked).
+    const paidOrder = !!(e.zohoInvoiceId || e.zohoPaymentId);
+    const floor = dj?.deliveredAt ? 'DELIVERED' : dj?.pickedAt || dj?.awb || (paidOrder && (e.zohoChallanId || ['DRAFT', 'OPEN', 'DELIVERED'].includes(e.deliveryState))) ? 'SHIPPED'
       : fj && ['ACCEPTED', 'READY', 'COLLECTED'].includes(String(fj.stage)) ? 'FRAMING'
       : pj && ['READY', 'COLLECTED'].includes(String(pj.stage)) ? 'PRINTED' : pj && pj.stage === 'ACCEPTED' ? 'PRINTING' : '';
     if (floor && FLOW.indexOf(k) < FLOW.indexOf(floor)) return floor === 'PRINTED' ? `${pj.name || 'print shop'} already printed it` : floor === 'PRINTING' ? `${pj.name || 'print shop'} accepted the job` : floor === 'FRAMING' ? `${fj.name || 'frame shop'} accepted the job` : floor === 'SHIPPED' ? `already shipped${dj?.name ? ` by ${dj.name}` : ''}` : 'already delivered';
@@ -2646,7 +2648,7 @@ async function showDetailBody(e) {
     }
     const blockWhy = statusBlock(e, $('eStatus').value, s);
     if (blockWhy) {
-      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'not for crafts' ? 'Crafts shop orders skip “Being framed”.' : blockWhy.startsWith('waiting for') ? `${esc(artistOf(e))} hasn't marked this work “Sent to frame shop” yet. Update it in ${artistPage(e)} first (you can do it for them).` : 'Mark it Shipped before Delivered.'}</div>`);
+      $('detail').querySelector('#saveMsg').insertAdjacentHTML('afterend', `<div class="err">${blockWhy === 'not for crafts' ? 'Crafts shop orders skip “Being framed”.' : blockWhy.startsWith('waiting for') ? `${esc(artistOf(e))} hasn't marked this work “Sent to frame shop” yet. Update it in ${artistPage(e)} first (you can do it for them).` : blockWhy === 'not now' && $('eStatus').value === 'DELIVERED' ? 'Mark it Shipped before Delivered.' : `Can't move to ${esc(STATUS[$('eStatus').value] || $('eStatus').value)} now: ${esc(blockWhy)}.`}</div>`);
       b.disabled = false; return;
     }
     if (SHIP_STATUSES.includes($('eStatus').value) && !SHIP_STATUSES.includes(s)) {

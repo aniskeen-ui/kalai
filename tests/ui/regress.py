@@ -228,6 +228,14 @@ def _(b):
     need('price already sent' in pg.inner_text('#eStdOffer'), 'no note about the standard discount')
     return errs
 
+@check('Unpaid order with an old delivery challan can still be marked Paid (0JWW: "Mark it Shipped before Delivered")')
+def _(b):
+    s = priced_seed(); s['items'][0].update(status='PRICE_SENT', quotedPrice=599, zohoChallanId='dc1', zohoInvoiceId=None)
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(800)
+    dis = pg.evaluate("[...document.getElementById('eStatus').options].find(o => o.value === 'PAID').disabled")
+    need(not dis, 'Paid is greyed out on an unpaid order that has an old challan')
+    return errs
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
