@@ -228,7 +228,7 @@ async function start() {
   await load();
   // Links in studio emails: admin.html#order=<id> opens that order.
   const m = location.hash.match(/^#order=(.+)$/);
-  const hit = m && all.find((x) => x.id === decodeURIComponent(m[1]));
+  const hit = m && all.find((x) => x.id === decodeURIComponent(m[1]) || x.ref === decodeURIComponent(m[1]).toUpperCase()); // id or order no.
   if (hit) { selectedId = hit.id; render(); showDetail(hit); }
 }
 
@@ -973,7 +973,8 @@ function render() {
   // A variant (saved selection of orders): only its orders, whatever their dates.
   const vr = variantOn();
   const list = all.filter((e) => (vr ? vr.refs.includes(e.ref) : true) && (!fs || (fs === '__REQ' ? isReq(e) : (e.status || 'RECEIVED') === fs)) && (!fk || e.kind === fk)
-    && hit(e) && (vr || ((!from || dubaiDay(e.createdAt) >= from) && (!to || dubaiDay(e.createdAt) <= to))));
+    // An order number typed in the search box is found whatever dates are set (65CF was hidden by "last 2 days").
+    && hit(e) && (vr || (q && String(e.ref || '').toLowerCase().includes(q)) || ((!from || dubaiDay(e.createdAt) >= from) && (!to || dubaiDay(e.createdAt) <= to))));
   $('rows').innerHTML = list.length ? list.map((e) => {
     const s = e.status || 'RECEIVED';
     const d = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';

@@ -154,6 +154,17 @@ def _(b):
     need('United States' not in pg.inner_text('#costOut'), 'US courier still in the costing')
     return errs
 
+@check('Orders: searching an order number finds an older order even with the 2-day date filter; #order=KA-… opens it')
+def _(b):
+    s = priced_seed(createdAt='2026-10-01T08:00:00Z')
+    pg, errs = open_page(b, 'admin.html', s); pg.wait_for_timeout(500)
+    if not pg.input_value('#fFrom'): pg.fill('#fFrom', '2026-10-27'); pg.dispatch_event('#fFrom', 'change')
+    pg.fill('#fSearch', 'X3BT'); pg.wait_for_timeout(600)
+    need('KA-261021-X3BT' in pg.inner_text('#ordersTable, table'), 'order number search hidden by the dates')
+    pg2, errs2 = open_page(b, 'admin.html#order=KA-261021-X3BT', s); pg2.wait_for_timeout(800)
+    need('Old Town Lane' in pg2.inner_text('#detail'), '#order=<order no.> does not open the order')
+    return errs + errs2
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
