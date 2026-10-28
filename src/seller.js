@@ -177,6 +177,8 @@ function route() {
   }
   show('deskView');
   $('tabComm').hidden = profile.type !== 'ARTIST';
+  // Artists: the crafts "Orders" tab only when they have crafts orders (their work orders are under "Orders to make").
+  if (profile.type === 'ARTIST') { $('tabOrders').hidden = true; call('orders').then((r) => { if ((r.orders || []).length) $('tabOrders').hidden = false; }).catch(() => {}); }
   // Siva works only through his desk (Kalai's own orders): his portal shows just that, without the self-listing tabs.
   const sivaOnly = deskTab() && /\bs(h)?iva\b/i.test(`${profile.business} ${profile.contactName}`) && !listings.length;
   if (sivaOnly) {
@@ -185,7 +187,7 @@ function route() {
     pane('desk');
   } else
   pane(location.hash === '#orders' ? 'orders' : location.hash === '#commissions' ? 'commissions' : location.hash === '#studio' && deskTab() ? 'desk' : 'products');
-  if (profile.type === 'ARTIST' && location.hash !== '#commissions' && !$('tabComm').hidden) call('commissions').then((r) => { comms = r.items || []; commCur = r.currency || 'INR'; const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length; $('tabComm').textContent = open ? `Commissions (${open})` : 'Commissions'; }).catch(() => {});
+  if (profile.type === 'ARTIST' && location.hash !== '#commissions' && !$('tabComm').hidden) call('commissions').then((r) => { comms = r.items || []; commCur = r.currency || 'INR'; const open = comms.filter((x) => ['NEEDED', 'ORDERED'].includes(x.stage)).length; $('tabComm').textContent = open ? `Orders to make (${open})` : 'Orders to make'; }).catch(() => {});
   $('dBiz').textContent = profile.business;
   $('dPhoto').hidden = !profile.photoKey;
   if (profile.photoKey) imgUrl(profile.photoKey).then((u) => { $('dPhoto').src = u; });
@@ -516,7 +518,10 @@ function drawOrders() {
   const owed = orders.filter((o) => o.status === 'DELIVERED' && !o.paidRef && !o.cancelled).reduce((a, o) => a + Number(o.amount || 0), 0);
   const paid = orders.filter((o) => o.paidRef).reduce((a, o) => a + Number(o.amount || 0), 0);
   $('oSum').innerHTML = `${open.length} to send · delivered, payment due to you: <b>${aed(owed)}</b> · paid to you so far: <b>${aed(paid)}</b>`;
-  $('tabOrders').textContent = open.length ? `Orders (${open.length})` : 'Orders';
+  $('tabOrders').textContent = open.length ? `${profile?.type === 'ARTIST' ? 'Crafts orders' : 'Orders'} (${open.length})` : profile?.type === 'ARTIST' ? 'Crafts orders' : 'Orders';
+  // An artist's work orders are under "Orders to make": the crafts-shop Orders tab only shows when they have such orders
+  // (Sobana looked in an empty "Orders" while her paid Collection order sat under "Commissions").
+  if (profile?.type === 'ARTIST') $('tabOrders').hidden = !orders.length;
   if (!orders.length) { $('oList').innerHTML = '<p class="muted">No orders yet. Paid orders appear here, and we email you each one.</p>'; return; }
   $('oList').innerHTML = orders.map((o) => {
     const [label, cls] = orderState(o);

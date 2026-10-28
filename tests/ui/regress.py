@@ -769,6 +769,16 @@ def _(b):
     return errs
 
 
+@check('Artist portal: work orders are under "Orders to make", no empty "Orders" tab (Sobana missed BLVP under "Commissions")')
+def _(b):
+    users = {**ADMIN, 'art@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
+    sellers = SELLERS + [{'id': 'art@x.com', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE'}]
+    pg, errs = open_page(b, 'seller.html', {'users': users, 'session': 'art@x.com', 'sellers': sellers, 'items': [], 'listings': [], 'costing': []}, wait=3000)
+    need(pg.locator('#tabComm').is_visible() and 'Orders to make' in pg.inner_text('#tabComm'), f"work-orders tab: {pg.inner_text('#tabComm')!r}")
+    need(not pg.locator('#tabOrders').is_visible(), 'an empty crafts "Orders" tab is shown to an artist')
+    return errs
+
+
 @check('Every admin/portal page warns when a newer version is live (stale open tabs ran old code)')
 def _(b):
     root = os.path.dirname(os.path.dirname(HERE))
