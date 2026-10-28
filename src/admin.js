@@ -2190,7 +2190,12 @@ async function wireDiscount(e) {
       const c = (await client.models.Customer.get({ code: e.customerCode }))?.data;
       const AREA_KINDS = { ART: ['PRICE', 'COMMISSION'], CRAFTS: ['MARKET'], GIFT: ['GIFT'] };
       const fits = !c?.discountArea || c.discountArea === 'ALL' || (AREA_KINDS[c.discountArea] || []).includes(e.kind);
-      if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value) {
+      // An offer the customer made is the agreed price: their standard discount is not filled in (it would look applied
+      // while the quote and payment link stay at the offer). Say so; the studio can still pick it by hand.
+      if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value && offerOf(e) != null) {
+        const sd = c.discountType === 'PCT' ? `${c.discountValue}%` : `⃃ ${c.discountValue}`;
+        $('eDiscOut').innerHTML = `<span style="color:var(--gold)" id="eStdOffer">This customer's standard discount (${esc(sd)}) is not added to an accepted offer. To give it anyway, choose it here and save: the quote and payment link are made again.</span>`;
+      } else if (fits && c?.discountType && Number(c.discountValue) > 0 && $('eDiscT') && !$('eDiscT').value) {
         $('eDiscT').value = c.discountType; $('eDiscV').value = c.discountValue; $('eDiscNote').value = c.discountNote || 'Customer\'s standard discount';
         show(); renderCost?.();
         $('eDiscOut').insertAdjacentHTML('beforeend', ' <span style="color:var(--gold)">(this customer\'s standard discount: saved with the order when you save)</span>');

@@ -130,6 +130,19 @@ def _(b):
     need('832.5' in pg.inner_text('#detail'), '925 − 10% should show 832.50')
     return errs
 
+@check('Offer order (KA-…-HDHX): customer\'s standard 25% is not shown as applied (quote and link stay at the offer); a normal order still gets it')
+def _(b):
+    cust = [{'code': 'C1', 'name': 'Ananya', 'discountType': 'PCT', 'discountValue': 25, 'discountNote': 'Senior citizens (60+)', 'discountArea': 'ALL'}]
+    s = priced_seed(customerCode='C1'); s['customers'] = cust
+    s['items'][0]['details'] = json.dumps({'Artwork': 'Coconut Palm (Pen and ink on paper, 21 × 30 cm)', 'Offer': 'AED 150'})
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(1500)
+    need(pg.input_value('#eDiscT') == '', f"standard discount filled on an offer order ({pg.input_value('#eDiscT')})")
+    need(pg.locator('#eStdOffer').count() == 1 and '25%' in pg.inner_text('#eStdOffer'), 'no note that the standard discount is not added to the offer')
+    s2 = priced_seed(customerCode='C1'); s2['customers'] = cust
+    pg2, errs2 = open_page(b, 'admin.html#order=x1', s2); pg2.wait_for_timeout(1500)
+    need(pg2.input_value('#eDiscT') == 'PCT' and pg2.input_value('#eDiscV') == '25', 'normal order lost the standard discount')
+    return errs + errs2
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
