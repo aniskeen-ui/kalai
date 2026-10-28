@@ -694,6 +694,14 @@ def _(b):
     return []
 
 
+@check('Cancellation withdraws supplier jobs not started yet (UHBU: refunded, frame shop job still open)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    i = src.index('async function afterSales'); body = src[i:i + 6000]
+    need("action === 'CANCEL_FULL' || action === 'CANCEL_HALF'" in body and "['ASSIGNED', 'ACCEPTED'].includes(j.stage)" in body and 'Job withdrawn' in body, 'cancellation does not withdraw open supplier jobs')
+    return []
+
+
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
     import re

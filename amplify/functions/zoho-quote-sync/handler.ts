@@ -1194,12 +1194,32 @@ async function afterSales(img: Img) {
       return;
     }
 
+    // A cancelled order: frame shop / print shop / courier jobs not started yet are withdrawn and the supplier is told
+    // (UHBU was refunded while the frame shop still had "sent, waiting to accept"). Work already done stays, to be paid.
+    let jobsNote = '';
+    if (action === 'CANCEL_FULL' || action === 'CANCEL_HALF') {
+      try {
+        const jobs = await jobsOf(id), gone: string[] = [], kept: string[] = [];
+        for (const role of ['printer', 'framer', 'delivery'] as const) {
+          const j = jobs[role]; if (!j) continue;
+          if (['ASSIGNED', 'ACCEPTED'].includes(j.stage)) {
+            delete jobs[role]; gone.push(`${j.name} (${ROLE_WORD[role]})`);
+            const { S } = mtables();
+            const p = plain(await getRow(S, { id: { S: j.supplierId } }));
+            if (p?.email) await sendMail({ to: String(p.email), subject: `Job withdrawn: ${str(img, 'ref')}`, lines: [`Hello ${h(p.contactName)},`, `The customer cancelled order <b>${h(str(img, 'ref'))}</b>, so Kalai Art House has withdrawn your ${ROLE_WORD[role]} job. Please don't start it. Sorry for any inconvenience.`] }).catch(() => {});
+          } else kept.push(`${j.name} (${ROLE_WORD[role]}, ${String(j.stage).toLowerCase()})`);
+        }
+        if (gone.length) await saveJobs(id, jobs);
+        jobsNote = `${gone.length ? ` Jobs withdrawn: ${gone.join(', ')}.` : ''}${kept.length ? ` Already done, pay as agreed: ${kept.join(', ')}.` : ''}`;
+      } catch (err) { console.warn('Jobs not withdrawn', err); jobsNote = ' Supplier jobs not withdrawn: take them back in the order.'; }
+    }
     // Siva: a cancellation before he started cancels his order (if no bill yet).
     const sivaCancelled = action === 'CANCEL_FULL' && !['GIFT', 'PHOTO'].includes(str(img, 'kind')) && !str(img, 'zohoBillId');
     const sivaNote =
       action === 'CANCEL_FULL'
         ? sivaCancelled ? " Siva's order cancelled (nothing owed)." : " Siva's bill already exists: agree with him what is owed."
         : ['GIFT', 'PHOTO'].includes(str(img, 'kind')) ? '' : action === 'CANCEL_HALF' ? " Siva's order stopped: he is paid 50% of his price (his invoice no. → bill)." : ' Siva had started / finished: pay him as agreed.';
+    const sivaJobsNote = sivaNote + jobsNote;
 
     if (!(amount > 0)) throw new Error('Enter the refund amount.');
     if (testing) {
@@ -1215,7 +1235,7 @@ async function afterSales(img: Img) {
       await writeBack(id, {
         refundState: 'TEST',
         ...cnSet,
-        refundMessage: `Test mode: ${label}. ${cnText} · AED ${amount.toLocaleString('en-US')}; refund not recorded.${sivaNote}`,
+        refundMessage: `Test mode: ${label}. ${cnText} · AED ${amount.toLocaleString('en-US')}; refund not recorded.${sivaJobsNote}`,
         ...(sivaCancelled ? { purchaseState: 'CANCELLED', purchaseMessage: 'Order cancelled: customer cancelled before work started.' } : {}),
       });
       return;
@@ -1229,7 +1249,7 @@ async function afterSales(img: Img) {
       zohoRefundId: r.refundId || null,
       refundMessage: r.refundError
         ? `Credit note ${r.creditNote} created, but the refund could not be recorded: ${r.refundError}`
-        : `${label}. Credit note ${r.creditNote} · refund AED ${amount.toLocaleString('en-US')} recorded.${sivaNote}`,
+        : `${label}. Credit note ${r.creditNote} · refund AED ${amount.toLocaleString('en-US')} recorded.${sivaJobsNote}`,
       ...(sivaCancelled ? { purchaseState: 'CANCELLED', purchaseMessage: 'Order cancelled: customer cancelled before work started.' } : {}),
     });
   } catch (err) {
