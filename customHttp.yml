@@ -13,3 +13,14 @@ customHeaders:
     headers:
       - key: Cache-Control
         value: 'public, max-age=31536000, immutable'
+  # The installed app's service worker and manifests: always checked for a new version.
+  - pattern: '/sw.js'
+    headers:
+      - key: Cache-Control
+        value: 'no-cache, must-revalidate'
+      - key: Service-Worker-Allowed
+        value: '/'
+  - pattern: '/app/**'
+    headers:
+      - key: Cache-Control
+        value: 'no-cache'

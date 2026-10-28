@@ -1,0 +1,37 @@
+{
+ "id": "/",
+ "name": "Kalai Art House",
+ "short_name": "Kalai",
+ "description": "Original watercolours and sketches, portrait commissions and framed gifts of children's drawings, delivered across the UAE.",
+ "start_url": "/?app=1",
+ "scope": "/",
+ "display": "standalone",
+ "orientation": "portrait-primary",
+ "theme_color": "#232046",
+ "background_color": "#fbf8f1",
+ "lang": "en",
+ "categories": [
+  "shopping",
+  "lifestyle"
+ ],
+ "icons": [
+  {
+   "src": "/app/shop-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/app/shop-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/app/shop-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}

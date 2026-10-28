@@ -532,6 +532,33 @@ def _(b):
     return errs
 
 
+@check('App: every page links its own app manifest (icons load), and "Install app" appears when the phone offers it')
+def _(b):
+    errs = []
+    seen = set()
+    for page in ['index.html', 'admin.html', 'seller.html', 'artist.html', 'supplier.html', 'offers.html']:
+        pg, e = open_page(b, page, {'users': ADMIN, 'session': None, 'items': []}, wait=1500, width=390)
+        errs += e
+        href = pg.get_attribute('link[rel="manifest"]', 'href')
+        need(href, f'{page}: no app manifest')
+        m = pg.evaluate(f"fetch('{href}').then(r => r.json())")
+        need(m['display'] == 'standalone' and m['start_url'] and m['name'], f'{page}: manifest incomplete')
+        seen.add(m['id'])
+        for ic in m['icons']:
+            w = pg.evaluate(f"new Promise(r => {{ const i = new Image(); i.onload = () => r(i.naturalWidth); i.onerror = () => r(0); i.src = '{ic['src']}'; }})")
+            need(w == int(ic['sizes'].split('x')[0]), f"{page}: icon {ic['src']} is {w}px")
+        need(pg.locator('link[rel="apple-touch-icon"]').count() == 1, f'{page}: no iPhone icon')
+        pg.evaluate("(() => { const e = new Event('beforeinstallprompt'); e.prompt = () => { window.__asked = 1; }; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); })()")
+        pg.wait_for_timeout(200)
+        need(pg.locator('#appInstall').count() == 1, f'{page}: no Install app button')
+        pg.click('#appInstall'); pg.wait_for_timeout(100)
+        need(pg.evaluate('window.__asked') == 1, f'{page}: Install app does not open the install prompt')
+        need(pg.evaluate("document.documentElement.scrollWidth") <= 391, f'{page}: Install app button makes the page scroll sideways on a phone')
+        pg.close()
+    need(len(seen) == 5, f'apps not separate: {seen}')
+    return errs
+
+
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):

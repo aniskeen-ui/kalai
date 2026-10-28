@@ -1,0 +1,37 @@
+{
+ "id": "/seller.html",
+ "name": "Kalai Artists · Artist & seller portal",
+ "short_name": "Kalai Artists",
+ "description": "Your works, orders and commissions with Kalai Art House.",
+ "start_url": "/seller.html",
+ "scope": "/",
+ "display": "standalone",
+ "orientation": "any",
+ "theme_color": "#a3242f",
+ "background_color": "#fbf8f1",
+ "lang": "en",
+ "categories": [
+  "business",
+  "productivity"
+ ],
+ "icons": [
+  {
+   "src": "/app/studio-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/app/studio-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/app/studio-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
