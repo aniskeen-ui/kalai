@@ -721,6 +721,14 @@ def _(b):
     return []
 
 
+@check('Refund messages name the order\'s artist, not always "Siva" (BLVP was Sobana\'s)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    i = src.index('async function afterSales'); body = src[i:i + 7000]
+    need("' Siva had started" not in body and "${who} had started" in body, 'refund message still says Siva for every artist')
+    return []
+
+
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
     import re

@@ -1213,12 +1213,13 @@ async function afterSales(img: Img) {
         jobsNote = `${gone.length ? ` Jobs withdrawn: ${gone.join(', ')}.` : ''}${kept.length ? ` Already done, pay as agreed: ${kept.join(', ')}.` : ''}`;
       } catch (err) { console.warn('Jobs not withdrawn', err); jobsNote = ' Supplier jobs not withdrawn: take them back in the order.'; }
     }
-    // Siva: a cancellation before he started cancels his order (if no bill yet).
+    // The artist (Siva, or a portal artist such as Sobana: named, BLVP said "Siva"): a cancellation before they started cancels their order (if no bill yet).
+    const who = str(img, 'artistName') || 'Siva';
     const sivaCancelled = action === 'CANCEL_FULL' && !['GIFT', 'PHOTO'].includes(str(img, 'kind')) && !str(img, 'zohoBillId');
     const sivaNote =
       action === 'CANCEL_FULL'
-        ? sivaCancelled ? " Siva's order cancelled (nothing owed)." : " Siva's bill already exists: agree with him what is owed."
-        : ['GIFT', 'PHOTO'].includes(str(img, 'kind')) ? '' : action === 'CANCEL_HALF' ? " Siva's order stopped: he is paid 50% of his price (his invoice no. → bill)." : ' Siva had started / finished: pay him as agreed.';
+        ? sivaCancelled ? ` ${who}'s order cancelled (nothing owed).` : ` ${who}'s bill already exists: agree with them what is owed.`
+        : ['GIFT', 'PHOTO'].includes(str(img, 'kind')) ? '' : action === 'CANCEL_HALF' ? ` ${who}'s order stopped: paid 50% of their price (their invoice no. → bill).` : ` ${who} had started / finished: pay them as agreed.`;
     const sivaJobsNote = sivaNote + jobsNote;
 
     if (!(amount > 0)) throw new Error('Enter the refund amount.');
