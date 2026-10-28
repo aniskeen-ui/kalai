@@ -1937,6 +1937,7 @@ async function refreshOne(id) {
   if (!data) return null;
   try {
     const c = await client.models.Costing.get({ enquiryId: id });
+    if (c.errors?.length) console.warn('Costing read', c.errors);
     if (c.data) costings.set(id, c.data);
   } catch { /* costing optional */ }
   const i = all.findIndex((x) => x.id === id);
@@ -1956,7 +1957,10 @@ function unsavedInputs() {
   const out = [];
   document.querySelectorAll('#detail input[id], #detail select[id], #detail textarea[id]').forEach((el) => {
     if (SERVER_OWNED.has(el.id) || el.type === 'file' || el.type === 'hidden') return;
-    const dirty = el.tagName === 'SELECT' ? [...el.options].some((o) => o.selected !== o.defaultSelected)
+    // A select with no option marked as default starts on its first option: that is not a change (the artist select
+    // counted as changed, was "restored" after Check Zoho and its change handler blanked the artist price, HDHX).
+    const defIdx = (el) => { const i = [...el.options].findIndex((o) => o.defaultSelected); return i < 0 ? 0 : i; };
+    const dirty = el.tagName === 'SELECT' ? (el.multiple ? [...el.options].some((o) => o.selected !== o.defaultSelected) : el.selectedIndex !== defIdx(el))
       : el.type === 'checkbox' || el.type === 'radio' ? el.checked !== el.defaultChecked : el.value !== el.defaultValue;
     if (dirty) out.push([el.id, el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value]);
   });

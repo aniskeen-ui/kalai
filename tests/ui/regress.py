@@ -207,6 +207,18 @@ def _(b):
     need('Old Town Lane' in pg2.inner_text('#detail'), '#order=<order no.> does not open the order')
     return errs + errs2
 
+@check('Check Zoho never blanks the artist price on screen (HDHX showed "needs the artist\'s price" until a reload)')
+def _(b):
+    s = priced_seed(zohoPOId='po1'); s['items'][0]['status'] = 'DELIVERED'
+    s['costing'] = [{'enquiryId': 'x1', 'artistPriceInr': 2000}]
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(800)
+    need(pg.input_value('#cInr') == '2000', 'price not shown at first')
+    # Check Zoho redraws the order; the artist select must not count as "changed" (its change handler clears the price).
+    pg.click('#checkZoho'); pg.wait_for_timeout(1500)
+    need(pg.input_value('#cInr') == '2000', f"price box blank after Check Zoho ({pg.input_value('#cInr')!r})")
+    need('needs the artist' not in pg.inner_text('#costOut'), 'costing says the artist price is needed')
+    return errs
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
