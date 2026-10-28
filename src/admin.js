@@ -1045,11 +1045,16 @@ window.kalaiSaveActual = async (id) => {
 
 // Delivery outside the UAE: the destination country and state / region (costs JSON destCountry / destRegion),
 // defaulting to the customer's delivery address. The local courier is then the partner's price for that zone.
+// The order has a delivery address (entered by the customer or by you): it decides the destination, over an older
+// costing (KA-261022-65CF: address India, costing still "United States" from an earlier edit → US courier costed).
+const hasAddr = (e) => !!(e.deliveryAddress || e.deliveryEmirate) || (!!e.deliveryCountry && e.deliveryCountry !== 'UAE');
 function destOf(e) {
   let cs = {}; try { const raw = costings.get(e.id)?.costs; cs = (typeof raw === 'string' ? JSON.parse(raw) : raw) || {}; if (typeof cs === 'string') cs = JSON.parse(cs); } catch { cs = {}; }
   const live = $('cDestCountry');
-  const country = (live && live.value) || cs.destCountry || (e.deliveryCountry && e.deliveryCountry !== 'UAE' ? e.deliveryCountry : 'India');
-  const region = live ? ($('cDestRegion')?.value || '') : (cs.destRegion || (country === e.deliveryCountry ? e.deliveryEmirate || '' : ''));
+  const addrAbroad = hasAddr(e) && e.deliveryCountry && e.deliveryCountry !== 'UAE';
+  const country = (live && live.value) || (addrAbroad ? e.deliveryCountry : '') || cs.destCountry || (e.deliveryCountry && e.deliveryCountry !== 'UAE' ? e.deliveryCountry : 'India');
+  const region = live ? ($('cDestRegion')?.value || '') : (addrAbroad ? e.deliveryEmirate || '' : (cs.destRegion || (country === e.deliveryCountry ? e.deliveryEmirate || '' : '')));
+  if (cs.destCountry && cs.destCountry !== country) cs = { ...cs, shipFrom: undefined }; // a new destination: work out where it ships from again
   // Default: an artist in India (Siva's desk, or a portal artist in India) sending to India ships from India.
   const artistInIndia = hasArtist(e) && (!e.artistId || e.artistCountry === 'India');
   const from = ($('cShipFrom')?.value) || cs.shipFrom || (country === 'India' && artistInIndia ? 'India' : 'UAE');
@@ -1081,7 +1086,8 @@ function costingSection(e) {
   // No tier saved yet: take it from the work's size (e.g. "28 × 40 cm" in Artwork / Size), so the costing shows a total straight away.
   const guess = c.sizeTier ? '' : tierFromSize(e);
   // Not chosen yet: the delivery follows the order's address (India, UK… = outside the UAE).
-  const delOut = c.delivery ? c.delivery === 'OUTSIDE' : !!e.deliveryCountry && e.deliveryCountry !== 'UAE';
+  // With a delivery address, the address decides (an older costing choice can be out of date).
+  const delOut = hasAddr(e) ? (!!e.deliveryCountry && e.deliveryCountry !== 'UAE') : c.delivery ? c.delivery === 'OUTSIDE' : !!e.deliveryCountry && e.deliveryCountry !== 'UAE';
   const tierOpts = Object.entries(rates.tiers).map(([k, t]) => `<option value="${k}" ${(c.sizeTier || guess) === k ? 'selected' : ''}>${k} · ${esc(t.label)}</option>`).join('');
   const fromSiva = c.artistAt
     ? `${c.artistBy && /^Kalai Art House/.test(c.artistBy) ? `Entered by you on ${esc(who)}’s behalf` : `From ${esc(c.artistBy || who)}`} ${esc(when(c.artistAt))}${c.artistReadyBy ? ` · ready by ${esc(c.artistReadyBy)}` : ''}${c.artistNote ? ` · “${esc(c.artistNote)}”` : ''}`

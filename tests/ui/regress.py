@@ -143,6 +143,17 @@ def _(b):
     need(pg2.input_value('#eDiscT') == 'PCT' and pg2.input_value('#eDiscV') == '25', 'normal order lost the standard discount')
     return errs + errs2
 
+@check('Costing follows the delivery address (KA-261022-65CF: address India, old costing said United States)')
+def _(b):
+    s = priced_seed(deliveryCountry='India', deliveryEmirate='Tamil Nadu', deliveryAddress='26/6 Carmel Street, Nagercoil', deliveryPin='629004')
+    s['costing'] = [{'enquiryId': 'x1', 'artistPriceInr': 9000, 'costs': json.dumps({'delivery': 'OUTSIDE', 'destCountry': 'United States', 'destRegion': 'Califoria', 'shipFrom': 'UAE'})}]
+    pg, errs = open_page(b, 'admin.html#order=x1', s); pg.wait_for_timeout(800)
+    need(pg.input_value('#cDel') == 'OUTSIDE', 'delivery not outside the UAE')
+    need(pg.input_value('#cDestCountry') == 'India', f"costing destination {pg.input_value('#cDestCountry')} (address is India)")
+    need(pg.input_value('#cDestRegion') == 'Tamil Nadu', f"region {pg.input_value('#cDestRegion')}")
+    need('United States' not in pg.inner_text('#costOut'), 'US courier still in the costing')
+    return errs
+
 @check('What next card never stays on top of the Save button')
 def _(b):
     pg, errs = open_page(b, 'admin.html#order=x1', priced_seed(), width=1500)
