@@ -5216,9 +5216,26 @@ function renderMail(m: Mail) {
   return { html, text };
 }
 
+// Test site: emails meant for a frame shop, print shop or courier go to the studio inbox instead, so real companies
+// never get jobs for test orders (and the whole test can run without stopping). The live site is unchanged.
+let SUPPLIER_EMAILS: Map<string, string> | null = null;
+async function supplierNameFor(email: string): Promise<string | null> {
+  if (!SUPPLIER_EMAILS) {
+    SUPPLIER_EMAILS = new Map();
+    try {
+      const S = process.env.SELLER_TABLE;
+      if (S) for (const p of (await scanAll(S)).map(plain)) if (p && ['FRAMER', 'PRINTER', 'COURIER'].includes(String(p.type)) && p.email) SUPPLIER_EMAILS.set(String(p.email).trim().toLowerCase(), String(p.business || p.contactName || p.email));
+    } catch (err) { console.warn('Supplier emails not loaded', err); }
+  }
+  return SUPPLIER_EMAILS.get(email.trim().toLowerCase()) ?? null;
+}
 async function sendMail(m: Mail) {
   if (!m.to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.to)) return;
-  if (TEST_SITE && !m.subject.startsWith('[TEST]')) m = { ...m, subject: `[TEST] ${m.subject}` };
+  if (TEST_SITE) {
+    const sup = m.to.toLowerCase() === STUDIO_EMAIL ? null : await supplierNameFor(m.to);
+    if (sup) m = { ...m, to: STUDIO_EMAIL, subject: `[TEST → ${sup}] ${m.subject.replace(/^\[TEST\]\s*/, '')}`, lines: [`<i>Test site: this email would have gone to ${h(sup)} (${h(m.to)}). It was sent to the studio instead.</i>`, ...m.lines] };
+  }
+  if (TEST_SITE && !m.subject.startsWith('[TEST')) m = { ...m, subject: `[TEST] ${m.subject}` };
   const { html, text } = renderMail(m);
   await sesClient.send(new SendEmailCommand({
     FromEmailAddress: FROM,

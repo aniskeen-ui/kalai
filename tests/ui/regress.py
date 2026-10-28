@@ -650,6 +650,15 @@ def _(b):
     return []
 
 
+@check('Test site: emails to frame shops, print shops and couriers go to the studio inbox (no real company gets a test job)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    i = src.index('async function sendMail'); body = src[i:i + 900]
+    need('TEST_SITE' in body and 'supplierNameFor' in body and 'to: STUDIO_EMAIL' in body, 'sendMail does not redirect supplier emails on the test site')
+    need(src.count('new SendEmailCommand(') == 1, 'an email is sent outside sendMail (would skip the test-site redirect)')
+    return []
+
+
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
     import re
