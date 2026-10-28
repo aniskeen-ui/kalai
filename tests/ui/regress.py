@@ -637,6 +637,19 @@ def _(b):
 
 
 # ---------------------------------------------------------------- Server code guards (the Lambda isn't run here)
+@check('Server code type-checks (a type error stopped the Amplify build: Job had no "spec", 28 Oct)')
+def _(b):
+    amp = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify')
+    try:
+        out = subprocess.run(['npx', '--no-install', 'tsc', '--noEmit', '-p', '.'], cwd=amp, capture_output=True, text=True, timeout=300).stdout
+    except Exception as ex:  # no TypeScript here: say so, don't pass silently
+        raise AssertionError(f'could not run tsc: {ex}')
+    # Missing packages / Node types on this machine (no npm install here) are not code errors.
+    bad = [l for l in out.splitlines() if 'error TS' in l and not any(c in l for c in ('TS2307', 'TS2591', 'TS7006', 'TS7016'))]
+    need(not bad, 'type errors: ' + ' | '.join(bad[:5]))
+    return []
+
+
 @check('Server: order details read through detStr (website orders store them as a map; brief was empty)')
 def _(b):
     import re

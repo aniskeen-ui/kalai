@@ -2507,7 +2507,7 @@ async function sellerAction(ev: ApiEvent) {
 // The job lives on the admin-only Costing record (supplierJobs), so customers never see what Kalai pays its suppliers.
 // Frame shop: Accept → Framed, ready for pickup → its invoice (Zoho bill). Delivery partner: Accept → Picked up
 // (order Shipped, tracking no.) → Delivered (order Delivered) → its invoice (Zoho bill).
-type Job = { supplierId: string; name: string; price: number | null; due: string; note: string; stage: string; assignedAt: string; acceptedAt?: string; readyAt?: string; canDeliver?: boolean; deliveryPrice?: number | null; byFramer?: boolean;
+type Job = { supplierId: string; name: string; price: number | null; due: string; note: string; stage: string; assignedAt: string; acceptedAt?: string; readyAt?: string; canDeliver?: boolean; spec?: string; deliveryPrice?: number | null; byFramer?: boolean;
   pickedAt?: string; deliveredAt?: string; awb?: string; awbAt?: string; pod?: { name: string; at: string; signKey?: string; photoKeys?: string[]; note?: string }; invoiceNo?: string; invoiceAmt?: number; invoiceAt?: string; bill?: string; billId?: string; billState?: string; message?: string };
 // Print shops print the customer's photo / child's drawing / our print file (Little Artists, Framed Prints) and hand
 // the print to the frame shop. Without a print job, the frame shop prints it itself.
