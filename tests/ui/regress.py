@@ -355,6 +355,12 @@ def _(b):
     need(abs(float(v) - 62.92) < 0.01, f'back to ⃃ gives {v}')
     return errs
 
+@check('Courier proof of delivery: receiver name is filled in, not a grey placeholder that looks filled (65CF)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'src', 'supplier.js')).read()
+    need('data-podname maxlength="80" value="${esc(j.to?.name' in src, 'receiver name not pre-filled in the proof of delivery')
+    return []
+
 @check('Supplier: order search box + drop-down filter the jobs')
 def _(b):
     jobs = [JOB, dict(JOB, id='e2', ref='KA-261025-AAAA', title='Other work', to={'name': 'Zed', 'address': 'Marina'})]

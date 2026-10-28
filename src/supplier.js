@@ -302,7 +302,7 @@ function supGuide(j, fr, pr) {
     <div class="guide-ask">Not sure about the ${pr ? 'size, paper or colours' : fr ? 'frame, size, mount or glass' : 'address or timing'}? <b>Please ask before you start.</b> <a href="${esc(ask)}" target="_blank" rel="noopener">Ask Kalai Art House on WhatsApp</a></div></details>`;
 }
 const podForm = (j, label, action) => `<div class="pod" data-pod><b>Proof of delivery</b> <span class="muted">(needed: name, plus signature or photo)</span>
-  <div class="field"><label>Received by (name)</label><input data-podname maxlength="80" placeholder="${esc(j.to?.name || 'Name of the person')}"></div>
+  <div class="field"><label>Received by (name)</label><input data-podname maxlength="80" value="${esc(j.to?.name || '')}" placeholder="Name of the person who received it"><span class="muted" style="font-size:11px">Filled with the customer's name: change it if someone else received it.</span></div>
   <div class="field"><label>Signature of the receiver</label><canvas data-sign width="520" height="160" style="width:100%;max-width:520px;height:160px;border:1px dashed var(--line);border-radius:6px;background:#fff;touch-action:none"></canvas><button type="button" class="linkbtn" data-signclear>Clear signature</button></div>
   <div class="field"><label>Photos of the delivered parcel (optional, up to 4)</label><input data-podphotos type="file" accept="image/*" capture="environment" multiple></div>
   <div class="field"><label>Note (optional)</label><input data-podnote maxlength="200" placeholder="e.g. left with the building guard"></div>
