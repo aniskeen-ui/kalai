@@ -86,7 +86,7 @@ const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Numb
 const escSym = (v) => esc(v).replace(/\bAED (?=\d)/g, '\u20C3 ');
 const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 // A credit note gives money back: its amounts show as negative (asked 29 Oct).
-const docAmt = (x, v, d = 0) => (/^Credit note/.test(x?.type || '') && Number(v) > 0 ? `−${aed(v, d)}` : aed(v, d));
+const docAmt = (x, v, d = 0) => (/^(Credit note|Debit note)/.test(x?.type || '') && Number(v) > 0 ? `−${aed(v, d)}` : aed(v, d));
 
 // Costs from the supplier price lists (Pricing → Margin & charges picks the default supplier, or the cheapest):
 // the supplier on the order's job if one is assigned, else the default one's price for this size / style / address.
@@ -476,6 +476,13 @@ function royaltyOf(e) {
   const base = Number(e.listPrice || e.quotedPrice || 0);
   return { pct, amount: pct ? Math.round(base * pct / (e.kind === 'LICENCE' ? 100 : 100 + pct) * 100) / 100 : 0 };
 }
+/** Debit note to the artist when the customer is refunded after delivery: the artist's own % (Artists & sellers),
+ *  else the default in Pricing → Margin & charges (asked 29 Oct). */
+function recoveryPctOf(e) {
+  const p = artists.find((a) => (e.artistId && a.id === e.artistId) || (e.artistName && String(a.business || '').toLowerCase() === String(e.artistName).toLowerCase()));
+  const v = p?.refundRecoveryPct;
+  return v != null && v !== '' ? Number(v) : Number(rates.recoveryPct ?? 50);
+}
 function reportLine(e) {
   const c = costings.get(e.id);
   const costs = parseCosts(c);
@@ -522,6 +529,11 @@ function reportLine(e) {
     // 50% cancellation after Siva started: he is paid half; India courier and customs only if he had sent it.
     if (e.refundAction === 'CANCEL_HALF' && e.purchaseState !== 'CANCELLED') { k.artist *= 0.5; if (!e.artistShippedAt) { k.india = 0; k.customs = 0; } }
   }
+  // Refunded after delivery (damage / rejection): part of the artist's pay comes back with a debit note.
+  let recovery = 0, recoveryPct = 0;
+  if (k && e.refundAction === 'DAMAGED_REFUND' && ['PRICE', 'COMMISSION'].includes(e.kind) && k.artist > 0) {
+    recoveryPct = recoveryPctOf(e); recovery = r2(k.artist * recoveryPct / 100); k.artist = r2(k.artist - recovery);
+  }
   const rc = reworkCost(e);
   if (k) { k.rework = rc.net; k.other = 0; }
   const ins = price * (rates.ins || 0);
@@ -541,7 +553,7 @@ function reportLine(e) {
   const totalA = ka ? sumK(ka) : null;
   const marginA = ka && haveAct ? net - fees - totalA : null;
   return { e, price, refund, net: r2(net), fee: r2(fees), reserve: r2(price * (rates.reserve || 0)), rc, k, ka, est, haveAct, total: total == null ? null : r2(total), totalA: totalA == null ? null : r2(totalA),
-    margin: margin == null ? null : r2(margin), marginA: marginA == null ? null : r2(marginA), pct: margin == null || !net ? null : margin / net, pctA: marginA == null || !net ? null : marginA / net, note };
+    margin: margin == null ? null : r2(margin), marginA: marginA == null ? null : r2(marginA), pct: margin == null || !net ? null : margin / net, pctA: marginA == null || !net ? null : marginA / net, note, recovery, recoveryPct };
 }
 
 /** One order's report (the Report button under Check Zoho): sales, refund, net revenue, costs planned vs actual,
@@ -554,7 +566,7 @@ function orderReport(e) {
   const invoiced = sum(/^Invoice/), credited = sum(/^Credit note/), billed = r2(docs.filter((x) => x.group === 'PURCHASE' && /Bill/.test(x.type)).reduce((a, x) => a + Number(x.amount ?? x.total ?? 0), 0));
   const m = (v) => (v == null ? '–' : `⃃ ${money(v)}`), neg = (v) => (v ? `−⃃ ${money(v)}` : '⃃ 0.00');
   const pc = (v) => (v == null ? '–' : `${(v * 100).toFixed(1)}%`);
-  const LBL = { artist: e.kind === 'PHOTO' ? 'Artist royalty' : e.kind === 'MARKET' ? 'Maker payout' : 'Artist', framing: ['PHOTO', 'GIFT'].includes(e.kind) ? 'Print shop + frame shop' : 'Frame shop', india: 'Courier India → Dubai', customs: 'Customs / duty', local: 'Courier to the customer', other: 'Other (packing, etc.)' };
+  const LBL = { artist: e.kind === 'PHOTO' ? 'Artist royalty' : e.kind === 'MARKET' ? 'Maker payout' : l.recovery ? `Artist (after ${l.recoveryPct}% recovered: debit note −⃃ ${money(l.recovery)})` : 'Artist', framing: ['PHOTO', 'GIFT'].includes(e.kind) ? 'Print shop + frame shop' : 'Frame shop', india: 'Courier India → Dubai', customs: 'Customs / duty', local: 'Courier to the customer', other: 'Other (packing, etc.)' };
   const costRows = l.k ? [...ACT_FIELDS.map(([f]) => f), 'rework'].filter((f) => (l.k[f] || l.ka?.[f])).map((f) => `<tr><td>${esc(LBL[f] || 'Rework (net of insurance)')}</td><td class="num mono">${m(r2(l.k[f] || 0))}</td><td class="num mono">${l.ka && f !== 'rework' ? m(r2(l.ka[f] || 0)) + (l.est.has(f) ? ' <span class="muted">est.</span>' : '') : m(r2(l.k[f] || 0))}</td></tr>`).join('') : '';
   const det = parseDetails(e.details);
   const party = (x) => esc(x.party || x.vendor || (x.group === 'PURCHASE' ? '' : e.customerName || ''));
@@ -632,7 +644,18 @@ function payLines() {
     if (['PRICE', 'COMMISSION', 'PHOTO', 'LICENCE'].includes(e.kind) && !(e.status === 'CANCELLED' && e.refundAction !== 'CANCEL_HALF')) {
       const art = ['PRICE', 'COMMISSION'].includes(e.kind), refunded = ['CANCEL_FULL', 'DAMAGED_REFUND'].includes(e.refundAction);
       const earned = art ? (e.artistShippedAt || e.refundAction === 'CANCEL_HALF' || ['FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(e.status)) && e.refundAction !== 'CANCEL_FULL' : !refunded;
-      const amt = earned ? r2(reportLine(e).k?.artist || 0) : 0;
+      const rl = earned || refunded ? reportLine(e) : null;
+      const amt = earned ? r2((rl.k?.artist || 0) + (rl.recovery || 0)) : 0;
+      // A paid print / licence royalty already billed, then refunded: all of it comes back.
+      const name0 = e.artistName || 'Siva Raja';
+      const dn = rl?.recovery ? { amount: rl.recovery, what: `Debit note: ${rl.recoveryPct}% recovery, customer refunded` }
+        : !art && refunded && artistBillOf(e, name0) && royaltyOf(e).amount ? { amount: royaltyOf(e).amount, what: 'Debit note: royalty back, customer refunded' } : null;
+      if (dn) {
+        const first = name0.toLowerCase().split(' ')[0];
+        const raised = zohoDocsOf(e).find((x) => /^Debit note/.test(x.type) && x.status !== 'void' && String(x.vendor || x.party || '').toLowerCase().includes(first));
+        out.push({ e, partner: name0, type: 'ARTIST', role: 'artist', mode: prof(e.artistId, name0)?.invoiceMode || 'MONTHLY', date: e.refundAt || e.updatedAt || e.createdAt,
+          what: dn.what, amount: -dn.amount, inr: null, debit: true, billed: !!raised, billNo: raised?.number || '' });
+      }
       if (amt > 0) {
         const name = e.artistName || 'Siva Raja', p = prof(e.artistId, name), bill = artistBillOf(e, name);
         const half = e.refundAction === 'CANCEL_HALF';
@@ -671,16 +694,17 @@ function renderPayables() {
   $('payMonth').value = months.includes(cur) ? cur : '';
   const who = $('payWho').value, mon = $('payMonth').value, showBilled = $('payBilled').checked;
   const lines = linesAll.filter((l) => (!who || l.type === who) && (!mon || l.month === mon) && (showBilled || !l.billed));
-  const pend = (t) => r2(linesAll.filter((l) => !l.billed && (!mon || l.month === mon) && (t ? l.type === t : l.type !== 'ARTIST')).reduce((a, l) => a + l.amount, 0));
+  const pend = (t) => r2(linesAll.filter((l) => !l.billed && !l.debit && (!mon || l.month === mon) && (t ? l.type === t : l.type !== 'ARTIST')).reduce((a, l) => a + l.amount, 0));
+  const dnDue = r2(-linesAll.filter((l) => l.debit && !l.billed && (!mon || l.month === mon)).reduce((a, l) => a + l.amount, 0));
   const tile = (k, v) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-  $('payTiles').innerHTML = tile(`Artists: to invoice${mon ? ` (${esc(monthName(mon))})` : ''}`, `⃃ ${money(pend('ARTIST'))}`) + tile('Frame, print shops and couriers: invoices due', `⃃ ${money(pend(''))}`);
+  $('payTiles').innerHTML = tile(`Artists: to invoice${mon ? ` (${esc(monthName(mon))})` : ''}`, `⃃ ${money(pend('ARTIST'))}`) + tile('Debit notes to raise (artists)', dnDue ? `−⃃ ${money(dnDue)}` : '⃃ 0.00') + tile('Frame, print shops and couriers: invoices due', `⃃ ${money(pend(''))}`);
   const groups = new Map();
   for (const l of lines) { const k = `${l.partner}|${l.month}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); }
   $('payList').innerHTML = groups.size ? [...groups.values()].map((g) => {
-    const f = g[0], due = r2(g.filter((l) => !l.billed).reduce((a, l) => a + l.amount, 0)), inr = g.filter((l) => !l.billed && l.inr).reduce((a, l) => a + l.inr, 0);
+    const f = g[0], due = r2(g.filter((l) => !l.billed && !l.debit).reduce((a, l) => a + l.amount, 0)), dn = r2(-g.filter((l) => !l.billed && l.debit).reduce((a, l) => a + l.amount, 0)), inr = g.filter((l) => !l.billed && l.inr).reduce((a, l) => a + l.inr, 0);
     const modeTxt = f.mode === 'MONTHLY' ? 'one consolidated invoice for the month' : 'one invoice per order';
-    return `<details class="pay-grp" data-pay="${esc(f.partner)}"><summary><b>${esc(f.partner)}</b> <span class="muted">· ${esc(f.role)} · ${esc(monthName(f.month))} · ${g.length} order${g.length > 1 ? 's' : ''} · ${modeTxt}</span><span class="mono" style="margin-left:auto">${due ? `to invoice ⃃ ${money(due)}${inr ? ` (₹ ${Math.round(inr).toLocaleString('en-IN')})` : ''}` : 'all billed'}</span></summary>
-      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}</td><td class="num mono">⃃ ${money(l.amount)}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${l.billed ? `Billed${l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : ''}` : '<b>To invoice</b>'}</td></tr>`).join('')}</tbody></table></details>`;
+    return `<details class="pay-grp" data-pay="${esc(f.partner)}"><summary><b>${esc(f.partner)}</b> <span class="muted">· ${esc(f.role)} · ${esc(monthName(f.month))} · ${g.length} order${g.length > 1 ? 's' : ''} · ${modeTxt}</span><span class="mono" style="margin-left:auto">${due ? `to invoice ⃃ ${money(due)}${inr ? ` (₹ ${Math.round(inr).toLocaleString('en-IN')})` : ''}` : dn ? '' : 'all billed'}${dn ? `${due ? ' · ' : ''}debit note −⃃ ${money(dn)}${due ? ` · net ⃃ ${money(r2(due - dn))}` : ''}` : ''}</span></summary>
+      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}</td><td class="num mono">${l.amount < 0 ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${l.billed ? `${l.debit ? 'Raised' : 'Billed'}${l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : ''}` : `<b>${l.debit ? 'Debit note to raise' : 'To invoice'}</b>`}</td></tr>`).join('')}</tbody></table></details>`;
   }).join('') : '<p class="muted">Nothing to invoice for this choice.</p>';
 }
 ['payWho', 'payMonth', 'payBilled'].forEach((id) => $(id) && ($(id).onchange = renderPayables));
@@ -689,7 +713,7 @@ if ($('payCsv')) $('payCsv').onclick = () => {
   const rows = payLines().filter((l) => (!who || l.type === who) && (!mon || l.month === mon) && (showBilled || !l.billed));
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = [['Partner', 'Role', 'Invoicing', 'Month', 'Date', 'Order', 'Title', 'For', 'Amount AED', 'Amount INR', 'Status', 'Bill no.'].map(q).join(','),
-    ...rows.map((l) => [l.partner, l.role, l.mode === 'MONTHLY' ? 'Monthly' : 'Per order', l.month, dDay(l.date), l.e.ref, l.e.title, l.what, l.amount, l.inr ?? '', l.billed ? 'Billed' : 'To invoice', l.billNo].map(q).join(','))].join('\n');
+    ...rows.map((l) => [l.partner, l.role, l.mode === 'MONTHLY' ? 'Monthly' : 'Per order', l.month, dDay(l.date), l.e.ref, l.e.title, l.what, l.amount, l.inr ?? '', l.debit ? (l.billed ? 'Debit note raised' : 'Debit note to raise') : l.billed ? 'Billed' : 'To invoice', l.billNo].map(q).join(','))].join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `kalai-to-invoice${mon ? `-${mon}` : ''}.csv`; a.click();
 };
 
@@ -1920,6 +1944,7 @@ function showRates() {
       <div class="two">
         <div class="field"><label for="rSivaRoy">Siva's print royalty (%)</label><input id="rSivaRoy" type="number" min="0" max="50" step="0.5" value="${rates.sivaRoyalty ?? 10}"><span class="muted" style="font-size:12px">His share of each framed print of his paintings, added to the print price. Portal artists: set in Artists &amp; sellers.</span></div>
         <div class="field"><label for="rSivaLic">Siva's licence royalty (%)</label><input id="rSivaLic" type="number" min="0" max="90" step="0.5" value="${rates.sivaLicenceRoyalty ?? 30}"><span class="muted" style="font-size:12px">His share of each image licence of his works (% of the licence price). Portal artists: set in Artists &amp; sellers; a work can have its own in Catalogue.</span></div>
+        <div class="field"><label for="rRecov">Artist recovery on a refund (%)</label><input id="rRecov" type="number" min="0" max="100" step="5" value="${rates.recoveryPct ?? 50}"><span class="muted" style="font-size:12px">When a customer is refunded (damage, rejection), this share of what the artist was paid is recovered with a debit note. Portal artists can have their own % in Artists &amp; sellers.</span></div>
         <div class="field"><label for="rFx">Exchange rate (⃃ per ₹)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
         ${pct('rFee', 'Ziina fee (%)', rates.fee, 'of what the customer pays')}
@@ -1963,7 +1988,7 @@ function showRates() {
     host.querySelectorAll('.err').forEach((x) => x.remove());
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: t[k].framing ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
-    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, sivaLicenceRoyalty: n($('rSivaLic').value) ?? 30, fx: n($('rFx').value) ?? 0,
+    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, sivaLicenceRoyalty: n($('rSivaLic').value) ?? 30, recoveryPct: n($('rRecov').value) ?? 50, fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(),
       // The old Pricing master copies (courier, frame table, frame source) are dropped: one set of figures now.
@@ -2073,7 +2098,7 @@ function docsList(e) {
       <td data-party>${partyOf(x)}</td>
       <td><a href="${esc(x.url)}" target="_blank" rel="noopener" class="mono">${esc(x.number || 'open')}</a></td>
       <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
-      <td class="num mono" data-amt>${x.total != null ? docAmt(x, x.total, 2) : ''}${x.balance ? `<br><span class="muted">${/^Credit note/.test(x.type) ? 'open' : 'due'} ${docAmt(x, x.balance, 2)}</span>` : ''}</td></tr>`).join('');
+      <td class="num mono" data-amt>${x.total != null ? docAmt(x, x.total, 2) : ''}${x.balance ? `<br><span class="muted">${/^(Credit note|Debit note)/.test(x.type) ? 'open' : 'due'} ${docAmt(x, x.balance, 2)}</span>` : ''}</td></tr>`).join('');
   };
   return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', hasArtist(e) ? `Purchase (${esc(artistOf(e))}, frame shop, courier)` : 'Purchase (frame shop, courier)')}</tbody></table>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</span><button type="button" class="btn ghost" data-ordreport="${esc(e.id)}" style="margin-left:auto">📊 Report</button></div></div>`;

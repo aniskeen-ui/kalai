@@ -282,6 +282,7 @@ function sellerCard(s) {
       ${s.status !== 'REJECTED' ? `<label>Commission %<input type="number" min="0" max="90" step="0.5" data-f="pct" value="${esc(s.commissionPct ?? DEF_PCT)}"></label>
       <label>Kalai delivery fee (⃃)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
       ${s.type === 'ARTIST' ? `<label title="The artist's share of each framed print sold of their works, added to the print price">Print royalty %<input type="number" min="0" max="50" step="0.5" data-f="royalty" value="${esc(s.royaltyPct ?? 10)}"></label><label title="The artist's share of each image licence sold of their works (% of the licence price)">Licence royalty %<input type="number" min="0" max="90" step="0.5" data-f="licroyalty" value="${esc(s.licenceRoyaltyPct ?? 30)}"></label>
+      <label title="When a customer is refunded (damage, rejection), this share of what the artist was paid is recovered with a debit note">Recovery % on a refund<input type="number" min="0" max="100" step="5" data-f="recovery" value="${esc(s.refundRecoveryPct ?? '')}" placeholder="default"></label>
       <label title="Shown on their artist bio on the website">Artist photo<input type="file" accept="image/*" data-f="photofile"><input type="hidden" data-f="photo" value=""></label>` : ''}` : ''}
       ${invoiceModeCtl(s)}
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
@@ -432,7 +433,7 @@ function wireCards() {
       if (['rejectSeller', 'rejectListing', 'suspendSeller'].includes(a) && !f('note').trim()) { msg.textContent = 'Write a short note to the seller first.'; return; }
       if (a === 'deleteSeller' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Delete for good? Click again'; b.classList.remove('ghost'); msg.textContent = 'This removes the account, its listings and its catalogue copies. It cannot be undone.'; return; }
       const data = { id, note: f('note').trim() };
-      if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); data.licenceRoyaltyPct = f('licroyalty'); if (f('photo')) data.photoKey = f('photo'); }
+      if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); data.licenceRoyaltyPct = f('licroyalty'); data.recoveryPct = f('recovery'); if (f('photo')) data.photoKey = f('photo'); }
       if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
       if (a === 'approveListing') data.commissionPct = f('pct');
       if (a === 'invoiceModeSeller') data.invoiceMode = f('invmode');

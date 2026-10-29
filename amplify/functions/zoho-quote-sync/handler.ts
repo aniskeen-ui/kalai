@@ -1632,7 +1632,7 @@ async function zget(path: string): Promise<any> {
 async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Doc[]> {
   const q = encodeURIComponent(ref);
   const rw = encodeURIComponent(`${ref}-RW`);
-  const [est, inv, bill, rwBill, dcs, cns, shared] = await Promise.all([
+  const [est, inv, bill, rwBill, dcs, cns, shared, vcs] = await Promise.all([
     zget(`/estimates?reference_number=${q}`),
     zget(`/invoices?reference_number=${q}&filter_by=Status.All`),
     zget(`/bills?reference_number=${q}`),
@@ -1641,6 +1641,8 @@ async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Do
     zget(`/creditnotes?reference_number=${q}`),
     // Vendor bills (frame shop, courier, customs) whose Reference# mentions this order, also bills for several orders.
     zget(`/bills?reference_number_contains=${q}`),
+    // Debit notes to the artist (Zoho vendor credits) when a refunded order recovers part of what they were paid.
+    zget(`/vendorcredits?reference_number=${q}`).catch(() => ({})),
   ]);
   const seen = new Set((bill.bills ?? []).map((b: { bill_id: string }) => b.bill_id));
   const extra = (shared.bills ?? []).filter((b: { bill_id: string; reference_number?: string }) => !seen.has(b.bill_id) && String(b.reference_number ?? '').includes(ref) && !String(b.reference_number ?? '').includes(`${ref}-RW`));
@@ -1691,6 +1693,10 @@ async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Do
       amount = mine.length ? mine.reduce((t, l) => t + Number(l.item_total || 0), 0) : Number(b.total || 0) / Math.max(1, new Set(refs).size);
     } catch { amount = Number(b.total || 0) / Math.max(1, new Set(refs).size); }
     docs.push({ group: 'PURCHASE', type: 'Vendor bill', id: b.bill_id, number: b.bill_number, status: b.status, date: b.date, total: b.total, balance: b.balance, url: `${BOOKS_APP}/bills/${b.bill_id}`, vendor: b.vendor_name, amount: Math.round(amount * 100) / 100, shared: true });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const v of (vcs.vendor_credits ?? []).filter(same) as any[]) {
+    docs.push({ group: 'PURCHASE', type: 'Debit note (vendor credit)', id: v.vendor_credit_id, number: v.vendor_credit_number, status: v.status, date: v.date, total: v.total, balance: v.balance, url: `${BOOKS_APP}/vendorcredits/${v.vendor_credit_id}`, vendor: v.vendor_name, party: v.vendor_name });
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (cns.creditnotes ?? []).filter(same) as any[]) {
@@ -3166,6 +3172,8 @@ async function marketAdmin(ev: ApiEvent) {
       const extra: Dict = {};
       if (p.type === 'ARTIST' && d.royaltyPct !== undefined && d.royaltyPct !== '') extra.royaltyPct = numIn(d.royaltyPct, 50);
       if (p.type === 'ARTIST' && d.licenceRoyaltyPct !== undefined && d.licenceRoyaltyPct !== '') extra.licenceRoyaltyPct = numIn(d.licenceRoyaltyPct, 90);
+      // Share of what the artist was paid that is recovered (debit note) when the customer is refunded.
+      if (p.type === 'ARTIST' && d.recoveryPct !== undefined && d.recoveryPct !== '') extra.refundRecoveryPct = numIn(d.recoveryPct, 100);
       if (typeof d.photoKey === 'string' && /^market\//.test(d.photoKey)) extra.photoKey = txt(d.photoKey, 300);
       const row = { ...p, ...extra, status: 'APPROVED', commissionPct: pct, kalaiDeliveryFee: fee, approvedAt: p.approvedAt ?? now, adminNote: txt(d.note, 500), updatedAt: now };
       await putRow(S, row);
