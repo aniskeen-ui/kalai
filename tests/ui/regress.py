@@ -126,6 +126,20 @@ def _(b):
     need(jobs.get('framer', {}).get('spec') == '2 × White frame A3', f"frame job spec: {jobs.get('framer', {}).get('spec')}")
     return errs
 
+@check('Framed print, 2 copies: planned print + frame cost is the agreed job prices, not doubled (UW6D planned ⃃316, a false loss)')
+def _(b):
+    it = order(id='u7', ref='KA-261029-UW6D', kind='PHOTO', title='Framed print: Feathers of grace (A3)', status='DELIVERED', quotedPrice=435, deliveryCountry='UAE', deliveryEmirate='Dubai', deliveryAddress='Studio',
+               details=json.dumps({'Print': 'Feathers of grace', 'Size': 'A3 (30 × 42 cm)', 'Frame': 'White frame, white mount', 'Copies': '2'}))
+    jobs = {'printer': {'supplierId': 'p1', 'name': 'AB Print House', 'stage': 'COLLECTED', 'price': 38}, 'framer': {'supplierId': 'f1', 'name': 'Rafi Frames', 'stage': 'COLLECTED', 'price': 120},
+            'delivery': {'supplierId': 'c1', 'name': 'ARAMAX', 'stage': 'DELIVERED', 'price': 32}}
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'costing': [{'enquiryId': 'u7', 'supplierJobs': json.dumps(jobs)}]}
+    pg, errs = open_page(b, 'admin.html#order=u7', seed)
+    t = pg.inner_text('#detail')
+    i = t.find('Print shop + frame shop')
+    row = t[i:i + 60] if i >= 0 else ''
+    need(row and '316' not in row and '158' in row, f'planned print + frame row: {row!r}')
+    return errs
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,

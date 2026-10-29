@@ -107,6 +107,14 @@ function frameSpecText(e) {
   const n = ['GIFT', 'PHOTO'].includes(e.kind) ? copiesOf(parseDetails(e.details)) : 1;
   return `${n > 1 ? `${n} × ` : ''}${style ? `${style} frame` : 'Frame'} ${sp.size}${/×/.test(sp.size) ? ' cm' : ''}${['PRICE', 'COMMISSION'].includes(e.kind) ? ', white mount, glass' : ''}`;
 }
+// Print + frame for all copies. A job's agreed price is already for every copy; a price-list figure is per copy
+// (UW6D: ⃃38 + ⃃120 for 2 copies was counted twice, ⃃316 planned, a false loss).
+function allCopies(e, det, print, frame) {
+  const n = copiesOf(det), j = jobsOf(e);
+  // A frame shop with no print shop on the job prints too: its price covers the print.
+  const pr = j.printer?.price != null ? Number(j.printer.price) : j.framer?.price != null && !j.printer ? 0 : print * n;
+  return pr + (j.framer?.price != null ? Number(j.framer.price) : frame * n);
+}
 function estCosts(e) {
   if (!e) return {};
   const det = parseDetails(e.details), spec = specOf(e, det), j = jobsOf(e), d = rates.defaults || {};
@@ -496,13 +504,12 @@ function reportLine(e) {
     const es = estCosts(e), print = Number(es.print || 0), frm = sp.style === 'none' ? 0 : Number(es.framing || 0);
     // A print of a painting: the artist's royalty (% of the price) is their share, shown under Artist.
     const ry = royaltyOf(e);
-    k = { artist: ry.amount, framing: (print + frm) * copiesOf(gd), india: 0, customs: 0, local: Number(es.local || 0) };
+    k = { artist: ry.amount, framing: allCopies(e, gd, print, frm), india: 0, customs: 0, local: Number(es.local || 0) };
     note = `est. from supplier prices (print + frame${ry.pct ? ` + ${ry.pct}% royalty to ${e.artistName || 'Siva Raja'}` : ''})${es.framing == null || es.print == null ? ' · some supplier prices missing' : ''}`;
   } else if (e.kind === 'GIFT') {
     // Print (from the photo) + framing, per copy; A3 when the customer chose the large size.
     const gd = parseDetails(e.details), es = estCosts(e);
-    const per = Number(es.framing || 0) + Number(es.print || 0);
-    k = { artist: 0, framing: per * copiesOf(gd), india: 0, customs: 0, local: Number(es.local || 0) };
+    k = { artist: 0, framing: allCopies(e, gd, Number(es.print || 0), Number(es.framing || 0)), india: 0, customs: 0, local: Number(es.local || 0) };
     note = `est. from supplier prices (print + frame)${es.framing == null || es.print == null || es.local == null ? ' · some supplier prices missing' : ''}`;
   } else {
     note = 'no costing';
