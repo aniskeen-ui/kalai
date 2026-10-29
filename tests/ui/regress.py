@@ -689,7 +689,8 @@ def _(b):
 @check('Refund after delivery: artist invoice 100% plus a debit note for their recovery % (artist master), margin counts it (asked 29 Oct)')
 def _(b):
     art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE', 'refundRecoveryPct': 40}
-    p1 = order(id='r1', ref='KA-261029-BLVP', title='Circle of Colours', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=375, artistName='Sobana', artistShippedAt='2026-10-29T05:00:00Z', quotedPrice=375)
+    p1 = order(id='r1', ref='KA-261029-BLVP', title='Circle of Colours', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=375, artistName='Sobana', artistShippedAt='2026-10-29T05:00:00Z', quotedPrice=375,
+               zohoBillId='b-blvp', zohoBill='SB-T-BLVP')
     p2 = order(id='r2', ref='KA-261022-SIVA', title='Siva work', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=500, artistName='Siva Raja', artistShippedAt='2026-10-28T05:00:00Z', quotedPrice=500)
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS + [art], 'items': [p1, p2],
             'costing': [{'enquiryId': 'r1', 'costs': json.dumps({'artistAed': 216, 'framing': 70, 'localCourier': 22})}, {'enquiryId': 'r2', 'costs': json.dumps({'artistAed': 100})}]}
@@ -697,6 +698,9 @@ def _(b):
     t = pg.text_content('#payList')
     need('216.00' in t and '−⃃ 86.40' in t and 'Debit note to raise' in t, f'Sobana 40%: {t[:500]}')
     need('−⃃ 50.00' in t, f'Siva default 50% of 100: {t[:600]}')
+    need('against bill SB-T-BLVP of ⃃ 216.00 × 40%' in t, f'debit note does not name its invoice: {t[:700]}')
+    need(0 < t.index('↳ Debit note: 40%') - t.index('Billed · SB-T-BLVP') < 120, f'debit note is not right under its invoice line: {t[:900]}')
+    need('against its invoice line of ⃃ 100.00 × 50%' in t, 'unbilled original not named')
     tiles = pg.inner_text('#payTiles')
     need('−⃃ 136.40' in tiles, f'debit tile: {tiles}')
     pg.goto(pg.url.split('#')[0] + '#order=r1'); pg.wait_for_timeout(1500)

@@ -2910,8 +2910,8 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
  *  debit note (vendor credit, Reference# = the order) per refunded order. Test site: both stay drafts. Each order is
  *  marked so it shows Billed / Raised and can't be billed twice. (Asked 29 Oct.) */
 async function artistMonthBill(d: Dict) {
-  type Line = { id: string; amount: number; what: string; rework?: boolean };
-  const clean = (x: unknown): Line[] => (Array.isArray(x) ? x : []).slice(0, 200).map((l) => ({ id: txt((l as Dict).id, 80), amount: r2(Number((l as Dict).amount)), what: txt((l as Dict).what, 80), rework: !!(l as Dict).rework }))
+  type Line = { id: string; amount: number; what: string; rework?: boolean; against?: string };
+  const clean = (x: unknown): Line[] => (Array.isArray(x) ? x : []).slice(0, 200).map((l) => ({ id: txt((l as Dict).id, 80), amount: r2(Number((l as Dict).amount)), what: txt((l as Dict).what, 80), rework: !!(l as Dict).rework, against: txt((l as Dict).against, 160) }))
     .filter((l) => l.id && l.amount > 0 && l.amount < 1_000_000);
   const lines = clean(d.lines), debits = clean(d.debits);
   if (!lines.length && !debits.length) throw new Error('Tick at least one line.');
@@ -2952,7 +2952,7 @@ async function artistMonthBill(d: Dict) {
     const e = rows.get(l.id)!, ref = str(e, 'ref');
     const r = await zoho('/vendorcredits', { method: 'POST', body: JSON.stringify({
       vendor_id: vendor.id, reference_number: ref, date: today,
-      line_items: [{ name: `${ref} · ${l.what}`.slice(0, 100), description: `Recovery on ${str(e, 'title')} (${ref}): the customer was refunded.`.slice(0, 2000), rate: l.amount, quantity: 1, ...(account ? { account_id: account } : {}) }],
+      line_items: [{ name: `${ref} · ${l.what}`.slice(0, 100), description: `Recovery on ${str(e, 'title')} (${ref}), ${l.against || 'against the artist invoice'}: the customer was refunded.`.slice(0, 2000), rate: l.amount, quantity: 1, ...(account ? { account_id: account } : {}) }],
       notes: `Kalai Art House debit note to ${vendor.name} for order ${ref}.` }) });
     if (!r.ok || !r.body.vendor_credit) { notes.push({ ref, error: `Zoho debit note failed (${r.status}): ${r.body.message}` }); continue; }
     const vc = r.body.vendor_credit;

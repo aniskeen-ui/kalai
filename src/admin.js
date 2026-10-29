@@ -651,12 +651,20 @@ function payLines() {
       const name0 = e.artistName || 'Siva Raja';
       const dn = rl?.recovery ? { amount: rl.recovery, what: `Debit note: ${rl.recoveryPct}% recovery, customer refunded` }
         : !art && refunded && artistBillOf(e, name0) && royaltyOf(e).amount ? { amount: royaltyOf(e).amount, what: 'Debit note: royalty back, customer refunded' } : null;
-      if (dn) {
+      // The debit note goes right under the invoice it reduces, naming that invoice (asked 29 Oct).
+      const invDate = e.artistShippedAt || e.deliveredAt || e.updatedAt || e.createdAt;
+      const pushDebit = () => {
+        if (!dn) return;
         const first = name0.toLowerCase().split(' ')[0];
         const raised = e.artistDebitNote ? { number: e.artistDebitNote } : zohoDocsOf(e).find((x) => /^Debit note/.test(x.type) && x.status !== 'void' && String(x.vendor || x.party || '').toLowerCase().includes(first));
-        out.push({ e, partner: name0, type: 'ARTIST', role: 'artist', mode: prof(e.artistId, name0)?.invoiceMode || 'MONTHLY', date: e.refundAt || e.updatedAt || e.createdAt,
-          what: dn.what, amount: -dn.amount, inr: null, debit: true, billed: !!raised, billNo: raised?.number || '' });
-      }
+        const orig = artistBillOf(e, name0), base = rl?.recovery ? r2((rl.k?.artist || 0) + rl.recovery) : dn.amount;
+        const dDate = e.refundAt || e.updatedAt || e.createdAt;
+        out.push({ e, partner: name0, type: 'ARTIST', role: 'artist', mode: prof(e.artistId, name0)?.invoiceMode || 'MONTHLY', date: dDate, sortDate: monthOf(dDate) === monthOf(invDate) ? invDate : dDate,
+          what: dn.what, amount: -dn.amount, inr: null, debit: true, billed: !!raised, billNo: raised?.number || '',
+          origBill: orig?.number || '', origAmount: base,
+          against: `against ${orig?.number ? `bill ${orig.number}` : 'its invoice line'} of ⃃ ${money(base)}${rl?.recovery ? ` × ${rl.recoveryPct}%` : ''}${monthOf(dDate) !== monthOf(invDate) ? ` (${monthName(monthOf(invDate))})` : ''}` });
+      };
+      if (!(amt > 0)) pushDebit();
       if (amt > 0) {
         const name = e.artistName || 'Siva Raja', p = prof(e.artistId, name), bill = artistBillOf(e, name);
         const half = e.refundAction === 'CANCEL_HALF';
@@ -665,6 +673,7 @@ function payLines() {
         out.push({ e, partner: name, type: 'ARTIST', role: 'artist', mode: p?.invoiceMode || 'MONTHLY', date: e.artistShippedAt || e.deliveredAt || e.updatedAt || e.createdAt,
           what: art ? `${e.kind === 'COMMISSION' ? 'Commission' : 'Painting'}${half ? ' · 50% (cancelled after start)' : ''}` : `${e.kind === 'LICENCE' ? 'Licence' : 'Print'} royalty ${ry.pct}%`,
           amount: amt, inr, billed: !!bill, billNo: bill?.number || '' });
+        pushDebit();
       }
       // Artist's rework (repair / repaint after damage), once sent back.
       if (/^SIVA/.test(e.reworkType || '') && e.reworkSentAt && c?.reworkPriceInr) {
@@ -685,7 +694,8 @@ function payLines() {
         mode: p?.invoiceMode || 'PER_ORDER', date: j.deliveredAt || j.readyAt || j.invoiceAt || e.updatedAt, what: label, amount: r2(Number(j.invoiceAmt ?? j.price)), inr: null, billed: !!j.invoiceNo, billNo: j.invoiceNo || '' });
     }
   }
-  return out.map((l) => ({ ...l, month: monthOf(l.date) })).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  // Newest first; a debit note sits right under the invoice line it reduces (same order, invoice first).
+  return out.map((l) => ({ ...l, month: monthOf(l.date) })).sort((a, b) => String(b.sortDate || b.date).localeCompare(String(a.sortDate || a.date)) || String(a.e.ref).localeCompare(String(b.e.ref)) || (a.debit ? 1 : 0) - (b.debit ? 1 : 0));
 }
 function renderPayables() {
   if (!$('payList')) return;
@@ -695,19 +705,21 @@ function renderPayables() {
   $('payMonth').innerHTML = `<option value="">All months</option>${months.map((m) => `<option value="${m}">${esc(monthName(m))}</option>`).join('')}`;
   $('payMonth').value = months.includes(cur) ? cur : '';
   const who = $('payWho').value, mon = $('payMonth').value, showBilled = $('payBilled').checked;
-  const lines = linesAll.filter((l) => (!who || l.type === who) && (!mon || l.month === mon) && (showBilled || !l.billed));
+  // A debit note still to raise always shows with the original invoice it reduces, even when that invoice is billed.
+  const dnOrders = new Set(linesAll.filter((l) => l.debit && !l.billed).map((l) => l.e.id));
+  const lines = linesAll.filter((l) => (!who || l.type === who) && (!mon || l.month === mon || (!l.debit && dnOrders.has(l.e.id) && l.type === 'ARTIST')) && (showBilled || !l.billed || (!l.debit && dnOrders.has(l.e.id))));
   const pend = (t) => r2(linesAll.filter((l) => !l.billed && !l.debit && (!mon || l.month === mon) && (t ? l.type === t : l.type !== 'ARTIST')).reduce((a, l) => a + l.amount, 0));
   const dnDue = r2(-linesAll.filter((l) => l.debit && !l.billed && (!mon || l.month === mon)).reduce((a, l) => a + l.amount, 0));
   const tile = (k, v) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`;
   $('payTiles').innerHTML = tile(`Artists: to invoice${mon ? ` (${esc(monthName(mon))})` : ''}`, `⃃ ${money(pend('ARTIST'))}`) + tile('Debit notes to raise (artists)', dnDue ? `−⃃ ${money(dnDue)}` : '⃃ 0.00') + tile('Frame, print shops and couriers: invoices due', `⃃ ${money(pend(''))}`);
   const groups = new Map();
-  for (const l of lines) { const k = `${l.partner}|${l.month}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); }
+  for (const l of lines) { const k = `${l.partner}|${mon || l.month}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); }
   $('payList').innerHTML = groups.size ? [...groups.values()].map((g) => {
     const f = g[0], due = r2(g.filter((l) => !l.billed && !l.debit).reduce((a, l) => a + l.amount, 0)), dn = r2(-g.filter((l) => !l.billed && l.debit).reduce((a, l) => a + l.amount, 0)), inr = g.filter((l) => !l.billed && l.inr).reduce((a, l) => a + l.inr, 0);
     const modeTxt = f.mode === 'MONTHLY' ? 'one consolidated invoice for the month' : 'one invoice per order';
     const canBill = f.type === 'ARTIST' && g.some((l) => !l.billed);
     return `<details class="pay-grp" data-pay="${esc(f.partner)}" ${mon || groups.size <= 6 ? 'open' : ''}><summary><b>${esc(f.partner)}</b> <span class="muted">· ${esc(f.role)} · ${esc(monthName(f.month))} · ${g.length} order${g.length > 1 ? 's' : ''} · ${modeTxt}</span><span class="mono" style="margin-left:auto">${due ? `to invoice ⃃ ${money(due)}${inr ? ` (₹ ${Math.round(inr).toLocaleString('en-IN')})` : ''}` : dn ? '' : 'all billed'}${dn ? `${due ? ' · ' : ''}debit note −⃃ ${money(dn)}${due ? ` · net ⃃ ${money(r2(due - dn))}` : ''}` : ''}</span></summary>
-      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}</td><td class="num mono">${l.amount < 0 ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${l.billed ? `${l.debit ? 'Raised' : 'Billed'}${l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : ''}` : `<b>${l.debit ? 'Debit note to raise' : 'To invoice'}</b>`}</td></tr>`).join('')}</tbody></table>
+      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr class="${l.debit ? 'pay-debit' : ''}"><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${l.debit ? `↳ ${esc(l.what)}<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : esc(l.what)}</td><td class="num mono ${l.debit ? 'neg' : ''}">${l.amount < 0 ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${l.billed ? `${l.debit ? 'Raised' : 'Billed'}${l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : ''}` : `<b>${l.debit ? 'Debit note to raise' : 'To invoice'}</b>`}</td></tr>`).join('')}</tbody></table>
       ${canBill ? `<div style="display:flex;justify-content:flex-end;margin:0 12px 12px"><button type="button" class="btn" data-mbill="${esc(f.partner)}|${esc(f.month)}">Create in Zoho…</button></div>` : ''}</details>`;
   }).join('') : '<p class="muted">Nothing to invoice for this choice.</p>';
 }
@@ -716,8 +728,8 @@ if ($('payCsv')) $('payCsv').onclick = () => {
   const who = $('payWho').value, mon = $('payMonth').value, showBilled = $('payBilled').checked;
   const rows = payLines().filter((l) => (!who || l.type === who) && (!mon || l.month === mon) && (showBilled || !l.billed));
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [['Partner', 'Role', 'Invoicing', 'Month', 'Date', 'Order', 'Title', 'For', 'Amount AED', 'Amount INR', 'Status', 'Bill no.'].map(q).join(','),
-    ...rows.map((l) => [l.partner, l.role, l.mode === 'MONTHLY' ? 'Monthly' : 'Per order', l.month, dDay(l.date), l.e.ref, l.e.title, l.what, l.amount, l.inr ?? '', l.debit ? (l.billed ? 'Debit note raised' : 'Debit note to raise') : l.billed ? 'Billed' : 'To invoice', l.billNo].map(q).join(','))].join('\n');
+  const csv = [['Partner', 'Role', 'Invoicing', 'Month', 'Date', 'Order', 'Title', 'For', 'Amount AED', 'Amount INR', 'Status', 'Bill no.', 'Against invoice'].map(q).join(','),
+    ...rows.map((l) => [l.partner, l.role, l.mode === 'MONTHLY' ? 'Monthly' : 'Per order', l.month, dDay(l.date), l.e.ref, l.e.title, l.what, l.amount, l.inr ?? '', l.debit ? (l.billed ? 'Debit note raised' : 'Debit note to raise') : l.billed ? 'Billed' : 'To invoice', l.billNo, l.debit ? l.against : ''].map(q).join(','))].join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `kalai-to-invoice${mon ? `-${mon}` : ''}.csv`; a.click();
 };
 
@@ -728,7 +740,7 @@ function monthBillDialog(partner, month) {
   const code = partner.split(/\s+/).map((w) => w[0]).join('').toUpperCase() + (partner.trim().includes(' ') ? '' : partner.slice(1, 3).toUpperCase());
   let dlg = $('mbillDlg');
   if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'mbillDlg'; dlg.className = 'orep-dlg'; document.body.appendChild(dlg); }
-  const row = (l, i, kind) => `<tr><td><input type="checkbox" checked data-mb="${kind}" data-i="${i}" style="width:auto"></td><td class="mono">${esc(dDay(l.date))}</td><td><span class="mono">${esc(l.e.ref)}</span><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}</td><td class="num mono">${l.debit ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td></tr>`;
+  const row = (l, i, kind) => `<tr><td><input type="checkbox" checked data-mb="${kind}" data-i="${i}" style="width:auto"></td><td class="mono">${esc(dDay(l.date))}</td><td><span class="mono">${esc(l.e.ref)}</span><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}${l.debit ? `<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : ''}</td><td class="num mono">${l.debit ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td></tr>`;
   dlg.innerHTML = `<div class="orep">
     <h2 style="margin:0">Proposal: ${esc(partner)} · ${esc(monthName(month))}</h2>
     <p class="muted" style="margin:6px 0 12px">One bill in Zoho with a line per order${dn.length ? ', and one debit note (vendor credit) per refunded order' : ''}. Untick anything that should wait. ${location.hostname.startsWith('art.') ? '<b>Test site: Zoho keeps them as drafts.</b>' : ''}</p>
@@ -752,7 +764,7 @@ function monthBillDialog(partner, month) {
   dlg.querySelector('#mbGo').onclick = async (ev) => {
     const b = ev.currentTarget, msg = dlg.querySelector('#mbMsg');
     const lines = picked('inv', inv).map((l) => ({ id: l.e.id, amount: l.amount, what: l.what, rework: !!l.rework }));
-    const debits = picked('dn', dn).map((l) => ({ id: l.e.id, amount: -l.amount, what: l.what }));
+    const debits = picked('dn', dn).map((l) => ({ id: l.e.id, amount: -l.amount, what: l.what, against: l.against || '' }));
     if (!lines.length && !debits.length) { msg.textContent = 'Tick at least one line.'; return; }
     b.disabled = true; msg.textContent = 'Creating in Zoho…';
     try {
