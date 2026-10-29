@@ -372,13 +372,15 @@ function showReset(email) {
 }
 
 const myReviews = new Map();
+let rateOpenId = ''; // the order whose rating the delivery email asked to open: stays open when the list is drawn again
 const starText = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 function rateBlock(e) {
   if (e.status !== 'DELIVERED') return '';
   const r = myReviews.get(e.id);
   if (r) return `<div class="rated">You rated this <span aria-label="${r.rating} out of 5">${starText(r.rating)}</span>. Thank you for your feedback.${r.published ? ' It is now on our website.' : ''}</div>`;
-  return `<button type="button" class="btn rate-open" data-rate="${esc(e.id)}">★ Rate your ${e.kind === 'GIFT' ? 'framed gift' : e.kind === 'PHOTO' ? 'framed photo' : 'artwork'}</button>
-  <form class="rate" data-id="${esc(e.id)}" novalidate hidden>
+  const op = e.id === rateOpenId;
+  return `<button type="button" class="btn rate-open" data-rate="${esc(e.id)}" ${op ? 'hidden' : ''}>★ Rate your ${e.kind === 'GIFT' ? 'framed gift' : e.kind === 'PHOTO' ? 'framed photo' : 'artwork'}</button>
+  <form class="rate" data-id="${esc(e.id)}" novalidate ${op ? '' : 'hidden'}>
     <b>How did we do? Rate your ${e.kind === 'GIFT' ? 'framed gift' : e.kind === 'PHOTO' ? 'framed photo' : 'artwork'}</b>
     <div class="stars" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="false" aria-label="${n} star${n > 1 ? 's' : ''}" data-n="${n}">★</button>`).join('')}</div>
     <textarea name="comment" maxlength="600" placeholder="Tell us about the painting, the packing and delivery (optional)"></textarea>
@@ -989,6 +991,7 @@ function trackCard(e) {
       const cls = i < cur ? 'done' : i === cur ? 'now' : 'todo';
       return `<li class="${cls}"><span class="dot">${i < cur || (i === cur && st === 'DELIVERED') ? '✓' : ''}</span><div><b>${esc(label)}</b>${at[k] && i <= cur ? ` <span class="trk-at">${esc(d(at[k]))}</span>` : ''}${i === cur ? `<div class="trk-note">${esc(note)}${k === 'SHIPPED' ? ship : ''}</div>` : ''}</div></li>`;
     }).join('')}</ol>
+    ${st === 'DELIVERED' ? rateBlock(e) : ''}
     ${st === 'PRICE_SENT' && e.paymentLink ? `<a class="btn primary" style="text-decoration:none;text-align:center" href="${esc(e.paymentLink)}" target="_blank" rel="noopener">${payLabel(e)}</a>` : ''}
   </article>`;
 }
@@ -1103,6 +1106,19 @@ async function showList() {
       wirePoints();
     };
     draw();
+    // A rating asked for by the delivery email: show its tab, open the stars and bring them into view.
+    let want = ''; try { want = sessionStorage.getItem('kalaiRate') || ''; } catch { /* */ }
+    const we = want && items.find((x) => String(x.ref).toUpperCase() === want);
+    if (we) {
+      try { sessionStorage.removeItem('kalaiRate'); } catch { /* */ }
+      rateOpenId = we.id;
+      const tab = TABS.find(([k, , f]) => f(we) && groups[k].includes(we));
+      if (tab) currentTab = tab[0];
+      draw();
+      const form = list.querySelector(`form.rate[data-id="${CSS.escape(we.id)}"]`);
+      const target = form || [...list.querySelectorAll('.rated')].find((r) => r.closest('article')?.textContent.includes(we.ref));
+      if (target) setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+    }
     wireRedeem(items);
     showCircle(items);
   } catch (ex) {
@@ -1137,13 +1153,17 @@ loadUser().then(async () => {
     open();
     return;
   }
+  // "Rate your order" in the delivery email: ?rate=KA-…#my-enquiries opens that order's rating (Jegan landed on his
+  // tracker and could not find where to rate, 29 Oct). Kept through sign-in.
+  const rateRef = qp.get('rate');
+  if (rateRef) { try { sessionStorage.setItem('kalaiRate', rateRef.toUpperCase()); } catch { /* */ } }
   if (location.hash === "#my-enquiries") {
     if (state.user) {
       await showList();
       const paid = qp.get('paid'), fail = qp.get('payfail');
       if (paid) body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0;border-left-color:var(--ok)">Thank you! We have received your payment for <b>${esc(paid)}</b>. It shows as <b>Paid</b> here within a minute, and we email your confirmation.</p>`);
       if (fail) body.insertAdjacentHTML('afterbegin', `<p class="enq-msg" style="margin:0;border-left-color:var(--kumkum)">The payment for <b>${esc(fail)}</b> did not go through. Nothing was charged; tap <b>Pay now</b> to try again, or contact us on WhatsApp.</p>`);
-      if (paid || fail) try { history.replaceState(null, '', location.pathname + '#my-enquiries'); } catch { /* ignore */ }
+      if (paid || fail || rateRef) try { history.replaceState(null, '', location.pathname + '#my-enquiries'); } catch { /* ignore */ }
     } else showSignIn();
     open();
   }

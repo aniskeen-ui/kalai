@@ -760,6 +760,22 @@ def _(b):
     return errs + errs2
 
 
+@check('Delivery email "Rate your order" opens the stars for that order (Jegan landed on his tracker with no way to rate)')
+def _(b):
+    import datetime
+    now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    users = {'jegan@x.com': {'password': 'S', 'confirmed': True, 'groups': []}}
+    it = order(id='j1', ref='KA-261026-EZSP', title='Majestic Mosaic', status='DELIVERED', deliveredAt=now, customerName='Jegan', owner='jegan@x.com')
+    pg, errs = open_page(b, 'index.html', {'users': users, 'session': 'jegan@x.com', 'sellers': [], 'items': [it], 'costing': []}, wait=1500)
+    pg.goto(f'{BASE}/index.html?rate=KA-261026-EZSP#my-enquiries'); pg.wait_for_timeout(4000)  # the email link, opened once
+    f = pg.locator('form.rate[data-id="j1"]')
+    need(f.count() >= 1 and f.first.is_visible(), f'rating form not open: {pg.inner_text("body")[:300]}')
+    need(pg.locator('.trk form.rate').count() == 1, 'no rating on the tracker card of a delivered order')
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    need("url: `${SITE}/?rate=${encodeURIComponent(ref)}#my-enquiries`" in src, 'the email button does not link to the order rating')
+    return errs
+
+
 @check('Artists & sellers: each partner has an Invoices setting, one per order or one consolidated a month')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [], 'sellers': SELLERS}

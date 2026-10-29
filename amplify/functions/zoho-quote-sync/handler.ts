@@ -5472,7 +5472,7 @@ function mailsFor(rec: StreamRecord): Mail[] {
     if (st === 'DELIVERED' && kind === 'LICENCE') cust(`Your licensed file: ${title} (${ref})`, [`Your licence for <b>${h(title.replace(/^Image licence:\s*/i, ''))}</b> is active. Download the full-size file under <b>My enquiries & orders</b> (sign in with this email address); you can download it again any time.`, msgLine], MY);
     else if (st === 'DELIVERED') cust(`Delivered: ${title}`, [`<b>${h(title)}</b> has been delivered. We hope you love it.`, msgLine,
       'If anything arrived damaged, report it with photos under My enquiries & orders within 48 hours and choose a replacement or a refund.',
-      'We would be grateful for your feedback: you can rate your order under My enquiries & orders.'], { label: 'Rate your order', url: `${SITE}/#my-enquiries` });
+      'We would be grateful for your feedback: the button below opens the rating for this order (stars and a few words).'], { label: 'Rate your order', url: `${SITE}/?rate=${encodeURIComponent(ref)}#my-enquiries` });
     if (st === 'REPLACEMENT') cust(`Your replacement is under way (${ref})`, [`We've started the replacement for <b>${h(title)}</b>.`, msgLine,
       'You can follow each step (collection, the new work, framing and delivery) under My enquiries & orders. There is nothing to pay.']);
     if (st === 'REFUNDED' && rs === ors) cust(`Order closed: ${ref}`, [`Your order for <b>${h(title)}</b> is closed as refunded${num(img, 'refundAmount') ? ` (<b>${aed(num(img, 'refundAmount'))}</b>)` : ''}.`, msgLine,
