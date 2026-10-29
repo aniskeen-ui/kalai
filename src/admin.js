@@ -238,6 +238,12 @@ async function start() {
   const hit = m && all.find((x) => x.id === decodeURIComponent(m[1]) || x.ref === decodeURIComponent(m[1]).toUpperCase()); // id or order no.
   if (hit) { selectedId = hit.id; render(); showDetail(hit); }
 }
+// A second #order= link on an already-open page (another studio email, a pasted link) opens that order too (77QM kept showing DCGE).
+window.addEventListener('hashchange', () => {
+  const m = location.hash.match(/^#order=(.+)$/);
+  const hit = m && all.find((x) => x.id === decodeURIComponent(m[1]) || x.ref === decodeURIComponent(m[1]).toUpperCase());
+  if (hit) { showPane('orders', 'tabOrders'); selectedId = hit.id; render(); showDetail(hit); }
+});
 
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -736,6 +742,16 @@ function supplierSection(e) {
     const list = suppliers.filter((s) => s.type === type || (role === 'delivery' && s.type === 'FRAMER' && Object.keys(parseCard(s).uae || {}).length)).map((s) => ({ ...s, cost: costFor(s, role), shop: s.type === 'FRAMER' && role === 'delivery', away: !!want && fromOf(s) !== want }))
       .sort((a, b) => (a.cost == null) - (b.cost == null) || a.away - b.away || (a.cost ?? 0) - (b.cost ?? 0) || String(a.business).localeCompare(String(b.business)));
     const best = list.find((s) => s.cost != null);
+    // Little Artists with no print shop yet: a print shop + a frame-only shop can be far cheaper than one shop doing both (DCGE: ⃃125 vs ⃃30 + ⃃11.99).
+    const split = (() => {
+      if (role !== 'framer' || !gift || j.printer || cur) return '';
+      const ok = (s) => servesKind(parseCard(s), e.kind) && (!want || fromOf(s) === want);
+      const pr = suppliers.filter((s) => s.type === 'PRINTER' && ok(s)).map((s) => ({ s, c: printerCost(parseCard(s)) })).filter((x) => x.c != null).sort((a, b) => a.c - b.c)[0];
+      const fr = suppliers.filter((s) => s.type === 'FRAMER' && ok(s)).map((s) => { const f = frameCost(parseCard(s), spec); return { s, c: f == null ? null : Math.round(f * copies * 100) / 100 }; }).filter((x) => x.c != null).sort((a, b) => a.c - b.c)[0];
+      if (!pr || !fr) return '';
+      const tot = Math.round((pr.c + fr.c) * 100) / 100;
+      return best && tot >= best.cost ? '' : `<div class="note" data-split style="font-size:13px">Cheaper split: print at <b>${esc(pr.s.business)}</b> ⃃ ${pr.c} + frame only at <b>${esc(fr.s.business)}</b> ⃃ ${fr.c} = <b>⃃ ${tot}</b>${best ? ` (vs ⃃ ${best.cost} here)` : ''}. Send the print shop job first, then the frame shop.</div>`;
+    })();
     const locked = cur && !['ASSIGNED', 'ACCEPTED'].includes(cur.stage);
     const self = role === 'delivery' && cur && j.framer && cur.supplierId === j.framer.supplierId;
     return `<div style="display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--line)">
@@ -743,7 +759,7 @@ function supplierSection(e) {
       ${role === 'delivery' && cur ? deliveryDocs(cur) : ''}
       ${self ? '<div class="muted" style="font-size:12px">The frame shop delivers this one itself.</div>' : locked ? '' : `<div class="three" style="align-items:end">
         <div class="field" style="grid-column:1/-1"><label>${role === 'framer' ? 'Frame shop' : role === 'printer' ? 'Print shop' : 'Courier'}</label><select data-js="${role}-sid"><option value="">${list.length ? 'Choose…' : `none approved yet (Artists & sellers → Frame shops & delivery)`}</option>${list.map((s) => `<option value="${esc(s.id)}" data-cost="${s.cost ?? ''}" ${(cur ? cur.supplierId === s.id : best && best.id === s.id) ? 'selected' : ''}>${esc(s.business)}${s.shop ? ' (frame shop)' : ''} · ${s.cost != null ? `⃃ ${s.cost}` : 'no price for this'}${fromOf(s) === 'India' ? ' · India' : s.emirate ? ` · ${esc(s.emirate)}` : ''}</option>`).join('')}</select>
-          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'printer' ? `Print ${esc(spec.size)}${copies > 1 ? ` × ${copies}` : ''}, fine-art matte` : role === 'framer' ? `${gift ? `${j.printer ? 'Frame only' : 'Print + frame'}${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(addrNote || e.deliveryEmirate || e.deliveryCountry)}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} ⃃ ${best.cost}${cur ? '' : ' (pre-selected: check and press Send the job)'}` : ' · no supplier has a price for this yet'}</span></div>
+          ${role === 'framer' && cur ? framesOf(cur.supplierId, spec.style) : ''}<span class="muted" style="font-size:12px">${role === 'printer' ? `Print ${esc(spec.size)}${copies > 1 ? ` × ${copies}` : ''}, fine-art matte` : role === 'framer' ? `${gift ? `${j.printer ? 'Frame only' : 'Print + frame'}${copies > 1 ? ` × ${copies}` : ''}: ` : ''}${esc((RC_STYLES.find((x) => x[0] === spec.style) || ['', spec.style === 'none' ? 'No frame' : spec.style])[1])}, ${esc(spec.size)}` : `${esc(addrNote || e.deliveryEmirate || e.deliveryCountry)}, ${esc(spec.size)} frame`}${best ? ` · cheapest: ${esc(best.business)} ⃃ ${best.cost}${cur ? '' : ' (pre-selected: check and press Send the job)'}` : ' · no supplier has a price for this yet'}</span></div>${split}
         <div class="field"><label>Price you pay them (⃃)</label><input data-js="${role}-price" type="number" min="0" step="1" value="${cur?.price ?? (best?.cost ?? '')}"></div>
         <div class="field"><label>Finish by</label><input data-js="${role}-due" type="date" value="${esc(cur?.due || '')}"></div></div>
         <div class="field"><label>${role === 'framer' ? 'Note for them (frame style, size, glass, timing…)' : role === 'printer' ? 'Note for them (paper, crop, colour, timing…)' : 'Note for them (pickup time, contact, handling…)'}</label><input data-js="${role}-note" maxlength="500" value="${esc(cur?.note || '')}"></div>
@@ -777,7 +793,7 @@ function flowStrip(e, j, gift) {
     parts.push(node('Print shop', j.printer?.name || 'not chosen', pDone, !pDone), leg(j.printer?.stage === 'COLLECTED' ? 'collected' : 'frame shop collects', j.printer?.stage === 'COLLECTED'));
   }
   const aOk = hasArtist(e) ? e.artistStage === 'SHIPPED' : gift ? ['READY', 'COLLECTED'].includes(j.printer?.stage) : true;
-  parts.push(node('Frame shop', j.framer?.name || 'not chosen', fDone, aOk && !fDone), leg(j.delivery ? `${j.delivery.name}${j.delivery.awb ? ` · ${j.delivery.awb}` : ''}` : 'courier?', dDone), node('Customer', e.customerName || e.customerCode || 'customer', dDone, fDone && !dDone));
+  parts.push(node('Frame shop', j.framer?.name || 'not chosen', fDone, aOk && !fDone), leg(j.delivery ? `${j.delivery.name}${j.delivery.awb ? ` · ${j.delivery.awb}` : ''}` : 'courier?', dDone), node('Customer', e.deliveryName || e.customerName || e.customerCode || 'customer', dDone, fDone && !dDone));
   return `<div style="margin-top:8px"><div class="muted" style="font-size:12px">Flow for a ${esc(KIND[e.kind] || 'order')} order: ${hasArtist(e) ? 'Artist → Frame shop → Customer' : 'Print shop → Frame shop → Customer'}</div><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:6px">${parts.join('')}</div></div>`;
 }
 function artistBox(e) {
@@ -789,7 +805,7 @@ function artistBox(e) {
 function handover(j) {
   const p = j.printer, f = j.framer;
   const st = !p ? 'choose the print shop first' : !f ? 'choose the frame shop' : p.stage === 'COLLECTED' ? `✓ collected by ${esc(f.name)}` : p.stage === 'READY' ? `printed, ready: ${esc(f.name)} collects it from ${esc(p.name)}` : `${esc(f.name)} collects it from ${esc(p.name)} when it is printed`;
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><b>Print shop → Frame shop</b><span class="muted">${st}</span><span class="muted" style="font-size:12px">(the frame shop sees the print shop's address in its portal and marks it Collected)</span></div>`;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><b>Print shop → Frame shop</b><span class="muted">${st}</span><span class="muted" style="font-size:12px">(the frame shop sees the print shop's address in its portal; the print shows Collected when they mark the frame ready)</span></div>`;
 }
 // Delivery row: the airway bill label (display / PDF / print) and the customer's proof of delivery document.
 function deliveryDocs(dj) {
@@ -1258,21 +1274,23 @@ function marketSection(e) {
 const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
 function giftAddress(e) {
   const d = parseDetails(e.details);
-  return (e.kind === 'GIFT' || e.kind === 'PHOTO') && d['Address'] ? { address: d['Address'], emirate: String(d['Emirate'] || '').split(' (')[0] } : null;
+  return (e.kind === 'GIFT' || e.kind === 'PHOTO') && d['Address'] ? { address: d['Address'], emirate: String(d['Emirate'] || d['State / city'] || '').split(' (')[0],
+    to: e.kind === 'GIFT' ? d['Gift for'] || '' : '', country: d['Country'] || '' } : null;
 }
 function addressSection(e) {
   const g = giftAddress(e);
   const has = !!e.deliveryAddress;
   const need = !has && !g && ['PAID', 'ARTIST_WORKING', 'ARTIST_DONE', 'ARTIST_SENT', 'PRINTING', 'PRINTED', 'FRAMING', 'REPLACEMENT'].includes(e.status);
-  const emi = e.deliveryEmirate || (g && EMIRATES.find((x) => g.emirate.includes(x))) || '';
+  const gCountry = e.deliveryCountry || g?.country || 'UAE';
+  const emi = e.deliveryEmirate || (g && (gCountry === 'UAE' ? EMIRATES.find((x) => g.emirate.includes(x)) : g.emirate)) || '';
   return `<fieldset class="cost" id="addrBox" ${need ? 'style="border-color:var(--kumkum)"' : ''}>
     <legend>Delivery address ${has ? `<span class="muted">· ${esc(e.addressBy === 'Customer' ? 'from the customer' : 'entered by you')} ${esc(when(e.addressAt))}</span>` : ''}</legend>
     ${need ? '<div class="err" style="font-size:13px">No delivery address yet. The customer was asked to add it under My enquiries & orders; you can also type it here.</div>' : ''}
     <div class="three">
-      <div class="field"><label for="dName">Receiver</label><input id="dName" value="${esc(e.deliveryName || e.customerName)}"></div>
+      <div class="field"><label for="dName">Receiver</label><input id="dName" value="${esc(e.deliveryName || g?.to || e.customerName)}"></div>
       <div class="field"><label for="dPhone">Receiver mobile</label><input id="dPhone" value="${esc(e.deliveryPhone || e.phone)}"></div>
     </div>
-    <div class="three">${countryRegionHtml({ country: e.deliveryCountry || 'UAE', region: emi, pin: e.deliveryPin, prefix: 'd', names: false })}</div>
+    <div class="three">${countryRegionHtml({ country: gCountry, region: emi, pin: e.deliveryPin, prefix: 'd', names: false })}</div>
     <div class="field"><label for="dAddr">Address (villa / flat, building, street, area)</label><textarea id="dAddr" rows="2">${esc(e.deliveryAddress || g?.address || '')}</textarea></div>
     <div class="field"><label for="dLand">Landmark (optional)</label><input id="dLand" value="${esc(e.deliveryLandmark)}"></div>
   </fieldset>`;

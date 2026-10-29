@@ -823,6 +823,51 @@ def _(b):
     return errs
 
 
+@check('Little Artists gift: the courier delivers to the person it is for, not the parent (DCGE receiver was the parent)')
+def _(b):
+    root = os.path.dirname(os.path.dirname(HERE))
+    src = open(os.path.join(root, 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    i = src.index("if (t === 'GIFT')"); part = src[i:src.index("throw new Error('Unknown item in the cart.')", i)]
+    need("deliveryName: det['Gift for']" in part and 'deliveryAddress: det.Address' in part, 'a new gift order does not store the recipient as the delivery name/address')
+    det = {'Child': 'Test, age 12', 'Gift for': 'Grandma Leela', 'Country': 'India', 'State / city': 'Kerala', 'Address': '12 MG Road, Kochi', 'Total': 'AED 119'}
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'costing': [],
+            'items': [order(id='k1', ref='KA-261029-DCGE', kind='GIFT', title='Little Artists gift for Grandma Leela', status='PAID', customerName='Parent', details=json.dumps(det))]}
+    pg, errs = open_page(b, 'admin.html#order=k1', seed)
+    vals = pg.evaluate("[document.getElementById('dName')?.value, document.getElementById('dCountry')?.value, document.getElementById('dAddr')?.value]")
+    need(vals[0] == 'Grandma Leela', f'receiver: {vals[0]!r}')
+    need(vals[1] == 'India', f'country: {vals[1]!r} (a gift abroad showed UAE)')
+    need('MG Road' in (vals[2] or ''), f'address: {vals[2]!r}')
+    return errs
+
+
+@check('Little Artists: admin is told when a print shop + frame-only shop is cheaper than one shop doing both (DCGE: ⃃125 vs ⃃41.99)')
+def _(b):
+    sups = [
+        {'id': 'c1', 'type': 'COURIER', 'status': 'APPROVED', 'business': 'ARAMAX', 'country': 'UAE', 'rateCard': json.dumps({'uae': {'Dubai': {'s1': 22}}})},
+        {'id': 'p2', 'type': 'PRINTER', 'status': 'APPROVED', 'business': 'Monda Gallery', 'country': 'UAE', 'rateCard': json.dumps({'print': {'A4': 30}})},
+        {'id': 'fa', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'Infinity Art', 'country': 'UAE', 'rateCard': json.dumps({'frames': {'white': {'A4': 90}}, 'print': {'A4': 35}, 'fixingIncluded': True})},
+        {'id': 'fb', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 'Day to Day', 'country': 'UAE', 'rateCard': json.dumps({'frames': {'white': {'A4': 11.99}}, 'fixingIncluded': True})},
+    ]
+    det = {'Child': 'Test, age 12', 'Gift for': 'Grandma', 'Country': 'UAE', 'Emirate': 'Dubai', 'Address': 'Studio, DSO', 'Frame': 'white', 'Total': 'AED 119'}
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': sups, 'costing': [],
+            'items': [order(id='k2', kind='GIFT', title='Little Artists gift for Grandma', status='PAID', deliveryCountry='UAE', deliveryEmirate='Dubai', deliveryAddress='Studio, DSO', details=json.dumps(det))]}
+    pg, errs = open_page(b, 'admin.html#order=k2', seed)
+    t = pg.inner_text('[data-split]') if pg.locator('[data-split]').count() else ''
+    need('41.99' in t and 'Monda Gallery' in t and 'Day to Day' in t, f'no cheaper-split hint: {t!r}')
+    return errs
+
+
+@check('Order Management: a second #order= link on an open page opens that order (77QM link kept showing DCGE)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'costing': [],
+            'items': [order(id='o1', ref='KA-261029-DCGE', title='First order'), order(id='o2', ref='KA-261028-77QM', title='Second order')]}
+    pg, errs = open_page(b, 'admin.html#order=o1', seed)
+    need('First order' in pg.inner_text('#detail'), 'first link did not open the order')
+    pg.evaluate("location.hash = '#order=KA-261028-77QM'"); pg.wait_for_timeout(800)
+    need('Second order' in pg.inner_text('#detail'), 'second link left the first order open')
+    return errs
+
+
 @check('Every admin/portal page warns when a newer version is live (stale open tabs ran old code)')
 def _(b):
     root = os.path.dirname(os.path.dirname(HERE))

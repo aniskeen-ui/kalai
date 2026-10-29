@@ -3407,7 +3407,10 @@ async function cartLine(it: Dict, site: Dict | null, used: Set<string>): Promise
       'Delivery charge': del == null ? 'to quote' : `AED ${del}`, Address: txt(f.address, 300), Frame: txt(f.frame, 20), Extras: ex.map((e) => e[0]).join(', '), 'Card message': txt(f.msg, 200), Parent: txt(f.parent, 80), Mobile: txt(f.phone, 30),
       Total: `AED ${total.toLocaleString('en-US')}${del == null ? ' + shipping' : ''}`, Consent: 'Parent/guardian confirmed' };
     if (!det['Gift for'] || !det.Address || !txt(f.child, 40)) throw new Error('A Little Artists gift is missing the child, who it is for or the address: add it again.');
-    return { kind: 'GIFT', title: `Little Artists gift for ${det['Gift for']}`, details: det, price: total, quote: del == null, extra: {}, gift: true, fileKey: key };
+    // The gift goes to the person it is for (DCGE: the courier label said the parent's name), at the address on the gift form.
+    const extra: Dict = { deliveryName: det['Gift for'], deliveryPhone: det.Mobile || null, deliveryCountry: country, deliveryEmirate: (uae ? txt(f.emirate, 40) : txt(f.region, 60)) || null,
+      deliveryAddress: det.Address, addressAt: new Date().toISOString(), addressBy: 'Customer' };
+    return { kind: 'GIFT', title: `Little Artists gift for ${det['Gift for']}`, details: det, price: total, quote: del == null, extra, gift: true, fileKey: key };
   }
   throw new Error('Unknown item in the cart.');
 }
