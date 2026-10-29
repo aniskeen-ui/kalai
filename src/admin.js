@@ -1195,7 +1195,8 @@ function statusBlock(e, k, s) {
   if (e.kind === 'MARKET' && k === 'FRAMING') return 'not for crafts';
   // Printing steps: only orders printed from a file (Framed Prints, Little Artists).
   if (['PRINTING', 'PRINTED'].includes(k) && !['PHOTO', 'GIFT'].includes(e.kind)) return 'nothing to print';
-  if (e.kind === 'LICENCE' && ['PAID', 'FRAMING', 'SHIPPED', 'REPLACEMENT'].includes(k)) return 'digital licence';
+  // A licence paid by bank transfer / cash is marked Paid here; the server then marks it Delivered (file ready). 4PYO couldn't be.
+  if (e.kind === 'LICENCE' && ['FRAMING', 'SHIPPED', 'REPLACEMENT'].includes(k)) return 'digital licence';
   // A print / gift / crafts order put on an artist step by mistake: back to Paid (or on to framing) is allowed.
   if (ARTIST_ST.includes(s) && !hasArtist(e) && ['PAID', 'FRAMING'].includes(k)) return '';
   // The print shop, frame shop and delivery partner set these steps from their portal (dates and AWB recorded there).
@@ -2493,8 +2494,9 @@ async function showDetailBody(e) {
     ['eMsg', 'eStatus'].forEach((id) => { $(id).addEventListener('input', stale); $(id).addEventListener('change', stale); }); stale(); }
   if ($('addrBox')) wireRegion($('addrBox'));
   if ($('reviewBox')) wireReviews($('reviewBox'));
-  ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id).addEventListener('input', waLink));
-  $('eStatus').addEventListener('change', () => { $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); doneLock(); });
+  // Licences have no courier / AWB fields: a missing field stopped the rest of the wiring (4PYO).
+  ['ePhone', 'ePrice', 'eLink', 'eMsg', 'eCourier', 'eAwb'].forEach((id) => $(id)?.addEventListener('input', waLink));
+  $('eStatus').addEventListener('change', () => { if ($('shipBox')) $('shipBox').hidden = !SHIP_STATUSES.includes($('eStatus').value); waLink(); doneLock(); });
   // Fields open and close with the stage:
   //   payment (paid by, reference, link): open until the payment is recorded
   //   delivery address: open until Shipped (then it's on the courier's label)
@@ -2526,7 +2528,7 @@ async function showDetailBody(e) {
   };
   doneLock();
   // Courier dropdown (works on phones); "Other…" opens a text box. The text box always holds the value saved.
-  $('eCourierSel').addEventListener('change', () => {
+  $('eCourierSel')?.addEventListener('change', () => {
     const v = $('eCourierSel').value;
     const other = v === '__other';
     $('eCourier').hidden = !other;

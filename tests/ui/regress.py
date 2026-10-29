@@ -140,6 +140,27 @@ def _(b):
     need(row and '316' not in row and '158' in row, f'planned print + frame row: {row!r}')
     return errs
 
+@check('Image licence paid by bank transfer can be marked Paid (4PYO: Paid was greyed out)')
+def _(b):
+    it = order(id='l1', ref='KA-261029-4PYO', kind='LICENCE', title='Image licence: Village Artisans at Work (Web licence)', status='PRICE_SENT', quotedPrice=70, zohoInvoiceId=None,
+               details=json.dumps({'Artwork': 'Village Artisans at Work', 'Licence': 'Web licence'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'costing': []}
+    pg, errs = open_page(b, 'admin.html#order=l1', seed)
+    st = pg.evaluate("Object.fromEntries([...document.getElementById('eStatus').options].map(o => [o.value, o.disabled]))")
+    need(st.get('PAID') is False, f'Paid disabled for a licence: {st}')
+    need(st.get('SHIPPED') is True, 'a licence can be shipped')
+    return errs
+
+@check('Order Management opens every kind of order without script errors (a licence order stopped half-wired, 4PYO)')
+def _(b):
+    bad = []
+    for kind in ['PRICE', 'COMMISSION', 'GIFT', 'PHOTO', 'LICENCE', 'MARKET']:
+        for st in ['PRICE_SENT', 'PAID', 'DELIVERED']:
+            it = order(id='x1', kind=kind, status=st, details=json.dumps({'Artwork': 'A', 'Address': 'Studio', 'Gift for': 'G', 'Total': 'AED 100', 'Size': 'A4 (21 × 30 cm)'}))
+            pg, errs = open_page(b, 'admin.html#order=x1', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [it], 'costing': []}, wait=1000)
+            bad += [f'{kind} {st}: {e[:100]}' for e in errs]; pg.close()
+    return bad
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,
