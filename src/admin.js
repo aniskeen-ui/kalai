@@ -85,6 +85,8 @@ const n = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Numb
 // Server notes say "AED 1,175"; show the dirham sign on screen.
 const escSym = (v) => esc(v).replace(/\bAED (?=\d)/g, '\u20C3 ');
 const aed = (v, d = 0) => (v == null ? '–' : '⃃ ' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+// A credit note gives money back: its amounts show as negative (asked 29 Oct).
+const docAmt = (x, v, d = 0) => (/^Credit note/.test(x?.type || '') && Number(v) > 0 ? `−${aed(v, d)}` : aed(v, d));
 
 // Costs from the supplier price lists (Pricing → Margin & charges picks the default supplier, or the cheapest):
 // the supplier on the order's job if one is assigned, else the default one's price for this size / style / address.
@@ -541,6 +543,60 @@ function reportLine(e) {
   return { e, price, refund, net: r2(net), fee: r2(fees), reserve: r2(price * (rates.reserve || 0)), rc, k, ka, est, haveAct, total: total == null ? null : r2(total), totalA: totalA == null ? null : r2(totalA),
     margin: margin == null ? null : r2(margin), marginA: marginA == null ? null : r2(marginA), pct: margin == null || !net ? null : margin / net, pctA: marginA == null || !net ? null : marginA / net, note };
 }
+
+/** One order's report (the Report button under Check Zoho): sales, refund, net revenue, costs planned vs actual,
+ *  margin, and every Zoho document with who it is with. Same figures as the Reports tab (asked 29 Oct). */
+function orderReport(e) {
+  const l = reportLine(e);
+  let d = null; try { const raw = costings.get(e.id)?.zohoDocs; d = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; if (typeof d === 'string') d = JSON.parse(d); } catch { d = null; }
+  const docs = d?.docs || [];
+  const sum = (t) => r2(docs.filter((x) => t.test(x.type)).reduce((a, x) => a + Number(x.total || 0), 0));
+  const invoiced = sum(/^Invoice/), credited = sum(/^Credit note/), billed = r2(docs.filter((x) => x.group === 'PURCHASE' && /Bill/.test(x.type)).reduce((a, x) => a + Number(x.amount ?? x.total ?? 0), 0));
+  const m = (v) => (v == null ? '–' : `⃃ ${money(v)}`), neg = (v) => (v ? `−⃃ ${money(v)}` : '⃃ 0.00');
+  const pc = (v) => (v == null ? '–' : `${(v * 100).toFixed(1)}%`);
+  const LBL = { artist: e.kind === 'PHOTO' ? 'Artist royalty' : e.kind === 'MARKET' ? 'Maker payout' : 'Artist', framing: ['PHOTO', 'GIFT'].includes(e.kind) ? 'Print shop + frame shop' : 'Frame shop', india: 'Courier India → Dubai', customs: 'Customs / duty', local: 'Courier to the customer', other: 'Other (packing, etc.)' };
+  const costRows = l.k ? [...ACT_FIELDS.map(([f]) => f), 'rework'].filter((f) => (l.k[f] || l.ka?.[f])).map((f) => `<tr><td>${esc(LBL[f] || 'Rework (net of insurance)')}</td><td class="num mono">${m(r2(l.k[f] || 0))}</td><td class="num mono">${l.ka && f !== 'rework' ? m(r2(l.ka[f] || 0)) + (l.est.has(f) ? ' <span class="muted">est.</span>' : '') : m(r2(l.k[f] || 0))}</td></tr>`).join('') : '';
+  const det = parseDetails(e.details);
+  const party = (x) => esc(x.party || x.vendor || (x.group === 'PURCHASE' ? '' : e.customerName || ''));
+  const docRows = docs.map((x) => `<tr><td>${esc(x.type)}</td><td class="mono">${esc(x.number || '')}</td><td>${party(x)}</td><td>${esc(x.status || '')}</td><td class="num mono">${x.total != null ? docAmt(x, x.total, 2) : ''}</td></tr>`).join('');
+  return `<div class="orep">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><h2 style="margin:0">Order report · <span class="mono">${esc(e.ref)}</span></h2><span class="muted">${esc(KIND[e.kind] || e.kind)} · ${esc(STATUS[e.status] || e.status)}</span></div>
+    <p style="margin:6px 0 14px"><b>${esc(e.title)}</b><br>${esc(e.customerName || '')}${e.customerCode ? ` · <span class="mono">${esc(e.customerCode)}</span>` : ''}${det['Gift for'] ? ` · gift for ${esc(det['Gift for'])}` : ''}${e.deliveryName && e.deliveryName !== e.customerName ? ` · delivered to ${esc(e.deliveryName)}` : ''}</p>
+    <div class="orep-tiles">
+      <div><span>Sales</span><b>${m(l.price)}</b></div>
+      <div><span>Refunded</span><b>${neg(l.refund)}</b></div>
+      <div><span>Net revenue</span><b>${m(l.net)}</b><small>after refund${rates.vat ? ' and VAT' : ''}</small></div>
+      <div><span>Margin</span><b class="${(l.marginA ?? l.margin) < 0 ? 'neg' : ''}">${m(l.marginA ?? l.margin)}</b><small>${pc(l.marginA != null ? l.pctA : l.pct)} of net revenue · ${l.marginA != null ? 'actual' : 'planned'}</small></div>
+    </div>
+    <table class="costs"><thead><tr><th>Revenue and costs</th><th class="num">Planned</th><th class="num">Actual</th></tr></thead><tbody>
+      <tr><td>Sales price</td><td class="num mono">${m(l.price)}</td><td class="num mono">${m(l.price)}</td></tr>
+      ${l.refund ? `<tr><td>Refund (credit note)</td><td class="num mono">${neg(l.refund)}</td><td class="num mono">${neg(l.refund)}</td></tr>` : ''}
+      <tr><td><b>Net revenue</b></td><td class="num mono"><b>${m(l.net)}</b></td><td class="num mono"><b>${m(l.net)}</b></td></tr>
+      ${costRows}
+      <tr><td>Payment fee + insurance</td><td class="num mono">${m(l.fee)}</td><td class="num mono">${m(l.fee)}</td></tr>
+      <tr><td><b>Total cost</b></td><td class="num mono"><b>${m(l.total == null ? null : r2(l.total + l.fee))}</b></td><td class="num mono"><b>${m(l.totalA == null ? null : r2(l.totalA + l.fee))}</b></td></tr>
+      <tr><td><b>Margin</b></td><td class="num mono"><b>${m(l.margin)}</b> <span class="muted">${pc(l.pct)}</span></td><td class="num mono"><b class="${l.marginA != null && l.marginA < 0 ? 'neg' : ''}">${m(l.marginA)}</b> <span class="muted">${pc(l.pctA)}</span></td></tr>
+      ${l.marginA != null && l.margin != null ? `<tr><td>Variance (actual − planned)</td><td></td><td class="num mono ${l.marginA - l.margin < 0 ? 'neg' : ''}">${m(r2(l.marginA - l.margin))}</td></tr>` : ''}
+    </tbody></table>
+    ${l.note ? `<p class="muted" style="font-size:12px">${esc(l.note)}</p>` : ''}
+    <h3 style="margin:18px 0 6px">In Zoho Books</h3>
+    ${docs.length ? `<p class="muted" style="font-size:12px;margin:0 0 6px">Invoiced ${m(invoiced)} · credit notes ${neg(credited)} · supplier bills ${m(billed)} · checked ${esc(when(d.checkedAt))}</p>
+    <table class="costs"><thead><tr><th>Document</th><th>No.</th><th>With</th><th>Status</th><th class="num">Amount</th></tr></thead><tbody>${docRows}</tbody></table>` : '<p class="muted">Press Check Zoho on the order to list its Zoho documents.</p>'}
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button type="button" class="btn ghost" onclick="window.print()">Print</button><button type="button" class="btn" data-orepclose>Close</button></div>
+  </div>`;
+}
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest?.('[data-ordreport]');
+  if (b) {
+    const e = all.find((x) => x.id === b.dataset.ordreport); if (!e) return;
+    let dlg = $('ordReport');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'ordReport'; dlg.className = 'orep-dlg'; document.body.appendChild(dlg); }
+    dlg.innerHTML = orderReport(e);
+    dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
+    return;
+  }
+  if (ev.target.closest?.('[data-orepclose]')) $('ordReport')?.close();
+});
 
 function reportLines() {
   const from = $('rFrom').value, to = $('rTo').value, kind = $('rKind').value;
@@ -1864,7 +1920,7 @@ function docFlow(e, d) {
   const docs = d?.docs || [];
   const st = (x) => (!x ? 'todo' : ['void', 'cancelled'].includes(x.status) ? 'void' : x.status === 'draft' ? 'draft' : 'done');
   const TAG = { done: '✓', draft: '✎', todo: '…', void: '✕' };
-  const box = (icon, label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><span class="ic" aria-hidden="true">${icon}</span><span class="tag" aria-hidden="true">${TAG[st(x)]}</span><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : 'to come'))}</span>${x?.total != null ? `<span class="mono">${aed(x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
+  const box = (icon, label, x, sub = '') => `<a class="df ${st(x)}" ${x?.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''} title="${esc(x ? `${x.type} ${x.number || ''} · ${x.status || ''}` : 'Not yet')}"><span class="ic" aria-hidden="true">${icon}</span><span class="tag" aria-hidden="true">${TAG[st(x)]}</span><b>${esc(label)}</b><span class="mono">${esc(x?.number || (x ? '' : 'to come'))}</span>${x?.total != null ? `<span class="mono">${docAmt(x, x.total, 0)}</span>` : ''}${sub ? `<span>${esc(sub)}</span>` : ''}</a>`;
   const arrow = '<span class="dfa" aria-hidden="true">➜</span>';
   const lane = (cls, icon, title, boxes, link = '') => `<div class="dfl ${cls}"><div class="dft"><i aria-hidden="true">${icon}</i>${link ? esc(title).replace(/ · (.+)$/, ` · ${link.replace('$NAME', '$1')}`) : esc(title)}</div><div class="dfr">${boxes.join(arrow)}</div></div>`;
   const one = (type) => docs.filter((x) => x.type === type).slice(-1)[0];
@@ -1913,20 +1969,34 @@ function docsList(e) {
   let d = null;
   try { d = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; if (typeof d === 'string') d = JSON.parse(d); } catch { d = null; }
   queueMicrotask(() => showFlow(e, d));
-  if (!d) return '<div class="muted" style="font-size:12px">Press Check Zoho to list every Zoho document for this order.</div>';
+  if (!d) return `<div style="display:flex;align-items:center;gap:10px"><span class="muted" style="font-size:12px">Press Check Zoho to list every Zoho document for this order.</span><button type="button" class="btn ghost" data-ordreport="${esc(e.id)}" style="margin-left:auto">📊 Report</button></div>`;
   if (!d.docs?.length) return `<div class="muted" style="font-size:12px">No Zoho documents with reference ${esc(e.ref)} (checked ${esc(when(d.checkedAt))}).</div>`;
+  // Who each document is with: the customer on sales and delivery, the supplier or artist on bills (with their role).
+  const n = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const ROLE = { COURIER: 'courier', FRAMER: 'frame shop', PRINTER: 'print shop', ARTIST: 'artist', SELLER: 'seller' };
+  const partyOf = (x) => {
+    const who = x.party || x.vendor || (x.group === 'PURCHASE' ? '' : e.customerName || '');
+    if (!who) return '';
+    let role = x.group === 'PURCHASE' ? '' : 'customer';
+    if (!role) {
+      const sp = suppliers.find((s) => n(s.business) && (n(who).includes(n(s.business)) || n(s.business).includes(n(who))));
+      role = sp ? ROLE[sp.type] || '' : n(who).includes(n(artistOf(e)).split(' ')[0]) ? 'artist' : '';
+    }
+    return `${esc(who)}${role ? ` <span class="muted">· ${role}</span>` : ''}`;
+  };
   const pretty = (st) => String(st || '').replace(/creditcard/, 'card').replace(/banktransfer/, 'bank transfer').replace(/_/g, ' ');
   const rows = (group, title) => {
     const list = d.docs.filter((x) => x.group === group);
     if (!list.length) return '';
-    return `<tr class="grp"><th colspan="4">${title}</th></tr>` + list.map((x) => `<tr>
+    return `<tr class="grp"><th colspan="5">${title}</th></tr>` + list.map((x) => `<tr>
       <td>${esc(x.type)}</td>
+      <td data-party>${partyOf(x)}</td>
       <td><a href="${esc(x.url)}" target="_blank" rel="noopener" class="mono">${esc(x.number || 'open')}</a></td>
       <td><span class="dstat ${x.status === 'void' || x.status === 'cancelled' ? 'bad' : x.status === 'draft' ? 'draft' : DOC_STATUS_OK.includes(x.status) ? 'good' : ''}">${esc(pretty(x.status))}</span></td>
-      <td class="num mono">${x.total != null ? aed(x.total, 2) : ''}${x.balance ? `<br><span class="muted">due ${aed(x.balance, 2)}</span>` : ''}</td></tr>`).join('');
+      <td class="num mono" data-amt>${x.total != null ? docAmt(x, x.total, 2) : ''}${x.balance ? `<br><span class="muted">${/^Credit note/.test(x.type) ? 'open' : 'due'} ${docAmt(x, x.balance, 2)}</span>` : ''}</td></tr>`).join('');
   };
   return `<div class="docs"><table class="costs"><tbody>${rows('SALES', 'Sales (customer)')}${rows('DELIVERY', 'Delivery')}${rows('PURCHASE', hasArtist(e) ? `Purchase (${esc(artistOf(e))}, frame shop, courier)` : 'Purchase (frame shop, courier)')}</tbody></table>
-    <div class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</div></div>`;
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="muted" style="font-size:12px">Checked ${esc(when(d.checkedAt))} · links open in Zoho Books</span><button type="button" class="btn ghost" data-ordreport="${esc(e.id)}" style="margin-left:auto">📊 Report</button></div></div>`;
 }
 
 async function ziinaStatus(msg = '') {

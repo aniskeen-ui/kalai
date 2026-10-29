@@ -85,6 +85,16 @@ nav.links a:hover{opacity:1;color:#e8c77f}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{background:var(--gold);color:#1d1b2b}}
 .hero-art{display:grid;grid-template-columns:1fr;gap:18px;max-width:440px;justify-self:end;width:100%}
 .hero-art img{width:100%;height:auto;aspect-ratio:4/3;object-fit:contain;display:block;border-radius:3px;box-shadow:0 18px 40px rgba(0,0,0,.45);background:#fbfaf6;padding:10px;box-sizing:border-box} /* whole artwork shown, never cropped */
+.hero{position:relative}
+/* Little Artists in the empty space left of the hero on wide screens; a one-line chip under the promises elsewhere (29 Oct) */
+.hero-kids{display:none;position:absolute;top:50%;transform:translateY(-50%);left:max(24px,calc((100% - 1180px) / 2 - 252px));width:220px;background:rgba(255,255,255,.06);border:1px solid rgba(226,187,104,.45);border-radius:12px;padding:14px;color:var(--on-ink);text-align:left}
+.hero-kids img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:5px solid #fbfaf6;box-sizing:border-box;display:block}
+.hero-kids b{display:block;font-size:17px;margin:12px 0 4px;color:#e2bb68}
+.hero-kids p{font-size:13.5px;line-height:1.45;margin:0 0 12px;color:#cfc9e2;max-width:none}
+.hero-kids .btn{width:100%;justify-content:center}
+.kids-chip{display:inline-flex;gap:8px;align-items:center;margin-top:16px;background:rgba(255,255,255,.07);border:1px solid rgba(226,187,104,.45);color:var(--on-ink);border-radius:999px;padding:7px 14px;font:inherit;font-size:13.5px;cursor:pointer;text-align:left}
+.kids-chip b{color:#e2bb68}
+@media (min-width:1660px){.hero-kids{display:block}.kids-chip{display:none}}
 .hero-art{position:relative}
 .hero-art img{border:6px solid #fbfaf6;transition:opacity 1.2s ease}
 .hero-art .next{position:absolute;inset:0;opacity:0}
@@ -691,7 +701,7 @@ html.lp #little .vsai{display:none}
   <h2 style="font-size:34px;margin-top:8px">Your child's art, treated with care</h2>
   <ul>
     <li>We never publish your child's drawing or name without your permission.</li>
-    <li>For children aged 3 to 10 the framing is free: you pay only the delivery.</li>
+    <li>The print and the frame are free for every child aged 3 to 17: you pay only the delivery.</li>
     <li>Printed on fine paper and framed by hand in Dubai, ready to hang.</li>
     <li>If a photo is too small to print sharply, we tell you before we start.</li>
   </ul>
@@ -700,7 +710,7 @@ html.lp #little .vsai{display:none}
 <div class="lp-sec"><div class="wrap" style="max-width:820px">
   <div class="lp-eyebrow">Questions parents ask</div>
   <h2 style="font-size:34px;margin:8px 0 10px">Good to know</h2>
-  <details><summary>How old can my child be?</summary><p>Little Artists is for children aged 3 to 17. For ages 3 to 10 the framing is free; for ages 11 to 17 there is a small framing fee.</p></details>
+  <details><summary>How old can my child be?</summary><p>Little Artists is for children aged 3 to 17. At every age the print and the frame are free; you pay only the delivery.</p></details>
   <details><summary>Do I need to send the original drawing?</summary><p>No. A clear photo taken in daylight, straight above the paper, is usually enough. If the photo is too small to print sharply, we will ask you to send the paper drawing.</p></details>
   <details><summary>Can it be sent to grandparents in another country?</summary><p>Yes. Within the UAE delivery is a fixed small charge; for other countries we confirm the shipping charge before you pay.</p></details>
   <details><summary>Will my child's drawing appear on your website?</summary><p>Never without your permission. The children shown on our site are illustrations, and any real drawing we show is shared with the family's consent.</p></details>
@@ -725,7 +735,12 @@ try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("ka
     document.querySelectorAll('nav.links a').forEach(a=>{if(/little/.test(a.getAttribute('href')))a.toggleAttribute('aria-current',on)})};
   set();addEventListener('hashchange',set);})();
 </script>
-<section class="hero" style="padding-block:0"><div class="wrap">
+<section class="hero" style="padding-block:0"><aside class="hero-kids" aria-label="Little Artists">
+  <img src="/img/kids/kid-01-crab.jpg" alt="A child's crab drawing in a white frame" loading="lazy">
+  <b>Little Artists</b>
+  <p>Turn your child's drawing into a framed gift. The print and the frame are free: you pay only the delivery (⃃ 25 in Dubai, Sharjah and Ajman, ⃃ 35 to the other emirates).</p>
+  <button type="button" class="btn gold" data-jump="little">Make a gift</button>
+</aside><div class="wrap">
   <div>
     <h1 id="heroH1">Original watercolours and pencil sketches, <em>painted for your walls</em>.</h1>
     <p id="heroP">Hand-painted originals and commissioned portraits of your pets, home and family, by artists in Kerala and Tamil Nadu. Priced in dirhams, delivered across the UAE with customs and duties already included.</p>
@@ -734,6 +749,7 @@ try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("ka
       <button class="btn ghost" data-jump="commission">Commission a painting</button>
     </div>
     <div class="promises"><span>Duties paid, no charges at the door</span><span>Signed by the artist</span><span>Insured courier delivery</span></div>
+    <button type="button" class="kids-chip" data-jump="little"><b>Little Artists</b> Your child's drawing, printed and framed for free. You pay only the delivery. →</button>
   </div>
   <div class="hero-art" aria-hidden="true">
     <img id="heroA" alt="Original artwork">
@@ -838,7 +854,7 @@ try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("ka
   <div>
     <div class="kind" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--kumkum);font-weight:700">Ages 3 to 17</div>
     <h2 style="margin-top:6px">Turn your child's drawing into a framed gift</h2>
-    <p class="lead">Upload a drawing your child made by hand and choose who it's for: a grandparent, a teacher, a friend. We frame it and deliver it with your child's message. For children aged 3 to 10 the framing is free and you pay only the delivery. For ages 11 to 17 there is a small framing fee.</p>
+    <p class="lead">Upload a drawing your child made by hand and choose who it's for: a grandparent, a teacher, a friend. We frame it and deliver it with your child's message. We print and frame it for free: you pay only the delivery.</p>
     <div class="mock" aria-live="polite">
       <div class="kframe" id="kFrame">
         <div class="kmount" id="kMount"><div class="ph">Your child's drawing<br>will appear here</div></div>
@@ -934,7 +950,7 @@ try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("ka
     <details><summary>What materials do you use?</summary><p>Watercolours are painted on 300 gsm cotton paper with artist-grade paints. Pencil sketches use graphite on heavy acid-free drawing paper, sealed with fixative so they don't smudge.</p></details>
     <details><summary>What if it arrives damaged?</summary><p>Every parcel is insured. Report it under My enquiries &amp; orders with photos within 48 hours of delivery and choose: a replacement or repair, or a full refund. Because each work is one of a kind, we can't accept change-of-mind returns.</p></details>
     <details><summary>Can I cancel my order?</summary><p>Yes, under My enquiries &amp; orders on this site, where you see the refund before you confirm. Before you pay, there's nothing to pay. After payment, if the artist hasn't started your work, you get a full refund. Once the artist has started (including the pencil sketch for commissions), we refund 50% to cover the artist's time. Once it has shipped it can't be cancelled.</p></details>
-    <details><summary>What does Little Artists cost?</summary><p>For children aged 3 to 10, framing is free and you pay only delivery: ⃃ 25 within Dubai, Sharjah and Ajman, AED 35 to the other emirates, or the overseas shipping charge for your country (shown on the form; confirmed with your payment link). One free framing per child each month. For ages 11 to 17, framing costs ⃃ 79 plus delivery. Premium frames, A3 size, extra copies and gift wrap are optional extras at any age.</p></details>
+    <details><summary>What does Little Artists cost?</summary><p>The print and the frame are free for every child aged 3 to 17; you pay only delivery: ⃃ 25 within Dubai, Sharjah and Ajman, AED 35 to the other emirates, or the overseas shipping charge for your country (shown on the form; confirmed with your payment link). One free framing per child each month. Premium frames, A3 size, extra copies and gift wrap are optional extras at any age.</p></details>
     <details><summary>Do you deliver outside the UAE?</summary><p>Yes, we deliver worldwide. Within the UAE, delivery is included in the price. For any other country, we confirm the shipping charge with your payment link, before you pay. Import duty or taxes charged by your country, if any, are paid on arrival.</p></details>
     <details><summary>Can I visit to see paintings?</summary><p>We are an online gallery and paintings ship directly from our artists' studios. For larger commissions we can arrange a video call with the artist.</p></details>
   </div>
@@ -964,7 +980,7 @@ try{document.documentElement.setAttribute("data-lstyle",localStorage.getItem("ka
     <div><b style="color:var(--fg)">4. Payment.</b> Full payment is required upfront, for catalogue works and commissions alike. We take payment by secure payment link from a licensed payment provider, by bank transfer or by other methods we agree with you. We never ask for or store your card details.</div>
     <div><b style="color:var(--fg)">5. The artworks.</b> Every work is an original, made by hand, so small variations from the photos on screen (colour, texture, framing) are normal and are not a defect. Sizes are approximate.</div>
     <div><b style="color:var(--fg)">6. Commissions.</b> We share a pencil sketch for your approval before painting. You may ask for reasonable changes at the sketch stage; the finished work is the artist's interpretation of your brief. Timelines are estimates. You confirm you have the right to share any photo you send us, and that it can be used to make your commission.</div>
-    <div><b style="color:var(--fg)">7. Little Artists.</b> Orders are placed by a parent or guardian, who confirms they may share the child's drawing, first name and age with us. We use them only to make and deliver the gift and never publish them. Free framing for ages 3 to 10 is limited to one framing per child each month.</div>
+    <div><b style="color:var(--fg)">7. Little Artists.</b> Orders are placed by a parent or guardian, who confirms they may share the child's drawing, first name and age with us. We use them only to make and deliver the gift and never publish them. Free printing and framing is limited to one gift per child each month.</div>
     <div><b style="color:var(--fg)">8. Delivery.</b> We deliver worldwide by courier. Delivery within the UAE is included; for other countries the shipping charge is confirmed in your quote or payment link before you pay, and any import duty or taxes charged by the destination country are paid by the customer on arrival. Please give a complete address and a reachable mobile number; if a delivery fails because of incorrect details or no one is available, redelivery may be charged. Responsibility for the artwork passes to you on delivery.</div>
     <div><b style="color:var(--fg)">9. Cancellations, returns and damage.</b> Each work is one of a kind, so there are no change-of-mind returns. You can cancel yourself under <b>My enquiries &amp; orders</b>: (a) before payment, at any time and at no cost; (b) after payment and before the work starts, with a full refund; (c) once the artist has started (including the pencil sketch for a commission), or for Little Artists once framing has started, with a 50% refund, the rest covering the work done. An order that has shipped can't be cancelled. If an item arrives damaged, report it under My enquiries &amp; orders with photos within 48 hours of delivery and choose a replacement or repair, or a full refund; please keep the packaging until it is resolved. My enquiries &amp; orders shows the refund that applies before you confirm. Refunds go back the way you paid, usually within 7 working days.</div>
     <div><b style="color:var(--fg)">10. Order updates.</b> We send order updates (price, payment, shipping, delivery, cancellations and refunds) by email to the address on your account, and may also message you on WhatsApp. Requests you make under My enquiries &amp; orders are recorded with the date and time and confirmed by email.</div>
@@ -1553,7 +1569,7 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   const $=id=>document.getElementById(id);
   const plate=()=>{const n=$("kName").value.trim()||"Aarav",a=$("kAge").value,m=$("kMsg").value.trim()||("For "+($("kTo").value.trim()||"Ammachi")+", with love");
     $("kPlate").innerHTML="";const t=document.createTextNode("By "+n+", age "+a);const sm=document.createElement("small");sm.textContent=m;$("kPlate").append(t,sm)};
-  const FRAME_FEE=79;
+
   // Delivery: emirate fee in the UAE; elsewhere the zone fee from Order management → Settings (blank = quoted).
   const ZONE={A:["Saudi Arabia","Oman","Qatar","Bahrain","Kuwait"],B:["India","Sri Lanka","Pakistan","Bangladesh","Nepal","Maldives","Bhutan"],
     C:["United Kingdom","Ireland","France","Germany","Italy","Spain","Portugal","Netherlands","Belgium","Luxembourg","Switzerland","Austria","Denmark","Sweden","Norway","Finland","Iceland","Poland","Czechia","Slovakia","Hungary","Slovenia","Croatia","Romania","Bulgaria","Greece","Cyprus","Malta","Estonia","Latvia","Lithuania","Monaco","Liechtenstein","Andorra","San Marino","Vatican City","Jersey","Guernsey","Isle of Man","Gibraltar","Serbia","Bosnia and Herzegovina","Montenegro","North Macedonia","Albania","Kosovo","Moldova","Ukraine"],
@@ -1564,10 +1580,10 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
   const delivery=()=>{if(uae())return +$("kEmirate").value;const f=(window.kalaiShipZones||{})[zoneOf($("kCountry").value)];return f>0?+f:null};
   // Small amounts: whole dollars and tens of rupees (the Settings rounding is meant for artwork prices).
   const pm=a=>{if(typeof moneyH!=="function")return fmt(a);const r=window.kalaiRound;window.kalaiRound={...r,usd:1,inr:10};try{return moneyH(a)}finally{window.kalaiRound=r}};
-  const fee=()=>{const age=+$("kAge").value,del=delivery(),rows=[["Framing",age<=10?0:FRAME_FEE],[uae()?"Delivery":"Shipping to "+$("kCountry").value,del]];
+  const fee=()=>{const age=+$("kAge").value,del=delivery(),rows=[["Print and frame",0],[uae()?"Delivery":"Shipping to "+$("kCountry").value,del]];
     document.querySelectorAll('[id^="kx-"]:checked').forEach(x=>rows.push([(window.kalaiEN||(e=>e.textContent))(x.parentElement.querySelector("span").firstChild).trim(),+x.dataset.price]));
     const tot=rows.reduce((a,r)=>a+(r[1]||0),0);
-    $("kBreak").innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:12px"><span>${r[0]}</span><span class="mono">${r[1]?pm(r[1]):(r[0]==="Framing"?"Free (age 10 and under)":r[1]===null?"we quote before you pay":"")}</span></div>`).join("")
+    $("kBreak").innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:12px"><span>${r[0]}</span><span class="mono">${r[1]?pm(r[1]):(r[0]==="Print and frame"?"Free":r[1]===null?"we quote before you pay":"")}</span></div>`).join("")
       +(uae()?"":`<div style="font-size:12px">Outside the UAE: the shipping charge is confirmed with your payment link; any import duty in your country is paid on arrival.</div>`);
     document.querySelectorAll("[data-kp]").forEach(b=>b.innerHTML="+ "+pm(+b.dataset.kp));
     $("kFee").innerHTML=pm(tot)+(del===null?" + shipping":"");$("kFee").dataset.aed="AED "+tot.toLocaleString("en-US")+(del===null?" + shipping":"")};

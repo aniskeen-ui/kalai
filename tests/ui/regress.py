@@ -161,6 +161,63 @@ def _(b):
             bad += [f'{kind} {st}: {e[:100]}' for e in errs]; pg.close()
     return bad
 
+@check('Check Zoho list shows who each document is with: customer, courier, frame shop, artist (asked 29 Oct)')
+def _(b):
+    docs = {'checkedAt': '2026-10-29T04:41:00Z', 'docs': [
+        {'group': 'SALES', 'type': 'Invoice', 'number': 'TEST-KAH-INV-0011', 'status': 'draft', 'total': 435, 'url': '#'},
+        {'group': 'DELIVERY', 'type': 'Delivery challan', 'number': 'TEST-KAH-DC-0011', 'status': 'draft', 'total': 435, 'url': '#', 'party': 'Ponns'},
+        {'group': 'PURCHASE', 'type': 'Bill', 'number': 'AR-T-UW6D', 'status': 'draft', 'total': 32, 'url': '#', 'vendor': 'ARAMAX'},
+        {'group': 'PURCHASE', 'type': 'Bill', 'number': 'RF-T-UW6D', 'status': 'draft', 'total': 120, 'url': '#', 'vendor': 'Rafi Frames'},
+        {'group': 'PURCHASE', 'type': 'Bill', 'number': 'SR-T-1', 'status': 'draft', 'total': 569, 'url': '#', 'vendor': 'Siva Raja'}]}
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [order(status='DELIVERED')], 'costing': [{'enquiryId': 'e1', 'zohoDocs': json.dumps(docs)}]}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed)
+    cells = pg.evaluate("[...document.querySelectorAll('[data-party]')].map(c => c.innerText.trim())")
+    need(cells == ['Ponns · customer', 'Ponns · customer', 'ARAMAX · courier', 'Rafi Frames · frame shop', 'Siva Raja · artist'], f'party column: {cells}')
+    return errs
+
+@check('Credit notes show as negative amounts; Report opens the order sales, revenue and margin (asked 29 Oct)')
+def _(b):
+    docs = {'checkedAt': '2026-10-29T03:23:00Z', 'docs': [
+        {'group': 'SALES', 'type': 'Invoice', 'number': 'TEST-KAH-INV-0009', 'status': 'draft', 'total': 375, 'balance': 375, 'url': '#'},
+        {'group': 'SALES', 'type': 'Credit note', 'number': 'TEST-KAH-CN-0003', 'status': 'draft', 'total': 375, 'balance': 375, 'url': '#'},
+        {'group': 'PURCHASE', 'type': 'Bill', 'number': 'AR-T-0011', 'status': 'draft', 'total': 22, 'url': '#', 'vendor': 'ARAMAX'}]}
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [order(status='DELIVERED', quotedPrice=375)], 'costing': [{'enquiryId': 'e1', 'zohoDocs': json.dumps(docs)}]}
+    pg, errs = open_page(b, 'admin.html#order=e1', seed)
+    amts = pg.evaluate("[...document.querySelectorAll('[data-amt]')].map(c => c.innerText.replace(/\\s+/g, ' ').trim())")
+    need(amts[1].startswith('−⃃ 375.00') and 'open −⃃ 375.00' in amts[1] and not amts[0].startswith('−'), f'amounts: {amts}')
+    pg.click('[data-ordreport]'); pg.wait_for_timeout(500)
+    need(pg.locator('#ordReport').is_visible(), 'report did not open')
+    t = pg.inner_text('#ordReport')
+    need('KA-261020-YWXE' in t and 'Net revenue' in t and 'Margin' in t and 'ARAMAX' in t and '−⃃ 375.00' in t, f'report text: {t[:300]}')
+    pg.click('[data-orepclose]'); pg.wait_for_timeout(200)
+    need(not pg.locator('#ordReport').is_visible(), 'report did not close')
+    return errs
+
+
+@check('Little Artists: print and frame free at every age, only delivery charged (age 12 paid ⃃79 before)')
+def _(b):
+    pg, errs = open_page(b, 'index.html#kidsOrder', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [], 'items': []}, wait=2500)
+    pg.evaluate("""(() => { const s = (id, v) => { const x = document.getElementById(id); x.value = v; ['input','change'].forEach(k => x.dispatchEvent(new Event(k, {bubbles:true}))); };
+      s('kAge', '12'); s('kCountry', 'UAE'); s('kEmirate', [...document.getElementById('kEmirate').options].find(o => o.text === 'Dubai').value); })()""")
+    pg.wait_for_timeout(400)
+    t = pg.inner_text('#kBreak')
+    need('Print and frame' in t and 'Free' in t and '79' not in t, f'breakdown: {t!r}')
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    need('age <= 10 ? 0 : 79' not in src, 'the server still charges ⃃79 for ages 11–17')
+    return errs
+
+
+@check('Home page: Little Artists panel in the empty space left of the hero on wide screens, a chip on smaller ones')
+def _(b):
+    pg, errs = open_page(b, 'index.html', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [], 'items': []}, wait=1500, width=1900)
+    need(pg.locator('.hero-kids').is_visible() and 'only the delivery' in pg.inner_text('.hero-kids'), 'no Little Artists panel on a wide screen')
+    box = pg.locator('.hero-kids').bounding_box(); wrap = pg.locator('.hero .wrap').bounding_box()
+    need(box['x'] + box['width'] <= wrap['x'] + 16, f'panel overlaps the hero text: {box} vs {wrap}')
+    pg.close()
+    pg, errs2 = open_page(b, 'index.html', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [], 'items': []}, wait=1500, width=1200)
+    need(not pg.locator('.hero-kids').is_visible() and pg.locator('.kids-chip').is_visible(), 'small screen: panel/chip wrong')
+    return errs + errs2
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,

@@ -1620,7 +1620,7 @@ async function artistPhoto(id: string) {
 // ---------- all Zoho documents for one order (shown on the Studio desk) ----------
 
 const BOOKS_APP = `https://books.zoho.com/app/${env.ZOHO_ORG_ID}#`;
-type Doc = { group: 'SALES' | 'PURCHASE' | 'DELIVERY'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string; vendor?: string; amount?: number; shared?: boolean };
+type Doc = { group: 'SALES' | 'PURCHASE' | 'DELIVERY'; type: string; id: string; number: string; status: string; date?: string; total?: number; balance?: number; url: string; vendor?: string; party?: string; amount?: number; shared?: boolean };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function zget(path: string): Promise<any> {
@@ -1656,16 +1656,16 @@ async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Do
   const docs: Doc[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const e of (est.estimates ?? []).filter(same) as any[]) {
-    docs.push({ group: 'SALES', type: 'Quote', id: e.estimate_id, number: e.estimate_number, status: e.status, date: e.date, total: e.total, url: `${BOOKS_APP}/quotes/${e.estimate_id}` });
+    docs.push({ group: 'SALES', type: 'Quote', id: e.estimate_id, number: e.estimate_number, status: e.status, date: e.date, total: e.total, url: `${BOOKS_APP}/quotes/${e.estimate_id}`, party: e.customer_name });
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const i of (inv.invoices ?? []).filter(same) as any[]) {
-    docs.push({ group: 'SALES', type: 'Invoice', id: i.invoice_id, number: i.invoice_number, status: i.status, date: i.date, total: i.total, balance: i.balance, url: `${BOOKS_APP}/invoices/${i.invoice_id}` });
+    docs.push({ group: 'SALES', type: 'Invoice', id: i.invoice_id, number: i.invoice_number, status: i.status, date: i.date, total: i.total, balance: i.balance, url: `${BOOKS_APP}/invoices/${i.invoice_id}`, party: i.customer_name });
     if (['draft', 'void'].includes(i.status)) continue;
     const pays = await zget(`/invoices/${i.invoice_id}/payments`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const p of (pays.payments ?? []) as any[]) {
-      docs.push({ group: 'SALES', type: 'Payment received', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsreceived/${p.payment_id}` });
+      docs.push({ group: 'SALES', type: 'Payment received', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsreceived/${p.payment_id}`, party: p.customer_name });
     }
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1675,7 +1675,7 @@ async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Do
     const pays = await zget(`/bills/${b.bill_id}/payments`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const p of (pays.payments ?? []) as any[]) {
-      docs.push({ group: 'PURCHASE', type: 'Payment made', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsmade/${p.payment_id}` });
+      docs.push({ group: 'PURCHASE', type: 'Payment made', id: p.payment_id, number: p.payment_number || p.reference_number || '', status: p.payment_mode || 'recorded', date: p.date, total: p.amount, url: `${BOOKS_APP}/paymentsmade/${p.payment_id}`, party: p.vendor_name || b.vendor_name });
     }
   }
   // A bill for several orders ("KA-…, KA-…" in Reference#): this order's lines (description mentions the ref),
@@ -1694,11 +1694,11 @@ async function collectDocs(ref: string, prevChallans: string[] = []): Promise<Do
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (cns.creditnotes ?? []).filter(same) as any[]) {
-    docs.push({ group: 'SALES', type: 'Credit note', id: c.creditnote_id, number: c.creditnote_number, status: c.status, date: c.date, total: c.total, balance: c.balance, url: `${BOOKS_APP}/creditnotes/${c.creditnote_id}` });
+    docs.push({ group: 'SALES', type: 'Credit note', id: c.creditnote_id, number: c.creditnote_number, status: c.status, date: c.date, total: c.total, balance: c.balance, url: `${BOOKS_APP}/creditnotes/${c.creditnote_id}`, party: c.customer_name });
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (dcs.deliverychallans ?? []).filter(same) as any[]) {
-    docs.push({ group: 'DELIVERY', type: prevChallans.includes(c.deliverychallan_id) ? 'Delivery challan (damaged delivery)' : 'Delivery challan', id: c.deliverychallan_id, number: c.deliverychallan_number, status: c.status, date: c.date, total: c.total, url: `${BOOKS_APP}/deliverychallans/${c.deliverychallan_id}` });
+    docs.push({ group: 'DELIVERY', type: prevChallans.includes(c.deliverychallan_id) ? 'Delivery challan (damaged delivery)' : 'Delivery challan', id: c.deliverychallan_id, number: c.deliverychallan_number, status: c.status, date: c.date, total: c.total, url: `${BOOKS_APP}/deliverychallans/${c.deliverychallan_id}`, party: c.customer_name });
   }
   return docs;
 }
@@ -3400,7 +3400,8 @@ async function cartLine(it: Dict, site: Dict | null, used: Set<string>): Promise
     let zones: Record<string, number> = {}; try { zones = JSON.parse(String(site?.shipZones ?? '{}')) ?? {}; } catch { zones = {}; }
     const del = uae ? (KIDS_EMIRATE[txt(f.emirate, 40)] ?? 35) : (Number(zones[zoneOfCountry(country)]) > 0 ? Number(zones[zoneOfCountry(country)]) : null);
     const ex = (Array.isArray(f.extras) ? f.extras : []).map((k) => KIDS_EXTRAS[String(k)]).filter(Boolean);
-    const total = (age <= 10 ? 0 : 79) + (del ?? 0) + ex.reduce((a, e) => a + e[1], 0);
+    // Print and frame are free at every age (29 Oct): the customer pays the delivery and any extras.
+    const total = (del ?? 0) + ex.reduce((a, e) => a + e[1], 0);
     const key = txt(it.fileKey, 300);
     if (!key.startsWith('uploads/')) throw new Error("The child's drawing is missing: add the gift again.");
     const det: Dict = { Child: `${txt(f.child, 40)}, age ${age}`, 'Gift for': txt(f.to, 60), Country: country, [uae ? 'Emirate' : 'State / city']: uae ? txt(f.emirate, 40) : txt(f.region, 60),
