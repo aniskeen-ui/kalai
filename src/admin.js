@@ -764,7 +764,7 @@ function monthBillDialog(partner, month) {
   const code = partner.split(/\s+/).map((w) => w[0]).join('').toUpperCase() + (partner.trim().includes(' ') ? '' : partner.slice(1, 3).toUpperCase());
   let dlg = $('mbillDlg');
   if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'mbillDlg'; dlg.className = 'orep-dlg'; document.body.appendChild(dlg); }
-  const row = (l, i, kind) => `<tr><td><input type="checkbox" ${kind === 'dn' || ready(l) ? 'checked' : ''} data-mb="${kind}" data-i="${i}" style="width:auto"></td><td class="mono">${esc(dDay(l.date))}</td><td><span class="mono">${esc(l.e.ref)}</span><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}${l.debit ? `<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : !ready(l) ? `<br><span class="muted" style="font-size:12px">${l.payStart ? `in the damage window until ${esc(l.payStart)}` : 'not delivered yet'}: left out</span>` : ''}</td><td class="num mono">${l.debit ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td></tr>`;
+  const row = (l, i, kind) => `<tr><td><input type="checkbox" ${kind === 'dn' || ready(l) ? 'checked' : ''} data-mb="${kind}" data-i="${i}" style="width:auto"></td><td class="mono">${esc(dDay(l.date))}</td><td><span class="mono">${esc(l.e.ref)}</span><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}${l.debit ? `<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : !ready(l) ? `<br><span class="muted" style="font-size:12px">${l.payStart ? `in the 48-hour damage window until ${esc(l.payStart)}` : 'not delivered yet'}: unticked by default (next month's bill)</span>` : ''}</td><td class="num mono">${l.debit ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td></tr>`;
   dlg.innerHTML = `<div class="orep">
     <h2 style="margin:0">Proposal: ${esc(partner)} · ${esc(monthName(month))}</h2>
     <p class="muted" style="margin:6px 0 12px">${inv.length ? `One bill in Zoho with a line per order, <b>due ${esc(ymdAdd(today, terms.days))}</b> (${terms.days} credit days)` : 'Debit notes in Zoho'}${inv.length && dn.length ? ', and one debit note (vendor credit) per refunded order' : ''}. Works not yet past delivery + 48 h are left unticked; untick anything else that should wait. ${location.hostname.startsWith('art.') ? '<b>Test site: Zoho keeps them as drafts.</b>' : ''}</p>
@@ -792,8 +792,16 @@ function monthBillDialog(partner, month) {
     if (!lines.length && !debits.length) { msg.textContent = 'Tick at least one line.'; return; }
     b.disabled = true; msg.textContent = 'Creating in Zoho…';
     try {
-      const r = await client.mutations.marketAdmin({ action: 'artistMonthBill', data: JSON.stringify({ month, billNo: dlg.querySelector('#mbNo')?.value.trim() || '', lines, debits }) });
-      if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+      // AWS turns a request away when too many arrive at once ("Rate Exceeded", 429): nothing ran, so wait and try again.
+      let r;
+      for (let i = 0; i < 4; i++) {
+        r = await client.mutations.marketAdmin({ action: 'artistMonthBill', data: JSON.stringify({ month, billNo: dlg.querySelector('#mbNo')?.value.trim() || '', lines, debits }) });
+        const busy = r.errors?.length && /TooManyRequests|Rate Exceeded|429/i.test(r.errors[0].message || '');
+        if (!busy || i === 3) break;
+        msg.textContent = `The server is busy: trying again (${i + 2}/4)…`;
+        await new Promise((ok) => setTimeout(ok, 2000 * (i + 1)));
+      }
+      if (r.errors?.length) throw new Error(/TooManyRequests|Rate Exceeded|429/i.test(r.errors[0].message || '') ? 'The server is busy (AWS rate limit). Nothing was created in Zoho: wait a minute and press Create in Zoho again.' : r.errors[0].message.replace(/^.*?Error: /, ''));
       const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
       const bad = (res.debits || []).filter((x) => x.error);
       msg.innerHTML = `${res.bill ? `Bill <a href="${esc(res.bill.url)}" target="_blank" rel="noopener" class="mono">${esc(res.bill.number)}</a> created (⃃ ${money(res.bill.total)}, ${esc(res.bill.state)}). ` : ''}${(res.debits || []).filter((x) => !x.error).map((x) => `Debit note <span class="mono">${esc(x.number)}</span> for ${esc(x.ref)}.`).join(' ')}${bad.length ? ` <span class="neg">${bad.map((x) => esc(`${x.ref}: ${x.error}`)).join(' ')}</span>` : ''}`;
