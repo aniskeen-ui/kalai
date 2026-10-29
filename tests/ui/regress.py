@@ -661,6 +661,44 @@ INDIA_FRAMER = {'id': 'g1', 'type': 'FRAMER', 'status': 'APPROVED', 'business': 
                 'rateCard': json.dumps({'frames': {'black': {'40×50': 1900}}, 'currency': 'INR', 'from': 'India', 'basis': 'est'})}
 
 
+@check('Reports → To invoice: artists owed for paintings and royalties by month, suppliers for jobs not invoiced (asked 29 Oct)')
+def _(b):
+    p1 = order(id='p1', ref='KA-261029-BLVP', title='Circle of Colours', status='DELIVERED', artistName='Sobana', artistShippedAt='2026-10-29T05:00:00Z', quotedPrice=375)
+    p2 = order(id='p2', ref='KA-261025-2INX', kind='PHOTO', title='Framed print: Village Artisans at Work (A4)', status='DELIVERED', royaltyPct=10, quotedPrice=330, deliveredAt='2026-10-26T05:00:00Z',
+               details=json.dumps({'Size': 'A4 (21 × 30 cm)', 'Frame': 'Black frame'}))
+    p3 = order(id='p3', ref='KA-261029-NEW1', title='Not sent yet', status='PAID', artistName='Sobana', quotedPrice=500)
+    jobs = {'delivery': {'supplierId': 'c1', 'name': 'ARAMAX', 'stage': 'DELIVERED', 'price': 22, 'deliveredAt': '2026-10-29T06:00:00Z'},
+            'framer': {'supplierId': 'f1', 'name': 'Rafi Frames', 'stage': 'COLLECTED', 'price': 70, 'invoiceNo': 'RF-T-0003', 'invoiceAmt': 70}}
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS, 'items': [p1, p2, p3],
+            'costing': [{'enquiryId': 'p1', 'costs': json.dumps({'artistAed': 216, 'framing': 70, 'localCourier': 22}), 'supplierJobs': json.dumps(jobs)}]}
+    pg, errs = open_page(b, 'admin.html#reports', seed, wait=3000)
+    t = pg.inner_text('#payList')
+    need('Sobana' in t and 'Siva Raja' in t, f'artists missing: {t[:300]}')
+    need('KA-261029-NEW1' not in t, 'an order the artist has not sent yet is listed as owed')
+    need('ARAMAX' not in t, 'suppliers shown under Artists')
+    tiles = pg.inner_text('#payTiles')
+    need('216.00' in tiles or '246.00' in tiles, f'artist total: {tiles}')
+    pg.select_option('#payWho', ''); pg.wait_for_timeout(300)
+    t = pg.inner_text('#payList')
+    need('ARAMAX' in t and 'Rafi Frames' not in t, f'all partners: billed Rafi shown or ARAMAX missing: {t[:400]}')
+    pg.check('#payBilled'); pg.wait_for_timeout(300)
+    need('RF-T-0003' in pg.text_content('#payList'), 'billed lines not shown with Show billed too')
+    return errs
+
+
+@check('Artists & sellers: each partner has an Invoices setting, one per order or one consolidated a month')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [], 'sellers': SELLERS}
+    pg, errs = open_page(b, 'admin.html#sellers', seed, wait=3000)
+    pg.click('[data-mk="suppliers"]'); pg.wait_for_timeout(500)
+    card = pg.locator('[data-seller="c1"]')
+    need(card.locator('[data-f="invmode"]').input_value() == 'PER_ORDER', 'courier not per order by default')
+    card.locator('[data-f="invmode"]').select_option('MONTHLY'); card.locator('[data-a="invoiceModeSeller"]').click(); pg.wait_for_timeout(600)
+    mode = pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).sellers.find(s => s.id === 'c1').invoiceMode")
+    need(mode == 'MONTHLY', f'saved mode: {mode}')
+    return errs
+
+
 @check('Artists & sellers: country filter shows only the India frame shops (Guddis saved as UAE by default)')
 def _(b):
     sellers = [dict(s, address='Al Quoz, Dubai') if s['id'] == 'f1' else s for s in SELLERS] + [INDIA_FRAMER]

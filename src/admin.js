@@ -312,7 +312,7 @@ function showPane(pane, tabId) {
   $('customersPane').hidden = pane !== 'customers';
   ['tabOrders', 'tabCustomers', 'tabReports', 'tabFeedback', 'tabCatalogue', 'tabMessages', 'tabSellers', 'tabOffers', 'tabSettings', 'tabPricing'].forEach((t) => $(t)?.setAttribute('aria-selected', String(t === tabId)));
   try { history.replaceState(null, '', ['customers', 'reports', 'feedback', 'catalogue', 'messages', 'sellers', 'offers', 'settings', 'pricing'].includes(pane) ? '#' + pane : location.pathname); } catch { /* ignore */ }
-  if (pane === 'reports') renderReport();
+  if (pane === 'reports') { renderReport(); renderPayables(); }
   if (pane === 'feedback') renderFeedback();
   if (pane === 'catalogue') showCatalogue();
   if (pane === 'messages') showMessages();
@@ -457,7 +457,7 @@ function zohoActual(e) {
     out[f] = Math.round(((out[f] || 0) + amt) * 100) / 100;
     ref[f] = [ref[f], `${b.vendor || ''} · ${b.number}${b.status === 'draft' ? ' (draft)' : ''}`].filter(Boolean).join('; ');
   }
-  if (['PHOTO', 'LICENCE'].includes(e.kind) && out.artist == null) { const ry = royaltyOf(e); if (ry.pct) { out.artist = ry.amount; ref.artist = `${ry.pct}% royalty to ${e.artistName || 'Siva Raja'} (paid with their earnings, no bill)`; } }
+  if (['PHOTO', 'LICENCE'].includes(e.kind) && out.artist == null) { const ry = royaltyOf(e); if (ry.pct) { out.artist = ry.amount; ref.artist = `${ry.pct}% royalty to ${e.artistName || 'Siva Raja'} (in their monthly invoice: Reports → To invoice)`; } }
   return { out, ref, unmapped, checkedAt: d?.checkedAt || null };
 }
 /** Actual costs: what you typed wins; otherwise the figure from Zoho. */
@@ -613,6 +613,86 @@ const RCUR_SYM = { AED: '⃃', USD: '$', INR: '₹' };
 const RCUR = () => $('rCur')?.value || 'AED';
 const rFactor = () => (RCUR() === 'USD' ? 1 / 3.6725 : RCUR() === 'INR' ? 1 / (Number(rates.fx) || 0.044) : 1);
 try { const c = localStorage.getItem('kalaiReportCur'); if (c && $('rCur')) $('rCur').value = c; } catch { /* storage blocked */ }
+// ---------- To invoice: what we owe partners (artists monthly, suppliers per job unless set to monthly) ----------
+const monthOf = (iso) => (iso ? dDay(iso).slice(0, 7) : '');
+const monthName = (m) => (m ? new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : '');
+function zohoDocsOf(e) { try { let d = costings.get(e.id)?.zohoDocs; for (let i = 0; i < 2 && typeof d === 'string'; i++) d = JSON.parse(d); return d?.docs || []; } catch { return []; } }
+/** The artist's bill for this order in Zoho, if there is one (its own bill, or a monthly bill naming this order). */
+function artistBillOf(e, name) {
+  const first = String(name || '').toLowerCase().split(' ')[0];
+  return zohoDocsOf(e).find((x) => x.group === 'PURCHASE' && /Bill/.test(x.type) && !/rework/i.test(x.type) && x.status !== 'void' && (x.id === e.zohoBillId || (first && String(x.vendor || '').toLowerCase().includes(first)))) || (e.zohoBillId ? { number: e.zohoBill || 'in Zoho' } : null);
+}
+function payLines() {
+  const out = [];
+  const prof = (id, name) => [...artists, ...suppliers].find((p) => (id && p.id === id) || (name && String(p.business || '').toLowerCase() === String(name).toLowerCase()));
+  for (const e of all) {
+    if (['RECEIVED', 'PRICE_SENT'].includes(e.status)) continue;
+    const c = costings.get(e.id);
+    // Artist: the painting / commission price once they have sent the work (half after a 50% cancellation), or the royalty on a paid print / licence.
+    if (['PRICE', 'COMMISSION', 'PHOTO', 'LICENCE'].includes(e.kind) && !(e.status === 'CANCELLED' && e.refundAction !== 'CANCEL_HALF')) {
+      const art = ['PRICE', 'COMMISSION'].includes(e.kind), refunded = ['CANCEL_FULL', 'DAMAGED_REFUND'].includes(e.refundAction);
+      const earned = art ? (e.artistShippedAt || e.refundAction === 'CANCEL_HALF' || ['FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(e.status)) && e.refundAction !== 'CANCEL_FULL' : !refunded;
+      const amt = earned ? r2(reportLine(e).k?.artist || 0) : 0;
+      if (amt > 0) {
+        const name = e.artistName || 'Siva Raja', p = prof(e.artistId, name), bill = artistBillOf(e, name);
+        const half = e.refundAction === 'CANCEL_HALF';
+        const inr = art && c?.artistPriceInr ? Number(c.artistPriceInr) * (half ? 0.5 : 1) : null;
+        const ry = art ? null : royaltyOf(e);
+        out.push({ e, partner: name, type: 'ARTIST', role: 'artist', mode: p?.invoiceMode || 'MONTHLY', date: e.artistShippedAt || e.deliveredAt || e.updatedAt || e.createdAt,
+          what: art ? `${e.kind === 'COMMISSION' ? 'Commission' : 'Painting'}${half ? ' · 50% (cancelled after start)' : ''}` : `${e.kind === 'LICENCE' ? 'Licence' : 'Print'} royalty ${ry.pct}%`,
+          amount: amt, inr, billed: !!bill, billNo: bill?.number || '' });
+      }
+      // Artist's rework (repair / repaint after damage), once sent back.
+      if (/^SIVA/.test(e.reworkType || '') && e.reworkSentAt && c?.reworkPriceInr) {
+        out.push({ e, partner: e.artistName || 'Siva Raja', type: 'ARTIST', role: 'artist', mode: prof(e.artistId, e.artistName || 'Siva Raja')?.invoiceMode || 'MONTHLY', date: e.reworkSentAt,
+          what: e.reworkType === 'SIVA_REPAINT' ? 'Rework: repaint' : 'Rework: repair', amount: r2(Number(c.reworkPriceInr) * rates.fx), inr: Number(c.reworkPriceInr), billed: !!e.zohoReworkBillId, billNo: e.zohoReworkBillId ? 'in Zoho' : '' });
+      }
+    }
+    // Suppliers: each finished job with an agreed price.
+    const jobs = jobsOf(e);
+    for (const [role, label] of [['printer', 'Print'], ['framer', 'Framing'], ['delivery', 'Delivery'], ['inbound', 'Courier to the frame shop']]) {
+      const j = jobs[role];
+      if (!j || j.price == null || j.price === '') continue;
+      const done = ['READY', 'COLLECTED', 'DELIVERED'].includes(j.stage) || !!j.deliveredAt || !!j.invoiceNo;
+      if (!done) continue;
+      const p = suppliers.find((x) => x.id === j.supplierId);
+      out.push({ e, partner: j.name || p?.business || 'Supplier', type: p?.type || (role === 'printer' ? 'PRINTER' : role === 'framer' ? 'FRAMER' : 'COURIER'), role: role === 'printer' ? 'print shop' : role === 'framer' ? 'frame shop' : 'courier',
+        mode: p?.invoiceMode || 'PER_ORDER', date: j.deliveredAt || j.readyAt || j.invoiceAt || e.updatedAt, what: label, amount: r2(Number(j.invoiceAmt ?? j.price)), inr: null, billed: !!j.invoiceNo, billNo: j.invoiceNo || '' });
+    }
+  }
+  return out.map((l) => ({ ...l, month: monthOf(l.date) })).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+function renderPayables() {
+  if (!$('payList')) return;
+  const linesAll = payLines();
+  const months = [...new Set(linesAll.map((l) => l.month).filter(Boolean))].sort().reverse();
+  const cur = $('payMonth').value;
+  $('payMonth').innerHTML = `<option value="">All months</option>${months.map((m) => `<option value="${m}">${esc(monthName(m))}</option>`).join('')}`;
+  $('payMonth').value = months.includes(cur) ? cur : '';
+  const who = $('payWho').value, mon = $('payMonth').value, showBilled = $('payBilled').checked;
+  const lines = linesAll.filter((l) => (!who || l.type === who) && (!mon || l.month === mon) && (showBilled || !l.billed));
+  const pend = (t) => r2(linesAll.filter((l) => !l.billed && (!mon || l.month === mon) && (t ? l.type === t : l.type !== 'ARTIST')).reduce((a, l) => a + l.amount, 0));
+  const tile = (k, v) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  $('payTiles').innerHTML = tile(`Artists: to invoice${mon ? ` (${esc(monthName(mon))})` : ''}`, `⃃ ${money(pend('ARTIST'))}`) + tile('Frame, print shops and couriers: invoices due', `⃃ ${money(pend(''))}`);
+  const groups = new Map();
+  for (const l of lines) { const k = `${l.partner}|${l.month}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); }
+  $('payList').innerHTML = groups.size ? [...groups.values()].map((g) => {
+    const f = g[0], due = r2(g.filter((l) => !l.billed).reduce((a, l) => a + l.amount, 0)), inr = g.filter((l) => !l.billed && l.inr).reduce((a, l) => a + l.inr, 0);
+    const modeTxt = f.mode === 'MONTHLY' ? 'one consolidated invoice for the month' : 'one invoice per order';
+    return `<details class="pay-grp" data-pay="${esc(f.partner)}"><summary><b>${esc(f.partner)}</b> <span class="muted">· ${esc(f.role)} · ${esc(monthName(f.month))} · ${g.length} order${g.length > 1 ? 's' : ''} · ${modeTxt}</span><span class="mono" style="margin-left:auto">${due ? `to invoice ⃃ ${money(due)}${inr ? ` (₹ ${Math.round(inr).toLocaleString('en-IN')})` : ''}` : 'all billed'}</span></summary>
+      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}</td><td class="num mono">⃃ ${money(l.amount)}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${l.billed ? `Billed${l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : ''}` : '<b>To invoice</b>'}</td></tr>`).join('')}</tbody></table></details>`;
+  }).join('') : '<p class="muted">Nothing to invoice for this choice.</p>';
+}
+['payWho', 'payMonth', 'payBilled'].forEach((id) => $(id) && ($(id).onchange = renderPayables));
+if ($('payCsv')) $('payCsv').onclick = () => {
+  const who = $('payWho').value, mon = $('payMonth').value, showBilled = $('payBilled').checked;
+  const rows = payLines().filter((l) => (!who || l.type === who) && (!mon || l.month === mon) && (showBilled || !l.billed));
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [['Partner', 'Role', 'Invoicing', 'Month', 'Date', 'Order', 'Title', 'For', 'Amount AED', 'Amount INR', 'Status', 'Bill no.'].map(q).join(','),
+    ...rows.map((l) => [l.partner, l.role, l.mode === 'MONTHLY' ? 'Monthly' : 'Per order', l.month, dDay(l.date), l.e.ref, l.e.title, l.what, l.amount, l.inr ?? '', l.billed ? 'Billed' : 'To invoice', l.billNo].map(q).join(','))].join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `kalai-to-invoice${mon ? `-${mon}` : ''}.csv`; a.click();
+};
+
 function renderReport() {
   const f = rFactor(), rmon = (v) => (v == null ? '–' : (Number(v) * f).toLocaleString(RCUR() === 'INR' ? 'en-IN' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const lines = reportLines();
@@ -669,7 +749,7 @@ $('rZoho').onclick = async () => {
   }
   await loadCostings();
   b.textContent = 'Get actual costs from Zoho'; b.disabled = false;
-  renderReport();
+  renderReport(); renderPayables();
 };
 $('rCsv').onclick = () => {
   const head = ['Date', 'Ref', 'Order', 'Customer', 'Status', 'Sales', 'Refund', 'Net sales', 'Artist', 'Framing', 'India courier', 'Customs', 'Local courier', 'Rework (net of insurance)', 'Fees & insurance', 'Planned total cost', 'Planned margin', 'Planned margin %', 'Actual artist', 'Actual framing', 'Actual India courier', 'Actual customs', 'Actual local courier', 'Actual other', 'Actual total cost (planned where no bill)', 'Actual margin', 'Actual margin %', 'Variance', 'Note'];
@@ -1023,7 +1103,7 @@ async function load() {
       client.mutations.assignCodes().then((r) => { let o = r?.data; try { if (typeof o === 'string') o = JSON.parse(o); } catch { o = null; } if (!o || o.customers || o.artworks || items.some((e) => !e.customerCode)) load(); }).catch(() => {});
     }
     render();
-    if (!$('reportsPane').hidden) renderReport();
+    if (!$('reportsPane').hidden) { renderReport(); renderPayables(); }
     if (!$('feedbackPane').hidden) renderFeedback();
     if (selectedId) { const e = all.find((x) => x.id === selectedId); if (e) showDetail(e); }
   } catch (ex) {

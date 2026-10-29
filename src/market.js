@@ -232,6 +232,13 @@ function editBox(s) {
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:8px">${EDIT_FIELDS.map(([k, l, t]) => `<label class="field" style="${t ? 'grid-column:1/-1' : ''}"><span style="font-size:12px;font-weight:700">${l}</span>${t ? `<textarea data-e="${k}" rows="2">${esc(s[k] || '')}</textarea>` : `<input data-e="${k}" value="${esc(s[k] || '')}">`}</label>`).join('')}</div>
     <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small" type="button" data-edit-save>Save details</button><span class="muted" data-edit-msg style="font-size:12px"></span></div></details>`;
 }
+/** How the partner is billed: one invoice per order, or one consolidated invoice each month (Reports → To invoice). */
+const invMode = (s) => s.invoiceMode || (s.type === 'ARTIST' ? 'MONTHLY' : 'PER_ORDER');
+function invoiceModeCtl(s) {
+  if (s.status !== 'APPROVED') return '';
+  const m = invMode(s);
+  return `<label title="Reports → To invoice lists what is owed to them until it is billed">Invoices<select data-f="invmode"><option value="PER_ORDER" ${m === 'PER_ORDER' ? 'selected' : ''}>One per order</option><option value="MONTHLY" ${m === 'MONTHLY' ? 'selected' : ''}>One consolidated a month</option></select></label><button class="btn small ghost" data-a="invoiceModeSeller" type="button">Save invoicing</button>`;
+}
 function supplierCard(s) {
   const fr = s.type === 'FRAMER';
   return `<article class="mk-card" data-seller="${esc(s.id)}">
@@ -244,6 +251,7 @@ function supplierCard(s) {
     ${s.adminNote ? `<div class="muted">Note: ${esc(s.adminNote)}</div>` : ''}
     ${editBox(s)}
     <div class="mk-act">
+      ${invoiceModeCtl(s)}
       <label>Note to ${fr ? 'frame shop' : 'delivery partner'}<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
@@ -275,6 +283,7 @@ function sellerCard(s) {
       <label>Kalai delivery fee (⃃)<input type="number" min="0" step="1" data-f="fee" value="${esc(s.kalaiDeliveryFee ?? 30)}"></label>
       ${s.type === 'ARTIST' ? `<label title="The artist's share of each framed print sold of their works, added to the print price">Print royalty %<input type="number" min="0" max="50" step="0.5" data-f="royalty" value="${esc(s.royaltyPct ?? 10)}"></label><label title="The artist's share of each image licence sold of their works (% of the licence price)">Licence royalty %<input type="number" min="0" max="90" step="0.5" data-f="licroyalty" value="${esc(s.licenceRoyaltyPct ?? 30)}"></label>
       <label title="Shown on their artist bio on the website">Artist photo<input type="file" accept="image/*" data-f="photofile"><input type="hidden" data-f="photo" value=""></label>` : ''}` : ''}
+      ${invoiceModeCtl(s)}
       <label>Note to seller<input class="note" data-f="note" maxlength="500" value=""></label>
       ${s.status === 'APPROVED' ? '<button class="btn small" data-a="approveSeller" type="button">Save rates</button><button class="btn small ghost" data-a="suspendSeller" type="button">Suspend</button>'
         : s.status === 'SUSPENDED' ? '<button class="btn small" data-a="approveSeller" type="button">Re-activate</button>'
@@ -426,6 +435,7 @@ function wireCards() {
       if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); data.licenceRoyaltyPct = f('licroyalty'); if (f('photo')) data.photoKey = f('photo'); }
       if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
       if (a === 'approveListing') data.commissionPct = f('pct');
+      if (a === 'invoiceModeSeller') data.invoiceMode = f('invmode');
       card.querySelectorAll('button').forEach((x) => { x.disabled = true; }); msg.textContent = '';
       try {
         const r = await act(a, data);

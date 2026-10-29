@@ -3154,6 +3154,12 @@ async function marketAdmin(ev: ApiEvent) {
   if (action.endsWith('Seller')) {
     const p = plain(await getRow(S, { id: { S: id } }));
     if (!p) throw new Error('Seller not found');
+    // How this partner is billed: one invoice per order, or one consolidated invoice a month (artists: monthly by default).
+    if (action === 'invoiceModeSeller') {
+      const row = { ...p, invoiceMode: d.invoiceMode === 'MONTHLY' ? 'MONTHLY' : 'PER_ORDER', updatedAt: now };
+      await putRow(S, row);
+      return { profile: row };
+    }
     if (action === 'approveSeller') {
       const pct = numIn(d.commissionPct, 90), fee = numIn(d.kalaiDeliveryFee, 1000);
       const wasApproved = p.status === 'APPROVED';
