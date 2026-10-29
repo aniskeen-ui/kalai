@@ -103,7 +103,9 @@ function frameSpecText(e) {
   const sp = specOf(e, parseDetails(e.details));
   if (sp.style === 'none') return '';
   const style = (RC_STYLES.find(([k]) => k === sp.style) || [, ''])[1];
-  return `${style ? `${style} frame` : 'Frame'} ${sp.size}${/×/.test(sp.size) ? ' cm' : ''}${['PRICE', 'COMMISSION'].includes(e.kind) ? ', white mount, glass' : ''}`;
+  // Several copies of a print: the frame shop makes that many frames (UW6D: 2 × A3 showed as one frame).
+  const n = ['GIFT', 'PHOTO'].includes(e.kind) ? copiesOf(parseDetails(e.details)) : 1;
+  return `${n > 1 ? `${n} × ` : ''}${style ? `${style} frame` : 'Frame'} ${sp.size}${/×/.test(sp.size) ? ' cm' : ''}${['PRICE', 'COMMISSION'].includes(e.kind) ? ', white mount, glass' : ''}`;
 }
 function estCosts(e) {
   if (!e) return {};

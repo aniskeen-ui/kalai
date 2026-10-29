@@ -1295,7 +1295,8 @@ function drawCartUi() {
   }
   const a = lastAddr || {};
   t.innerHTML = '';
-  b.innerHTML = `<div style="font-size:13px;color:var(--muted)">${items.length} item${items.length > 1 ? 's' : ''} · ${money(sub)}</div><form id="coForm" novalidate style="display:grid;gap:8px">
+  // Same count as the cart heading (copies, not lines): it said "2 items" above and "1 item" here.
+  b.innerHTML = `<div style="font-size:13px;color:var(--muted)">${units} item${units > 1 ? 's' : ''} · ${money(sub)}</div><form id="coForm" novalidate style="display:grid;gap:8px">
       <b style="font-size:15px">${gifts ? 'Your details' : 'Delivery address'}</b>
       <input name="name" placeholder="${gifts ? 'Your name' : "Receiver's name"}" autocomplete="name" value="${esc(a.name)}" aria-label="Name">
       <input name="phone" type="tel" inputmode="tel" placeholder="Mobile, e.g. +971 50 123 4567" autocomplete="tel" value="${esc(a.phone)}" aria-label="Mobile">

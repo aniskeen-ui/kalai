@@ -1635,7 +1635,7 @@ let tt;function toast(m){const t=document.getElementById("toast");t.textContent=
      <div class="info"><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;padding-right:34px">${p.painting?"Framed print · fine-art print of the painting":"Framed print · fine-art photographic print"}</div>
       <h2 style="font-size:30px">${esc2(p.name)}</h2>${p.code?`<p class="note" style="margin:0" class="mono">${esc2(p.code)}</p>`:""}
       <div class="pprice"><b id="prPrice"></b> <span class="note" id="prNote"></span></div>${askShip(p.name,p.code||p.id,"Framed print")}
-      ${p.desc?`<p class="note" style="font-size:15px;margin:0">${esc2(p.desc)}</p>`:""}
+      ${p.desc?`<p class="note pr-desc" style="font-size:15px;margin:0;white-space:pre-line">${esc2(p.desc)}</p>`:""}
       <form id="prForm" novalidate style="display:grid;gap:12px">
        <div class="two"><div class="field"><label for="prSize">Size</label><select id="prSize">${SZ.map(z=>`<option value="${z[0]}">${z[1]}</option>`).join("")}</select></div>
         <div class="field"><label for="prFr">Frame</label><select id="prFr">${FR.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join("")}</select></div></div>

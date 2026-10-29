@@ -350,7 +350,7 @@ function jobCard(j) {
         ${pr ? `<dt>Hand the print to</dt><dd>${addr(j.handTo)}</dd>` : fr ? `${j.collectFrom ? `<dt>Collect the print from</dt><dd>${addr(j.collectFrom)}${j.collectFrom.ready ? ' · <b>ready</b>' : ''}</dd>` : ''}<dt>Deliver to</dt><dd>${addr(j.to)}</dd>` : `<dt>Pick up from</dt><dd>${addr(j.from)}</dd><dt>Deliver to</dt><dd>${addr(j.to)}</dd>`}
       </dl>
     </div>
-    ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? 'drawing' : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
+    ${j.hasPhoto ? `<div style="display:flex;gap:14px;flex-wrap:wrap"><button class="linkbtn" data-photo>Show the ${j.printJob ? (/Little/i.test(j.kind || '') ? 'drawing' : 'picture') : 'artwork photo'}</button>${j.printJob ? '<button class="linkbtn" data-dl>⬇ Download the full-size file to print</button>' : ''}</div><div data-img></div>` : ''}
     ${j.label ? `<div class="awb-box" data-awbbox><div><span class="muted">Airway bill</span> ${j.label.awb ? `<b class="mono">${esc(j.label.awb)}</b>` : ''} · courier <b>${esc(j.label.courier)}</b></div>
       ${awbButtons()}
       <div class="muted" style="font-size:12px">${j.role === 'delivery' ? 'The shop sticks this label on the parcel: scan it at pickup.' : 'Print it (4 × 6 in label, or on A4 and cut it out), stick it on the packed parcel: the courier scans it at pickup.'}</div></div>`

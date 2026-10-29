@@ -112,6 +112,20 @@ def _(b):
     need('has(c)' in src[src.index('function addressText'):src.index('function addressText') + 900], 'address repeats the country')
     return errs
 
+@check('Frame job for 2 copies of a print says "2 × White frame A3" (UW6D: Rafi saw one frame)')
+def _(b):
+    rafi = dict(SELLERS[1], rateCard=json.dumps({'frames': {'white': {'A3': 60}}, 'fixingIncluded': True}))
+    pr = dict(SELLERS[2], rateCard=json.dumps({'print': {'A3': 19}}))
+    it = order(id='u6', ref='KA-261029-UW6D', kind='PHOTO', title='Framed print: Feathers of grace (A3)', status='PAID', deliveryCountry='UAE', deliveryEmirate='Dubai', deliveryAddress='Studio',
+               details=json.dumps({'Print': 'Feathers of grace', 'Size': 'A3 (30 × 42 cm)', 'Frame': 'White frame, white mount', 'Copies': '2'}))
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [SELLERS[0], rafi, pr], 'items': [it], 'costing': []}
+    pg, errs = open_page(b, 'admin.html#order=u6', seed)
+    pg.locator('[data-jobsend="printer"]').click(); pg.wait_for_timeout(1500)
+    pg.select_option('[data-js="framer-sid"]', 'f1'); pg.locator('[data-jobsend="framer"]').click(); pg.wait_for_timeout(1500)
+    jobs = pg.evaluate("JSON.parse(JSON.parse(localStorage.getItem('stubdb')).costing.find(c => c.enquiryId === 'u6').supplierJobs)")
+    need(jobs.get('framer', {}).get('spec') == '2 × White frame A3', f"frame job spec: {jobs.get('framer', {}).get('spec')}")
+    return errs
+
 @check('Order: Little Artists flow Print shop → Frame shop → Customer')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS,
@@ -865,6 +879,25 @@ def _(b):
     need('First order' in pg.inner_text('#detail'), 'first link did not open the order')
     pg.evaluate("location.hash = '#order=KA-261028-77QM'"); pg.wait_for_timeout(800)
     need('Second order' in pg.inner_text('#detail'), 'second link left the first order open')
+    return errs
+
+
+@check('Framed print details: the description keeps its lines ("Artwork Type: … Medium: … Perfect for: …" ran together)')
+def _(b):
+    root = os.path.dirname(os.path.dirname(HERE))
+    src = open(os.path.join(root, 'index.html')).read()
+    need('class="note pr-desc" style="font-size:15px;margin:0;white-space:pre-line"' in src, 'print description is not shown with its line breaks')
+    return []
+
+
+@check('Cart checkout: 2 copies of a print count as 2 items everywhere (heading said 2, checkout said 1)')
+def _(b):
+    pg, errs = open_page(b, 'index.html', {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [], 'items': []}, wait=1500)
+    pg.evaluate("""localStorage.setItem('kalai-cart3', JSON.stringify([{t:'PRINT', name:'Feathers of grace', sub:'Framed print · A3 · white frame · 2 copies', qty:2, price:580}]))""")
+    pg.reload(); pg.wait_for_timeout(2500)
+    pg.click('#openCart'); pg.wait_for_timeout(500); pg.click('#cartGo'); pg.wait_for_timeout(1200)
+    head = pg.inner_text('#drawer header h2'); body = pg.inner_text('#cartBody')[:200]
+    need('2 items' in head and '2 items' in body, f'heading {head!r} vs checkout {body[:60]!r}')
     return errs
 
 
