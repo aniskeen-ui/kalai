@@ -777,6 +777,14 @@ def _(b):
     return []
 
 
+@check('Test site: customer emails go to the studio inbox too, marked who they were for (real customers got test emails)')
+def _(b):
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    i = src.index('async function sendMail'); body = src[i:i + 1200]
+    need("|| `customer ${m.to}`" in body, 'a customer email on the test site still goes to the customer')
+    return []
+
+
 @check('Cancellation withdraws supplier jobs not started yet (UHBU: refunded, frame shop job still open)')
 def _(b):
     src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()

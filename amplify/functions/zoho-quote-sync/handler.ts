@@ -5256,7 +5256,9 @@ async function supplierNameFor(email: string): Promise<string | null> {
 async function sendMail(m: Mail) {
   if (!m.to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.to)) return;
   if (TEST_SITE) {
-    const sup = m.to.toLowerCase() === STUDIO_EMAIL ? null : await supplierNameFor(m.to);
+    // Test site: nothing reaches a real supplier or customer. Every email still fires (so the trigger can be checked)
+    // but goes to the studio, marked with who it was for (29 Oct: customer emails paused while testing).
+    const sup = m.to.toLowerCase() === STUDIO_EMAIL ? null : (await supplierNameFor(m.to)) || `customer ${m.to}`;
     if (sup) m = { ...m, to: STUDIO_EMAIL, subject: `[TEST → ${sup}] ${m.subject.replace(/^\[TEST\]\s*/, '')}`, lines: [`<i>Test site: this email would have gone to ${h(sup)} (${h(m.to)}). It was sent to the studio instead.</i>`, ...m.lines] };
   }
   if (TEST_SITE && !m.subject.startsWith('[TEST')) m = { ...m, subject: `[TEST] ${m.subject}` };
