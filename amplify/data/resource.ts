@@ -376,6 +376,7 @@ const schema = a.schema({
       royaltyPct: a.float(), // artists: their share of each print sold of their works (% of the print price)
       licenceRoyaltyPct: a.float(), // artists: their share of each image licence of their works (% of the licence price)
       refundRecoveryPct: a.float(), // artists: % of what they were paid that is recovered by a debit note when the customer is refunded
+      creditDays: a.float(), // days to pay the partner: from delivery + 48 h (per-order bills) or from the monthly bill date
       invoiceMode: a.string(), // PER_ORDER | MONTHLY: one invoice per order or one consolidated invoice a month (artists default MONTHLY)
       catalogue: a.string(), // frame shops: their frames (JSON [{name, style, material, colour, widthMm, extra, photoKey, note}])
     })

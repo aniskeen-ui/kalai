@@ -635,6 +635,16 @@ function artistBillOf(e, name) {
   if (e.artistMonthBill) return { number: e.artistMonthBill };
   return zohoDocsOf(e).find((x) => x.group === 'PURCHASE' && /Bill/.test(x.type) && !/rework/i.test(x.type) && x.status !== 'void' && (x.id === e.zohoBillId || (first && String(x.vendor || '').toLowerCase().includes(first)))) || (e.zohoBillId ? { number: e.zohoBill || 'in Zoho' } : null);
 }
+/** An artist's agreement: mode and credit days (profile, else Siva's in Pricing); defaults per order 30, monthly 15. */
+function artistTermsOf(e) {
+  const p = artists.find((a) => (e.artistId && a.id === e.artistId) || (e.artistName && String(a.business || '').toLowerCase() === String(e.artistName).toLowerCase()));
+  const mode = p ? (p.invoiceMode === 'MONTHLY' ? 'MONTHLY' : 'PER_ORDER') : rates.sivaInvoiceMode === 'MONTHLY' ? 'MONTHLY' : 'PER_ORDER';
+  const raw = p ? p.creditDays : rates.sivaCreditDays;
+  return { mode, days: raw != null && raw !== '' ? Number(raw) : mode === 'MONTHLY' ? 15 : 30 };
+}
+const ymdAdd = (ymd, n) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+/** Payable from: delivery + the 48-hour damage window (a 50% cancellation: at once); null while not delivered. */
+const payStartOf = (e) => (e.deliveredAt ? ymdAdd(dDay(e.deliveredAt), 2) : e.refundAction === 'CANCEL_HALF' ? dDay(e.refundAt || e.updatedAt) : null);
 function payLines() {
   const out = [];
   const prof = (id, name) => [...artists, ...suppliers].find((p) => (id && p.id === id) || (name && String(p.business || '').toLowerCase() === String(name).toLowerCase()));
@@ -659,7 +669,7 @@ function payLines() {
         const raised = e.artistDebitNote ? { number: e.artistDebitNote } : zohoDocsOf(e).find((x) => /^Debit note/.test(x.type) && x.status !== 'void' && String(x.vendor || x.party || '').toLowerCase().includes(first));
         const orig = artistBillOf(e, name0), base = rl?.recovery ? r2((rl.k?.artist || 0) + rl.recovery) : dn.amount;
         const dDate = e.refundAt || e.updatedAt || e.createdAt;
-        out.push({ e, partner: name0, type: 'ARTIST', role: 'artist', mode: prof(e.artistId, name0)?.invoiceMode || 'MONTHLY', date: dDate, sortDate: monthOf(dDate) === monthOf(invDate) ? invDate : dDate,
+        out.push({ e, partner: name0, type: 'ARTIST', role: 'artist', mode: artistTermsOf(e).mode, date: dDate, sortDate: monthOf(dDate) === monthOf(invDate) ? invDate : dDate,
           what: dn.what, amount: -dn.amount, inr: null, debit: true, billed: !!raised, billNo: raised?.number || '',
           origBill: orig?.number || '', origAmount: base,
           against: `against ${orig?.number ? `bill ${orig.number}` : 'its invoice line'} of ⃃ ${money(base)}${rl?.recovery ? ` × ${rl.recoveryPct}%` : ''}${monthOf(dDate) !== monthOf(invDate) ? ` (${monthName(monthOf(invDate))})` : ''}` });
@@ -670,14 +680,14 @@ function payLines() {
         const half = e.refundAction === 'CANCEL_HALF';
         const inr = art && c?.artistPriceInr ? Number(c.artistPriceInr) * (half ? 0.5 : 1) : null;
         const ry = art ? null : royaltyOf(e);
-        out.push({ e, partner: name, type: 'ARTIST', role: 'artist', mode: p?.invoiceMode || 'MONTHLY', date: e.artistShippedAt || e.deliveredAt || e.updatedAt || e.createdAt,
+        out.push({ e, partner: name, type: 'ARTIST', role: 'artist', mode: artistTermsOf(e).mode, date: e.artistShippedAt || e.deliveredAt || e.updatedAt || e.createdAt,
           what: art ? `${e.kind === 'COMMISSION' ? 'Commission' : 'Painting'}${half ? ' · 50% (cancelled after start)' : ''}` : `${e.kind === 'LICENCE' ? 'Licence' : 'Print'} royalty ${ry.pct}%`,
-          amount: amt, inr, billed: !!bill, billNo: bill?.number || '' });
+          amount: amt, inr, billed: !!bill, billNo: bill?.number || '', payStart: payStartOf(e), terms: artistTermsOf(e) });
         pushDebit();
       }
       // Artist's rework (repair / repaint after damage), once sent back.
       if (/^SIVA/.test(e.reworkType || '') && e.reworkSentAt && c?.reworkPriceInr) {
-        out.push({ e, partner: e.artistName || 'Siva Raja', type: 'ARTIST', role: 'artist', mode: prof(e.artistId, e.artistName || 'Siva Raja')?.invoiceMode || 'MONTHLY', date: e.reworkSentAt,
+        out.push({ e, partner: e.artistName || 'Siva Raja', type: 'ARTIST', role: 'artist', mode: artistTermsOf(e).mode, date: e.reworkSentAt,
           what: e.reworkType === 'SIVA_REPAINT' ? 'Rework: repaint' : 'Rework: repair', amount: r2(Number(c.reworkPriceInr) * rates.fx), inr: Number(c.reworkPriceInr), rework: true,
           billed: !!(e.zohoReworkBillId || e.reworkMonthBill), billNo: e.reworkMonthBill || (e.zohoReworkBillId ? 'in Zoho' : '') });
       }
@@ -696,6 +706,16 @@ function payLines() {
   }
   // Newest first; a debit note sits right under the invoice line it reduces (same order, invoice first).
   return out.map((l) => ({ ...l, month: monthOf(l.date) })).sort((a, b) => String(b.sortDate || b.date).localeCompare(String(a.sortDate || a.date)) || String(a.e.ref).localeCompare(String(b.e.ref)) || (a.debit ? 1 : 0) - (b.debit ? 1 : 0));
+}
+/** Status of a To invoice line, with the artist's agreement: when it can be billed and when it falls due. */
+function payStatus(l) {
+  const no = l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : '';
+  if (l.debit) return l.billed ? `Raised${no}` : '<b>Debit note to raise</b>';
+  if (l.type !== 'ARTIST' || !l.terms) return l.billed ? `Billed${no}` : '<b>To invoice</b>';
+  const due = l.payStart ? ymdAdd(l.payStart, l.terms.days) : null;
+  if (l.billed) return `Billed${no}${l.terms.mode === 'PER_ORDER' && due ? `<br><span class="muted" style="font-size:12px">due ${esc(due)}</span>` : ''}`;
+  if (l.terms.mode === 'PER_ORDER') return l.e.artistInvoiceNo ? `Invoice <span class="mono">${esc(l.e.artistInvoiceNo)}</span> in<br><span class="muted" style="font-size:12px">${l.payStart ? 'bill being made' : 'bill made after delivery + 48 h'}</span>` : `<b>Their invoice due</b><br><span class="muted" style="font-size:12px">one per order · ${l.terms.days} days after delivery + 48 h</span>`;
+  return `<b>To invoice</b>${l.payStart ? '' : '<br><span class="muted" style="font-size:12px">not delivered yet</span>'}`;
 }
 function renderPayables() {
   if (!$('payList')) return;
@@ -717,10 +737,11 @@ function renderPayables() {
   $('payList').innerHTML = groups.size ? [...groups.values()].map((g) => {
     const f = g[0], due = r2(g.filter((l) => !l.billed && !l.debit).reduce((a, l) => a + l.amount, 0)), dn = r2(-g.filter((l) => !l.billed && l.debit).reduce((a, l) => a + l.amount, 0)), inr = g.filter((l) => !l.billed && l.inr).reduce((a, l) => a + l.inr, 0);
     const modeTxt = f.mode === 'MONTHLY' ? 'one consolidated invoice for the month' : 'one invoice per order';
-    const canBill = f.type === 'ARTIST' && g.some((l) => !l.billed);
+    // Monthly artists: the month's bill and debit notes; per-order artists invoice each order themselves, so only debit notes.
+    const canBill = f.type === 'ARTIST' && g.some((l) => !l.billed && (l.debit || l.mode === 'MONTHLY'));
     return `<details class="pay-grp" data-pay="${esc(f.partner)}" ${mon || groups.size <= 6 ? 'open' : ''}><summary><b>${esc(f.partner)}</b> <span class="muted">· ${esc(f.role)} · ${esc(monthName(f.month))} · ${g.length} order${g.length > 1 ? 's' : ''} · ${modeTxt}</span><span class="mono" style="margin-left:auto">${due ? `to invoice ⃃ ${money(due)}${inr ? ` (₹ ${Math.round(inr).toLocaleString('en-IN')})` : ''}` : dn ? '' : 'all billed'}${dn ? `${due ? ' · ' : ''}debit note −⃃ ${money(dn)}${due ? ` · net ⃃ ${money(r2(due - dn))}` : ''}` : ''}</span></summary>
-      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr class="${l.debit ? 'pay-debit' : ''}"><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${l.debit ? `↳ ${esc(l.what)}<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : esc(l.what)}</td><td class="num mono ${l.debit ? 'neg' : ''}">${l.amount < 0 ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${l.billed ? `${l.debit ? 'Raised' : 'Billed'}${l.billNo ? ` · <span class="mono">${esc(l.billNo)}</span>` : ''}` : `<b>${l.debit ? 'Debit note to raise' : 'To invoice'}</b>`}</td></tr>`).join('')}</tbody></table>
-      ${canBill ? `<div style="display:flex;justify-content:flex-end;margin:0 12px 12px"><button type="button" class="btn" data-mbill="${esc(f.partner)}|${esc(f.month)}">Create in Zoho…</button></div>` : ''}</details>`;
+      <table class="costs"><thead><tr><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${g.map((l) => `<tr class="${l.debit ? 'pay-debit' : ''}"><td>${esc(dDay(l.date))}</td><td><a href="#order=${esc(l.e.ref)}" class="mono">${esc(l.e.ref)}</a><br><span class="muted">${esc(l.e.title)}</span></td><td>${l.debit ? `↳ ${esc(l.what)}<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : esc(l.what)}</td><td class="num mono ${l.debit ? 'neg' : ''}">${l.amount < 0 ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td><td>${payStatus(l)}</td></tr>`).join('')}</tbody></table>
+      ${canBill ? `<div style="display:flex;justify-content:flex-end;margin:0 12px 12px"><button type="button" class="btn" data-mbill="${esc(f.partner)}|${esc(f.month)}">${f.mode === 'MONTHLY' ? 'Create in Zoho…' : 'Create debit notes in Zoho…'}</button></div>` : ''}</details>`;
   }).join('') : '<p class="muted">Nothing to invoice for this choice.</p>';
 }
 ['payWho', 'payMonth', 'payBilled'].forEach((id) => $(id) && ($(id).onchange = renderPayables));
@@ -736,14 +757,17 @@ if ($('payCsv')) $('payCsv').onclick = () => {
 /** Month-end proposal for one artist: tick the lines, check the bill number, then create the bill and debit notes in Zoho. */
 function monthBillDialog(partner, month) {
   const g = payLines().filter((l) => l.partner === partner && l.month === month && l.type === 'ARTIST' && !l.billed);
-  const inv = g.filter((l) => !l.debit), dn = g.filter((l) => l.debit);
+  const inv = g.filter((l) => !l.debit && l.mode === 'MONTHLY'), dn = g.filter((l) => l.debit);
+  const today = dDay(new Date().toISOString()), terms = (inv[0] || dn[0])?.terms || artistTermsOf((inv[0] || dn[0]).e);
+  // Only works past delivery + 48 h are ticked: the rest can still be ticked by hand (29 Oct).
+  const ready = (l) => !!l.payStart && l.payStart <= today;
   const code = partner.split(/\s+/).map((w) => w[0]).join('').toUpperCase() + (partner.trim().includes(' ') ? '' : partner.slice(1, 3).toUpperCase());
   let dlg = $('mbillDlg');
   if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'mbillDlg'; dlg.className = 'orep-dlg'; document.body.appendChild(dlg); }
-  const row = (l, i, kind) => `<tr><td><input type="checkbox" checked data-mb="${kind}" data-i="${i}" style="width:auto"></td><td class="mono">${esc(dDay(l.date))}</td><td><span class="mono">${esc(l.e.ref)}</span><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}${l.debit ? `<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : ''}</td><td class="num mono">${l.debit ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td></tr>`;
+  const row = (l, i, kind) => `<tr><td><input type="checkbox" ${kind === 'dn' || ready(l) ? 'checked' : ''} data-mb="${kind}" data-i="${i}" style="width:auto"></td><td class="mono">${esc(dDay(l.date))}</td><td><span class="mono">${esc(l.e.ref)}</span><br><span class="muted">${esc(l.e.title)}</span></td><td>${esc(l.what)}${l.debit ? `<br><span class="muted" style="font-size:12px">${esc(l.against || '')}</span>` : !ready(l) ? `<br><span class="muted" style="font-size:12px">${l.payStart ? `in the damage window until ${esc(l.payStart)}` : 'not delivered yet'}: left out</span>` : ''}</td><td class="num mono">${l.debit ? `−⃃ ${money(-l.amount)}` : `⃃ ${money(l.amount)}`}${l.inr ? `<br><span class="muted">₹ ${Math.round(l.inr).toLocaleString('en-IN')}</span>` : ''}</td></tr>`;
   dlg.innerHTML = `<div class="orep">
     <h2 style="margin:0">Proposal: ${esc(partner)} · ${esc(monthName(month))}</h2>
-    <p class="muted" style="margin:6px 0 12px">One bill in Zoho with a line per order${dn.length ? ', and one debit note (vendor credit) per refunded order' : ''}. Untick anything that should wait. ${location.hostname.startsWith('art.') ? '<b>Test site: Zoho keeps them as drafts.</b>' : ''}</p>
+    <p class="muted" style="margin:6px 0 12px">${inv.length ? `One bill in Zoho with a line per order, <b>due ${esc(ymdAdd(today, terms.days))}</b> (${terms.days} credit days)` : 'Debit notes in Zoho'}${inv.length && dn.length ? ', and one debit note (vendor credit) per refunded order' : ''}. Works not yet past delivery + 48 h are left unticked; untick anything else that should wait. ${location.hostname.startsWith('art.') ? '<b>Test site: Zoho keeps them as drafts.</b>' : ''}</p>
     ${inv.length ? `<div class="field" style="max-width:320px"><label for="mbNo">Bill number (the artist's invoice no.)</label><input id="mbNo" maxlength="40" value="${esc(code)}-${esc(month.replace('-', ''))}"></div>
     <h3 style="margin:12px 0 6px">Bill: what we pay ${esc(partner)}</h3>
     <table class="costs"><thead><tr><th></th><th>Date</th><th>Order</th><th>For</th><th class="num">Amount</th></tr></thead><tbody>${inv.map((l, i) => row(l, i, 'inv')).join('')}</tbody></table>` : ''}
@@ -2013,6 +2037,8 @@ function showRates() {
       <div class="two">
         <div class="field"><label for="rSivaRoy">Siva's print royalty (%)</label><input id="rSivaRoy" type="number" min="0" max="50" step="0.5" value="${rates.sivaRoyalty ?? 10}"><span class="muted" style="font-size:12px">His share of each framed print of his paintings, added to the print price. Portal artists: set in Artists &amp; sellers.</span></div>
         <div class="field"><label for="rSivaLic">Siva's licence royalty (%)</label><input id="rSivaLic" type="number" min="0" max="90" step="0.5" value="${rates.sivaLicenceRoyalty ?? 30}"><span class="muted" style="font-size:12px">His share of each image licence of his works (% of the licence price). Portal artists: set in Artists &amp; sellers; a work can have its own in Catalogue.</span></div>
+        <div class="field"><label for="rSivaMode">Siva's invoicing</label><select id="rSivaMode"><option value="PER_ORDER" ${rates.sivaInvoiceMode !== 'MONTHLY' ? 'selected' : ''}>One per order</option><option value="MONTHLY" ${rates.sivaInvoiceMode === 'MONTHLY' ? 'selected' : ''}>One consolidated a month</option></select><span class="muted" style="font-size:12px">The agreement with Siva. Portal artists: set in Artists &amp; sellers.</span></div>
+        <div class="field"><label for="rSivaDays">Siva's credit days</label><input id="rSivaDays" type="number" min="0" max="180" step="1" value="${rates.sivaCreditDays ?? ''}" placeholder="${rates.sivaInvoiceMode === 'MONTHLY' ? 15 : 30}"><span class="muted" style="font-size:12px">Per order: days after delivery + 48 h. Monthly: days after the month's bill. Blank = 30 per order, 15 monthly.</span></div>
         <div class="field"><label for="rRecov">Artist recovery on a refund (%)</label><input id="rRecov" type="number" min="0" max="100" step="5" value="${rates.recoveryPct ?? 50}"><span class="muted" style="font-size:12px">When a customer is refunded (damage, rejection), this share of what the artist was paid is recovered with a debit note. Portal artists can have their own % in Artists &amp; sellers.</span></div>
         <div class="field"><label for="rFx">Exchange rate (⃃ per ₹)</label><input id="rFx" type="number" min="0" step="0.0001" value="${rates.fx}"></div>
         ${pct('rCus', 'Customs (%)', rates.customs, 'of artist price + India courier')}
@@ -2057,7 +2083,7 @@ function showRates() {
     host.querySelectorAll('.err').forEach((x) => x.remove());
     const tiers = {};
     Object.keys(t).forEach((k) => { tiers[k] = { label: $('rL' + k).value.trim(), framing: t[k].framing ?? 0, courier: n($('rC' + k).value) ?? 0 }; });
-    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, sivaLicenceRoyalty: n($('rSivaLic').value) ?? 30, recoveryPct: n($('rRecov').value) ?? 50, fx: n($('rFx').value) ?? 0,
+    const data = { tiers, defaults: { framer: $('rDefFr').value, delivery: $('rDefDl').value, printer: $('rDefPr').value }, local: rates.local ?? 0, printA4: rates.printA4 ?? 0, printA3: rates.printA3 ?? 0, sivaRoyalty: n($('rSivaRoy').value) ?? 0, sivaLicenceRoyalty: n($('rSivaLic').value) ?? 30, recoveryPct: n($('rRecov').value) ?? 50, sivaInvoiceMode: $('rSivaMode').value, sivaCreditDays: $('rSivaDays').value === '' ? null : n($('rSivaDays').value), fx: n($('rFx').value) ?? 0,
       customs: (n($('rCus').value) ?? 0) / 100, fee: (n($('rFee').value) ?? 0) / 100, ins: (n($('rIns').value) ?? 0) / 100, reserve: (n($('rRes').value) ?? 0) / 100, margins: Object.fromEntries(CATS.map(([k]) => [k, (n($('rMg_' + k).value) ?? 0) / 100])), margin: (n($('rMg_collection').value) ?? 0) / 100,
       vat: (n($('rVat').value) ?? 0) / 100, vendors: $('rVendors').value.trim(), round25: $('rRound').checked, round9: false, updatedAt: new Date().toISOString(),
       // The old Pricing master copies (courier, frame table, frame source) are dropped: one set of figures now.

@@ -832,7 +832,8 @@ async function createArtistBill(img: Img) {
       vendor_id: (await orderVendor(img)).id,
       bill_number: str(img, 'artistInvoiceNo'),
       reference_number: ref,
-      date: dubaiToday(),
+      date: str(img, 'artistInvoiceAt') ? new Date(Date.parse(str(img, 'artistInvoiceAt')) + 4 * 3600_000).toISOString().slice(0, 10) : dubaiToday(),
+      due_date: addDays(artistDueStart(img) || dubaiToday(), (await artistTerms(img)).days),
       line_items: lines.map((l) => ({ ...l, ...(account ? { account_id: account } : {}) })),
       notes: `Kalai Art House order ${ref}.`,
     }),
@@ -874,6 +875,26 @@ async function payVendor(img: Img) {
 }
 
 /** Run whichever purchase step is due. Never throws: problems go to purchaseMessage. */
+/** The artist's billing agreement: one bill per order or one consolidated bill a month, and the credit days.
+ *  Portal artists: their master (Artists & sellers); Siva: Pricing → Margin & charges. Default: per order, 30 days. */
+async function artistTerms(img: Img): Promise<{ mode: 'PER_ORDER' | 'MONTHLY'; days: number }> {
+  let mode: unknown, days: unknown;
+  try {
+    if (str(img, 'artistId')) { const { S } = mtables(); const p = plain(await getRow(S, { id: { S: str(img, 'artistId') } })); mode = p?.invoiceMode; days = p?.creditDays; }
+    else { const row = plain(await getRow(process.env.RATES_TABLE!, { key: { S: 'default' } })); let rd: unknown = row?.data; for (let i = 0; i < 2 && typeof rd === 'string'; i++) rd = JSON.parse(rd); mode = (rd as Dict)?.sivaInvoiceMode; days = (rd as Dict)?.sivaCreditDays; }
+  } catch { /* defaults */ }
+  const m = mode === 'MONTHLY' ? 'MONTHLY' : 'PER_ORDER';
+  const n = Number(days);
+  return { mode: m, days: Number.isFinite(n) && n >= 0 && days !== null && days !== '' && days !== undefined ? Math.min(180, Math.round(n)) : m === 'MONTHLY' ? 15 : 30 };
+}
+const addDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+/** Credit days run from delivery + the 48-hour damage window (29 Oct); a 50% cancellation from today. */
+function artistDueStart(img: Img): string | null {
+  const del = str(img, 'deliveredAt') || (['DELIVERED', 'REFUNDED', 'REPLACEMENT'].includes(str(img, 'status')) ? new Date().toISOString() : '');
+  if (del) return addDays(new Date(Date.parse(del) + 4 * 3600_000).toISOString().slice(0, 10), 2);
+  if (str(img, 'refundAction') === 'CANCEL_HALF' || str(img, 'purchaseState') === 'CANCELLED') return dubaiToday();
+  return null;
+}
 async function purchaseSteps(start: Img) {
   if (str(start, 'kind') === 'MARKET') { await marketSteps(start); return; }
   let img: Img = { ...start };
@@ -896,6 +917,14 @@ async function purchaseSteps(start: Img) {
         purchaseMessage: `${po.number}: ${vendorName(img)} · AED ${po.total.toLocaleString('en-US')} owed when the artist's invoice arrives (price fixed)`,
       });
       img = { ...img, zohoPO: { S: po.number }, zohoPOId: { S: po.id } };
+    }
+    // The artist's invoice is in, but the work isn't delivered yet: the bill is made after delivery (+48 h), so the
+    // credit days start then and a damaged delivery is settled first (29 Oct).
+    if (str(img, 'artistInvoiceNo') && !str(img, 'zohoBillId') && !artistDueStart(img)) {
+      const t = await artistTerms(img);
+      const m = `Invoice ${str(img, 'artistInvoiceNo')} from ${vendorName(img)} received: the bill is made in Zoho when the work is delivered, due ${t.days} days after delivery + 48 h.`;
+      if (str(img, 'purchaseMessage') !== m) await writeBack(id, { purchaseMessage: m });
+      return;
     }
     if (testing) {
       // Test mode: Siva's bill as a draft (on his invoice number); the payment to him is never recorded.
@@ -2935,7 +2964,7 @@ async function artistMonthBill(d: Dict) {
   if (lines.length) {
     const billNo = txt(d.billNo, 40) || `${vendor.name.split(/\s+/).map((w) => w[0]).join('').toUpperCase()}-${month.replace('-', '')}`;
     const r = await zoho('/bills', { method: 'POST', body: JSON.stringify({
-      vendor_id: vendor.id, bill_number: billNo, reference_number: `Monthly ${month} (${lines.length} orders)`.slice(0, 50), date: today,
+      vendor_id: vendor.id, bill_number: billNo, reference_number: `Monthly ${month} (${lines.length} orders)`.slice(0, 50), date: today, due_date: addDays(today, (await artistTerms(first)).days),
       line_items: lines.map((l) => { const e = rows.get(l.id)!; return { name: `${str(e, 'ref')} · ${l.what}`.slice(0, 100), description: `${str(e, 'title')} (${str(e, 'ref')})`.slice(0, 2000), rate: l.amount, quantity: 1, ...(account ? { account_id: account } : {}) }; }),
       notes: `Kalai Art House: ${vendor.name}'s consolidated invoice for ${month}. Orders: ${lines.map((l) => str(rows.get(l.id)!, 'ref')).join(', ')}`.slice(0, 1000) }) });
     if (!r.ok || !r.body.bill) {
@@ -3223,7 +3252,8 @@ async function marketAdmin(ev: ApiEvent) {
     if (!p) throw new Error('Seller not found');
     // How this partner is billed: one invoice per order, or one consolidated invoice a month (artists: monthly by default).
     if (action === 'invoiceModeSeller') {
-      const row = { ...p, invoiceMode: d.invoiceMode === 'MONTHLY' ? 'MONTHLY' : 'PER_ORDER', updatedAt: now };
+      const days = d.creditDays === undefined || d.creditDays === '' ? undefined : Math.min(180, Math.max(0, Math.round(Number(d.creditDays) || 0)));
+      const row = { ...p, invoiceMode: d.invoiceMode === 'MONTHLY' ? 'MONTHLY' : 'PER_ORDER', ...(days !== undefined ? { creditDays: days } : {}), updatedAt: now };
       await putRow(S, row);
       return { profile: row };
     }

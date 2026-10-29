@@ -233,11 +233,13 @@ function editBox(s) {
     <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn small" type="button" data-edit-save>Save details</button><span class="muted" data-edit-msg style="font-size:12px"></span></div></details>`;
 }
 /** How the partner is billed: one invoice per order, or one consolidated invoice each month (Reports → To invoice). */
-const invMode = (s) => s.invoiceMode || (s.type === 'ARTIST' ? 'MONTHLY' : 'PER_ORDER');
+const invMode = (s) => s.invoiceMode || 'PER_ORDER';
+// Artists: the billing agreement (one bill per order or one consolidated a month) and the credit days. Per order: due
+// N days after delivery + 48 h; monthly: N days after the month's bill. Defaults 30 / 15 days (29 Oct).
 function invoiceModeCtl(s) {
   if (s.status !== 'APPROVED') return '';
-  const m = invMode(s);
-  return `<label title="Reports → To invoice lists what is owed to them until it is billed">Invoices<select data-f="invmode"><option value="PER_ORDER" ${m === 'PER_ORDER' ? 'selected' : ''}>One per order</option><option value="MONTHLY" ${m === 'MONTHLY' ? 'selected' : ''}>One consolidated a month</option></select></label><button class="btn small ghost" data-a="invoiceModeSeller" type="button">Save invoicing</button>`;
+  const m = invMode(s), art = s.type === 'ARTIST';
+  return `<label title="Agreed with the partner. Reports → To invoice lists what is owed until it is billed">Invoices<select data-f="invmode"><option value="PER_ORDER" ${m === 'PER_ORDER' ? 'selected' : ''}>One per order</option><option value="MONTHLY" ${m === 'MONTHLY' ? 'selected' : ''}>One consolidated a month</option></select></label>${art ? `<label title="Per order: days after delivery + 48 h. Monthly: days after the month's bill. Blank = 30 per order, 15 monthly">Credit days<input type="number" min="0" max="180" step="1" data-f="creditdays" value="${esc(s.creditDays ?? '')}" placeholder="${m === 'MONTHLY' ? 15 : 30}" style="width:80px"></label>` : ''}<button class="btn small ghost" data-a="invoiceModeSeller" type="button">Save invoicing</button>`;
 }
 function supplierCard(s) {
   const fr = s.type === 'FRAMER';
@@ -436,7 +438,7 @@ function wireCards() {
       if (a === 'approveSeller' && card.querySelector('[data-f="royalty"]')) { data.royaltyPct = f('royalty'); data.licenceRoyaltyPct = f('licroyalty'); data.recoveryPct = f('recovery'); if (f('photo')) data.photoKey = f('photo'); }
       if (a === 'approveSeller' && card.querySelector('[data-f="pct"]')) { data.commissionPct = f('pct'); data.kalaiDeliveryFee = f('fee'); if (f('pct') === '') { msg.textContent = 'Set the commission %.'; return; } }
       if (a === 'approveListing') data.commissionPct = f('pct');
-      if (a === 'invoiceModeSeller') data.invoiceMode = f('invmode');
+      if (a === 'invoiceModeSeller') { data.invoiceMode = f('invmode'); if (card.querySelector('[data-f="creditdays"]')) data.creditDays = f('creditdays'); }
       card.querySelectorAll('button').forEach((x) => { x.disabled = true; }); msg.textContent = '';
       try {
         const r = await act(a, data);

@@ -711,16 +711,16 @@ def _(b):
 
 @check('To invoice: lines visible per artist; Create in Zoho shows a proposal (bill + debit notes), then marks them Billed / Raised (asked 29 Oct)')
 def _(b):
-    art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE', 'refundRecoveryPct': 50}
-    r1 = order(id='r1', ref='KA-261029-BLVP', title='Circle of Colours', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=375, artistName='Sobana', artistShippedAt='2026-10-29T05:00:00Z', quotedPrice=375)
-    r2 = order(id='r2', ref='KA-261028-SOB2', title='Second work', status='DELIVERED', artistName='Sobana', artistShippedAt='2026-10-28T05:00:00Z', quotedPrice=400)
+    art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE', 'refundRecoveryPct': 50, 'invoiceMode': 'MONTHLY', 'creditDays': 15}
+    r1 = order(id='r1', ref='KA-261029-BLVP', title='Circle of Colours', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=375, artistName='Sobana', artistShippedAt='2026-10-20T05:00:00Z', deliveredAt='2026-10-22T05:00:00Z', quotedPrice=375)
+    r2 = order(id='r2', ref='KA-261028-SOB2', title='Second work', status='DELIVERED', artistName='Sobana', artistShippedAt='2026-10-21T05:00:00Z', deliveredAt='2026-10-23T05:00:00Z', quotedPrice=400)
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS + [art], 'items': [r1, r2],
             'costing': [{'enquiryId': 'r1', 'costs': json.dumps({'artistAed': 216})}, {'enquiryId': 'r2', 'costs': json.dumps({'artistAed': 250})}]}
     pg, errs = open_page(b, 'admin.html#reports', seed, wait=3000)
     need('KA-261028-SOB2' in pg.inner_text('#payList'), 'order lines are hidden (group closed)')
     pg.click('[data-mbill]'); pg.wait_for_timeout(400)
     t = pg.inner_text('#mbillDlg')
-    need('Proposal: Sobana' in t and '⃃ 466.00' in t and '−⃃ 108.00' in t and '⃃ 358.00' in t, f'proposal: {t[:600]}')
+    need('Proposal: Sobana' in t and '⃃ 466.00' in t and '−⃃ 108.00' in t and '⃃ 358.00' in t and '15 credit days' in t, f'proposal: {t[:600]}')
     need(pg.input_value('#mbNo').startswith('SOB-2026'), f'bill no: {pg.input_value("#mbNo")}')
     pg.click('#mbGo'); pg.wait_for_timeout(2500)
     need('created' in pg.inner_text('#mbMsg'), f'result: {pg.inner_text("#mbMsg")}')
@@ -728,6 +728,35 @@ def _(b):
     need(['r2', pg.input_value('#mbNo'), ''] in items or any(x[0] == 'r2' and x[1] for x in items), f'orders not marked: {items}')
     need(any(x[0] == 'r1' and x[2] for x in items), f'debit note not marked: {items}')
     return errs
+
+
+@check('Artist agreement: per order (default, 30 days after delivery + 48 h) or monthly; per-order artists only get debit notes from Create in Zoho (29 Oct)')
+def _(b):
+    art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE'}
+    r1 = order(id='r1', ref='KA-261029-BLVP', title='Circle of Colours', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=375, artistName='Sobana', artistShippedAt='2026-10-20T05:00:00Z', deliveredAt='2026-10-22T05:00:00Z', quotedPrice=375, zohoBillId='b1', zohoBill='SB-T-BLVP')
+    r2 = order(id='r2', ref='KA-261028-SOB2', title='Second work', status='DELIVERED', artistName='Sobana', artistShippedAt='2026-10-21T05:00:00Z', deliveredAt='2026-10-23T05:00:00Z', quotedPrice=400)
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS + [art], 'items': [r1, r2],
+            'costing': [{'enquiryId': 'r1', 'costs': json.dumps({'artistAed': 216})}, {'enquiryId': 'r2', 'costs': json.dumps({'artistAed': 250})}]}
+    pg, errs = open_page(b, 'admin.html#reports', seed, wait=3000)
+    t = pg.inner_text('#payList')
+    need('one invoice per order' in t and 'Their invoice due' in t and '30 days after delivery + 48 h' in t, f'per-order artist: {t[:500]}')
+    need(pg.locator('[data-mbill]').inner_text() == 'Create debit notes in Zoho…', 'per-order artist offered a monthly bill')
+    pg.click('[data-mbill]'); pg.wait_for_timeout(400)
+    d = pg.inner_text('#mbillDlg')
+    need('Debit notes' in d and 'Bill number' not in d and '−⃃ 108.00' in d, f'per-order proposal: {d[:400]}')
+    pg.click('[data-mbclose]'); pg.close()
+    # the agreement is saved on the artist card
+    pg, errs2 = open_page(b, 'admin.html#sellers', {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [], 'sellers': SELLERS + [art]}, wait=3000)
+    pg.click('[data-mk="artists"]'); pg.wait_for_timeout(500)
+    card = pg.locator('[data-seller="a1"]')
+    need(card.locator('[data-f="invmode"]').input_value() == 'PER_ORDER', 'artist not per order by default')
+    card.locator('[data-f="invmode"]').select_option('MONTHLY'); card.locator('[data-f="creditdays"]').fill('20'); card.locator('[data-a="invoiceModeSeller"]').click(); pg.wait_for_timeout(600)
+    sv = pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).sellers.find(s => s.id === 'a1')")
+    need(sv.get('invoiceMode') == 'MONTHLY' and sv.get('creditDays') == 20, f'saved: {sv}')
+    src = open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'amplify', 'functions', 'zoho-quote-sync', 'handler.ts')).read()
+    need("due_date: addDays(artistDueStart(img) || dubaiToday(), (await artistTerms(img)).days)" in src and "due_date: addDays(today, (await artistTerms(first)).days)" in src, 'Zoho bills get no due date from the agreement')
+    need("!artistDueStart(img)" in src, 'per-order artist bill is not held until delivery + 48 h')
+    return errs + errs2
 
 
 @check('Artists & sellers: each partner has an Invoices setting, one per order or one consolidated a month')
