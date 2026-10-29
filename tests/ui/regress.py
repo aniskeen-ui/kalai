@@ -705,6 +705,27 @@ def _(b):
     return errs
 
 
+@check('To invoice: lines visible per artist; Create in Zoho shows a proposal (bill + debit notes), then marks them Billed / Raised (asked 29 Oct)')
+def _(b):
+    art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE', 'refundRecoveryPct': 50}
+    r1 = order(id='r1', ref='KA-261029-BLVP', title='Circle of Colours', status='REFUNDED', refundAction='DAMAGED_REFUND', refundAmount=375, artistName='Sobana', artistShippedAt='2026-10-29T05:00:00Z', quotedPrice=375)
+    r2 = order(id='r2', ref='KA-261028-SOB2', title='Second work', status='DELIVERED', artistName='Sobana', artistShippedAt='2026-10-28T05:00:00Z', quotedPrice=400)
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS + [art], 'items': [r1, r2],
+            'costing': [{'enquiryId': 'r1', 'costs': json.dumps({'artistAed': 216})}, {'enquiryId': 'r2', 'costs': json.dumps({'artistAed': 250})}]}
+    pg, errs = open_page(b, 'admin.html#reports', seed, wait=3000)
+    need('KA-261028-SOB2' in pg.inner_text('#payList'), 'order lines are hidden (group closed)')
+    pg.click('[data-mbill]'); pg.wait_for_timeout(400)
+    t = pg.inner_text('#mbillDlg')
+    need('Proposal: Sobana' in t and '⃃ 466.00' in t and '−⃃ 108.00' in t and '⃃ 358.00' in t, f'proposal: {t[:600]}')
+    need(pg.input_value('#mbNo').startswith('SOB-2026'), f'bill no: {pg.input_value("#mbNo")}')
+    pg.click('#mbGo'); pg.wait_for_timeout(2500)
+    need('created' in pg.inner_text('#mbMsg'), f'result: {pg.inner_text("#mbMsg")}')
+    items = pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).items.map(i => [i.id, i.artistMonthBill || '', i.artistDebitNote || ''])")
+    need(['r2', pg.input_value('#mbNo'), ''] in items or any(x[0] == 'r2' and x[1] for x in items), f'orders not marked: {items}')
+    need(any(x[0] == 'r1' and x[2] for x in items), f'debit note not marked: {items}')
+    return errs
+
+
 @check('Artists & sellers: each partner has an Invoices setting, one per order or one consolidated a month')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [], 'sellers': SELLERS}

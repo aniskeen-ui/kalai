@@ -43,6 +43,7 @@ type ZohoBody = {
   message?: string;
   contacts?: { contact_id: string; contact_name: string }[];
   contact?: { contact_id: string };
+  vendor_credit?: { vendor_credit_id: string; vendor_credit_number: string; total?: number; status?: string };
   estimate?: { estimate_id: string; estimate_number: string; customer_id?: string; status?: string; line_items?: LineItem[] };
   estimates?: { estimate_id: string; estimate_number: string; reference_number?: string; status?: string }[];
   invoice?: { invoice_id: string; invoice_number: string; status?: string; balance?: number; total?: number; customer_id?: string };
@@ -2905,11 +2906,71 @@ async function supplierJobs(action: string, d: Dict, sub: string, profile: Dict)
   throw new Error('Unknown action');
 }
 
+/** Month-end billing for one artist (Reports → To invoice → Create in Zoho): one bill with a line per order, and one
+ *  debit note (vendor credit, Reference# = the order) per refunded order. Test site: both stay drafts. Each order is
+ *  marked so it shows Billed / Raised and can't be billed twice. (Asked 29 Oct.) */
+async function artistMonthBill(d: Dict) {
+  type Line = { id: string; amount: number; what: string; rework?: boolean };
+  const clean = (x: unknown): Line[] => (Array.isArray(x) ? x : []).slice(0, 200).map((l) => ({ id: txt((l as Dict).id, 80), amount: r2(Number((l as Dict).amount)), what: txt((l as Dict).what, 80), rework: !!(l as Dict).rework }))
+    .filter((l) => l.id && l.amount > 0 && l.amount < 1_000_000);
+  const lines = clean(d.lines), debits = clean(d.debits);
+  if (!lines.length && !debits.length) throw new Error('Tick at least one line.');
+  const month = /^\d{4}-\d{2}$/.test(String(d.month)) ? String(d.month) : dubaiToday().slice(0, 7);
+  const rows = new Map<string, Img>();
+  for (const l of [...lines, ...debits]) if (!rows.has(l.id)) { const e = await enquiryRow(l.id); if (!e) throw new Error('An order in the list no longer exists: refresh and try again.'); rows.set(l.id, e); }
+  const artist = (img: Img) => vendorName(img).toLowerCase();
+  const names = new Set([...rows.values()].map(artist));
+  if (names.size > 1) throw new Error('These lines are for more than one artist: create one bill per artist.');
+  for (const l of lines) {
+    const e = rows.get(l.id)!;
+    if (l.rework ? str(e, 'reworkMonthBill') || str(e, 'zohoReworkBillId') : str(e, 'artistMonthBill') || str(e, 'zohoBillId')) throw new Error(`${str(e, 'ref')} is already billed: refresh the report.`);
+  }
+  for (const l of debits) if (str(rows.get(l.id)!, 'artistDebitNote')) throw new Error(`${str(rows.get(l.id)!, 'ref')} already has a debit note: refresh the report.`);
+  const first = rows.get((lines[0] ?? debits[0]).id)!;
+  const vendor = await orderVendor(first);
+  const account = await artistAccountId();
+  const testing = await testMode();
+  const today = dubaiToday();
+  const out: Dict = { vendor: vendor.name };
+  if (lines.length) {
+    const billNo = txt(d.billNo, 40) || `${vendor.name.split(/\s+/).map((w) => w[0]).join('').toUpperCase()}-${month.replace('-', '')}`;
+    const r = await zoho('/bills', { method: 'POST', body: JSON.stringify({
+      vendor_id: vendor.id, bill_number: billNo, reference_number: `Monthly ${month} (${lines.length} orders)`.slice(0, 50), date: today,
+      line_items: lines.map((l) => { const e = rows.get(l.id)!; return { name: `${str(e, 'ref')} · ${l.what}`.slice(0, 100), description: `${str(e, 'title')} (${str(e, 'ref')})`.slice(0, 2000), rate: l.amount, quantity: 1, ...(account ? { account_id: account } : {}) }; }),
+      notes: `Kalai Art House: ${vendor.name}'s consolidated invoice for ${month}. Orders: ${lines.map((l) => str(rows.get(l.id)!, 'ref')).join(', ')}`.slice(0, 1000) }) });
+    if (!r.ok || !r.body.bill) {
+      const hint = /account/i.test(r.body.message ?? '') ? ' Set the expense account as SSM parameter /kalai/zoho/artist_account_id.' : '';
+      throw new Error(`Zoho bill failed (${r.status}): ${r.body.message}.${hint}`);
+    }
+    const bill = r.body.bill;
+    const state = testing ? await keepAsDraft(`/bills/${bill.bill_id}`, bill.status) : String(bill.status ?? 'open');
+    for (const l of lines) await writeBack(l.id, l.rework ? { reworkMonthBill: String(bill.bill_number), reworkMonthBillId: String(bill.bill_id) } : { artistMonthBill: String(bill.bill_number), artistMonthBillId: String(bill.bill_id) });
+    out.bill = { number: bill.bill_number, id: bill.bill_id, total: Number(bill.total ?? 0), state, url: `${BOOKS_APP}/bills/${bill.bill_id}` };
+  }
+  const notes: Dict[] = [];
+  for (const l of debits) {
+    const e = rows.get(l.id)!, ref = str(e, 'ref');
+    const r = await zoho('/vendorcredits', { method: 'POST', body: JSON.stringify({
+      vendor_id: vendor.id, reference_number: ref, date: today,
+      line_items: [{ name: `${ref} · ${l.what}`.slice(0, 100), description: `Recovery on ${str(e, 'title')} (${ref}): the customer was refunded.`.slice(0, 2000), rate: l.amount, quantity: 1, ...(account ? { account_id: account } : {}) }],
+      notes: `Kalai Art House debit note to ${vendor.name} for order ${ref}.` }) });
+    if (!r.ok || !r.body.vendor_credit) { notes.push({ ref, error: `Zoho debit note failed (${r.status}): ${r.body.message}` }); continue; }
+    const vc = r.body.vendor_credit;
+    const state = testing ? await keepAsDraft(`/vendorcredits/${vc.vendor_credit_id}`, vc.status) : String(vc.status ?? 'open');
+    await writeBack(l.id, { artistDebitNote: String(vc.vendor_credit_number), artistDebitNoteId: String(vc.vendor_credit_id) });
+    notes.push({ ref, number: vc.vendor_credit_number, total: Number(vc.total ?? l.amount), state });
+  }
+  out.debits = notes;
+  await sendMail({ to: STUDIO_EMAIL, button: { label: 'Open Reports', url: `${SITE}/admin.html#reports` }, footer: 'Studio notification from art.pranixtechno.com', subject: `${vendor.name}: ${lines.length ? `bill ${String((out.bill as Dict).number)}` : ''}${lines.length && notes.length ? ' and ' : ''}${notes.length ? `${notes.length} debit note(s)` : ''} for ${month}`,
+    lines: [`Created from Reports → To invoice${testing ? ' (test mode: drafts)' : ''}.`, ...lines.map((l) => `${h(str(rows.get(l.id)!, 'ref'))} · ${h(l.what)} · AED ${l.amount}`), ...debits.map((l) => `Debit note ${h(str(rows.get(l.id)!, 'ref'))} · AED −${l.amount}`)] }).catch(() => {});
+  return out;
+}
 async function marketAdmin(ev: ApiEvent) {
   const { S, L } = mtables();
   const action = String(ev.arguments.action ?? '');
   const d = parseData(ev.arguments.data);
   if (action === 'assignJob' || action === 'removeJob') return assignJob(action, d);
+  if (action === 'artistMonthBill') return artistMonthBill(d);
   // Studio: the airway bill label of an order (the parcel to the customer, or the artist's parcel to the frame shop).
   if (action === 'adminLabel') {
     const id = txt(d.id, 80);

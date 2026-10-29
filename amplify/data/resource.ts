@@ -41,6 +41,13 @@ const schema = a.schema({
       zohoPOId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoBill: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       zohoBillId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
+      // Month-end artist billing (Reports → To invoice): the consolidated bill and the debit note for this order.
+      artistMonthBill: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      artistMonthBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      reworkMonthBill: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      reworkMonthBillId: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      artistDebitNote: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      artistDebitNoteId: a.string().authorization((allow) => [allow.group('ADMINS')]),
       zohoVendorPaymentId: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
       // Delivery: courier + tracking (shown to the customer) and the Zoho delivery challan.
       courierName: a.string().authorization((allow) => [allow.owner().to(['read']), allow.group('ADMINS')]),
