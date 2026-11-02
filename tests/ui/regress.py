@@ -627,6 +627,8 @@ def _(b):
     m = re.search(r"const P=\[([^\]]*)\]", src)
     n = len(re.findall(r"little-vs-ai", m.group(1))) if m else 0
     need(n >= 14, f'rotation has {n} pairs')
+    need('little-vs-ai-farming.jpg' in m.group(1) and 'data-kid="/img/little-vs-ai-farming-kid.jpg"' in src, 'Farming pair missing')
+    need('kid-21-farming.jpg' in open(os.path.join(os.path.dirname(os.path.dirname(HERE)), 'public', 'data', 'little-gallery.json')).read(), 'Farming drawing missing from the gallery')
     return []
 
 
