@@ -345,6 +345,8 @@ function wireCards() {
       const r = await act('addSupplier', data);
       sellers = [r.profile, ...sellers];
       draw();
+      // Order Management keeps its own supplier list: refresh it so the new shop is in the job pickers at once (Kalai House, 3 Nov).
+      window.dispatchEvent(new Event('kalai:suppliers'));
       $('asMsg') && ($('asMsg').textContent = '');
     } catch (ex) { $('asMsg').textContent = ex.message; b.disabled = false; }
   };

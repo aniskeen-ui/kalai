@@ -921,6 +921,7 @@ $('fKind').onchange = render;
 
 // Approved portal artists, for allocating price enquiries / commissions (Siva is the default).
 let artists = [];
+window.addEventListener('kalai:suppliers', () => { loadArtists().catch(() => {}); });
 async function loadArtists() {
   const r = await client.models.SellerProfile.list({ limit: 500 });
   artists = (r.data || []).filter((p) => p.type === 'ARTIST' && p.status === 'APPROVED').sort((a, b) => String(a.business).localeCompare(String(b.business)));

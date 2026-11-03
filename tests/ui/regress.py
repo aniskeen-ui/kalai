@@ -778,6 +778,20 @@ def _(b):
     return errs
 
 
+@check('A frame shop added under Artists & sellers is in the order frame shop list without reloading (Kalai House, 3 Nov)')
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'costing': [], 'sellers': SELLERS, 'items': [order(id='e1', status='PAID')]}
+    pg, errs = open_page(b, 'admin.html#sellers', seed, wait=3000)
+    pg.click('[data-mk="suppliers"]'); pg.wait_for_timeout(500)
+    pg.evaluate("[...document.querySelectorAll('summary')].find(x => /yourself/.test(x.innerText)).click()")
+    pg.select_option('#asType', 'FRAMER'); pg.fill('#asBiz', 'Kalai House'); pg.fill('#asPhone', '+971 55 299 6626')
+    pg.evaluate("[...document.querySelectorAll('button')].find(b => /Add \\(approved\\)/.test(b.innerText)).click()"); pg.wait_for_timeout(1500)
+    pg.click('#tabOrders'); pg.wait_for_timeout(300); pg.evaluate("location.hash = '#order=e1'"); pg.wait_for_timeout(1200)
+    opts = pg.evaluate("[...document.querySelector('[data-js=\"framer-sid\"]').options].map(o => o.text)")
+    need(any(o.startswith('Kalai House') for o in opts), f'new shop missing: {opts}')
+    return errs
+
+
 @check('Artists & sellers: each partner has an Invoices setting, one per order or one consolidated a month')
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'listings': [], 'items': [], 'costing': [], 'sellers': SELLERS}
