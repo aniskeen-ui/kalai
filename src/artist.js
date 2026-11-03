@@ -285,7 +285,7 @@ function webTitle(w) { const t = cleanTitle(w.title); return t === 'Original' ? 
 function shownTitle(w) { return w.named ? w.title : webTitle(w) || SUGGEST[w.code]?.[0] || ''; }
 let isAdmin = false; // Kalai Art House signed in on Siva's page: may correct a courier / AWB after it was sent.
 // Same names as the couriers in Kalai's supplier list, so the order screen links the artist's courier to its portal.
-const COURIERS = ['ARAMAX', 'DHL Express UAE', 'FedEx UAE', 'DTDC', 'Blue Dart', 'Delhivery', 'India Post Speed Post', 'Global India Express', 'Emirates Post', 'ShiprocketX'];
+const COURIERS = ['ARAMAX', 'DHL Express UAE', 'FedEx UAE', 'DTDC', 'Blue Dart', 'Delhivery', 'India Post Speed Post', 'Air Shippers', 'Global India Express', 'Emirates Post', 'ShiprocketX'];
 function progressBlock(x) {
   if (!x.ordered) return '';
   // During a rework the original steps are done: the Rework card above has the buttons.
