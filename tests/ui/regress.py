@@ -837,6 +837,21 @@ def _(b):
     return errs
 
 
+@check('Every painting shows its artist, and the name opens that artist profile (asked 11 Nov)')
+def _(b):
+    arts = [{'id': 'ap1', 'name': 'Siva Raja', 'country': 'India', 'city': 'Bangalore', 'about': 'Painter and sketch artist.', 'mediums': 'Watercolour', 'publishedAt': '2026-10-01'}]
+    pg, errs = open_page(b, 'index.html#collection', {'users': ADMIN, 'session': None, 'items': [], 'artists': arts}, wait=3500)
+    links = pg.locator('#grid .artist-link')
+    need(links.count() > 3, f'{links.count()} artist names on the cards')
+    need(links.first.inner_text() == 'Siva Raja', f'card name: {links.first.inner_text()}')
+    pg.locator('#grid [data-view]').first.click(); pg.wait_for_timeout(600)
+    by = pg.inner_text('#modalBox .byline')
+    need(by.startswith('Hand-made by Siva Raja'), f'work window byline: {by!r}')
+    pg.click('#modalBox .byline .artist-link'); pg.wait_for_timeout(600)
+    need('Siva Raja' in pg.inner_text('#modalBox h2') and 'Painter and sketch artist.' in pg.inner_text('#modalBox'), f'profile not opened: {pg.inner_text("#modalBox")[:200]}')
+    return errs
+
+
 @check('Pricing: competitor simulation boxes 1–3 suggest a price from each UAE competitor, 4 mixes them, "Use" fills the website price')
 def _(b):
     sellers = [dict(SELLERS[0]), dict(SELLERS[1], rateCard=json.dumps({'frames': {k: {'30×40': 50, '40×50': 60} for k in ['black', 'white', 'oak', 'walnut', 'gold']}, 'fixingIncluded': True}))]
