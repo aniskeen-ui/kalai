@@ -767,7 +767,10 @@ async function artistLines(img: Img) {
   const { img: cimg, costs } = await getCosting(str(img, 'id'));
   // Customer cancelled after Siva started (50% refund): Siva is paid 50% of his price, plus the India courier only if he had sent it.
   const half = str(img, 'refundAction') === 'CANCEL_HALF';
-  const artistAed = round2(Number(costs.artistAed ?? 0) * (half ? 0.5 : 1));
+  // The price agreed for this order (Actual costs → Your figure) wins over the catalogue price (EMB3, 12 Nov).
+  let agreed: number | null = null;
+  try { let a: unknown = cimg ? str(cimg, 'actual') || null : null; for (let i = 0; i < 2 && typeof a === 'string'; i++) a = JSON.parse(a); const v = (a as Dict | null)?.artist; if (v !== undefined && v !== null && v !== '' && Number(v) > 0) agreed = Number(v); } catch { agreed = null; }
+  const artistAed = round2((agreed ?? Number(costs.artistAed ?? 0)) * (half ? 0.5 : 1));
   const courier = half && !str(img, 'artistShippedAt') ? 0 : round2(Number(costs.indiaCourier ?? 0));
   const inr = Number(costs.artistInr ?? num(cimg ?? undefined, 'artistPriceInr') ?? 0);
   const q = quoteParts(img);

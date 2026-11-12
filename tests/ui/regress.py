@@ -733,6 +733,18 @@ def _(b):
     return errs
 
 
+@check('To invoice: the artist price typed for one order (Actual costs) is what the artist is owed, not the catalogue price (EMB3, 12 Nov)')
+def _(b):
+    art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE', 'invoiceMode': 'MONTHLY'}
+    r1 = order(id='m1', ref='KA-261111-EMB3', title='Circle of Colours', status='ARTIST_SENT', artistName='Sobana', artistShippedAt='2026-11-12T05:00:00Z', quotedPrice=101)
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS + [art], 'items': [r1],
+            'costing': [{'enquiryId': 'm1', 'costs': json.dumps({'artistAed': 216}), 'actual': json.dumps({'artist': 180})}]}
+    pg, errs = open_page(b, 'admin.html#reports', seed, wait=3000)
+    t = pg.text_content('#payList')
+    need('180.00' in t and '216.00' not in t, f'artist owed: {t[:400]}')
+    return errs
+
+
 @check('Artist agreement: per order (default, 30 days after delivery + 48 h) or monthly; per-order artists only get debit notes from Create in Zoho (29 Oct)')
 def _(b):
     art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE'}

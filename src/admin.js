@@ -656,7 +656,10 @@ function payLines() {
       const art = ['PRICE', 'COMMISSION'].includes(e.kind), refunded = ['CANCEL_FULL', 'DAMAGED_REFUND'].includes(e.refundAction);
       const earned = art ? (e.artistShippedAt || e.refundAction === 'CANCEL_HALF' || ['FRAMING', 'SHIPPED', 'DELIVERED', 'REPLACEMENT'].includes(e.status)) && e.refundAction !== 'CANCEL_FULL' : !refunded;
       const rl = earned || refunded ? reportLine(e) : null;
-      const amt = earned ? r2((rl.k?.artist || 0) + (rl.recovery || 0)) : 0;
+      // The agreed price for this order (Actual costs → Your figure, or the artist's bill) wins over the catalogue price:
+      // EMB3, Sobana ⃃180 though her master says ⃃216 (12 Nov).
+      const actArt = rl && rl.ka && !rl.est.has('artist') && !rl.recovery ? rl.ka.artist : null;
+      const amt = earned ? r2(actArt != null ? actArt : (rl.k?.artist || 0) + (rl.recovery || 0)) : 0;
       // A paid print / licence royalty already billed, then refunded: all of it comes back.
       const name0 = e.artistName || 'Siva Raja';
       const dn = rl?.recovery ? { amount: rl.recovery, what: `Debit note: ${rl.recoveryPct}% recovery, customer refunded` }
