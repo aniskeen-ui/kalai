@@ -1399,7 +1399,7 @@ function costingSection(e) {
     <div class="field"><label for="cArtist">Artist doing this work</label><select id="cArtist" ${dis}>${artistOpts}</select>
       <span class="muted" style="font-size:12px" id="cArtistNote">${lockedPO ? 'Fixed: the order has been placed with this artist.' : e.artistId ? `Allocated to ${esc(who)}: they see it under Orders to make in their portal.` : 'Siva sees it on his Artist desk. Choose another approved artist to allocate it to them (they get an email when you save).'}</span></div>
     <div class="three">
-      <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? '⃃' : '₹'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${dis}></div>
+      <div class="field"><label for="cInr" id="cInrLabel">Artist price (${curAed ? '⃃' : '₹'})</label><input id="cInr" type="number" min="0" step="1" value="${(curAed ? c.artistPriceAed : c.artistPriceInr) ?? ''}" ${e.zohoBillId || e.artistMonthBill ? 'disabled' : ''}>${lockedPO && !(e.zohoBillId || e.artistMonthBill) ? '<span class="muted" style="font-size:12px">You can still change it: save, and the margin, the artist\'s portal, Reports → To invoice and their bill use the new price.</span>' : e.zohoBillId || e.artistMonthBill ? '<span class="muted" style="font-size:12px">Billed in Zoho: change it on the bill, or use Actual costs → Your figure.</span>' : ''}${c.artistPriceLog ? `<span class="muted" style="font-size:12px">${esc(c.artistPriceLog)}</span>` : ''}</div>
       <div class="field"><label for="cTier">Size tier</label><select id="cTier" ${dis}><option value="">Choose…</option>${tierOpts}</select>${guess ? '<span class="muted" style="font-size:11px">from the work\'s size: check, then Save</span>' : ''}</div>
       <div class="field"><label for="cDel">Delivery</label><select id="cDel" ${dis}><option value="UAE" ${!delOut ? 'selected' : ''}>UAE</option><option value="OUTSIDE" ${delOut ? 'selected' : ''}>Outside UAE</option></select></div>
     </div>
@@ -1991,6 +1991,19 @@ async function saveShipping(e) {
   const d = destOf(e);
   const next = { ...costs, framerId: estCosts(e).framingFromId || costs.framerId || null, ...(delivery === 'OUTSIDE' ? { destCountry: d.country, destRegion: d.region || null, shipFrom: d.from } : {}) };
   const rec = { enquiryId: e.id, delivery, costs: JSON.stringify(next) };
+  // The artist's price can change after the order is placed (12 Nov): it then drives the margin, the artist's portal,
+  // To invoice and their bill. A note keeps the old price.
+  const box = $('cInr');
+  if (box && !box.disabled && box.value !== '') {
+    const old = curAed ? existing?.artistPriceAed : existing?.artistPriceInr, nv = Number(box.value);
+    if (nv >= 0 && Number(old) !== nv) {
+      const sym = curAed ? '⃃' : '₹', fx = curAed ? 1 : Number(costs.fx || rates.fx);
+      rec[curAed ? 'artistPriceAed' : 'artistPriceInr'] = nv;
+      next.artistAed = Math.round(nv * fx * 100) / 100; if (curAed) next.artistAedPrice = nv; else next.artistInr = nv;
+      rec.costs = JSON.stringify(next);
+      rec.artistPriceLog = `Changed from ${sym} ${old ?? '–'} to ${sym} ${nv} on ${dDay(new Date().toISOString())}${existing?.artistPriceLog ? ` · earlier: ${existing.artistPriceLog}` : ''}`.slice(0, 600);
+    }
+  }
   const res = existing ? await client.models.Costing.update(rec) : await client.models.Costing.create(rec);
   if (res.errors?.length) throw new Error(res.errors[0].message);
   costings.set(e.id, { ...(existing || {}), ...(res.data || {}), ...rec });

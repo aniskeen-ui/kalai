@@ -195,6 +195,7 @@ const schema = a.schema({
       enquiryId: a.id().required(),
       artistPriceInr: a.float(),
       artistPriceAed: a.float(), // portal artists based outside India price in AED
+      artistPriceLog: a.string(), // changes to the artist's price after the order was placed
       artistReadyBy: a.string(),
       artistNote: a.string(),
       artistAt: a.string(),

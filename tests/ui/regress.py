@@ -733,6 +733,22 @@ def _(b):
     return errs
 
 
+@check('Artist price can be changed after the order is placed, and everything uses the new price (asked 12 Nov)')
+def _(b):
+    art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE'}
+    it = order(id='p9', ref='KA-261111-EMB3', title='Circle of Colours', status='ARTIST_WORKING', artistId='a1', artistName='Sobana', artistCountry='UAE', zohoPOId='po9', zohoPO='Order KA-261111-EMB3', quotedPrice=400)
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': SELLERS + [art], 'items': [it],
+            'costing': [{'enquiryId': 'p9', 'artistPriceAed': 216, 'costs': json.dumps({'artistAed': 216, 'artistAedPrice': 216, 'fx': 0.042})}]}
+    pg, errs = open_page(b, 'admin.html#order=p9', seed)
+    need(not pg.locator('#cInr').is_disabled(), 'artist price locked after the order was placed')
+    pg.fill('#cInr', '180'); pg.click('#eSave'); pg.wait_for_timeout(1500)
+    c = pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).costing.find(x => x.enquiryId === 'p9')")
+    costs = json.loads(c['costs'])
+    need(c.get('artistPriceAed') == 180 and costs.get('artistAed') == 180, f'not saved: {c}')
+    need('216' in (c.get('artistPriceLog') or '') and '180' in c.get('artistPriceLog', ''), f'no change log: {c.get("artistPriceLog")}')
+    return errs
+
+
 @check('To invoice: the artist price typed for one order (Actual costs) is what the artist is owed, not the catalogue price (EMB3, 12 Nov)')
 def _(b):
     art = {'id': 'a1', 'type': 'ARTIST', 'status': 'APPROVED', 'business': 'Sobana', 'contactName': 'Sobana', 'country': 'UAE', 'invoiceMode': 'MONTHLY'}
