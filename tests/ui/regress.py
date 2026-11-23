@@ -643,6 +643,18 @@ def _(b):
     need(pg.evaluate("document.getElementById('lpPair').getBoundingClientRect().width") <= 441, 'top picture wider than 440px')
     return errs
 
+@check("Little Artists: Saharashitha's 11 drawings are in the gallery with her name under each")
+def _(b):
+    pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)
+    caps = pg.evaluate("[...document.querySelectorAll('#lpGallery figure figcaption')].map(f => f.textContent)")
+    hers = [c for c in caps if c.endswith('by Saharashitha')]
+    need(len(hers) == 11, f'{len(hers)} captions name Saharashitha')
+    need(any(c == 'Flowers, Letters and Numbers · by Saharashitha' for c in caps), 'doodle caption missing')
+    bad = pg.evaluate("Promise.all([...document.querySelectorAll('#lpGallery img')].map(i => i.getAttribute('src')).filter(u => /kid-(2[2-9]|3[0-2])-/.test(u)).flatMap(u => [u, u.replace('/kids/', '/kids/s/')]).map(u => fetch(u).then(r => r.ok ? null : u)))")
+    need(not [u for u in bad if u] and len(bad) == 22, f'missing pictures: {bad}')
+    return errs
+
+
 @check('Little Artists: clicking a drawing in the gallery opens the order form with that drawing in the frame')
 def _(b):
     pg, errs = open_page(b, 'index.html#little-artists', {'users': ADMIN, 'session': None, 'items': []}, wait=2500, width=1300)

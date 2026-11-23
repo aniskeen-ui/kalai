@@ -581,6 +581,7 @@ html.lp #little .vsai{display:none}
 .lp-gallery figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .lp-gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--sunk)}
 .lp-gallery figcaption{padding:10px 14px;font-size:14px;color:var(--muted)}
+.lp-by{font-weight:500;font-style:italic}
 .lp-promise{background:var(--warm)}
 .lp-promise ul{list-style:none;padding:0;margin:20px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px}
 .lp-promise li{padding-left:30px;position:relative}
@@ -1754,12 +1755,13 @@ drawChips();drawGrid();updateCount();
   menu.querySelectorAll("[data-cur]").forEach(b=>b.onclick=()=>{CUR=b.dataset.cur;try{localStorage.setItem("kalaiCur",CUR)}catch(e){}paint();menu.hidden=true;window.kalaiRedrawPrices()})})();
 </script>
 <script>
-// Little Artists page: the children's drawings in /data/little-gallery.json ([{src, caption, w, h}]), shown in the
+// Little Artists page: the children's drawings in /data/little-gallery.json ([{src, caption, artist?, w, h}]), shown in the
 // style chosen in Settings → Look & theme: base (plain gallery), A taped down the sides (default), B a living screen,
 // C a washing line and a framed wall. window.kalaiLittleStyle(style) switches it (account.js, from Settings).
 (function(){
   const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const sm=src=>src.replace('/img/kids/','/img/kids/s/');
+  const by=x=>x.artist?`<span class="lp-by"> · by ${esc(x.artist)}</span>`:'';
   let list=[];
   const rnd=(i,a,b)=>{const x=Math.sin(i*99.7+7)*10000;return a+(x-Math.floor(x))*(b-a)};
   const tape=(x,i,style)=>`<div class="lp-tape" data-src="${esc(x.src)}" style="--t:${Math.round(rnd(i,-6,6))}deg;transform:rotate(${Math.round(rnd(i+3,-7,7))}deg);${style||''}"><img src="${esc(sm(x.src))}" alt="${esc(x.caption)}" loading="lazy"><span>${esc(x.caption)}</span></div>`;
@@ -1770,8 +1772,8 @@ drawChips();drawGrid();updateCount();
     // gallery
     g.className='lp-gallery'+(st==='C'?' framed':st==='base'?'':' taped');
     g.innerHTML=list.map((x,i)=>{const im=`<img src="${esc(x.src)}" alt="${esc(x.caption||"A child's drawing")}" loading="lazy"${x.w?` width="${x.w}" height="${x.h}"`:''}>`;
-      return st==='C'?`<figure data-src="${esc(x.src)}" class="fr-${[0,1,3,2,4,0,1,2,3,4][i%10]}"><div class="mat">${im}</div><figcaption>${esc(x.caption)}</figcaption></figure>`
-        :`<figure data-src="${esc(x.src)}" style="--r:${st==='base'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg">${im}<figcaption>${esc(x.caption)}</figcaption></figure>`}).join('');
+      return st==='C'?`<figure data-src="${esc(x.src)}" class="fr-${[0,1,3,2,4,0,1,2,3,4][i%10]}"><div class="mat">${im}</div><figcaption>${esc(x.caption)}${by(x)}</figcaption></figure>`
+        :`<figure data-src="${esc(x.src)}" style="--r:${st==='base'?0:Math.round(rnd(i,-3,3))}deg;--t:${Math.round(rnd(i+5,-6,6))}deg">${im}<figcaption>${esc(x.caption)}${by(x)}</figcaption></figure>`}).join('');
     const t=document.getElementById('lpGalTitle'); if(t)t.textContent=st==='C'?'This is what it looks like, framed':'Drawn by little hands';
     // A: taped down both sides (big screens) or strips between sections (phones)
     const sc=document.getElementById('lpScatter');
