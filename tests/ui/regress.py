@@ -892,6 +892,30 @@ def _(b):
     return errs
 
 
+@check("Catalogue: importing an artist's catalogue adds the artist (published) and all 21 works with their rupee prices (Sreenivasa)")
+def _(b):
+    seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [], 'items': [], 'listings': [], 'costing': [], 'products': [], 'aprices': []}
+    pg, errs = open_page(b, 'admin.html#catalogue', seed, wait=2500)
+    pg.click('#tabCatalogue'); pg.wait_for_timeout(500)
+    pg.click('#cgArtBtn'); pg.fill('#cgArtUrl', '/import/sreenivasa-ram-makineedi/catalogue.json'); pg.click('#cgArtGo')
+    pg.wait_for_function("/works imported|Could not/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
+    m = pg.inner_text('#cgArtMsg')
+    need('21 works imported' in m, m)
+    d = pg.evaluate("JSON.parse(localStorage.getItem('stubdb'))")
+    art = [s for s in d.get('sellers', []) if s.get('type') == 'ARTIST']
+    need(len(art) == 1 and art[0]['business'] == 'Sreenivasa Ram Makineedi' and art[0]['status'] == 'APPROVED' and art[0].get('photoKey'), f'artist: {art}')
+    pr = d.get('products', [])
+    need(len(pr) == 21 and all(p.get('artistId') == art[0]['id'] and p.get('artistCountry') == 'India' for p in pr), f'{len(pr)} works')
+    st = {p['title']: p['status'] for p in pr}
+    need(st['Rewind'] == 'SOLD' and st['Echoes of Strings'] == 'HIDDEN' and st['Silent Click'] == 'DRAFT', f'statuses {st}')
+    ap = {x['productId']: x for x in d.get('aprices', [])}
+    radio = next(p for p in pr if p['title'] == 'All India Radio')
+    need(ap.get(radio['id'], {}).get('artistPrice') == 40000 and ap[radio['id']]['currency'] == 'INR', f"price {ap.get(radio['id'])}")
+    pg.click('#cgArtGo'); pg.wait_for_function("/already in/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
+    need(len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 21, 'importing again added duplicates')
+    return errs
+
+
 @check('Pricing: competitor simulation boxes 1–3 suggest a price from each UAE competitor, 4 mixes them, "Use" fills the website price')
 def _(b):
     sellers = [dict(SELLERS[0]), dict(SELLERS[1], rateCard=json.dumps({'frames': {k: {'30×40': 50, '40×50': 60} for k in ['black', 'white', 'oak', 'walnut', 'gold']}, 'fixingIncluded': True}))]
@@ -1221,7 +1245,10 @@ def main():
     failed = 0
     with sync_playwright() as p:
         b = p.chromium.launch()
+        only = os.environ.get('ONLY', ''); ran = 0
         for name, fn in RESULTS:
+            if only and only not in name: continue
+            ran += 1
             try:
                 errs = fn(b) or []
                 if errs: raise AssertionError('script errors: ' + ' | '.join(errs[:3]))
@@ -1231,7 +1258,7 @@ def main():
                 print(f'  ✗ {name}\n      {ex if isinstance(ex, AssertionError) else traceback.format_exc(limit=2)}')
         b.close()
     srv.shutdown()
-    print(f'\n{len(RESULTS) - failed}/{len(RESULTS)} checks passed')
+    print(f'\n{ran - failed}/{ran} checks passed')
     sys.exit(1 if failed else 0)
 
 main()

@@ -363,6 +363,9 @@ function wireToolbar() {
   $('cgLinksBtn').onclick = () => { $('cgLinksBox').hidden = false; $('cgLinks').focus(); };
   $('cgLinksClose').onclick = () => { $('cgLinksBox').hidden = true; };
   $('cgLinksGo').onclick = importLinks;
+  $('cgArtBtn').onclick = () => { $('cgArtBox').hidden = false; $('cgArtUrl').focus(); };
+  $('cgArtClose').onclick = () => { $('cgArtBox').hidden = true; };
+  $('cgArtGo').onclick = () => importArtist($('cgArtUrl').value.trim() || $('cgArtUrl').placeholder);
 }
 
 /** Shrink to max 1600 px JPEG so the website stays fast. */
@@ -429,6 +432,52 @@ async function importSite() {
   } catch (ex) {
     $('cgBulkMsg').textContent = `Could not copy the website works: ${ex.message}`;
   }
+}
+
+/** An artist's catalogue (catalogue.json next to its pictures): add the artist (approved, public profile) and their
+ *  works, each with the artist's price in ₹ for Pricing. Sold works come in as sold; works on hold stay hidden. */
+async function importArtist(url) {
+  const msg = (t) => { $('cgArtMsg').textContent = t; };
+  const btn = $('cgArtGo'); btn.disabled = true;
+  try {
+    const base = new URL(url, location.href);
+    const cat = await (await fetch(base, { cache: 'no-store' })).json();
+    const a = cat.artist || {}, slug = String(a.business || 'artist').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const up = async (file, key, shrinkIt = true) => {
+      const blob = await (await fetch(new URL(file, base))).blob();
+      await uploadData({ path: key, data: shrinkIt ? await shrink(blob) : blob, options: { contentType: 'image/jpeg' } }).result;
+      return key;
+    };
+    msg('Adding the artist…');
+    const photoKey = a.photo ? await up(a.photo, `market/studio-${slug}/profile.jpg`) : undefined;
+    const forSale = (cat.works || []).filter((w) => w.status !== 'HIDDEN');
+    const sampleKeys = [];
+    for (const [i, w] of forSale.slice(0, 6).entries()) sampleKeys.push(await up(w.image, `market/studio-${slug}/sample-${i + 1}.jpg`));
+    const r = await client.mutations.marketAdmin({ action: 'addArtist', data: JSON.stringify({ ...a, photoKey, sampleKeys }) });
+    if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
+    const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data, prof = res.profile;
+    const have = new Set(items.map((p) => p.source));
+    let ok = 0, skip = 0;
+    for (const [i, w] of (cat.works || []).entries()) {
+      const source = `artist:${slug}:${w.image}`;
+      if (have.has(source)) { skip++; continue; }
+      msg(`Importing ${i + 1}/${cat.works.length}: ${w.title}`);
+      const key = await up(w.image, `catalogue/${uid()}.jpg`);
+      const kind = /pencil|charcoal|graphite|sketch/i.test(w.medium) ? 'sketch' : 'water';
+      const pr = await client.models.Product.create({ title: w.title, named: 'yes', kind, subject: w.subject || 'nature', medium: w.medium, size: w.size, description: w.description,
+        status: ['SOLD', 'HIDDEN'].includes(w.status) ? w.status : 'DRAFT', imageKey: key, sortOrder: i, source,
+        artist: prof.business, artistId: prof.id, artistCountry: prof.country || 'India' });
+      if (pr.errors?.length) throw new Error(pr.errors[0].message);
+      if (w.artistPriceInr) {
+        const ap = await client.models.ArtworkPrice.create({ productId: pr.data.id, artistPrice: Number(w.artistPriceInr), currency: 'INR', artistPriceAt: new Date().toISOString(),
+          artistNote: ["From the artist's catalogue", w.note].filter(Boolean).join(' · ') });
+        if (ap.errors?.length) throw new Error(ap.errors[0].message);
+      }
+      ok++;
+    }
+    msg(`${prof.business}: artist ${res.existed ? 'updated' : 'added and published'}; ${ok} works imported${skip ? `, ${skip} already in` : ''}. Approve their prices in Pricing to put them on the website.`);
+    await load();
+  } catch (ex) { msg(`Could not import: ${ex.message || ex}`); } finally { btn.disabled = false; }
 }
 
 /** Import from links: expand album links into artworks on the server, then download a few at a time. */

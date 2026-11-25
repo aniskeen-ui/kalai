@@ -3234,6 +3234,26 @@ async function marketAdmin(ev: ApiEvent) {
       button: { label: 'Open the supplier portal', url: `${SITE}/supplier.html` } });
     return { sent: true };
   }
+  // Studio adds an artist from their catalogue (Catalogue → Import an artist's catalogue): approved and published
+  // straight away, like a supplier the studio adds. The artist can later sign up with the same email to use the portal.
+  if (action === 'addArtist') {
+    const f: Dict = { business: txt(d.business, 120), contactName: txt(d.contactName, 80) || txt(d.business, 120), phone: txt(d.phone, 30), email: txt(d.email, 120).toLowerCase() || undefined,
+      country: txt(d.country, 40) || 'India', city: txt(d.city, 80) || undefined, about: txt(d.about, 4000) || undefined, mediums: txt(d.mediums, 200) || undefined,
+      training: txt(d.training, 120) || undefined, experience: txt(d.experience, 4000) || undefined, commissions: txt(d.commissions, 10) || undefined,
+      portfolio: txt(d.portfolio, 300) || undefined, ...(Number(d.bornYear) ? { bornYear: Math.round(Number(d.bornYear)) } : {}),
+      ...(typeof d.photoKey === 'string' && /^market\//.test(d.photoKey) ? { photoKey: txt(d.photoKey, 300) } : {}),
+      ...(Array.isArray(d.sampleKeys) ? { sampleKeys: JSON.stringify(d.sampleKeys.filter((k: unknown) => typeof k === 'string' && /^market\//.test(k)).slice(0, 12)) } : {}) };
+    if (!f.business) throw new Error("Add the artist's name.");
+    const all = await scanAll(S);
+    const same = all.map((x) => plain(x)!).find((x) => x.type === 'ARTIST' && String(x.business).trim().toLowerCase() === String(f.business).toLowerCase());
+    if (!same && f.email && all.some((x) => str(x, 'email').toLowerCase() === f.email)) throw new Error('A supplier, artist or seller with this email already exists.');
+    const now = new Date().toISOString();
+    const row = same ? { ...same, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== '')), status: 'APPROVED', approvedAt: same.approvedAt ?? now, updatedAt: now }
+      : { ...f, id: `art-${crypto.randomUUID()}`, type: 'ARTIST', status: 'APPROVED', appliedAt: now, approvedAt: now, adminNote: "Added by the studio from the artist's catalogue", commissionPct: 0, __typename: 'SellerProfile', createdAt: now, updatedAt: now };
+    await putRow(S, row);
+    await publishArtist(row);
+    return { profile: row, existed: !!same };
+  }
   if (action === 'addSupplier') {
     const type = d.type === 'COURIER' ? 'COURIER' : d.type === 'PRINTER' ? 'PRINTER' : 'FRAMER';
     const f = { business: txt(d.business, 120), contactName: txt(d.contactName, 80), phone: txt(d.phone, 30), email: txt(d.email, 120).toLowerCase(), emirate: txt(d.emirate, 60) || 'Dubai',

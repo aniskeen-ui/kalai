@@ -1,0 +1,229 @@
+{
+ "artist": {
+  "business": "Sreenivasa Ram Makineedi",
+  "contactName": "Sreenivasa Ram Makineedi",
+  "phone": "+91 99595 59250",
+  "country": "India",
+  "city": "Hyderabad",
+  "bornYear": 1978,
+  "training": "Self-taught",
+  "mediums": "Acrylic on canvas, watercolour, mixed media",
+ 
+  "portfolio": "https://www.instagram.com/sreenivasa_ram_makineedi/",
+  "photo": "artist.jpg",
+  "about": "Sreenivasa Ram Makineedi is a self-taught visual artist from Hyderabad. He won cash awards at the 75th and 82nd All India Exhibitions of the Hyderabad Art Society, has exhibited across Hyderabad, Bangalore, Mumbai and Delhi, and his paintings are in private collections in India and abroad.\n\nHis series “The Passage of Time” looks back at the objects that tie us to our heritage: bellows cameras, lanterns, rotary telephones, radios and typewriters, each visited by a sparrow, a bird at home in both town and village. Painted with heavy shadows and a palette of earth and metal, the works are a tribute to the things that once filled our homes.",
+  "experience": "Group shows: Monsoon 2011, Kamalnayan Bajaj Art Gallery, Mumbai · Painting Mela 2011, 2012 and 2017, State Art Gallery, Hyderabad · Chitrasanthe 2015, Vijayawada · Colors of Novotel 2015, Hyderabad · Chitrasanthe 2017, Bangalore · Eleven Expressions 2022, Chitra Kala Parishath, Bangalore · Mumbai Art Fair 2022, Nehru Art Centre · Songs of the Falling Rain Drops 2023, Jehangir Art Gallery · India Art Festival 2024, Hyderabad · Collective Visions 2025, Aalankrita Art Gallery, Hyderabad · Between Black & White 2025, Icon Art Gallery, Hyderabad · Kala for Vidya 2025, Bangalore International Centre · Chromatic Conversations III 2026, Hyderabad · Synthesis 2026, Lokayata Gallery, Delhi · Immanence 2026, Stainless Gallery, Delhi."
+ },
+ "works": [
+  {
+   "image": "w01.jpg",
+   "title": "Nostalgic Gravity 001",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 15000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w02.jpg",
+   "title": "Nostalgic Gravity 002",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 15000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w03.jpg",
+   "title": "Silent Click",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 15000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w04.jpg",
+   "title": "Rewind",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": null,
+   "status": "SOLD",
+   "note": ""
+  },
+  {
+   "image": "w05.jpg",
+   "title": "Focal Point",
+   "medium": "Acrylic on canvas",
+   "size": "66 × 66 cm (26 × 26 in)",
+   "description": "Acrylic on canvas, 26 × 26 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": null,
+   "status": "HIDDEN",
+   "note": "Not available (artist's catalogue)."
+  },
+  {
+   "image": "w06.jpg",
+   "title": "The Last Ring",
+   "medium": "Acrylic on canvas",
+   "size": "66 × 66 cm (26 × 26 in)",
+   "description": "Acrylic on canvas, 26 × 26 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 25000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w07.jpg",
+   "title": "All India Radio",
+   "medium": "Mixed media on canvas",
+   "size": "61 × 91 cm (24 × 36 in)",
+   "description": "Mixed media on canvas, 24 × 36 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 40000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w08.jpg",
+   "title": "Silent Letters",
+   "medium": "Mixed media on canvas",
+   "size": "91 × 61 cm (36 × 24 in)",
+   "description": "Mixed media on canvas, 36 × 24 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": null,
+   "status": "SOLD",
+   "note": ""
+  },
+  {
+   "image": "w09.jpg",
+   "title": "Time Machine",
+   "medium": "Acrylic on canvas",
+   "size": "30 × 30 cm (12 × 12 in)",
+   "description": "Acrylic on canvas, 12 × 12 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 12000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w10.jpg",
+   "title": "Switched Off",
+   "medium": "Acrylic on canvas",
+   "size": "30 × 30 cm (12 × 12 in)",
+   "description": "Acrylic on canvas, 12 × 12 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 12000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w11.jpg",
+   "title": "Last Ring",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 15000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w12.jpg",
+   "title": "Jhankar Beats",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 15000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w13.jpg",
+   "title": "Last Ring 02",
+   "medium": "Acrylic on canvas",
+   "size": "46 × 46 cm (18 × 18 in)",
+   "description": "Acrylic on canvas, 18 × 18 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 15000,
+   "status": "HIDDEN",
+   "note": "On hold (artist's catalogue)."
+  },
+  {
+   "image": "w14.jpg",
+   "title": "Echoes of Strings",
+   "medium": "Acrylic on canvas",
+   "size": "76 × 51 cm (30 × 20 in)",
+   "description": "Acrylic on canvas, 30 × 20 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": null,
+   "status": "HIDDEN",
+   "note": "On hold: in an exhibition in Taiwan."
+  },
+  {
+   "image": "w15.jpg",
+   "title": "Gravity of Quiet Notes",
+   "medium": "Acrylic on canvas",
+   "size": "71 × 51 cm (28 × 20 in)",
+   "description": "Acrylic on canvas, 28 × 20 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 30000,
+   "status": "HIDDEN",
+   "note": "On hold (artist's catalogue)."
+  },
+  {
+   "image": "w16.jpg",
+   "title": "After the Song Ends",
+   "medium": "Acrylic on canvas",
+   "size": "51 × 76 cm (20 × 30 in)",
+   "description": "Acrylic on canvas, 20 × 30 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 30000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w17.jpg",
+   "title": "Gramophone (title to confirm)",
+   "medium": "Acrylic on canvas",
+   "size": "51 × 71 cm (20 × 28 in)",
+   "description": "Acrylic on canvas, 20 × 28 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 30000,
+   "status": "HIDDEN",
+   "note": "On hold. The catalogue repeats the violin's title for this one: ask the artist for its name."
+  },
+  {
+   "image": "w18.jpg",
+   "title": "Shadow and Rust",
+   "medium": "Watercolour on paper",
+   "size": "46 × 61 cm (18 × 24 in)",
+   "description": "Watercolour on paper, 18 × 24 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 20000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w19.jpg",
+   "title": "The Wooden Soliloquy",
+   "medium": "Watercolour on paper",
+   "size": "56 × 76 cm (22 × 30 in)",
+   "description": "Watercolour on paper, 22 × 30 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 27000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w20.jpg",
+   "title": "Yesterday's Shadows",
+   "medium": "Acrylic on canvas",
+   "size": "91 × 61 cm (36 × 24 in)",
+   "description": "Acrylic on canvas, 36 × 24 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": 35000,
+   "status": "DRAFT",
+   "note": ""
+  },
+  {
+   "image": "w21.jpg",
+   "title": "Unspoken Messages",
+   "medium": "Acrylic on canvas",
+   "size": "66 × 66 cm (26 × 26 in)",
+   "description": "Acrylic on canvas, 26 × 26 inches. From the series “The Passage of Time”: vintage objects and the sparrows that visit them, a quiet look back at the things that tie us to our roots.",
+   "artistPriceInr": null,
+   "status": "SOLD",
+   "note": ""
+  }
+ ]
+}
