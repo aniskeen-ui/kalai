@@ -1,0 +1,103 @@
+{
+ "artist": {
+  "business": "Mahi",
+  "contactName": "Maheshwaran",
+  "country": "India",
+  "mediums": "Kerala mural painting",
+  "portfolio": "https://www.instagram.com/cosmicmahesh/",
+  "photo": "artist.jpg",
+  "about": "Mahi (Maheshwaran) paints in the Kerala mural tradition: gods and goddesses drawn in bold outline, filled with the style's ochre, red, green and yellow, and framed with rich ornament."
+ },
+ "works": [
+  {
+   "image": "w01.jpg",
+   "title": "Krishna with the Flute",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w02.jpg",
+   "title": "Ardhanari",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w03.jpg",
+   "title": "Little Krishna",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w04.jpg",
+   "title": "Guruvayurappan",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w05.jpg",
+   "title": "Ardhanari II",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w06.jpg",
+   "title": "Shiva with the Crescent Moon",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w07.jpg",
+   "title": "The Green-Faced Deity",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w08.jpg",
+   "title": "Hanuman",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "image": "w09.jpg",
+   "title": "Ganesha",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  }
+ ]
+}
