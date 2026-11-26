@@ -393,6 +393,18 @@
    "status": "DRAFT",
    "note": "Ask the artist for the size and price.",
    "replaceImage": true
+  },
+  {
+   "id": "w01.jpg",
+   "image": "q10.jpg",
+   "title": "Krishna with the Flute",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
   }
  ]
 }
