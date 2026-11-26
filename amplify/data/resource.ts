@@ -266,7 +266,7 @@ const schema = a.schema({
       framing: a.string(),
       description: a.string(),
       priceAed: a.float(),
-      status: a.string(), // DRAFT | PUBLISHED | SOLD | HIDDEN
+      status: a.string(), // DRAFT | PUBLISHED | SOLD | SHOWCASE (shown, not for sale) | HIDDEN
       publishAt: a.string(),
       imageKey: a.string(),
       sortOrder: a.integer(),

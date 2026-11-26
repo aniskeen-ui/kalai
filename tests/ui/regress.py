@@ -892,6 +892,18 @@ def _(b):
     return errs
 
 
+@check("Not for sale: a work shown as not for sale is on the website with a Not for sale label and cannot be ordered (Mahi, 26 Nov)")
+def _(b):
+    pr = [{'id': 'p1', 'title': 'Rasa Leela', 'named': 'yes', 'kind': 'water', 'status': 'SHOWCASE', 'imageKey': 'catalogue/x.jpg', 'artist': 'Mahi', 'code': 'AT-1'},
+          {'id': 'p2', 'title': 'Draft one', 'named': 'yes', 'kind': 'water', 'status': 'DRAFT', 'imageKey': 'catalogue/y.jpg', 'artist': 'Mahi', 'code': 'AT-2'}]
+    pg, errs = open_page(b, 'index.html#collection', {'users': ADMIN, 'session': None, 'items': [], 'products': pr}, wait=3000)
+    t = pg.inner_text('body')
+    need('Rasa Leela' in t and 'Draft one' not in t, 'showcase work not listed')
+    card = pg.evaluate("[...document.querySelectorAll('.card, article, [data-id]')].map(e => e.innerText).find(x => x.includes('Rasa Leela')) || ''")
+    need('Not for sale' in card and 'View details' not in card, card[:200])
+    return errs
+
+
 @check("Catalogue: importing an artist's catalogue adds the artist (published) and all 21 works with their rupee prices (Sreenivasa)")
 def _(b):
     seed = {'users': ADMIN, 'session': 'admin@kalai.com', 'sellers': [], 'items': [], 'listings': [], 'costing': [], 'products': [], 'aprices': []}

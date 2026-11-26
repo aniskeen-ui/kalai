@@ -165,7 +165,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cg-fields input,.cg-fields select,.cg-fields textarea{padding:5px 8px;font-size:13px}
 .cg-fields textarea{resize:vertical;min-height:32px}
 .cg-badge{white-space:nowrap;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--sunk)}
-.cg-badge.PUBLISHED{background:var(--ok);color:#fff}.cg-badge.SCHEDULED{background:var(--gold-soft)}.cg-badge.SOLD{background:var(--kumkum);color:#fff}.cg-badge.HIDDEN{opacity:.6}
+.cg-badge.PUBLISHED{background:var(--ok);color:#fff}.cg-badge.SCHEDULED{background:var(--gold-soft)}.cg-badge.SOLD{background:var(--kumkum);color:#fff}.cg-badge.SHOWCASE{background:var(--gold-soft)}.cg-badge.HIDDEN{opacity:.6}
 .cg-bulk{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--gold);border-radius:var(--r);padding:8px 10px}
 .cg-sched{display:inline-flex;gap:6px;align-items:center;font-size:13px}
 .cg-sched input{padding:4px 6px}
@@ -466,7 +466,7 @@ a.who{color:inherit;text-decoration:underline;text-underline-offset:3px}a.who:ho
       <div class="counts" id="cgCounts"></div>
       <div class="bar" style="gap:8px">
         <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" id="cgAll" style="width:auto"> Select all shown</label>
-        <select id="cgFilter" aria-label="Show" style="width:auto"><option value="">All</option><option value="DRAFT">Drafts</option><option value="SCHEDULED">Scheduled</option><option value="PUBLISHED">On the website</option><option value="SOLD">Sold</option><option value="HIDDEN">Hidden</option></select>
+        <select id="cgFilter" aria-label="Show" style="width:auto"><option value="">All</option><option value="DRAFT">Drafts</option><option value="SCHEDULED">Scheduled</option><option value="PUBLISHED">On the website</option><option value="SOLD">Sold</option><option value="SHOWCASE">Not for sale</option><option value="HIDDEN">Hidden</option></select>
         <input id="cgSearch" type="search" placeholder="Find a painting: title, AT-…, artist, size" style="width:280px">
         <span class="cg-sched" id="cgMass" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--surface)"><b style="font-size:13px">Mass change</b> <select id="cgMassField" style="width:auto" aria-label="Field to change"><option value="printRoyalty">Print royalty %</option><option value="licenceRoyalty">Licence royalty %</option><option value="licensable">Sell licences</option><option value="printMax">Largest print size</option><option value="subject">Subject</option><option value="kind">Type (watercolour / sketch)</option><option value="aiPreview">AI preview</option></select> to <span id="cgMassVal"></span> <button class="btn small" id="cgMassGo" type="button">Apply to selected</button><span class="muted" id="cgMassSel" style="font-size:12px"></span></span>
         <span class="muted" id="cgQueue" style="font-size:13px"></span>
@@ -477,6 +477,7 @@ a.who{color:inherit;text-decoration:underline;text-underline-offset:3px}a.who:ho
         <span class="cg-sched">Schedule <input id="cgPerDay" type="number" min="1" value="3" style="width:56px"> per day from <input id="cgStart" type="date" style="width:auto"> <button class="btn small" id="cgSchedule" type="button">Schedule</button></span>
         <span class="cg-sched">Framed prints: <button class="btn small" id="cgPrintsOn" type="button">Sell prints</button> up to <select id="cgPrintMax" style="width:auto"><option>A4</option><option selected>A3</option><option>40×50</option><option>50×70</option><option>60×80</option></select> <button class="btn small ghost" id="cgPrintsOff" type="button">Stop prints</button></span>
         <button class="btn small ghost" id="cgSold" type="button">Mark sold</button>
+        <button class="btn small ghost" id="cgNfs" type="button" title="Shown on the website and the artist's page, but not for sale">Show as not for sale</button>
         <button class="btn small ghost" id="cgDraft" type="button">Take off website</button>
         <button class="btn small ghost" id="cgHide" type="button">Hide</button>
         <button class="btn small ghost" id="cgDelete" type="button" style="color:var(--kumkum)">Delete</button>

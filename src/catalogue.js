@@ -44,7 +44,7 @@ function state(p) {
   if (s === 'PUBLISHED' && p.publishAt && p.publishAt > now()) return 'SCHEDULED';
   return s;
 }
-const STATE_LABEL = { DRAFT: 'Draft', SCHEDULED: 'Scheduled', PUBLISHED: 'On the website', SOLD: 'Sold', HIDDEN: 'Hidden' };
+const STATE_LABEL = { DRAFT: 'Draft', SCHEDULED: 'Scheduled', PUBLISHED: 'On the website', SOLD: 'Sold', SHOWCASE: 'Not for sale', HIDDEN: 'Hidden' };
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
 
 export async function showCatalogue() {
@@ -348,6 +348,7 @@ function wireToolbar() {
   $('cgSaveAll').onclick = saveAll;
   $('cgDiscard').onclick = async () => { pending.clear(); saveBar(); $('cgSaveMsg').textContent = ''; await load(); };
   $('cgSold').onclick = () => bulk('Marking sold', (p) => upd(p, { status: 'SOLD' }));
+  $('cgNfs').onclick = () => bulk('Showing as not for sale', (p) => upd(p, { status: 'SHOWCASE', publishAt: p.publishAt || now() }));
   $('cgDraft').onclick = () => bulk('Taking off the website', (p) => upd(p, { status: 'DRAFT' }));
   $('cgHide').onclick = () => bulk('Hiding', (p) => upd(p, { status: 'HIDDEN' }));
   $('cgDelete').onclick = () => {
@@ -462,12 +463,13 @@ async function importArtist(url) {
       const source = `artist:${slug}:${w.id || w.image}`;
       if (have.has(source)) {
         // A better picture for a work already in: swap the picture, keep everything else.
-        const ex = (w.replaceImage || w.updateText) && items.find((p) => p.source === source);
+        const ex = (w.replaceImage || w.updateText || w.updateStatus) && items.find((p) => p.source === source);
         if (ex) {
           msg(`Updating ${i + 1}/${cat.works.length}: ${ex.title}`);
           const ch = { id: ex.id };
           if (w.replaceImage) ch.imageKey = await up(w.image, `catalogue/${uid()}.jpg`);
           if (w.updateText) for (const k of ['title', 'description', 'size', 'medium']) if (w[k]) ch[k] = w[k];
+          if (w.updateStatus && ['SOLD', 'HIDDEN', 'SHOWCASE', 'DRAFT'].includes(w.status) && w.status !== ex.status) { ch.status = w.status; if (w.status === 'SHOWCASE' && !ex.publishAt) ch.publishAt = new Date().toISOString(); }
           const r2 = await client.models.Product.update(ch); if (r2.errors?.length) throw new Error(r2.errors[0].message); repl++;
         } else skip++;
         continue;
@@ -476,7 +478,7 @@ async function importArtist(url) {
       const key = await up(w.image, `catalogue/${uid()}.jpg`);
       const kind = /pencil|charcoal|graphite|sketch/i.test(w.medium) ? 'sketch' : 'water';
       const pr = await client.models.Product.create({ title: w.title, named: 'yes', kind, subject: w.subject || 'nature', medium: w.medium, size: w.size, description: w.description,
-        status: ['SOLD', 'HIDDEN'].includes(w.status) ? w.status : 'DRAFT', imageKey: key, sortOrder: i, source,
+        status: ['SOLD', 'HIDDEN', 'SHOWCASE'].includes(w.status) ? w.status : 'DRAFT', ...(w.status === 'SHOWCASE' ? { publishAt: new Date().toISOString() } : {}), imageKey: key, sortOrder: i, source,
         artist: prof.business, artistId: prof.id, artistCountry: prof.country || 'India' });
       if (pr.errors?.length) throw new Error(pr.errors[0].message);
       if (w.artistPriceInr) {

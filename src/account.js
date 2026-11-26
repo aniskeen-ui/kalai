@@ -1548,14 +1548,14 @@ async function showCatalogue() {
     } while (nextToken);
     const nowIso = new Date().toISOString();
     const live = all
-      .filter((p) => ['PUBLISHED', 'SOLD'].includes(p.status) && (!p.publishAt || p.publishAt <= nowIso) && p.imageKey)
-      .sort((a, b) => (a.status === 'SOLD') - (b.status === 'SOLD') || String(b.publishAt).localeCompare(String(a.publishAt)) || (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      .filter((p) => ['PUBLISHED', 'SOLD', 'SHOWCASE'].includes(p.status) && (!p.publishAt || p.publishAt <= nowIso) && p.imageKey)
+      .sort((a, b) => (a.status !== 'PUBLISHED') - (b.status !== 'PUBLISHED') || String(b.publishAt).localeCompare(String(a.publishAt)) || (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     if (!live.length) return;
     const list = await Promise.all(live.map(async (p) => {
       let img = '';
       try { img = (await getUrl({ path: p.imageKey, options: { expiresIn: 3600 } })).url.toString(); } catch { /* no photo */ }
       if (p.kind === 'photo') return { id: p.id, print: true, name: p.named ? p.title : cleanTitle(p.title), code: p.code || '', desc: p.description || '', img };
-      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: p.status === 'SOLD', ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}), ...(p.printable ? { printable: true, printMax: p.printMax || 'A3', printRoyalty: Number(p.printRoyalty || 0) } : {}), ...(p.licensable && p.printKey ? { licensable: true, fileW: p.printW || null, fileH: p.printH || null } : {}), ...(p.printable ? { printFrom: true } : {}) };
+      return { id: p.id, kind: p.kind === 'sketch' ? 'sketch' : 'water', subject: p.subject, name: p.named ? p.title : cleanTitle(p.title), untitled: !p.named && cleanTitle(p.title) === 'Original', code: p.code || '', size: p.size || '', medium: p.medium || (p.kind === 'sketch' ? 'Graphite on paper' : 'Watercolour on paper'), price: 1, ai: !!p.aiPreview, leadDays: p.leadDays ?? null, leadMax: p.leadMax ?? p.leadDays ?? null, prices: (() => { try { return p.priceMatrix ? JSON.parse(p.priceMatrix) : null; } catch { return null; } })(), sold: ['SOLD', 'SHOWCASE'].includes(p.status), ...(p.status === 'SHOWCASE' ? { notForSale: true } : {}), ship: 'Original · ready to ship', desc: p.description || '', img, ...(p.artist ? { artist: p.artist } : {}), ...(p.printable ? { printable: true, printMax: p.printMax || 'A3', printRoyalty: Number(p.printRoyalty || 0) } : {}), ...(p.licensable && p.printKey ? { licensable: true, fileW: p.printW || null, fileH: p.printH || null } : {}), ...(p.printable ? { printFrom: true } : {}) };
     }));
     // Framed prints (Catalogue type "Framed print") have their own section; paintings go to the collection.
     // Framed Prints: our photos, then paintings with prints switched on (Catalogue → Sell framed prints).
@@ -1635,7 +1635,7 @@ async function showArtists() {
     try {
       const pr = await client.models.Product.list({ authMode: 'apiKey', limit: 500 });
       const nowIso = new Date().toISOString();
-      for (const p of pr.data || []) if (p.artist && p.imageKey && ['PUBLISHED', 'SOLD'].includes(p.status) && (!p.publishAt || p.publishAt <= nowIso)) (works.get(p.artist.trim().toLowerCase()) || works.set(p.artist.trim().toLowerCase(), []).get(p.artist.trim().toLowerCase())).push(p.imageKey);
+      for (const p of pr.data || []) if (p.artist && p.imageKey && ['PUBLISHED', 'SOLD', 'SHOWCASE'].includes(p.status) && (!p.publishAt || p.publishAt <= nowIso)) (works.get(p.artist.trim().toLowerCase()) || works.set(p.artist.trim().toLowerCase(), []).get(p.artist.trim().toLowerCase())).push(p.imageKey);
     } catch { /* samples only */ }
     const list = await Promise.all((r.data || []).sort((a, b) => String(a.publishedAt).localeCompare(String(b.publishedAt))).map(async (a) => {
       let keys = []; try { keys = JSON.parse(a.sampleKeys || '[]'); } catch { keys = []; }
