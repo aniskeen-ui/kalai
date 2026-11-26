@@ -913,6 +913,10 @@ def _(b):
     need('Rasa Leela' in t and 'Draft one' not in t, 'showcase work not listed')
     card = pg.evaluate("[...document.querySelectorAll('.card, article, [data-id]')].map(e => e.innerText).find(x => x.includes('Rasa Leela')) || ''")
     need('Not for sale' in card and 'View details' not in card, card[:200])
+    need(pg.evaluate("[...document.querySelectorAll('#grid .card')].find(c => c.innerText.includes('Rasa Leela')).querySelector('.row button').disabled"), 'card button not greyed out')
+    pg.evaluate("[...document.querySelectorAll('#grid .card')].find(c => c.innerText.includes('Rasa Leela')).querySelector('.frame').click()"); pg.wait_for_timeout(700)
+    btns = pg.evaluate("[...document.querySelectorAll('#modalBox .acts button, #modalBox .acts a')].map(x => [x.textContent.trim(), x.disabled === true])")
+    need(btns and all(d for _, d in btns) and 'Not for sale at the moment' in pg.inner_text('#modalBox'), f'painting window buttons active: {btns}')
     return errs
 
 
