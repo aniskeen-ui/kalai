@@ -481,6 +481,7 @@ async function importArtist(url) {
         status: ['SOLD', 'HIDDEN', 'SHOWCASE'].includes(w.status) ? w.status : 'DRAFT', ...(w.status === 'SHOWCASE' ? { publishAt: new Date().toISOString() } : {}), imageKey: key, sortOrder: i, source,
         artist: prof.business, artistId: prof.id, artistCountry: prof.country || 'India' });
       if (pr.errors?.length) throw new Error(pr.errors[0].message);
+      have.add(source); items.push(pr.data);
       if (w.artistPriceInr) {
         const ap = await client.models.ArtworkPrice.create({ productId: pr.data.id, artistPrice: Number(w.artistPriceInr), currency: 'INR', artistPriceAt: new Date().toISOString(),
           artistNote: ["From the artist's catalogue", w.note].filter(Boolean).join(' · ') });

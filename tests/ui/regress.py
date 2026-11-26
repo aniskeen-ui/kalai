@@ -925,17 +925,27 @@ def _(b):
     need(ap.get(radio['id'], {}).get('artistPrice') == 40000 and ap[radio['id']]['currency'] == 'INR', f"price {ap.get(radio['id'])}")
     pg.click('#cgArtGo'); pg.wait_for_function("/already in/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
     need(len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 21, 'importing again added duplicates')
+    # A catalogue listing the same painting twice (a note update after it) imports it once (Mahi, 26 Nov: 15 duplicates)
+    pg.evaluate("""(async () => { const c = await (await fetch('/import/sreenivasa-ram-makineedi/catalogue.json')).json();
+      c.artist.photo = location.origin + '/import/sreenivasa-ram-makineedi/artist.jpg';
+      const w = { ...c.works[0], title: 'New One', id: 'new-one', image: location.origin + '/import/sreenivasa-ram-makineedi/w01.jpg' };
+      c.works = [w, { ...w, updateText: true, description: 'Note.' }];
+      document.getElementById('cgArtUrl').value = URL.createObjectURL(new Blob([JSON.stringify(c)], { type: 'application/json' })); })()""")
+    pg.click('#cgArtGo'); pg.wait_for_function("/1 works imported|Could not/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
+    need(len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 22, 'same painting imported twice')
     # A sharper picture for a work already in replaces its picture (Mahi's Instagram pictures, 26 Nov)
     before = next(p for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] == 'Nostalgic Gravity 001')['imageKey']
     pg.evaluate("""(async () => { const c = await (await fetch('/import/sreenivasa-ram-makineedi/catalogue.json')).json();
       c.artist.photo = location.origin + '/import/sreenivasa-ram-makineedi/artist.jpg';
       c.works = [{ ...c.works[0], id: 'w01.jpg', image: location.origin + '/import/sreenivasa-ram-makineedi/w02.jpg', replaceImage: true, updateText: true, description: 'Artist note: new.' }];
       document.getElementById('cgArtUrl').value = URL.createObjectURL(new Blob([JSON.stringify(c)], { type: 'application/json' })); })()""")
+    pg.evaluate("document.getElementById('cgArtMsg').textContent = ''")
     pg.click('#cgArtGo'); pg.wait_for_function("/1 updated|Could not/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
     need('1 updated' in pg.inner_text('#cgArtMsg'), pg.inner_text('#cgArtMsg'))
     after = next(p for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] == 'Nostalgic Gravity 001')['imageKey']
-    need(next(p for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] == 'Nostalgic Gravity 001')['description'] == 'Artist note: new.', 'note not updated')
-    need(after != before and len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 21, 'picture not replaced')
+    _ps = [(p['title'], p.get('source'), p.get('description','')[:20]) for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] in ('Nostalgic Gravity 001','New One')]
+    need(next(p for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] == 'Nostalgic Gravity 001')['description'] == 'Artist note: new.', f'note not updated {_ps}')
+    need(after != before and len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 22, 'picture not replaced')
     return errs
 
 
