@@ -2,11 +2,14 @@
  "artist": {
   "business": "Mahi",
   "contactName": "Maheshwaran",
-  "country": "India",
-  "mediums": "Kerala mural painting, watercolour, coloured pencil, acrylic",
+  "country": "Australia",
+  "mediums": "Kerala mural painting (acrylic on canvas), watercolour, coloured pencil",
   "portfolio": "https://www.instagram.com/cosmicmahesh/",
-  "photo": "artist.jpg",
-  "about": "Mahi (Maheshwaran) paints in the Kerala mural tradition: Krishna, Ganesha, Shiva and the goddesses drawn in bold outline, filled with the style's ochre, red, green and blue, and framed with rich ornament and lotus borders. He also works in watercolour, coloured pencil and acrylic."
+  "photo": "artist2.jpg",
+  "about": "Mahi (Maheshwaran) is a self-taught painter of Kerala murals, the temple-wall art of Kerala: gods and goddesses drawn in bold outline, filled with ochre, red, green and blue, and framed with rich ornament and lotus borders.\n\nHe began in Sydney in 2016 with a large Rasa Leela, Krishna dancing among the gopis, which travelled with him between Sydney and India for six years before he redrew and finished it in 2022. During the lockdown years he worked through a numbered series of paintings, learning the style's fine-line Rekhikam shading as he went, and decided to stay with traditional colours, traditional methods and free-hand drawing.\n\nHis work ranges from Krishna, Radha, Ganesha, Shiva and Shankaranarayana to Saraswati and Hanuman, mostly in acrylic on canvas, with some watercolour and coloured-pencil pieces.",
+  "city": "Sydney",
+  "training": "Self-taught; learnt the traditional techniques, such as Rekhikam fine-line shading, through practice and online lessons",
+  "experience": "Painting Kerala murals since 2016, in Sydney, India and California. Large works include the Rasa Leela (2016 to 2022) and The Butter Thieves."
  },
  "works": [
   {
@@ -203,9 +206,9 @@
    "id": "n10.jpg",
    "image": "p10.jpg",
    "title": "Eight-Armed Ganesha on the Lotus",
-   "medium": "Kerala mural painting",
-   "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "medium": "Kerala mural painting, acrylic on canvas",
+   "size": "30 × 41 cm (12 × 16 in)",
+   "description": "Artist's note: painting no. 5, finished in five days for Vinayaka Chathurthi. The canvas got so soiled from erasing the pencil sketch that I drew the outline in permanent marker and washed the canvas, not the traditional way, but I'm happy with the result.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -228,7 +231,7 @@
    "title": "The Butter Thieves",
    "medium": "Kerala mural painting",
    "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "description": "Artist's note: painting no. 6, the most challenging of the lot: the paint would not dry on this canvas. I tried grid-based copying after years, and underestimated these kids; they took far more effort than planned.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -248,9 +251,9 @@
    "id": "n14.jpg",
    "image": "p14.jpg",
    "title": "Krishna Dancing among the Lotuses",
-   "medium": "Kerala mural painting",
-   "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "medium": "Kerala mural painting, acrylic on canvas",
+   "size": "30 × 41 cm (12 × 16 in)",
+   "description": "Artist's note: painting no. 3 of my lockdown series. I filled the background with fine lines, the Rekhikam technique, learnt from Anila Manalil's “Learn Murals” YouTube channel. It looks even better in person than in the photo.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -261,7 +264,7 @@
    "title": "Rasa Leela",
    "medium": "Kerala mural painting",
    "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "description": "Artist's note: every painting has its own destiny. I started this one in Sydney on 18 February 2016, and thought it was 80% done. It travelled with me to India and back, and waited at my parents' house for years. When I picked it up again I had grown as a painter, so I redrew the whole painting and finished it on 15 November 2022: born in Sydney, it finally reached its home.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -270,9 +273,9 @@
    "id": "n16.jpg",
    "image": "p16.jpg",
    "title": "Shankaranarayana",
-   "medium": "Kerala mural painting",
-   "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "medium": "Kerala mural painting, acrylic on canvas",
+   "size": "46 × 61 cm (18 × 24 in)",
+   "description": "Artist's note: painting no. 4. With new-found confidence, it was time to go fully traditional. I added something of my own to the reference painting, some ornaments and the tree behind, and from here on decided to stick to traditional colours and methods, and only free-hand drawing.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -283,7 +286,7 @@
    "title": "Radha with the Veena and Krishna",
    "medium": "Kerala mural painting",
    "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "description": "Artist's note: painted at my sister's home in Los Gatos, California, to remember my first visit there, with materials bought locally.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -292,9 +295,9 @@
    "id": "n18.jpg",
    "image": "q01.jpg",
    "title": "Saraswati with the Swan",
-   "medium": "Kerala mural painting",
-   "size": "",
-   "description": "Kerala mural painting by Mahi.",
+   "medium": "Kerala mural painting, acrylic on canvas",
+   "size": "30 × 41 cm (12 × 16 in)",
+   "description": "Artist's note: painting no. 2 of my lockdown series, relearning stippling and drawing thin lines.",
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
@@ -404,6 +407,18 @@
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "w03.jpg",
+   "image": "q11.jpg",
+   "title": "Little Krishna",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "",
    "replaceImage": true
   }
  ]
