@@ -444,7 +444,7 @@ async function importArtist(url) {
     const cat = await (await fetch(base, { cache: 'no-store' })).json();
     const a = cat.artist || {}, slug = String(a.business || 'artist').toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const up = async (file, key, shrinkIt = true) => {
-      const blob = await (await fetch(new URL(file, base))).blob();
+      const blob = await (await fetch(new URL(file, /^https?:/.test(base.protocol) ? base : location.href))).blob();
       await uploadData({ path: key, data: shrinkIt ? await shrink(blob) : blob, options: { contentType: 'image/jpeg' } }).result;
       return key;
     };
@@ -457,10 +457,16 @@ async function importArtist(url) {
     if (r.errors?.length) throw new Error(r.errors[0].message.replace(/^.*?Error: /, ''));
     const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data, prof = res.profile;
     const have = new Set(items.map((p) => p.source));
-    let ok = 0, skip = 0;
+    let ok = 0, skip = 0, repl = 0;
     for (const [i, w] of (cat.works || []).entries()) {
-      const source = `artist:${slug}:${w.image}`;
-      if (have.has(source)) { skip++; continue; }
+      const source = `artist:${slug}:${w.id || w.image}`;
+      if (have.has(source)) {
+        // A better picture for a work already in: swap the picture, keep everything else.
+        const ex = w.replaceImage && items.find((p) => p.source === source);
+        if (ex) { msg(`New picture ${i + 1}/${cat.works.length}: ${ex.title}`); const r2 = await client.models.Product.update({ id: ex.id, imageKey: await up(w.image, `catalogue/${uid()}.jpg`) }); if (r2.errors?.length) throw new Error(r2.errors[0].message); repl++; }
+        else skip++;
+        continue;
+      }
       msg(`Importing ${i + 1}/${cat.works.length}: ${w.title}`);
       const key = await up(w.image, `catalogue/${uid()}.jpg`);
       const kind = /pencil|charcoal|graphite|sketch/i.test(w.medium) ? 'sketch' : 'water';
@@ -475,7 +481,7 @@ async function importArtist(url) {
       }
       ok++;
     }
-    msg(`${prof.business}: artist ${res.existed ? 'updated' : 'added and published'}; ${ok} works imported${skip ? `, ${skip} already in` : ''}. Approve their prices in Pricing to put them on the website.`);
+    msg(`${prof.business}: artist ${res.existed ? 'updated' : 'added and published'}; ${ok} works imported${repl ? `, ${repl} pictures replaced` : ''}${skip ? `, ${skip} already in` : ''}. Approve their prices in Pricing to put them on the website.`);
     await load();
   } catch (ex) { msg(`Could not import: ${ex.message || ex}`); } finally { btn.disabled = false; }
 }

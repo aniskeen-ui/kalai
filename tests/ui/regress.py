@@ -913,6 +913,16 @@ def _(b):
     need(ap.get(radio['id'], {}).get('artistPrice') == 40000 and ap[radio['id']]['currency'] == 'INR', f"price {ap.get(radio['id'])}")
     pg.click('#cgArtGo'); pg.wait_for_function("/already in/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
     need(len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 21, 'importing again added duplicates')
+    # A sharper picture for a work already in replaces its picture (Mahi's Instagram pictures, 26 Nov)
+    before = next(p for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] == 'Nostalgic Gravity 001')['imageKey']
+    pg.evaluate("""(async () => { const c = await (await fetch('/import/sreenivasa-ram-makineedi/catalogue.json')).json();
+      c.artist.photo = location.origin + '/import/sreenivasa-ram-makineedi/artist.jpg';
+      c.works = [{ ...c.works[0], id: 'w01.jpg', image: location.origin + '/import/sreenivasa-ram-makineedi/w02.jpg', replaceImage: true }];
+      document.getElementById('cgArtUrl').value = URL.createObjectURL(new Blob([JSON.stringify(c)], { type: 'application/json' })); })()""")
+    pg.click('#cgArtGo'); pg.wait_for_function("/pictures replaced|Could not/.test(document.getElementById('cgArtMsg').textContent)", timeout=30000)
+    need('1 pictures replaced' in pg.inner_text('#cgArtMsg'), pg.inner_text('#cgArtMsg'))
+    after = next(p for p in pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products") if p['title'] == 'Nostalgic Gravity 001')['imageKey']
+    need(after != before and len(pg.evaluate("JSON.parse(localStorage.getItem('stubdb')).products")) == 21, 'picture not replaced')
     return errs
 
 
