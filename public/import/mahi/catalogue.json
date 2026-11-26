@@ -287,6 +287,112 @@
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n18.jpg",
+   "image": "q01.jpg",
+   "title": "Saraswati with the Swan",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "w11.jpg",
+   "image": "q02.jpg",
+   "title": "Vishnu on Adisesha",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "w09.jpg",
+   "image": "q03.jpg",
+   "title": "Ganesha",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "n21.jpg",
+   "image": "q04.jpg",
+   "title": "Shiva and Parvati Dancing",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "w06.jpg",
+   "image": "q05.jpg",
+   "title": "Shiva with the Crescent Moon",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "w04.jpg",
+   "image": "q06.jpg",
+   "title": "Guruvayurappan",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "w07.jpg",
+   "image": "q07.jpg",
+   "title": "The Green-Faced Deity",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "w05.jpg",
+   "image": "q08.jpg",
+   "title": "Ardhanari II",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "w02.jpg",
+   "image": "q09.jpg",
+   "title": "Ardhanari",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
   }
  ]
 }
