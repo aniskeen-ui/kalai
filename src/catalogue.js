@@ -462,9 +462,14 @@ async function importArtist(url) {
       const source = `artist:${slug}:${w.id || w.image}`;
       if (have.has(source)) {
         // A better picture for a work already in: swap the picture, keep everything else.
-        const ex = w.replaceImage && items.find((p) => p.source === source);
-        if (ex) { msg(`New picture ${i + 1}/${cat.works.length}: ${ex.title}`); const r2 = await client.models.Product.update({ id: ex.id, imageKey: await up(w.image, `catalogue/${uid()}.jpg`) }); if (r2.errors?.length) throw new Error(r2.errors[0].message); repl++; }
-        else skip++;
+        const ex = (w.replaceImage || w.updateText) && items.find((p) => p.source === source);
+        if (ex) {
+          msg(`Updating ${i + 1}/${cat.works.length}: ${ex.title}`);
+          const ch = { id: ex.id };
+          if (w.replaceImage) ch.imageKey = await up(w.image, `catalogue/${uid()}.jpg`);
+          if (w.updateText) for (const k of ['title', 'description', 'size', 'medium']) if (w[k]) ch[k] = w[k];
+          const r2 = await client.models.Product.update(ch); if (r2.errors?.length) throw new Error(r2.errors[0].message); repl++;
+        } else skip++;
         continue;
       }
       msg(`Importing ${i + 1}/${cat.works.length}: ${w.title}`);
@@ -481,7 +486,7 @@ async function importArtist(url) {
       }
       ok++;
     }
-    msg(`${prof.business}: artist ${res.existed ? 'updated' : 'added and published'}; ${ok} works imported${repl ? `, ${repl} pictures replaced` : ''}${skip ? `, ${skip} already in` : ''}. Approve their prices in Pricing to put them on the website.`);
+    msg(`${prof.business}: artist ${res.existed ? 'updated' : 'added and published'}; ${ok} works imported${repl ? `, ${repl} updated` : ''}${skip ? `, ${skip} already in` : ''}. Approve their prices in Pricing to put them on the website.`);
     await load();
   } catch (ex) { msg(`Could not import: ${ex.message || ex}`); } finally { btn.disabled = false; }
 }
