@@ -1643,7 +1643,7 @@ async function showArtists() {
       if (own.length) keys = [...own, ...keys.filter((k) => !own.includes(k))].slice(0, 8);
       return {
         name: a.name, mediums: a.mediums, about: a.about, training: a.training || '', experience: a.experience || '', commissions: a.commissions,
-        place: [a.city || a.region, a.country === 'India' ? 'India' : 'UAE'].filter(Boolean).join(', '),
+        place: [a.city || a.region, a.country || 'UAE'].filter(Boolean).join(', '),
         born: `b. ${a.country === 'India' ? 'India' : 'UAE'}${a.bornYear ? `, ${a.bornYear}` : ''}`,
         img: await url(a.photoKey), featured: await url(own.length ? own[0] : a.featuredKey || keys[0]), sampleKeys: keys, url,
       };

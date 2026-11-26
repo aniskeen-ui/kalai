@@ -877,6 +877,18 @@ def _(b):
     return errs
 
 
+@check("Artist page shows the artist's own country (Mahi in Sydney showed 'Sydney, UAE')")
+def _(b):
+    arts = [{'id': 'ap9', 'name': 'Mahi', 'country': 'Australia', 'city': 'Sydney', 'about': 'Kerala murals.', 'mediums': 'Kerala mural', 'commissions': 'NO', 'publishedAt': '2026-11-26'}]
+    pr = [{'id': 'p9', 'title': 'Rasa Leela', 'named': 'yes', 'kind': 'water', 'status': 'SHOWCASE', 'imageKey': 'catalogue/x.jpg', 'artist': 'Mahi', 'code': 'AT-9'}]
+    pg, errs = open_page(b, 'index.html#collection', {'users': ADMIN, 'session': None, 'items': [], 'artists': arts, 'products': pr}, wait=3500)
+    pg.locator('#grid .artist-link', has_text='Mahi').first.click(); pg.wait_for_timeout(700)
+    t = pg.inner_text('#modalBox')
+    need('Sydney, Australia' in t and 'UAE' not in t, f'place shown wrongly: {t[:80]!r}')
+    need('Own works only' in t, 'commissions shown as yes')
+    return errs
+
+
 @check('Every painting shows its artist, and the name opens that artist profile (asked 11 Nov)')
 def _(b):
     arts = [{'id': 'ap1', 'name': 'Siva Raja', 'country': 'India', 'city': 'Bangalore', 'about': 'Painter and sketch artist.', 'mediums': 'Watercolour', 'publishedAt': '2026-10-01'}]
