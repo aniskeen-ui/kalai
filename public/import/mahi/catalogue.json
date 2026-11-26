@@ -3,10 +3,10 @@
   "business": "Mahi",
   "contactName": "Maheshwaran",
   "country": "India",
-  "mediums": "Kerala mural painting",
+  "mediums": "Kerala mural painting, watercolour, coloured pencil, acrylic",
   "portfolio": "https://www.instagram.com/cosmicmahesh/",
   "photo": "artist.jpg",
-  "about": "Mahi (Maheshwaran) paints in the Kerala mural tradition: gods and goddesses drawn in bold outline, filled with the style's ochre, red, green and yellow, and framed with rich ornament."
+  "about": "Mahi (Maheshwaran) paints in the Kerala mural tradition: Krishna, Ganesha, Shiva and the goddesses drawn in bold outline, filled with the style's ochre, red, green and blue, and framed with rich ornament and lotus borders. He also works in watercolour, coloured pencil and acrylic."
  },
  "works": [
   {
@@ -98,6 +98,195 @@
    "artistPriceInr": null,
    "status": "DRAFT",
    "note": "Picture taken from Instagram; ask the artist for the size, medium, price and a full photo."
+  },
+  {
+   "id": "w08.jpg",
+   "image": "p01.jpg",
+   "title": "Hanuman",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "n02.jpg",
+   "image": "p02.jpg",
+   "title": "Woman with a Basket of Lotuses",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n03.jpg",
+   "image": "p03.jpg",
+   "title": "Ganesha with the Shiva Lingam",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n04.jpg",
+   "image": "p04.jpg",
+   "title": "Krishna among the Lotuses",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n05.jpg",
+   "image": "p05.jpg",
+   "title": "Tulips and Calla Lilies",
+   "medium": "Acrylic on canvas",
+   "size": "",
+   "description": "Acrylic on canvas by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n06.jpg",
+   "image": "p06.jpg",
+   "title": "Saraswati on the Lotus",
+   "medium": "Coloured pencil on paper",
+   "size": "",
+   "description": "Coloured pencil on paper by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n07.jpg",
+   "image": "p07.jpg",
+   "title": "Krishna and Radha",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n08.jpg",
+   "image": "p08.jpg",
+   "title": "Ganesha (watercolour)",
+   "medium": "Kerala mural style, watercolour and ink on paper",
+   "size": "",
+   "description": "Kerala mural style, watercolour and ink on paper by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n09.jpg",
+   "image": "p09.jpg",
+   "title": "Ardhanari with Ganesha and Murugan",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n10.jpg",
+   "image": "p10.jpg",
+   "title": "Eight-Armed Ganesha on the Lotus",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "w10.jpg",
+   "image": "p11.jpg",
+   "title": "Ganesha II",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price.",
+   "replaceImage": true
+  },
+  {
+   "id": "n12.jpg",
+   "image": "p12.jpg",
+   "title": "The Butter Thieves",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n13.jpg",
+   "image": "p13.jpg",
+   "title": "Ganesha on the Lotus Throne",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n14.jpg",
+   "image": "p14.jpg",
+   "title": "Krishna Dancing among the Lotuses",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n15.jpg",
+   "image": "p15.jpg",
+   "title": "Rasa Leela",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n16.jpg",
+   "image": "p16.jpg",
+   "title": "Shankaranarayana",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
+  },
+  {
+   "id": "n17.jpg",
+   "image": "p17.jpg",
+   "title": "Radha with the Veena and Krishna",
+   "medium": "Kerala mural painting",
+   "size": "",
+   "description": "Kerala mural painting by Mahi.",
+   "artistPriceInr": null,
+   "status": "DRAFT",
+   "note": "Ask the artist for the size and price."
   }
  ]
 }
