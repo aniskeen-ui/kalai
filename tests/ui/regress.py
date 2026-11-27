@@ -877,6 +877,16 @@ def _(b):
     return errs
 
 
+@check("Box sticker QR: a link to #artist-siva-raja opens Siva's artist page")
+def _(b):
+    arts = [{'id': 'ap1', 'name': 'Siva Raja', 'country': 'India', 'city': 'Chennai', 'about': 'Village life in watercolour.', 'publishedAt': '2026-11-01'},
+            {'id': 'ap2', 'name': 'Sobana', 'country': 'UAE', 'about': 'Mandalas.', 'publishedAt': '2026-11-01'}]
+    pg, errs = open_page(b, 'index.html#artist-siva-raja', {'users': ADMIN, 'session': None, 'items': [], 'artists': arts, 'products': []}, wait=3500)
+    t = pg.inner_text('#modalBox') if pg.is_visible('#modalBox') else ''
+    need('Siva Raja' in t and 'Village life' in t, f'artist page not opened: {t[:80]!r}')
+    return errs
+
+
 @check("Artist page shows the artist's own country (Mahi in Sydney showed 'Sydney, UAE')")
 def _(b):
     arts = [{'id': 'ap9', 'name': 'Mahi', 'country': 'Australia', 'city': 'Sydney', 'about': 'Kerala murals.', 'mediums': 'Kerala mural', 'commissions': 'NO', 'publishedAt': '2026-11-26'}]

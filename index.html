@@ -1132,7 +1132,14 @@ window.kalaiShowArtists=function(list){
     <button type="button" class="pf-bio" data-bio="${i}">Read bio</button></article>`).join("");
   box.hidden=false;const k=document.getElementById("artistKicker");if(k)k.textContent="Our artists";const h=document.getElementById("artistH2");if(h)h.textContent="Meet our artists";const it=document.getElementById("artistIntro");if(it&&list.length>1)it.textContent="Painters and sketch artists from India and the UAE. Every work in this gallery, and every commission, is made by hand in the artist's studio and shipped to you.";
   const nav=document.querySelector('nav.links a[href="#artist"]');if(nav)nav.textContent="Our artists";
+  openArtistFromHash();
 };
+/* #artist-siva-raja (box stickers' QR codes): opens that artist's page */
+const artistSlug=n=>String(n||"").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+function openArtistFromHash(){const m=location.hash.match(/^#artist-([a-z0-9-]+)$/);if(!m||typeof ARTISTS==="undefined")return;
+  const i=ARTISTS.findIndex(a=>artistSlug(a.name)===m[1]||artistSlug(a.name).startsWith(m[1]+"-"));if(i<0)return;
+  document.getElementById("artist")?.scrollIntoView();const t=document.createElement("button");t.dataset.bio=i;t.hidden=true;document.body.appendChild(t);t.click();t.remove()}
+addEventListener("hashchange",openArtistFromHash);
 document.addEventListener("click",e=>{const l=e.target.closest(".artist-link");if(!l)return;e.preventDefault();e.stopPropagation();
   const n=String(l.dataset.artistName||"").trim().toLowerCase(),i=ARTISTS.findIndex(a=>String(a.name||"").trim().toLowerCase()===n);
   if(i>=0){const t=document.createElement("button");t.dataset.bio=i;t.hidden=true;document.body.appendChild(t);t.click();t.remove();return}
